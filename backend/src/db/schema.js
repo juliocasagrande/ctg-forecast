@@ -1,0 +1,109 @@
+import pg from 'pg';
+import dotenv from 'dotenv';
+dotenv.config();
+
+const { Pool } = pg;
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
+
+export async function initDB() {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(120) NOT NULL,
+        email VARCHAR(120) NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        role VARCHAR(20) NOT NULL DEFAULT 'engenheiro'
+          CHECK (role IN ('admin','gestor','engenheiro','planejador')),
+        active BOOLEAN DEFAULT true,
+        pending_approval BOOLEAN DEFAULT false,
+        avatar_initials VARCHAR(4),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS projects (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(50) NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        description TEXT,
+        si_value NUMERIC(15,2) DEFAULT 0,
+        pool_value NUMERIC(15,2) DEFAULT 0,
+        plants TEXT[] DEFAULT '{}',
+        created_by INTEGER REFERENCES users(id),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS project_assignments (
+        id SERIAL PRIMARY KEY,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        assigned_by INTEGER REFERENCES users(id),
+        assigned_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(project_id, user_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS forecast_entries (
+        id SERIAL PRIMARY KEY,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        category VARCHAR(20) NOT NULL CHECK (category IN ('Viagens','Contratos','POs')),
+        type VARCHAR(10) NOT NULL CHECK (type IN ('Budget','Forecast','Actual')),
+        year INTEGER NOT NULL,
+        month INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
+        value NUMERIC(15,2) DEFAULT 0,
+        comment TEXT,
+        updated_by INTEGER REFERENCES users(id),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(project_id, category, type, year, month)
+      );
+
+      CREATE TABLE IF NOT EXISTS project_notes (
+        id SERIAL PRIMARY KEY,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id),
+        note_date DATE,
+        content TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS messages (
+        id SERIAL PRIMARY KEY,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        content TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS message_reads (
+        message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        read_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (message_id, user_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_forecast_project ON forecast_entries(project_id);
+      CREATE INDEX IF NOT EXISTS idx_forecast_year ON forecast_entries(year);
+      CREATE INDEX IF NOT EXISTS idx_messages_project ON messages(project_id);
+      CREATE INDEX IF NOT EXISTS idx_assignments_user ON project_assignments(user_id);
+      CREATE INDEX IF NOT EXISTS idx_assignments_project ON project_assignments(project_id);
+    `);
+    console.log('✅ Database initialized');
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_approval BOOLEAN DEFAULT false;
+      ALTER TABLE projects ADD COLUMN IF NOT EXISTS plants TEXT[] DEFAULT '{}';
+    `);
+    // Alter role CHECK to include planejador (drop old constraint, add new)
+    await client.query(`
+      ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+      ALTER TABLE users ADD CONSTRAINT users_role_check
+        CHECK (role IN ('admin','gestor','engenheiro','planejador'));
+    `);
+  } finally {
+    client.release();
+  }
+}
