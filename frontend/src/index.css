@@ -296,8 +296,7 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
   .main-content{margin-left:0;}
 
   /* ── Header ── */
-  .page-header{padding:10px 14px 10px 58px;flex-wrap:wrap;gap:8px;min-height:52px;}
-  .page-title{font-size:1.25rem !important;}
+  /* page-header mobile handled by new block */
   .page-body{padding:12px 14px;}
 
   /* ── Period selector — hide on mobile, show only bell ── */
@@ -356,8 +355,7 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
 
 @media(max-width:480px){
   /* ── Header: tighter ── */
-  .page-header{padding:8px 12px 8px 52px;}
-  .page-title{font-size:1.1rem !important;}
+  /* page-header mobile handled by new block */
 
   /* ── KPI: stack to 2 col small ── */
   .stat-grid{grid-template-columns:1fr 1fr;gap:6px;}
@@ -1340,16 +1338,199 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
   /* Export button in header */
   .header-export-btn { font-size: 0.72rem !important; padding: 5px 10px !important; }
   /* Page title smaller on mobile */
-  .page-title { font-size: 1.4rem !important; }
 }
 
 @media(max-width:480px){
   .page-header { padding: 8px 12px 8px !important; }
-  .page-title { font-size: 1.2rem !important; }
   /* Stat cards: tighter */
   .stat-card { padding: 10px 10px !important; }
   .stat-value { font-size: 1rem !important; }
   .stat-label { font-size: 0.6rem !important; }
   /* Hide Acumulado Y axis label on tiny screens */
   .recharts-label { display: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE — single source of truth for ≤768px
+   Desktop layout is 100% untouched
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Elements that only exist in one context ── */
+.sidebar-toggle-inline  { display: none; }   /* shown only in mobile header */
+.header-controls-mobile { display: none; }   /* shown only in mobile        */
+.mobile-filter-btn      { display: none; }   /* shown only in mobile        */
+.header-controls-desktop{ display: flex; align-items: center; }
+
+@media(min-width: 769px) {
+  .sidebar-toggle      { display: none !important; }
+  .mobile-bottom-nav   { display: none !important; }
+}
+
+@media(max-width: 768px) {
+
+  /* ── 1. Overall layout ── */
+  .app-layout    { flex-direction: column; }
+  .main-content  { margin-left: 0 !important; min-height: 100dvh; }
+  .page-body     {
+    padding: 10px 12px !important;
+    /* never hide content under bottom nav */
+    padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* ── 2. Fixed top header: ☰  Title  🔔  ⚙ ── */
+  .page-header.mobile-header {
+    position: fixed !important;
+    top: 0; left: 0; right: 0;
+    z-index: 200;
+    height: 52px;
+    padding: 0 10px !important;
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    gap: 0 !important;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 1px 6px rgba(0,0,0,0.1);
+  }
+
+  /* Push page body below fixed header */
+  .main-content > .page-body { margin-top: 52px !important; }
+
+  /* ── Hamburger ── */
+  .sidebar-toggle { display: none !important; }   /* kill floating toggle */
+  .sidebar-toggle-inline {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: var(--ctg-navy);
+    font-size: 1.25rem;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ── Title — fills remaining space ── */
+  .mobile-header-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    padding: 0 6px;
+  }
+  .mobile-header-title .page-title {
+    font-size: 1.15rem !important;
+    font-weight: 800 !important;
+    line-height: 1 !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--ctg-navy);
+  }
+  .mobile-header-title .page-subtitle { display: none !important; }
+
+  /* ── Desktop controls hidden ── */
+  .header-controls-desktop { display: none !important; }
+
+  /* ── Mobile controls: bell + filter ── */
+  .header-controls-mobile {
+    display: flex !important;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  /* ── Filter icon button ── */
+  .mobile-filter-btn {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    width: 36px;
+    height: 36px;
+    background: var(--ctg-light);
+    border: 1.5px solid var(--ctg-blue);
+    border-radius: var(--radius-sm);
+    color: var(--ctg-blue);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .filter-badge {
+    position: absolute;
+    top: -5px; right: -5px;
+    background: var(--ctg-blue);
+    color: #fff;
+    font-size: 0.55rem;
+    font-weight: 700;
+    border-radius: 10px;
+    padding: 1px 4px;
+    line-height: 1.4;
+  }
+
+  /* ── Bottom nav ── */
+  .mobile-bottom-nav {
+    display: flex !important;
+    position: fixed !important;
+    bottom: 0; left: 0; right: 0;
+    z-index: 300;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border-top: 1px solid rgba(0,0,0,0.08);
+    box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
+    padding: 6px 0 calc(6px + env(safe-area-inset-bottom, 0px));
+    align-items: flex-start;
+  }
+  .mobile-bottom-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 4px 6px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    text-decoration: none;
+    color: var(--text-muted);
+    font-family: var(--font-body);
+    font-size: 0.6rem;
+    font-weight: 500;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mobile-bottom-nav-item.active  { color: var(--ctg-navy); font-weight: 700; }
+  .mobile-bottom-nav-item svg     { width: 20px; height: 20px; }
+  .logout-btn                     { color: #DC2626 !important; }
+
+  /* ── KPI cards: 2×2 ── */
+  .dash-kpi-grid { grid-template-columns: 1fr 1fr !important; gap: 8px !important; }
+  .stat-card     { padding: 10px 12px !important; }
+  .stat-value    { font-size: 1.05rem !important; }
+  .stat-label    { font-size: 0.62rem !important; }
+
+  /* ── Charts: 1 per row, no legend ── */
+  .dash-charts-row { grid-template-columns: 1fr !important; gap: 8px !important; }
+  .dash-legend     { display: none !important; }
+
+  /* ── Tooltips: clamp inside screen, no x-overflow ── */
+  .recharts-tooltip-wrapper { max-width: min(260px, calc(100vw - 24px)) !important; }
+  .recharts-tooltip-wrapper > div { max-width: min(260px, calc(100vw - 24px)) !important; }
+
+  /* ── Project grid: 1 column ── */
+  .project-grid { grid-template-columns: 1fr !important; }
+
+  /* ── Modals: full-width on mobile ── */
+  .modal { width: calc(100vw - 24px) !important; max-width: none !important; }
+  .modal-footer .btn { flex: 1; justify-content: center; }
+}
+
+@media(max-width: 480px) {
+  .page-header.mobile-header { height: 48px; }
+  .main-content > .page-body { margin-top: 48px !important; }
+  .mobile-header-title .page-title { font-size: 1rem !important; }
+  .stat-card  { padding: 8px 10px !important; }
+  .stat-value { font-size: 0.95rem !important; }
 }

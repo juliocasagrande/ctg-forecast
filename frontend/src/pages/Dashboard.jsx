@@ -55,7 +55,7 @@ function ChartTooltip({ active, payload, label, period }) {
     <div style={{
       background: 'var(--bg-card)', border: '1px solid var(--border)',
       borderRadius: 8, padding: '10px 14px', boxShadow: 'var(--shadow-lg)',
-      fontSize: '0.8rem', minWidth: 200, zIndex: 9999, pointerEvents: 'none',
+      fontSize: '0.8rem', minWidth: 180, maxWidth: 260, zIndex: 9999, pointerEvents: 'none',
     }}>
       <div style={{ fontWeight: 700, marginBottom: 7, color: 'var(--ctg-navy)',
         fontSize: '0.85rem', borderBottom: '1px solid var(--border)', paddingBottom: 5 }}>
@@ -86,7 +86,7 @@ function ProjectTooltip({ active, payload, label, projectMap }) {
     <div style={{
       background: 'var(--bg-card)', border: '1px solid var(--border)',
       borderRadius: 8, padding: '10px 14px', boxShadow: 'var(--shadow-lg)',
-      fontSize: '0.8rem', minWidth: 200, zIndex: 9999, pointerEvents: 'none',
+      fontSize: '0.8rem', minWidth: 180, maxWidth: 260, zIndex: 9999, pointerEvents: 'none',
     }}>
       <div style={{ fontWeight: 700, marginBottom: 2, color: 'var(--ctg-navy)', fontSize: '0.82rem' }}>
         {label}
@@ -304,7 +304,7 @@ export default function Dashboard({ period, plantFilter = [] }) {
                   label={{ value: 'Acumulado', angle: 90, position: 'insideRight', offset: 10, style: { fontSize: 8, fill: '#9CA3AF' } }}
                 />
 
-                <Tooltip content={<ChartTooltip period={period} />} isAnimationActive={false} wrapperStyle={{ zIndex: 9999 }} allowEscapeViewBox={{ x: true, y: true }} />
+                <Tooltip content={<ChartTooltip period={period} />} isAnimationActive={false} wrapperStyle={{ zIndex: 9999, maxWidth: 'min(260px, 70vw)' }} allowEscapeViewBox={{ x: false, y: true }} />
                 <Legend wrapperStyle={{ fontSize: '0.68rem', color: '#374151', paddingTop: 4 }} formatter={(value) => SERIES_LABELS[value] || (value === 'GapMax' ? 'Dif. Forecast vs Realizado' : value)} className="dash-legend" />
 
                 {/* Gap area between Forecast and Realizado (accumulated) */}
@@ -347,7 +347,7 @@ export default function Dashboard({ period, plantFilter = [] }) {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#374151' }} />
                 <YAxis tickFormatter={fmtAxis} tick={{ fontSize: 10, fill: '#374151' }} width={54} />
-                <Tooltip content={<ProjectTooltip projectMap={projectMap} />} isAnimationActive={false} wrapperStyle={{ zIndex: 9999 }} allowEscapeViewBox={{ x: true, y: true }} />
+                <Tooltip content={<ProjectTooltip projectMap={projectMap} />} isAnimationActive={false} wrapperStyle={{ zIndex: 9999, maxWidth: 'min(260px, 70vw)' }} allowEscapeViewBox={{ x: false, y: true }} />
                 <Legend wrapperStyle={{ fontSize: '0.68rem', color: '#374151', paddingTop: 4 }} className="dash-legend" />
                 <Bar dataKey="Budget"    fill={C.budget} radius={[2,2,0,0]} />
                 <Bar dataKey="Forecast"  fill={C.forecast} radius={[2,2,0,0]} />

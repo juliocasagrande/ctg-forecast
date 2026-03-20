@@ -366,6 +366,74 @@ function PlanejadorExportModal({ open, onClose }) {
   );
 }
 
+
+// ── Mobile filter modal (bottom-sheet) ──────────────────────────────────────
+function MobileFilterModal({ open, onClose, period, onPeriod, activePlants, plantFilter, onPlantFilter, isPlanejador, onOpenExport }) {
+  if (!open) return null;
+  return (
+    <div style={{
+      position:'fixed', inset:0, zIndex:500,
+      background:'rgba(0,0,0,0.45)', backdropFilter:'blur(2px)',
+      display:'flex', alignItems:'flex-end',
+    }} onClick={onClose}>
+      <div style={{
+        background:'var(--bg-card)', width:'100%', borderRadius:'16px 16px 0 0',
+        padding:'16px 20px calc(16px + env(safe-area-inset-bottom,0px))',
+        boxShadow:'0 -4px 32px rgba(0,0,0,0.18)',
+        maxHeight:'80vh', overflowY:'auto',
+      }} onClick={e=>e.stopPropagation()}>
+        {/* Handle bar */}
+        <div style={{ width:40, height:4, background:'var(--border-strong)', borderRadius:2, margin:'0 auto 16px' }} />
+        
+        <div style={{ fontSize:'0.82rem', fontWeight:700, color:'var(--ctg-navy)', marginBottom:14 }}>Filtros</div>
+        
+        {/* Period */}
+        <div style={{ marginBottom:16 }}>
+          <div style={{ fontSize:'0.68rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--text-muted)', marginBottom:8 }}>Período</div>
+          <PeriodSelector period={period} onChange={onPeriod} />
+        </div>
+        
+        {/* Plant filter */}
+        {activePlants.length > 0 && (
+          <div style={{ marginBottom:16 }}>
+            <div style={{ fontSize:'0.68rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--text-muted)', marginBottom:8 }}>Usina</div>
+            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+              <button
+                style={{ padding:'5px 12px', borderRadius:20, border:'1.5px solid var(--border-strong)',
+                  background: plantFilter.length===0 ? 'var(--ctg-navy)' : 'transparent',
+                  color: plantFilter.length===0 ? '#fff' : 'var(--text-secondary)',
+                  fontSize:'0.78rem', cursor:'pointer', fontFamily:'var(--font-body)' }}
+                onClick={() => onPlantFilter([])}>Todas</button>
+              {activePlants.map(pl => (
+                <button key={pl}
+                  style={{ padding:'5px 12px', borderRadius:20, border:'1.5px solid var(--border-strong)',
+                    background: plantFilter.includes(pl) ? 'var(--ctg-blue)' : 'transparent',
+                    color: plantFilter.includes(pl) ? '#fff' : 'var(--text-secondary)',
+                    fontSize:'0.78rem', cursor:'pointer', fontFamily:'var(--font-body)' }}
+                  onClick={() => onPlantFilter(prev => prev.includes(pl) ? prev.filter(x=>x!==pl) : [...prev, pl])}>
+                  {pl.replace('UHE ','').replace('PCH ','')}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {isPlanejador && (
+          <button className="btn btn-export" style={{ width:'100%', justifyContent:'center', marginTop:4 }}
+            onClick={() => { onClose(); onOpenExport(); }}>
+            ⬇ Relatório Geral
+          </button>
+        )}
+        
+        <button className="btn btn-secondary" style={{ width:'100%', justifyContent:'center', marginTop:8 }}
+          onClick={onClose}>
+          Fechar
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function getPageMeta(pathname) {
   if (pathname === '/') return { title: 'Dashboard', sub: null };
   if (pathname === '/projects') return { title: 'Projetos', sub: null };
@@ -439,45 +507,78 @@ export default function App() {
       />
 
       <div className="main-content">
-        <header className="page-header">
-          {/* Left: page title */}
-          <div>
+        {/* ── MOBILE: single sticky header row ── */}
+        <header className="page-header mobile-header">
+          {/* Mobile: menu toggle inline with title */}
+          <button className="sidebar-toggle-inline" onClick={() => setSidebarOpen(o => !o)}>☰</button>
+
+          {/* Title */}
+          <div className="mobile-header-title">
             <h1 className="page-title" style={{ fontSize: '2rem', lineHeight: 1 }}>{title}</h1>
             {sub && <div className="page-subtitle">{sub}</div>}
           </div>
 
-          {/* Right: alerts + plant filter + period slider */}
-          {showControls && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              {isPlanejador && (
-                <button
-                  className="header-export-btn"
-                  onClick={() => setPlanjExportModal(true)}
-                  style={{
-                    padding: '6px 14px', borderRadius: 'var(--radius-sm)',
-                    border: '1.5px solid #15803D', background: '#F0FDF4',
-                    color: '#15803D', fontWeight: 600, fontSize: '0.8rem',
-                    cursor: 'pointer', fontFamily: 'var(--font-body)',
-                    whiteSpace: 'nowrap', transition: 'all 0.15s',
-                  }}
-                >
-                  ⬇ Relatório Geral
-                </button>
-              )}
-              <AlertBell />
-              <PlantFilter
-                activePlants={activePlants}
-                selected={plantFilter}
-                onChange={setPlantFilter}
-              />
-              <PeriodSelector period={period} onChange={setPeriod} />
-            </div>
-          )}
-          {/* Alert bell on non-dashboard pages too */}
-          {!showControls && !isAdmin && (
+          {/* Desktop: full controls */}
+          <div className="header-controls-desktop">
+            {showControls && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                {isPlanejador && (
+                  <button
+                    className="header-export-btn"
+                    onClick={() => setPlanjExportModal(true)}
+                    style={{
+                      padding: '6px 14px', borderRadius: 'var(--radius-sm)',
+                      border: '1.5px solid #15803D', background: '#F0FDF4',
+                      color: '#15803D', fontWeight: 600, fontSize: '0.8rem',
+                      cursor: 'pointer', fontFamily: 'var(--font-body)',
+                      whiteSpace: 'nowrap', transition: 'all 0.15s',
+                    }}
+                  >
+                    ⬇ Relatório Geral
+                  </button>
+                )}
+                <AlertBell />
+                <PlantFilter
+                  activePlants={activePlants}
+                  selected={plantFilter}
+                  onChange={setPlantFilter}
+                />
+                <PeriodSelector period={period} onChange={setPeriod} />
+              </div>
+            )}
+            {!showControls && !isAdmin && <AlertBell />}
+          </div>
+
+          {/* Mobile: bell + filter button only */}
+          <div className="header-controls-mobile">
             <AlertBell />
-          )}
+            {showControls && (
+              <button
+                className="mobile-filter-btn"
+                onClick={() => setFilterModalOpen(true)}
+                aria-label="Filtros"
+              >
+                <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
+                  <path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L13 10.414V15a1 1 0 01-.553.894l-4 2A1 1 0 017 17v-6.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" />
+                </svg>
+                {(plantFilter.length > 0) && <span className="filter-badge">{plantFilter.length}</span>}
+              </button>
+            )}
+          </div>
         </header>
+
+        {/* Mobile filter modal */}
+        <MobileFilterModal
+          open={filterModalOpen}
+          onClose={() => setFilterModalOpen(false)}
+          period={period}
+          onPeriod={setPeriod}
+          activePlants={activePlants}
+          plantFilter={plantFilter}
+          onPlantFilter={setPlantFilter}
+          isPlanejador={isPlanejador}
+          onOpenExport={() => setPlanjExportModal(true)}
+        />
 
         <main className="page-body">
           <Routes>
