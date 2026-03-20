@@ -88,7 +88,7 @@ export default function AlertBell() {
 
       {/* Dropdown panel */}
       {open && (
-        <div style={{
+        <div className="alert-bell-dropdown" style={{
           position: 'absolute',
           top: 'calc(100% + 8px)',
           right: 0,

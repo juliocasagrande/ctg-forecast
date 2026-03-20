@@ -405,7 +405,7 @@ export default function ProjectDetail({ onEdit }) {
     <div>
       {/* ── Project header card ── */}
       <div className="card" style={{marginBottom:14}}>
-        <div style={{padding:'14px 18px',display:'flex',alignItems:'flex-start',gap:16,flexWrap:'wrap'}}>
+        <div className="project-detail-header" style={{padding:'14px 18px',display:'flex',alignItems:'flex-start',gap:16,flexWrap:'wrap'}}>
           <div style={{flex:1,minWidth:200}}>
             <div style={{fontSize:'0.72rem',fontWeight:700,color:'var(--ctg-blue)',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:2}}>{project.code}</div>
             <h2 style={{fontFamily:'var(--font-display)',fontSize:'1.25rem',color:'var(--ctg-navy)',lineHeight:1.2,marginBottom:4}}>{project.name}</h2>
@@ -426,7 +426,7 @@ export default function ProjectDetail({ onEdit }) {
           </div>
 
           {/* Totals */}
-          <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'flex-start'}}>
+          <div className="project-detail-totals" style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'flex-start'}}>
             {[
               {label:'Budget',   v:totalFor('Budget'),   cls:'budget'},
               {label:'Forecast', v:totalFor('Forecast'), cls:'forecast'},
@@ -441,7 +441,7 @@ export default function ProjectDetail({ onEdit }) {
           </div>
 
           {/* Actions */}
-          <div style={{display:'flex',gap:6,alignItems:'center',flexShrink:0,flexDirection:'column'}}>
+          <div className="project-detail-actions" style={{display:'flex',gap:6,alignItems:'center',flexShrink:0,flexDirection:'column'}}>
               {canManage && <button className="btn btn-secondary btn-sm" onClick={()=>onEdit?.(project)}>✎ Editar</button>}
             <button className="btn btn-export btn-sm" onClick={handleExport}>⬇ Excel</button>
             <button className="btn btn-ghost btn-sm" onClick={handleCheckin} style={{borderColor:'var(--ctg-blue)',color:'var(--ctg-blue)'}}>✓ Check-in</button>

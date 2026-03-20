@@ -217,7 +217,7 @@ export default function Dashboard({ period, plantFilter = [] }) {
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: 12 }}>
 
       {/* KPI cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, flexShrink: 0 }}>
+      <div className="dash-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, flexShrink: 0 }}>
         {[
           { cls: 'budget',   label: `Budget ${periodLabel}`,   val: totalBudget,   sub: `${filtered.length} projeto${filtered.length !== 1 ? 's' : ''}` },
           { cls: 'forecast', label: `Forecast ${periodLabel}`, val: totalForecast, sub: totalBudget ? `${((totalForecast / totalBudget) * 100).toFixed(1)}% do budget` : '—' },
@@ -233,10 +233,10 @@ export default function Dashboard({ period, plantFilter = [] }) {
       </div>
 
       {/* Two charts — 60% / 40% */}
-      <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 12, flexShrink: 0 }}>
+      <div className="dash-charts-row" style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 12, flexShrink: 0 }}>
 
         {/* Combined: bars (monthly) + lines (accumulated) — dual Y axis */}
-        <div className="card" style={{ overflow: 'hidden' }}>
+        <div className="card dash-chart-combined" style={{ overflow: 'hidden' }}>
           {cardHeader(`Evolução Mensal + S-Curve — ${periodLabel}`)}
           <div style={{ padding: '10px 8px 6px' }}>
             <ResponsiveContainer width="100%" height={175}>
@@ -303,7 +303,7 @@ export default function Dashboard({ period, plantFilter = [] }) {
         </div>
 
         {/* Por Projeto */}
-        <div className="card" style={{ overflow: 'hidden' }}>
+        <div className="card dash-chart-project" style={{ overflow: 'hidden' }}>
           {cardHeader(`Por Projeto — ${periodLabel}`)}
           <div style={{ padding: '10px 8px 6px' }}>
             <ResponsiveContainer width="100%" height={175}>
@@ -366,7 +366,7 @@ export default function Dashboard({ period, plantFilter = [] }) {
                   >
                     <td style={{ padding: '8px 14px', fontWeight: 700, color: 'var(--ctg-blue)', fontFamily: 'monospace', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{p.code}</td>
                     <td style={{ padding: '8px 14px', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)', fontWeight: 500 }}>{p.name}</td>
-                    <td style={{ padding: '8px 14px', maxWidth: 140 }}>
+                    <td className="dash-table-usinas" style={{ padding: '8px 14px', maxWidth: 140 }}>
                       <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
                         {(p.plants || []).map(pl => (
                           <span key={pl} className="plant-tag" style={{ fontSize: '0.65rem' }}>
@@ -388,7 +388,7 @@ export default function Dashboard({ period, plantFilter = [] }) {
                       ) : <span style={{ color: 'var(--text-secondary)' }}>—</span>}
                     </td>
                     <td style={{ padding: '8px 14px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)', fontWeight: 500 }}>{fmt(p.si_value)}</td>
-                    <td style={{ padding: '8px 14px' }}>
+                    <td className="dash-table-updated" style={{ padding: '8px 14px' }}>
                       <UpdateBadge dateStr={p.last_forecast_update} />
                     </td>
                     <td style={{ padding: '8px 14px', textAlign: 'center', color: 'var(--ctg-blue)', fontWeight: 700 }}>→</td>

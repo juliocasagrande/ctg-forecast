@@ -330,12 +330,15 @@ export default function App() {
                 </button>
               )}
               <AlertBell />
-              <PlantFilter
-                activePlants={activePlants}
-                selected={plantFilter}
-                onChange={setPlantFilter}
-              />
-              <PeriodSelector period={period} onChange={setPeriod} />
+              {/* Hide plant filter + period on mobile via CSS */}
+              <div className="header-desktop-controls" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <PlantFilter
+                  activePlants={activePlants}
+                  selected={plantFilter}
+                  onChange={setPlantFilter}
+                />
+                <PeriodSelector period={period} onChange={setPeriod} />
+              </div>
             </div>
           )}
           {/* Alert bell on non-dashboard pages too */}
@@ -343,6 +346,18 @@ export default function App() {
             <AlertBell />
           )}
         </header>
+
+        {/* Mobile-only filter bar — sticky, compact, shown only on small screens */}
+        {showControls && (
+          <div className="mobile-filter-bar">
+            <PlantFilter
+              activePlants={activePlants}
+              selected={plantFilter}
+              onChange={setPlantFilter}
+            />
+            <PeriodSelector period={period} onChange={setPeriod} />
+          </div>
+        )}
 
         <main className="page-body">
           <Routes>
