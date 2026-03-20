@@ -366,7 +366,7 @@ export default function Dashboard({ period, plantFilter = [] }) {
           </span>
         </div>
         <div style={{ overflowY: 'auto', overflowX: 'auto', flex: 1 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
+          <table className="dash-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
             <thead>
               <tr>
                 {['Código','Projeto','Usinas','Budget','Forecast','Realizado','% Exec.','SI','Atualizado',''].map(h => (

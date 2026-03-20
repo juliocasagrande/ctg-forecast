@@ -1356,9 +1356,10 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── Elements that only exist in one context ── */
-.sidebar-toggle-inline  { display: none; }   /* shown only in mobile header */
-.header-controls-mobile { display: none; }   /* shown only in mobile        */
-.mobile-filter-btn      { display: none; }   /* shown only in mobile        */
+/* header elements default state — desktop shows desktop controls, mobile shows mobile */
+.sidebar-toggle-inline  { display: none; }
+.header-controls-mobile { display: none; }
+.mobile-filter-btn      { display: none; }
 .header-controls-desktop{ display: flex; align-items: center; }
 
 @media(min-width: 769px) {
@@ -1380,17 +1381,19 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
   /* ── 2. Fixed top header: ☰  Title  🔔  ⚙ ── */
   .page-header.mobile-header {
     position: fixed !important;
-    top: 0; left: 0; right: 0;
-    z-index: 200;
-    height: 52px;
-    padding: 0 10px !important;
+    top: 0 !important; left: 0 !important; right: 0 !important;
+    z-index: 200 !important;
+    height: 52px !important;
+    min-height: 52px !important;
+    padding: 0 10px 0 0 !important;
     display: flex !important;
     align-items: center !important;
+    justify-content: flex-start !important;   /* NOT space-between */
     flex-wrap: nowrap !important;
     gap: 0 !important;
-    background: var(--bg-card);
-    border-bottom: 1px solid var(--border);
-    box-shadow: 0 1px 6px rgba(0,0,0,0.1);
+    background: var(--bg-card) !important;
+    border-bottom: 1px solid var(--border) !important;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.1) !important;
   }
 
   /* Push page body below fixed header */
@@ -1399,7 +1402,7 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
   /* ── Hamburger ── */
   .sidebar-toggle { display: none !important; }   /* kill floating toggle */
   .sidebar-toggle-inline {
-    display: flex !important;
+    display: flex !important; /* override global none */
     align-items: center;
     justify-content: center;
     width: 44px;
@@ -1436,7 +1439,7 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
 
   /* ── Mobile controls: bell + filter ── */
   .header-controls-mobile {
-    display: flex !important;
+    display: flex !important; /* override global none */
     align-items: center;
     gap: 6px;
     flex-shrink: 0;
@@ -1444,7 +1447,7 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
 
   /* ── Filter icon button ── */
   .mobile-filter-btn {
-    display: flex !important;
+    display: flex !important; /* override global none */
     align-items: center;
     justify-content: center;
     position: relative;
@@ -1526,6 +1529,25 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
   .modal { width: calc(100vw - 24px) !important; max-width: none !important; }
   .modal-footer .btn { flex: 1; justify-content: center; }
 }
+
+  /* ── Table fonts: smaller on mobile for readability ── */
+  /* Dashboard summary table */
+  .dash-table th, .dash-table td { 
+    font-size: 0.7rem !important; 
+    padding: 6px 8px !important; 
+  }
+  /* Polos table */
+  .polos-table th, .polos-table td,
+  table th, table td {
+    font-size: 0.72rem !important;
+    padding: 6px 8px !important;
+    white-space: nowrap;
+  }
+  /* Hide less important table columns on mobile */
+  .dash-table-si,
+  .col-hide-mobile { display: none !important; }
+  /* Horizontal scroll for tables */
+  .card > div[style*="overflow"] { -webkit-overflow-scrolling: touch; }
 
 @media(max-width: 480px) {
   .page-header.mobile-header { height: 48px; }

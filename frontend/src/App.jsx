@@ -497,7 +497,6 @@ export default function App() {
   return (
     <div className="app-layout">
       <ToastProvider />
-      <button className="sidebar-toggle" onClick={() => setSidebarOpen(o => !o)}>☰</button>
 
       <Sidebar
         open={sidebarOpen}
