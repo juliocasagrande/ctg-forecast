@@ -1,5 +1,6 @@
+import Icon from '../ui/Icon.jsx';
 import { useState, useEffect } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth, useRole } from '../../context/AuthContext.jsx';
 import api from '../../utils/api.js';
 
@@ -9,6 +10,8 @@ const IC = {
   users:     <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/></svg>,
   add:       <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd"/></svg>,
   profile:   <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"/></svg>,
+  settings:  <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd"/></svg>,
+  polos:     <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm0 6a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2zm0 6a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2z"/></svg>,
   logout:    <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 001 1h7v-2H4V5h6V3H3zm11.293 4.293a1 1 0 011.414 1.414L13.414 11H9a1 1 0 110-2h4.414l2.293-2.293z" clipRule="evenodd"/></svg>,
   plant:     <svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13"><path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd"/></svg>,
 };
@@ -51,8 +54,9 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
   const { user, logout } = useAuth();
   const { isAdmin, isGestor, isPlanejador } = useRole();
   const navigate = useNavigate();
+  const location = useLocation();
   const [unreadMap, setUnreadMap]     = useState({});
-  const [collapsed, setCollapsed]     = useState({}); // plant -> bool
+  const [collapsed, setCollapsed]     = useState({});
 
   // Poll unread message counts
   useEffect(() => {
@@ -109,25 +113,44 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
 
           {/* Gestor / Engenheiro */}
           {!isAdmin && <>
-            <div className="nav-section-label">Visão Geral</div>
+            <div className="nav-section-label" style={{color:"rgba(255,255,255,0.85)"}}>Visão Geral</div>
             {navItem('/', IC.dashboard, 'Dashboard')}
-            {navItem('/projects', IC.projects, 'Projetos')}
-            {(isGestor || isPlanejador) && (
-              <button className="nav-item" onClick={() => { onNewProject?.(); onClose(); }}>
-                {IC.add}<span>Novo Projeto</span>
-              </button>
-            )}
+            {/* Projetos row with inline + button for gestor/planejador */}
+            <div style={{ display:'flex', alignItems:'center', gap:2 }}>
+              <NavLink to="/projects" onClick={onClose}
+                className={({ isActive }) => `nav-item ${isActive && !location.pathname.includes('/projects/') ? 'active' : ''}`}
+                style={{ flex:1 }}>
+                {IC.projects}<span>Projetos</span>
+              </NavLink>
+              {(isGestor || isPlanejador) && (
+                <button
+                  title="Novo Projeto"
+                  onClick={() => { onNewProject?.(); onClose(); }}
+                  style={{
+                    flexShrink:0, width:26, height:26,
+                    background:'rgba(255,255,255,0.08)',
+                    border:'1px solid rgba(255,255,255,0.12)',
+                    borderRadius:'var(--radius-sm)',
+                    color:'rgba(255,255,255,0.7)',
+                    cursor:'pointer', fontSize:'1rem', lineHeight:1,
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    transition:'all 0.15s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background='rgba(0,174,239,0.25)'; e.currentTarget.style.color='#fff'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.08)'; e.currentTarget.style.color='rgba(255,255,255,0.7)'; }}
+                >+</button>
+              )}
+            </div>
+            {navItem('/polos', IC.polos || IC.dashboard, 'Visão Geral')}
           </>}
 
           {/* Projects grouped by plant */}
           {!isAdmin && grouped.length > 0 && (
             <>
-              <div className="nav-section-label" style={{ marginTop: 10 }}>
-                Meus Projetos
-              </div>
+              <div className="nav-section-label" style={{ marginTop:10, color:"rgba(255,255,255,0.85)" }}>Meus Projetos</div>
 
               {grouped.map(({ plant, projects: pjs }) => {
-                const isCollapsed = collapsed[plant];
+                const plantCollapsed = collapsed[plant] !== false; // default true
                 const groupUnread = pjs.reduce((s, p) => s + (unreadMap[p.id] || 0), 0);
 
                 return (
@@ -186,14 +209,14 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
                         color: 'rgba(255,255,255,0.3)',
                         flexShrink: 0,
                         transition: 'transform 0.2s',
-                        transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+                        transform: plantCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
                       }}>
                         ▾
                       </span>
                     </button>
 
                     {/* Project items */}
-                    {!isCollapsed && pjs.map(p => {
+                    {!plantCollapsed && pjs.map(p => {
                       const unread = unreadMap[p.id] || 0;
                       return (
                         <button
@@ -242,8 +265,9 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
         </div>
 
         {/* User footer */}
-        <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', padding: '12px 14px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', padding: '10px 8px' }}>
+          {/* Avatar + name row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', marginBottom: 4 }}>
             <div style={{
               width: 34, height: 34, borderRadius: '50%',
               background: 'rgba(0,174,239,0.25)',
@@ -252,22 +276,34 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
             }}>
               {initials}
             </div>
-            <div style={{ overflow: 'hidden' }}>
+            <div style={{ overflow: 'hidden', flex: 1 }}>
               <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {user?.name}
               </div>
-              <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.38)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {user?.email}
               </div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {navItem('/profile', IC.profile, 'Meu Perfil')}
-            <button className="nav-item" style={{ flex: '0 0 auto' }}
-              onClick={() => { logout(); navigate('/login'); }}>
-              {IC.logout}
-            </button>
-          </div>
+
+          {/* Nav items — one per line */}
+          {isPlanejador && (
+            <NavLink to="/settings" onClick={onClose}
+              className={({ isActive }) => `nav-item sidebar-footer-item ${isActive ? 'active' : ''}`}>
+              <Icon name="gear" style={{ width: 16, textAlign: 'center' }} />
+              <span>Configurações</span>
+            </NavLink>
+          )}
+          <NavLink to="/profile" onClick={onClose}
+            className={({ isActive }) => `nav-item sidebar-footer-item ${isActive ? 'active' : ''}`}>
+            <Icon name="circle-user" style={{ width: 16, textAlign: 'center' }} />
+            <span>Meu Perfil</span>
+          </NavLink>
+          <button className="nav-item sidebar-footer-item sidebar-logout"
+            onClick={() => { logout(); navigate('/login'); }}>
+            <Icon name="right-from-bracket" style={{ width: 16, textAlign: 'center' }} />
+            <span>Sair</span>
+          </button>
         </div>
       </nav>
     </>

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <rect width="200" height="200" rx="44" fill="#001F5B"/>
+  <rect x="24" y="128" width="22" height="48" rx="4" fill="#0070B8" opacity="0.7"/>
+  <rect x="52" y="104" width="22" height="72" rx="4" fill="#0070B8" opacity="0.85"/>
+  <rect x="80" y="80" width="22" height="96" rx="4" fill="#00AEEF"/>
+  <rect x="108" y="56" width="22" height="120" rx="4" fill="#00AEEF" opacity="0.85"/>
+  <polyline points="24,150 52,120 80,88 108,64 148,40"
+    fill="none" stroke="#00AEEF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+  <text x="100" y="36" font-family="Georgia, serif" font-size="22" font-weight="700"
+    fill="#FFFFFF" text-anchor="middle" letter-spacing="3">CTG</text>
+  <text x="100" y="190" font-family="Georgia, serif" font-size="16" font-weight="400"
+    fill="#94A3B8" text-anchor="middle" letter-spacing="2">FORECAST</text>
+</svg>

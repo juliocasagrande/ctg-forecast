@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import api from '../utils/api.js';
+import { useTypeColors } from '../context/SettingsContext.jsx';
 import { useAuth, useRole } from '../context/AuthContext.jsx';
 import { formatBRL, formatBRLShort, MONTHS_PT, CATEGORIES } from '../utils/format.js';
 import ForecastWizard from './ForecastWizard.jsx';
@@ -53,6 +54,7 @@ function SIWarning({ forecastTotal, actualTotal, consolidatedActual, siValue }) 
 
 // ── Read-only table (gestor) ──────────────────────────────────────────────────
 function ReadOnlyTable({ entries, year, siValue, consolidatedActual }) {
+  const C = useTypeColors();
   const get = (cat, type, month) =>
     parseFloat(entries.find(e=>e.category===cat&&e.type===type&&parseInt(e.year)===year&&parseInt(e.month)===month)?.value||0);
   const rowTotal = (cat, type) => Array.from({length:12},(_,i)=>i+1).reduce((s,m)=>s+get(cat,type,m),0);
@@ -84,11 +86,11 @@ function ReadOnlyTable({ entries, year, siValue, consolidatedActual }) {
             <tr className="cat-header-row"><td colSpan={14}>TOTAL GERAL</td></tr>
             {['Budget','Forecast','Actual','Meta','Pool'].map(type=>{
               const th = {
-                Budget:  { row:'#DCFCE7', midBg:'#86EFAC', text:'#15803D', border:'#4ADE80' },
-                Forecast:{ row:'#E0F2FE', midBg:'#7DD3FC', text:'#0369A1', border:'#38BDF8' },
-                Actual:  { row:'#DBEAFE', midBg:'#93C5FD', text:'#1E40AF', border:'#60A5FA' },
-                Meta:    { row:'#EDE9FE', midBg:'#C4B5FD', text:'#6D28D9', border:'#A78BFA' },
-                Pool:    { row:'#CFFAFE', midBg:'#67E8F9', text:'#0E7490', border:'#22D3EE' },
+                Budget:  { row:C.budget+'22', midBg:C.budget+'66', text:C.budget, border:C.budget },
+                Forecast:{ row:C.forecast+'22', midBg:C.forecast+'66', text:C.forecast, border:C.forecast },
+                Actual:  { row:C.actual+'22', midBg:C.actual+'66', text:C.actual, border:C.actual },
+                Meta:    { row:C.meta+'22', midBg:C.meta+'66', text:C.meta, border:C.meta },
+                Pool:    { row:C.pool+'22', midBg:C.pool+'66', text:C.pool, border:C.pool },
               }[type];
               return (
                 <tr key={`tot-${type}`} style={{background:th.row}}>
@@ -233,7 +235,141 @@ const MAIN_TABS = [
   {id:'notes',    label:'📌 Avisos'},
 ];
 
+
+// ── Export Modal — category + type selection ──────────────────────────────────
+const EXPORT_CATEGORIES = ['Viagens', 'Contratos', 'POs'];
+const EXPORT_TYPES_BY_ROLE = {
+  engenheiro: ['Forecast', 'Actual'],
+  gestor:     ['Budget', 'Forecast', 'Actual'],
+  planejador: ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'],
+  admin:      ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'],
+};
+const TYPE_LABELS = { Budget:'Budget', Forecast:'Forecast', Actual:'Realizado', Meta:'Meta', Pool:'Pool' };
+
+function ExportModal({ open, onClose, onConfirm, role, isEngenheiro }) {
+  const availableTypes = EXPORT_TYPES_BY_ROLE[role] || EXPORT_TYPES_BY_ROLE.gestor;
+  const [exportScope, setExportScope] = useState('projeto'); // 'projeto' | 'geral'
+  const [selCats,  setSelCats]  = useState([...EXPORT_CATEGORIES]);
+  const [selTypes, setSelTypes] = useState([...availableTypes]);
+
+  const toggle = (arr, setArr, val) =>
+    setArr(prev => prev.includes(val) ? prev.filter(x => x !== val) : [...prev, val]);
+
+  if (!open) return null;
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span className="modal-title">⬇ Exportar Excel</span>
+          <button className="btn btn-ghost btn-icon" onClick={onClose} style={{ color:'rgba(255,255,255,0.7)' }}>✕</button>
+        </div>
+        <div className="modal-body">
+          {/* Export scope selector */}
+          <div style={{ marginBottom:16 }}>
+            <div style={{ fontSize:'0.7rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--text-muted)', marginBottom:8 }}>
+              Tipo de exportação
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+              {[
+                { id:'projeto', label:'📄 Este projeto', desc:'Dados deste projeto apenas' },
+                { id:'geral',   label:'📊 Relatório Geral', desc: isEngenheiro ? 'Meus projetos (Jan/2026 – Dez/2031)' : 'Todos os projetos (Jan/2026 – Dez/2031)' },
+              ].map(opt => (
+                <label key={opt.id} style={{
+                  flex:1, padding:'10px 12px', borderRadius:'var(--radius-md)', cursor:'pointer',
+                  background: exportScope===opt.id ? 'var(--ctg-light)' : 'var(--bg-app)',
+                  border: `1.5px solid ${exportScope===opt.id ? 'var(--ctg-blue)' : 'var(--border-strong)'}`,
+                  userSelect:'none', transition:'all 0.15s',
+                }}>
+                  <input type="radio" name="scope" value={opt.id} checked={exportScope===opt.id}
+                    onChange={() => setExportScope(opt.id)} style={{ marginRight:6, accentColor:'var(--ctg-blue)' }} />
+                  <span style={{ fontSize:'0.83rem', fontWeight:600, color: exportScope===opt.id ? 'var(--ctg-navy)' : 'var(--text-secondary)' }}>{opt.label}</span>
+                  <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', marginTop:2, marginLeft:20 }}>{opt.desc}</div>
+                </label>
+              ))}
+            </div>
+          </div>
+          <p style={{ fontSize:'0.82rem', color:'var(--text-secondary)', marginBottom:16 }}>
+            {exportScope==='projeto'
+              ? 'Selecione as categorias e tipos de dados deste projeto.'
+              : 'Selecione os tipos de dados para o relatório geral.'}
+          </p>
+          {/* Show categories only for project export */}
+
+          {/* Categories — only for project export */}
+          {exportScope === 'projeto' && <div style={{ marginBottom:18 }}>
+            <div style={{ fontSize:'0.7rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--text-muted)', marginBottom:8 }}>
+              Categorias
+            </div>
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+              {EXPORT_CATEGORIES.map(cat => (
+                <label key={cat} style={{
+                  display:'flex', alignItems:'center', gap:7, padding:'7px 14px',
+                  borderRadius:'var(--radius-md)', cursor:'pointer',
+                  background: selCats.includes(cat) ? 'var(--ctg-light)' : 'var(--bg-app)',
+                  border: `1.5px solid ${selCats.includes(cat) ? 'var(--ctg-blue)' : 'var(--border-strong)'}`,
+                  fontSize:'0.83rem', fontWeight: selCats.includes(cat) ? 600 : 400,
+                  color: selCats.includes(cat) ? 'var(--ctg-navy)' : 'var(--text-secondary)',
+                  transition:'all 0.15s', userSelect:'none',
+                }}>
+                  <input type="checkbox" checked={selCats.includes(cat)}
+                    onChange={() => toggle(EXPORT_CATEGORIES, setSelCats, cat)}
+                    style={{ accentColor:'var(--ctg-blue)', width:14, height:14 }} />
+                  {cat}
+                </label>
+              ))}
+            </div>
+          </div>}
+
+          {/* Types */}
+          <div>
+            <div style={{ fontSize:'0.7rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--text-muted)', marginBottom:8 }}>
+              Tipos de dados
+            </div>
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+              {availableTypes.map(type => {
+                const theme = {
+                  Budget:   { bg:'var(--budget-bg)',   border:'var(--budget-border)',   text:'var(--budget-text)'   },
+                  Forecast: { bg:'var(--forecast-bg)', border:'var(--forecast-border)', text:'var(--forecast-text)' },
+                  Actual:   { bg:'var(--actual-bg)',   border:'var(--actual-border)',   text:'var(--actual-text)'   },
+                  Meta:     { bg:'#F5F3FF', border:'#DDD6FE', text:'#6D28D9' },
+                  Pool:     { bg:'#F0F9FF', border:'#BAE6FD', text:'#0369A1' },
+                }[type] || {};
+                const sel = selTypes.includes(type);
+                return (
+                  <label key={type} style={{
+                    display:'flex', alignItems:'center', gap:7, padding:'7px 14px',
+                    borderRadius:'var(--radius-md)', cursor:'pointer',
+                    background: sel ? theme.bg : 'var(--bg-app)',
+                    border: `1.5px solid ${sel ? theme.border : 'var(--border-strong)'}`,
+                    fontSize:'0.83rem', fontWeight: sel ? 600 : 400,
+                    color: sel ? theme.text : 'var(--text-secondary)',
+                    transition:'all 0.15s', userSelect:'none',
+                  }}>
+                    <input type="checkbox" checked={sel}
+                      onChange={() => toggle(availableTypes, setSelTypes, type)}
+                      style={{ accentColor: theme.text || 'var(--ctg-blue)', width:14, height:14 }} />
+                    {TYPE_LABELS[type] || type}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+          <button className="btn btn-export"
+            disabled={selTypes.length === 0 || (exportScope==='projeto' && selCats.length === 0)}
+            onClick={() => { onConfirm(selCats, selTypes, exportScope); onClose(); }}>
+            ⬇ Exportar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ProjectDetail({ onEdit }) {
+  const C = useTypeColors();
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -263,6 +399,7 @@ export default function ProjectDetail({ onEdit }) {
   const [addingNote,   setAddingNote]  = useState(false);
   const [editingNote,  setEditingNote] = useState(null);
   const [assignModal,  setAssignModal] = useState(false);
+  const [exportModal,  setExportModal]  = useState(false);
   const { toast } = useToast();
 
   // Set default forecastType based on role
@@ -362,21 +499,26 @@ export default function ProjectDetail({ onEdit }) {
     try { await api.post(`/forecast/project/${id}/checkin`); toast('Check-in registrado', 'success'); }
     catch { toast('Erro ao registrar check-in', 'error'); }
   };
-  const handleExport = async () => {
+  const handleExport = async (categories = null, types = null, scope = 'projeto') => {
     try {
       const token = localStorage.getItem('ctg_token');
       const base  = import.meta.env.VITE_API_URL || '/api';
-      // Planejador gets the consolidated report; others get the project-specific export
-      const url   = isPlanejador
-        ? `${base}/export/planejador`
-        : `${base}/export/project/${id}`;
+      const params = new URLSearchParams();
+      if (types) types.forEach(t => params.append('types', t));
+      const qs = params.toString() ? `?${params.toString()}` : '';
+      const isGeral = scope === 'geral';
+      // Route: 'geral' → consolidated report; 'projeto' → project-specific
+      if (categories && !isGeral) categories.forEach(c => params.append('categories', c));
+      const url = isGeral
+        ? `${base}/export/planejador${qs}`
+        : `${base}/export/project/${id}${qs}`;
       const res   = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('Erro ao gerar arquivo');
       const blob     = await res.blob();
-      const filename = isPlanejador
-        ? `CTG_Forecast_Planejador_${new Date().getFullYear()}.xlsx`
+      const filename = isGeral
+        ? `CTG_Forecast_Geral_${new Date().getFullYear()}.xlsx`
         : `${project.code} - ${project.name}.xlsx`;
       const link = document.createElement('a');
       link.href  = URL.createObjectURL(blob);
@@ -405,10 +547,16 @@ export default function ProjectDetail({ onEdit }) {
     <div>
       {/* ── Project header card ── */}
       <div className="card" style={{marginBottom:14}}>
-        <div className="project-detail-header" style={{padding:'14px 18px',display:'flex',alignItems:'flex-start',gap:16,flexWrap:'wrap'}}>
+        <div className="project-detail-header" style={{padding:'14px 18px',display:'flex',alignItems:'stretch',gap:16,flexWrap:'wrap'}}>
           <div style={{flex:1,minWidth:200}}>
             <div style={{fontSize:'0.72rem',fontWeight:700,color:'var(--ctg-blue)',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:2}}>{project.code}</div>
-            <h2 style={{fontFamily:'var(--font-display)',fontSize:'1.25rem',color:'var(--ctg-navy)',lineHeight:1.2,marginBottom:4}}>{project.name}</h2>
+            {/* Plant name + project name inline */}
+            <h2 style={{fontFamily:'var(--font-display)',fontSize:'1.25rem',color:'var(--ctg-navy)',lineHeight:1.3,marginBottom:4}}>
+              {project.plants?.length > 0 && (
+                <span style={{color:'var(--ctg-blue)'}}>{project.plants.join(', ')} — </span>
+              )}
+              {project.name}
+            </h2>
             {project.description && <p style={{fontSize:'0.82rem',color:'var(--text-muted)',marginBottom:6}}>{project.description}</p>}
             {overSI && <SIWarning forecastTotal={totalForecast} actualTotal={totalActual} consolidatedActual={consolidated.value} siValue={siValue}/>}
             {/* Engineers */}
@@ -425,26 +573,45 @@ export default function ProjectDetail({ onEdit }) {
             {/* ActivityPanel removed */}
           </div>
 
-          {/* Totals */}
-          <div className="project-detail-totals" style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'flex-start'}}>
+          {/* Totals — 4 cards side by side, filling full height */}
+          <div className="project-detail-totals" style={{display:'flex',flexDirection:'row',gap:6,flexShrink:0,alignSelf:'stretch'}}>
             {[
               {label:'Budget',   v:totalFor('Budget'),   cls:'budget'},
               {label:'Forecast', v:totalFor('Forecast'), cls:'forecast'},
               {label:'Realizado',v:totalFor('Actual'),   cls:'actual'},
               {label:'SI', v:project.si_value, cls: overSI ? 'actual' : '', border: overSI ? '1.5px solid #FCA5A5' : 'none'},
             ].map(s=>(
-              <div key={s.label} style={{padding:'8px 12px',background:s.cls?`var(--${s.cls}-bg)`:'var(--bg-app)',border:s.border||'none',borderRadius:'var(--radius-md)',minWidth:85,textAlign:'center'}}>
+              <div key={s.label} style={{
+                padding:'0 14px',
+                background:s.cls?`var(--${s.cls}-bg)`:'var(--bg-app)',
+                border:s.border||`1px solid ${s.cls?`var(--${s.cls}-border)`:'var(--border)'}`,
+                borderRadius:'var(--radius-md)',
+                minWidth:90,
+                display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+                textAlign:'center',
+              }}>
                 <div style={{fontSize:'0.6rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:s.cls?`var(--${s.cls}-text)`:'var(--text-muted)',marginBottom:2}}>{s.label}</div>
-                <div style={{fontFamily:'var(--font-display)',fontSize:'0.95rem',color:(s.label==='SI'&&overSI)?'#DC2626':'var(--text-primary)'}}>{fmt(s.v)}</div>
+                <div style={{fontFamily:'var(--font-display)',fontSize:'0.95rem',color:(s.label==='SI'&&overSI)?'#DC2626':'var(--text-primary)',lineHeight:1.2}}>{fmt(s.v)}</div>
               </div>
             ))}
           </div>
 
           {/* Actions */}
-          <div className="project-detail-actions" style={{display:'flex',gap:6,alignItems:'center',flexShrink:0,flexDirection:'column'}}>
-              {canManage && <button className="btn btn-secondary btn-sm" onClick={()=>onEdit?.(project)}>✎ Editar</button>}
-            <button className="btn btn-export btn-sm" onClick={handleExport}>⬇ Excel</button>
-            <button className="btn btn-ghost btn-sm" onClick={handleCheckin} style={{borderColor:'var(--ctg-blue)',color:'var(--ctg-blue)'}}>✓ Check-in</button>
+          <div className="project-detail-actions" style={{display:'flex',gap:6,alignItems:'stretch',flexShrink:0,flexDirection:'column',minWidth:118}}>
+            {canManage && (
+              <button className="btn btn-secondary btn-sm" onClick={()=>onEdit?.(project)}
+                style={{width:'100%',justifyContent:'center'}}>
+                ✎ Editar
+              </button>
+            )}
+            <button className="btn btn-export btn-sm" onClick={() => setExportModal(true)}
+              style={{width:'100%',justifyContent:'center'}}>
+              ⬇ Excel
+            </button>
+            <button className="btn btn-sm" onClick={handleCheckin}
+              style={{width:'100%',justifyContent:'center',background:'var(--ctg-blue)',color:'#fff',border:'none'}}>
+              ✓ Check-in
+            </button>
           </div>
         </div>
       </div>
@@ -541,13 +708,13 @@ export default function ProjectDetail({ onEdit }) {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/>
                   <XAxis dataKey="month" tick={{fontSize:11,fill:'#374151'}}/>
                   <YAxis tickFormatter={v=>fmt(v)} tick={{fontSize:11,fill:'#374151'}} width={72}/>
-                  <Tooltip formatter={v=>formatBRL(v)}/>
+                  <Tooltip formatter={v=>formatBRL(v)} labelFormatter={label=>`${label}/${year}`} contentStyle={{minWidth:200,zIndex:9999}} wrapperStyle={{zIndex:9999}} allowEscapeViewBox={{x:true,y:true}} isAnimationActive={false} />
                   <Legend wrapperStyle={{fontSize:'0.82rem'}}/>
-                  <Bar dataKey="Budget"    fill="#16A34A" radius={[3,3,0,0]}/>
-                  <Bar dataKey="Forecast"  fill="#38BDF8" radius={[3,3,0,0]}/>
-                  <Bar dataKey="Realizado" fill="#2563EB" radius={[3,3,0,0]}/>
-                  <Bar dataKey="Meta"      fill="#7C3AED" radius={[3,3,0,0]}/>
-                  <Bar dataKey="Pool"      fill="#0891B2" radius={[3,3,0,0]}/>
+                  <Bar dataKey="Budget"    fill={C.budget} radius={[3,3,0,0]}/>
+                  <Bar dataKey="Forecast"  fill={C.forecast} radius={[3,3,0,0]}/>
+                  <Bar dataKey="Realizado" fill={C.actual} radius={[3,3,0,0]}/>
+                  <Bar dataKey="Meta"      fill={C.meta} radius={[3,3,0,0]}/>
+                  <Bar dataKey="Pool"      fill={C.pool} radius={[3,3,0,0]}/>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -567,13 +734,13 @@ export default function ProjectDetail({ onEdit }) {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/>
                   <XAxis dataKey="month" tick={{fontSize:11,fill:'#374151'}}/>
                   <YAxis tickFormatter={v=>fmt(v)} tick={{fontSize:11,fill:'#374151'}} width={72}/>
-                  <Tooltip formatter={v=>formatBRL(v)}/>
+                  <Tooltip formatter={v=>formatBRL(v)} labelFormatter={label=>`${label}/${year}`} contentStyle={{minWidth:200,zIndex:9999}} wrapperStyle={{zIndex:9999}} allowEscapeViewBox={{x:true,y:true}} isAnimationActive={false} />
                   <Legend wrapperStyle={{fontSize:'0.82rem'}}/>
-                  <Line type="monotone" dataKey="Budget"    stroke="#15803D" strokeWidth={2} dot={false}/>
-                  <Line type="monotone" dataKey="Forecast"  stroke="#0EA5E9" strokeWidth={2} dot={false}/>
-                  <Line type="monotone" dataKey="Realizado" stroke="#1E40AF" strokeWidth={2} strokeDasharray="5 3"/>
-                  <Line type="monotone" dataKey="Meta"      stroke="#7C3AED" strokeWidth={2} strokeDasharray="8 3"/>
-                  <Line type="monotone" dataKey="Pool"      stroke="#0891B2" strokeWidth={2} strokeDasharray="4 2"/>
+                  <Line type="monotone" dataKey="Budget"    stroke={C.budget} strokeWidth={2} dot={false}/>
+                  <Line type="monotone" dataKey="Forecast"  stroke={C.forecast} strokeWidth={2} dot={false}/>
+                  <Line type="monotone" dataKey="Realizado" stroke={C.actual} strokeWidth={2} strokeDasharray="5 3" dot={false} activeDot={{ r: 3 }}/>
+                  <Line type="monotone" dataKey="Meta"      stroke={C.meta} strokeWidth={2} strokeDasharray="8 3" dot={false} activeDot={{ r: 3 }}/>
+                  <Line type="monotone" dataKey="Pool"      stroke={C.pool} strokeWidth={2} strokeDasharray="4 2" dot={false} activeDot={{ r: 3 }}/>
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -641,6 +808,15 @@ export default function ProjectDetail({ onEdit }) {
           </div>
         </div>
       )}
+
+      {/* ── Export Modal ── */}
+      <ExportModal
+        open={exportModal}
+        onClose={() => setExportModal(false)}
+        onConfirm={handleExport}
+        role={user?.role}
+        isEngenheiro={isEngenheiro}
+      />
 
       {/* ── Assign Modal ── */}
       <Modal open={assignModal} onClose={()=>setAssignModal(false)} title="Designar Engenheiro">

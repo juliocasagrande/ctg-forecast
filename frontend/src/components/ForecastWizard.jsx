@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../utils/api.js';
+import { useTypeColors } from '../context/SettingsContext.jsx';
 import { useToast } from './ui/Toast.jsx';
 import { MONTHS_FULL_PT, MONTHS_PT, formatBRL } from '../utils/format.js';
 
@@ -12,13 +13,17 @@ const CAT_DESCRIPTIONS = {
 const CAT_ICONS = { Viagens: 'VGS', Contratos: 'CTR', POs: 'POs' };
 
 // ── Theme per type ────────────────────────────────────────────────────────────
-const TYPE_THEME = {
-  Budget:   { label:'Budget',    color:'#15803D', light:'#F0FDF4', border:'#BBF7D0', row:'#DCFCE7', text:'#15803D' },
-  Forecast: { label:'Forecast',  color:'#0EA5E9', light:'#F0F9FF', border:'#BAE6FD', row:'#E0F2FE', text:'#0369A1' },
-  Actual:   { label:'Realizado', color:'#1E40AF', light:'#EFF6FF', border:'#BFDBFE', row:'#DBEAFE', text:'#1E40AF' },
-  Meta:     { label:'Meta',      color:'#7C3AED', light:'#F5F3FF', border:'#DDD6FE', row:'#EDE9FE', text:'#6D28D9' },
-  Pool:     { label:'Pool',      color:'#0891B2', light:'#F0F9FF', border:'#BAE6FD', row:'#E0F2FE', text:'#0369A1' },
-};
+function getTypeTheme(C) {
+  return {
+    Budget:   { label:'Budget',    color:C.budget,   light:C.budget+'18',   border:C.budget+'55',   row:C.budget+'28',   text:C.budget },
+    Forecast: { label:'Forecast',  color:C.forecast, light:C.forecast+'18', border:C.forecast+'55', row:C.forecast+'28', text:C.forecast },
+    Actual:   { label:'Realizado', color:C.actual,   light:C.actual+'18',   border:C.actual+'55',   row:C.actual+'28',   text:C.actual },
+    Meta:     { label:'Meta',      color:C.meta,     light:C.meta+'18',     border:C.meta+'55',     row:C.meta+'28',     text:C.meta },
+    Pool:     { label:'Pool',      color:C.pool,     light:C.pool+'18',     border:C.pool+'55',     row:C.pool+'28',     text:C.pool },
+  };
+}
+// Static fallback (for non-hook contexts)
+const TYPE_THEME = getTypeTheme({ budget:'#15803D', forecast:'#0EA5E9', actual:'#1E40AF', meta:'#7C3AED', pool:'#0891B2' });
 
 const REF_TYPE = { Budget:'Forecast', Forecast:'Budget', Actual:'Forecast', Meta:'Budget', Pool:'Budget' };
 
@@ -86,7 +91,7 @@ function MonthRow({ month, year, value, comment, onChange, refValue, refLabel, t
             onKeyDown={e => { if (e.key==='Enter') e.target.blur(); }}
           />
           {diff != null && Math.abs(diff) > 0.01 && (
-            <span style={{fontSize:'0.68rem',fontWeight:700,flexShrink:0,color:isOver?'#DC2626':'#15803D'}}>
+            <span style={{fontSize:'0.68rem',fontWeight:700,flexShrink:0,color:isOver?'#DC2626':'#166534'}}>
               {isOver?'▲':'▼'} {formatBRL(Math.abs(diff))}
             </span>
           )}
@@ -133,6 +138,8 @@ export default function ForecastWizard({
   siValue = 0,
   consolidatedActual = 0,
 }) {
+  const C = useTypeColors();
+  const TYPE_THEME = getTypeTheme(C);
   const types = availableTypes?.length ? availableTypes : [editType];
   const YEARS = [2026, 2027, 2028, 2029, 2030, 2031];
 
@@ -436,7 +443,7 @@ export default function ForecastWizard({
             <div style={{fontSize:'0.62rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:theme.text,marginBottom:2}}>Total {year}</div>
             <div style={{fontFamily:'var(--font-display)',fontSize:'1.3rem',color:theme.color}}>{formatBRL(catTotal)}</div>
             {refTotalCat>0 && (
-              <div style={{fontSize:'0.68rem',color:diff>0?'#DC2626':diff<0?'#15803D':'var(--text-muted)',fontWeight:600}}>
+              <div style={{fontSize:'0.68rem',color:diff>0?'#DC2626':diff<0?'#166534':'var(--text-muted)',fontWeight:600}}>
                 {diff===0?`= ${TYPE_THEME[REF_TYPE[activeType]]?.label}`:diff>0?`▲ ${formatBRL(Math.abs(diff))} acima`:`▼ ${formatBRL(Math.abs(diff))} abaixo`}
               </div>
             )}

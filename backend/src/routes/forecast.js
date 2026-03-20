@@ -253,8 +253,13 @@ router.get('/alerts', async (req, res) => {
   try {
     const { role, id: userId } = req.user;
     const currentYear = new Date().getFullYear();
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    // Load configurable threshold
+    const cfgRes = await pool.query(
+      "SELECT value FROM system_settings WHERE key='alert_stale_days'"
+    );
+    const staleDays = parseInt(cfgRes.rows[0]?.value || '30');
+    const staleDate = new Date();
+    staleDate.setDate(staleDate.getDate() - staleDays);
 
     // Which projects does this user have access to?
     const projFilter = role === 'engenheiro'
@@ -302,7 +307,7 @@ router.get('/alerts', async (req, res) => {
       GROUP BY p.id
       HAVING MAX(fe.updated_at) < $2
       ORDER BY last_update ASC
-    `, [currentYear, thirtyDaysAgo.toISOString()]);
+    `, [currentYear, staleDate.toISOString()]);
 
     const unreadMap = {};
     unreadRes.rows.forEach(r => { unreadMap[r.project_id] = parseInt(r.unread_count); });
@@ -327,5 +332,42 @@ router.get('/alerts', async (req, res) => {
         })),
       },
     });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Polo Consolidado — aggregated by polo → plant → project ──────────────────
+router.get('/polo-summary', async (req, res) => {
+  try {
+    const { year, yearStart, yearEnd } = req.query;
+    const currentYear = new Date().getFullYear();
+    const yrStart = parseInt(yearStart || year || currentYear);
+    const yrEnd   = parseInt(yearEnd   || year || currentYear);
+    const { role, id: userId } = req.user;
+
+    // Role-based project filter
+    const joinClause = role === 'engenheiro'
+      ? `INNER JOIN project_assignments pa ON pa.project_id=p.id AND pa.user_id=${userId}`
+      : '';
+
+    const r = await pool.query(`
+      SELECT
+        p.id, p.code, p.name, p.plants,
+        COALESCE(SUM(CASE WHEN fe.type='Budget'   AND fe.year BETWEEN $1 AND $2 THEN fe.value ELSE 0 END),0) AS budget,
+        COALESCE(SUM(CASE WHEN fe.type='Forecast' AND fe.year BETWEEN $1 AND $2 THEN fe.value ELSE 0 END),0) AS forecast,
+        COALESCE(SUM(CASE WHEN fe.type='Actual'   AND fe.year BETWEEN $1 AND $2 THEN fe.value ELSE 0 END),0) AS actual,
+        COALESCE(SUM(CASE WHEN fe.type='Pool'     AND fe.year BETWEEN $1 AND $2 THEN fe.value ELSE 0 END),0) AS pool,
+        STRING_AGG(DISTINCT u.name, ', ' ORDER BY u.name) AS engineers,
+        BOOL_OR(pa_mine.user_id IS NOT NULL) AS is_mine
+      FROM projects p
+      ${joinClause}
+      LEFT JOIN forecast_entries fe ON fe.project_id=p.id
+      LEFT JOIN project_assignments pa2 ON pa2.project_id=p.id
+      LEFT JOIN users u ON u.id=pa2.user_id AND u.role='engenheiro'
+      LEFT JOIN project_assignments pa_mine ON pa_mine.project_id=p.id AND pa_mine.user_id=${userId}
+      GROUP BY p.id
+      ORDER BY p.code
+    `, [yrStart, yrEnd]);
+
+    res.json(r.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

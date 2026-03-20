@@ -144,6 +144,29 @@ export async function initDB() {
         CHECK (type IN ('Budget','Forecast','Actual','Meta','Pool'));
     `);
 
+    // System settings table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS system_settings (
+        key   VARCHAR(80) PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_by INTEGER REFERENCES users(id),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      INSERT INTO system_settings (key, value) VALUES
+        ('alert_stale_days',     '30'),
+        ('alert_empty_forecast', 'true'),
+        ('alert_unread_messages','true'),
+        ('color_budget',         '#15803D'),
+        ('color_forecast',       '#0EA5E9'),
+        ('color_actual',         '#1E40AF'),
+        ('color_meta',           '#7C3AED'),
+        ('color_pool',           '#0891B2'),
+        ('export_include_meta',  'true'),
+        ('export_include_pool',  'true'),
+        ('fiscal_year_start',    '1')
+      ON CONFLICT (key) DO NOTHING;
+    `);
+
     console.log('✅ Migrations applied');
   } finally {
     client.release();

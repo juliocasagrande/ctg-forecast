@@ -1,5 +1,6 @@
+import Icon from './components/ui/Icon.jsx';
 import { useState, useEffect, useRef } from 'react';
-import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, useNavigate, NavLink } from 'react-router-dom';
 import { useAuth, useRole } from './context/AuthContext.jsx';
 import Sidebar from './components/layout/Sidebar.jsx';
 import { ToastProvider } from './components/ui/Toast.jsx';
@@ -9,6 +10,8 @@ import ProjectsPage from './pages/ProjectsPage.jsx';
 import ProjectDetail from './components/ProjectDetail.jsx';
 import ProjectForm from './components/ProjectForm.jsx';
 import Profile from './components/Profile.jsx';
+import SettingsPage from './pages/SettingsPage.jsx';
+import PolosPage from './pages/PolosPage.jsx';
 import AdminPanel from './components/admin/AdminPanel.jsx';
 import AlertBell from './components/ui/AlertBell.jsx';
 import api from './utils/api.js';
@@ -222,24 +225,168 @@ function RequireRole({ roles, children }) {
   return children;
 }
 
+function MobileBottomNav({ onLogout, isPlanejador, unreadCount = 0 }) {
+  const location = useLocation();
+  const isActive = (path) => location.pathname === path ||
+    (path !== '/' && location.pathname.startsWith(path));
+
+  return (
+    <nav className="mobile-bottom-nav">
+      <NavLink to="/" end className={`mobile-bottom-nav-item ${location.pathname === '/' ? 'active' : ''}`}>
+        <Icon name="house-chimney" />
+        <span>Dashboard</span>
+      </NavLink>
+
+      <NavLink to="/polos" className={`mobile-bottom-nav-item ${isActive('/polos') ? 'active' : ''}`}>
+        <Icon name="layer-group" /><span>Polos</span>
+      </NavLink>
+      <NavLink to="/projects" className={`mobile-bottom-nav-item ${isActive('/projects') ? 'active' : ''}`}>
+        <Icon name="folder-open" />
+        <span>Projetos</span>
+      </NavLink>
+
+      <NavLink to="/profile" className={`mobile-bottom-nav-item ${isActive('/profile') ? 'active' : ''}`}>
+        <Icon name="circle-user" />
+        <span>Perfil</span>
+      </NavLink>
+
+      {isPlanejador && (
+        <NavLink to="/settings" className={`mobile-bottom-nav-item ${isActive('/settings') ? 'active' : ''}`}>
+          <Icon name="gear" />
+          <span>Config.</span>
+        </NavLink>
+      )}
+
+      <button className="mobile-bottom-nav-item logout-btn" onClick={onLogout}>
+        <Icon name="right-from-bracket" />
+        <span>Sair</span>
+      </button>
+    </nav>
+  );
+}
+
+
+// ── Planejador / Relatório Geral export modal ─────────────────────────────────
+const PLANNER_TYPES  = ['Budget','Forecast','Actual','Meta','Pool'];
+const TYPE_LABEL_MAP = { Budget:'Budget', Forecast:'Forecast', Actual:'Realizado', Meta:'Meta', Pool:'Pool' };
+const TYPE_COLOR_MAP = {
+  Budget:   { bg:'#F0FDF4', border:'#BBF7D0', text:'#15803D' },
+  Forecast: { bg:'#F0F9FF', border:'#BAE6FD', text:'#0369A1' },
+  Actual:   { bg:'#EFF6FF', border:'#BFDBFE', text:'#1E40AF' },
+  Meta:     { bg:'#F5F3FF', border:'#DDD6FE', text:'#6D28D9' },
+  Pool:     { bg:'#F0F9FF', border:'#BAE6FD', text:'#0891B2' },
+};
+
+function PlanejadorExportModal({ open, onClose }) {
+  const [selTypes, setSelTypes] = useState([...PLANNER_TYPES]);
+  const [exporting, setExporting] = useState(false);
+
+  const toggle = (val) =>
+    setSelTypes(prev => prev.includes(val) ? prev.filter(x => x !== val) : [...prev, val]);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const token  = localStorage.getItem('ctg_token');
+      const base   = import.meta.env.VITE_API_URL || '/api';
+      const params = new URLSearchParams();
+      selTypes.forEach(t => params.append('types', t));
+      const res = await fetch(`${base}/export/planejador?${params.toString()}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const link = document.createElement('a');
+      link.href  = URL.createObjectURL(blob);
+      link.download = `CTG_Forecast_Planejador_${new Date().getFullYear()}.xlsx`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+      onClose();
+    } catch { alert('Erro ao exportar'); }
+    finally { setExporting(false); }
+  };
+
+  if (!open) return null;
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span className="modal-title">⬇ Relatório Geral</span>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer',
+            color:'rgba(255,255,255,0.7)', fontSize:'1.1rem', padding:'0 4px' }}>✕</button>
+        </div>
+        <div className="modal-body">
+          <p style={{ fontSize:'0.82rem', color:'var(--text-secondary)', marginBottom:8 }}>
+            O relatório incluirá <strong>todos os projetos</strong> com dados de Forecast mês a mês
+            de Jan/2026 a Dez/2031.
+          </p>
+          <p style={{ fontSize:'0.78rem', color:'var(--text-muted)', marginBottom:16,
+            padding:'8px 12px', background:'var(--bg-app)', borderRadius:'var(--radius-sm)',
+            borderLeft:'3px solid var(--ctg-blue)' }}>
+            ℹ Engenheiros verão apenas seus próprios projetos.
+            Planejadores e gestores verão todos os projetos.
+          </p>
+
+          <div style={{ fontSize:'0.7rem', fontWeight:700, textTransform:'uppercase',
+            letterSpacing:'0.08em', color:'var(--text-muted)', marginBottom:8 }}>
+            Colunas a incluir
+          </div>
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+            {PLANNER_TYPES.map(type => {
+              const th  = TYPE_COLOR_MAP[type] || {};
+              const sel = selTypes.includes(type);
+              return (
+                <label key={type} style={{
+                  display:'flex', alignItems:'center', gap:7, padding:'7px 14px',
+                  borderRadius:'var(--radius-md)', cursor:'pointer',
+                  background: sel ? th.bg : 'var(--bg-app)',
+                  border: `1.5px solid ${sel ? th.border : 'var(--border-strong)'}`,
+                  fontSize:'0.83rem', fontWeight: sel ? 600 : 400,
+                  color: sel ? th.text : 'var(--text-secondary)',
+                  transition:'all 0.15s', userSelect:'none',
+                }}>
+                  <input type="checkbox" checked={sel} onChange={() => toggle(type)}
+                    style={{ accentColor: th.text || 'var(--ctg-blue)', width:14, height:14 }} />
+                  {TYPE_LABEL_MAP[type] || type}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+          <button className="btn btn-export" onClick={handleExport}
+            disabled={selTypes.length === 0 || exporting}>
+            {exporting ? 'Gerando...' : '⬇ Exportar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function getPageMeta(pathname) {
   if (pathname === '/') return { title: 'Dashboard', sub: null };
   if (pathname === '/projects') return { title: 'Projetos', sub: null };
   if (pathname === '/admin') return { title: 'Administração', sub: 'Gestão de Usuários' };
   if (pathname === '/profile') return { title: 'Meu Perfil', sub: null };
+  if (pathname === '/settings') return { title: 'Configurações', sub: null };
+  if (pathname === '/polos') return { title: 'Visão Geral Consolidada — CTG Brasil', sub: null };
   if (pathname.startsWith('/projects/')) return { title: 'Projetos', sub: null };
   return { title: 'CTG Forecast', sub: null };
 }
 
 // ── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, logout } = useAuth();
   const { isAdmin, isPlanejador } = useRole();
   const [sidebarOpen, setSidebarOpen]       = useState(false);
   const [projects, setProjects]             = useState([]);
   const [projectFormOpen, setProjectFormOpen] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
   const [period, setPeriod]                 = useState({ start: new Date().getFullYear(), end: new Date().getFullYear() });
+  const [filterModalOpen,   setFilterModalOpen]   = useState(false);
+  const [planjExportModal, setPlanjExportModal] = useState(false);
   const [plantFilter, setPlantFilter]       = useState([]);
   const location  = useLocation();
   const navigate  = useNavigate();
@@ -272,7 +419,7 @@ export default function App() {
   );
 
   const { title, sub } = getPageMeta(location.pathname);
-  const showControls   = ['/', '/projects'].includes(location.pathname) && !isAdmin;
+  const showControls   = ['/', '/projects', '/polos'].includes(location.pathname) && !isAdmin;
 
   // Active plants = plants that exist in at least one project
   const activePlants = ALL_PLANTS.filter(pl => projects.some(p => (p.plants || []).includes(pl)));
@@ -302,22 +449,8 @@ export default function App() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               {isPlanejador && (
                 <button
-                  onClick={async () => {
-                    try {
-                      const token = localStorage.getItem('ctg_token');
-                      const base  = import.meta.env.VITE_API_URL || '/api';
-                      const res   = await fetch(`${base}/export/planejador`, {
-                        headers: { 'Authorization': `Bearer ${token}` },
-                      });
-                      if (!res.ok) throw new Error();
-                      const blob = await res.blob();
-                      const link = document.createElement('a');
-                      link.href  = URL.createObjectURL(blob);
-                      link.download = `CTG_Forecast_Planejador_${new Date().getFullYear()}.xlsx`;
-                      link.click();
-                      URL.revokeObjectURL(link.href);
-                    } catch { alert('Erro ao exportar'); }
-                  }}
+                  className="header-export-btn"
+                  onClick={() => setPlanjExportModal(true)}
                   style={{
                     padding: '6px 14px', borderRadius: 'var(--radius-sm)',
                     border: '1.5px solid #15803D', background: '#F0FDF4',
@@ -330,15 +463,12 @@ export default function App() {
                 </button>
               )}
               <AlertBell />
-              {/* Hide plant filter + period on mobile via CSS */}
-              <div className="header-desktop-controls" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <PlantFilter
-                  activePlants={activePlants}
-                  selected={plantFilter}
-                  onChange={setPlantFilter}
-                />
-                <PeriodSelector period={period} onChange={setPeriod} />
-              </div>
+              <PlantFilter
+                activePlants={activePlants}
+                selected={plantFilter}
+                onChange={setPlantFilter}
+              />
+              <PeriodSelector period={period} onChange={setPeriod} />
             </div>
           )}
           {/* Alert bell on non-dashboard pages too */}
@@ -346,18 +476,6 @@ export default function App() {
             <AlertBell />
           )}
         </header>
-
-        {/* Mobile-only filter bar — sticky, compact, shown only on small screens */}
-        {showControls && (
-          <div className="mobile-filter-bar">
-            <PlantFilter
-              activePlants={activePlants}
-              selected={plantFilter}
-              onChange={setPlantFilter}
-            />
-            <PeriodSelector period={period} onChange={setPeriod} />
-          </div>
-        )}
 
         <main className="page-body">
           <Routes>
@@ -395,6 +513,8 @@ export default function App() {
             } />
 
             <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
+            <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
+            <Route path="/polos" element={<RequireAuth><PolosPage period={period} /></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
@@ -406,6 +526,20 @@ export default function App() {
         project={editingProject}
         onSaved={handleProjectSaved}
       />
+
+      {/* Planejador export modal */}
+      <PlanejadorExportModal
+        open={planjExportModal}
+        onClose={() => setPlanjExportModal(false)}
+      />
+
+      {/* Mobile bottom navigation — hidden on desktop via CSS */}
+      {!isAdmin && (
+        <MobileBottomNav
+          isPlanejador={isPlanejador}
+          onLogout={() => { logout(); navigate('/login'); }}
+        />
+      )}
     </div>
   );
 }

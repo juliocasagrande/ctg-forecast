@@ -1,0 +1,13 @@
+{
+  "name": "CTG Forecast",
+  "short_name": "Forecast",
+  "description": "CTG Brasil — Controle de Forecast de Projetos",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#001F5B",
+  "theme_color": "#001F5B",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

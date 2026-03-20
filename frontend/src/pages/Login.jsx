@@ -231,6 +231,22 @@ export default function Login() {
           )}
 
         </div>
+
+        {/* Developer credit — discrete but visible */}
+        <div style={{
+          position: 'absolute', bottom: 20, left: 0, right: 0,
+          textAlign: 'center',
+          fontSize: '0.7rem',
+          color: 'var(--text-muted)',
+          letterSpacing: '0.04em',
+          opacity: 0.6,
+          userSelect: 'none',
+        }}>
+          Desenvolvido por{' '}
+          <span style={{ fontWeight: 600, color: 'var(--ctg-blue)', opacity: 1 }}>
+            Júlio Casagrande
+          </span>
+        </div>
       </div>
     </div>
   );

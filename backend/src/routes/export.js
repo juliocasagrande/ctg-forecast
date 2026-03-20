@@ -197,11 +197,14 @@ function buildResumo(wb, project, entries, years, d) {
 }
 
 // ── Category sheet (Viagens / Contratos / POs) ────────────────────────────
-function buildCategorySheet(wb, sheetName, catLabel, project, entries, years, d) {
+function buildCategorySheet(wb, sheetName, catLabel, project, entries, years, d, activeTypes) {
+  const typesToShow = activeTypes || ['Budget','Forecast','Actual'];
   const ws = wb.addWorksheet(sheetName);
   ws.properties.defaultColWidth = 13;
 
-  const typeBg  = { Budget: BUDGET_BG, Forecast: FORECAST_BG, Actual: ACTUAL_BG };
+  const typeBg   = { Budget: BUDGET_BG, Forecast: FORECAST_BG, Actual: ACTUAL_BG,
+                     Meta: 'F5F3FF', Pool: 'F0F9FF' };
+  const typeLabel= { Budget:'Budget', Forecast:'Forecast', Actual:'Realizado', Meta:'Meta', Pool:'Pool' };
   const isViagens = sheetName === 'Viagens';
 
   // Row 1: Year headers
@@ -221,31 +224,34 @@ function buildCategorySheet(wb, sheetName, catLabel, project, entries, years, d)
     });
   });
 
-  // Row 4: Budget / Forecast / Actual header rows
-  [[4,'Budget'],[5,'Forecast'],[6,'Actual']].forEach(([rowN, type]) => {
-    ws.getCell(rowN, 1).value = rowN === 4 ? catLabel : null;
-    ws.getCell(rowN, 2).value = type;
-    styleHeader(ws.getCell(rowN, 1), typeBg[type], NAVY, rowN === 4, 9);
-    styleHeader(ws.getCell(rowN, 2), typeBg[type], NAVY, true, 9);
+  // Rows 4+: one row per active type
+  typesToShow.forEach((type, ti) => {
+    const rowN = 4 + ti;
+    const bg   = typeBg[type]   || FORECAST_BG;
+    const lbl  = typeLabel[type] || type;
+    ws.getCell(rowN, 1).value = ti === 0 ? catLabel : null;
+    ws.getCell(rowN, 2).value = lbl;
+    styleHeader(ws.getCell(rowN, 1), bg, NAVY, ti === 0, 9);
+    styleHeader(ws.getCell(rowN, 2), bg, NAVY, true, 9);
     ws.getCell(rowN, 2).alignment.horizontal = 'left';
 
     years.forEach(year => {
       MONTHS_PT.forEach((_, mi) => {
         const month = mi + 1;
-        const cat = catLabel.trim();
-        const v = getVal(d, cat, type, year, month);
-        const c = ws.getCell(rowN, yearMonthToCol(year, month));
-        c.value = v;
-        styleValue(c, typeBg[type]);
+        const cat   = catLabel.trim();
+        const v     = getVal(d, cat, type, year, month);
+        const c     = ws.getCell(rowN, yearMonthToCol(year, month));
+        c.value     = v;
+        styleValue(c, bg);
       });
     });
   });
 
-  // Monthly detail rows — per year, per month
+  // Monthly detail rows (Forecast only for monthly breakdown)
+  const detailStartRow = 4 + typesToShow.length + 1;
   years.forEach((year, yearIdx) => {
-    // Year separator header (not in Viagens row pattern, but add for Contratos/POs)
     if (!isViagens) {
-      const yearHeaderRow = 8 + yearIdx * 26;
+      const yearHeaderRow = detailStartRow + yearIdx * 26;
       ws.getCell(yearHeaderRow, 1).value = year;
       ws.getCell(yearHeaderRow, 1).font = { bold: true, size: 10, name: 'Calibri' };
     }
@@ -254,26 +260,23 @@ function buildCategorySheet(wb, sheetName, catLabel, project, entries, years, d)
       const month = mi + 1;
       const cat   = catLabel.trim();
 
-      // Label row and value row
       let labelRow, valueRow;
       if (isViagens) {
-        labelRow = 8  + yearIdx * 26 + mi * 2;
+        labelRow = detailStartRow + yearIdx * 26 + mi * 2;
         valueRow = labelRow + 1;
       } else {
-        labelRow = 9  + yearIdx * 26 + mi * 2;
+        labelRow = detailStartRow + 1 + yearIdx * 26 + mi * 2;
         valueRow = labelRow + 1;
       }
 
       const forecastVal = getVal(d, cat, 'Forecast', year, month);
       const comment     = getCmt(d, cat, 'Forecast', year, month);
 
-      // Label row
       ws.getCell(labelRow, 1).value = `Previsto para o mês de ${monthName}/${year}`;
       ws.getCell(labelRow, 1).font  = { size: 9, name: 'Calibri' };
       ws.getCell(labelRow, 8).value = `Comentários após o fechamento do mês de ${monthName}/${year}`;
       ws.getCell(labelRow, 8).font  = { size: 9, name: 'Calibri' };
 
-      // Value row — col F (6) = forecast value, col H (8) = comment
       ws.getCell(valueRow, 6).value  = forecastVal || 0;
       ws.getCell(valueRow, 6).numFmt = '#,##0.00';
       ws.getCell(valueRow, 6).font   = { size: 9, name: 'Calibri' };
@@ -322,6 +325,25 @@ function buildAvisos(wb, notes) {
 router.get('/project/:projectId', requireProjectAccess, async (req, res) => {
   try {
     const { projectId } = req.params;
+    // Optional filters from frontend modal
+    const selCategories = req.query.categories
+      ? (Array.isArray(req.query.categories) ? req.query.categories : [req.query.categories])
+      : null;
+    const selTypes = req.query.types
+      ? (Array.isArray(req.query.types) ? req.query.types : [req.query.types])
+      : null;
+    const { role } = req.user;
+
+    // Role-based type whitelist
+    const ALLOWED_TYPES = {
+      engenheiro: ['Forecast','Actual'],
+      gestor:     ['Budget','Forecast','Actual'],
+      planejador: ['Budget','Forecast','Actual','Meta','Pool'],
+      admin:      ['Budget','Forecast','Actual','Meta','Pool'],
+    };
+    const allowedTypes = ALLOWED_TYPES[role] || ALLOWED_TYPES.gestor;
+    const activeTypes  = selTypes ? selTypes.filter(t => allowedTypes.includes(t)) : allowedTypes;
+    const activeCats   = selCategories || ['Viagens','Contratos','POs'];
 
     const [projRes, entriesRes, notesRes] = await Promise.all([
       pool.query('SELECT * FROM projects WHERE id=$1', [projectId]),
@@ -346,8 +368,8 @@ router.get('/project/:projectId', requireProjectAccess, async (req, res) => {
     wb.created  = new Date();
     wb.modified = new Date();
 
-    buildResumo(wb, project, entries, years, d);
-    CATEGORIES.forEach(cat => buildCategorySheet(wb, cat, cat, project, entries, years, d));
+    buildResumo(wb, project, entries, years, d, activeTypes, activeCats);
+    activeCats.forEach(cat => buildCategorySheet(wb, cat, cat, project, entries, years, d, activeTypes));
     buildAvisos(wb, notes);
 
     const safeName = `${project.code} - ${project.name}`.replace(/[/\\?%*:|"<>]/g, '-');
@@ -361,192 +383,260 @@ router.get('/project/:projectId', requireProjectAccess, async (req, res) => {
   }
 });
 
-// ── Planejador export: all projects × months forecast ──────────────────────
+// ── Planejador export: all projects × months, with type selection ─────────────
 router.get('/planejador', async (req, res) => {
-  const { role } = req.user;
-  if (!['admin', 'gestor', 'planejador'].includes(role))
+  const { role, id: userId } = req.user;
+  if (!['admin','gestor','planejador','engenheiro'].includes(role))
     return res.status(403).json({ error: 'Sem permissão' });
 
+  // Role-based type whitelist
+  const ALLOWED = {
+    engenheiro: ['Forecast','Actual'],
+    gestor:     ['Budget','Forecast','Actual'],
+    planejador: ['Budget','Forecast','Actual','Meta','Pool'],
+    admin:      ['Budget','Forecast','Actual','Meta','Pool'],
+  };
+  const allowed = ALLOWED[role] || [];
+  const reqTypes = req.query.types
+    ? (Array.isArray(req.query.types) ? req.query.types : [req.query.types])
+    : null;
+  const activeTypes = reqTypes ? reqTypes.filter(t => allowed.includes(t)) : allowed;
+
+  const TYPE_LABELS = { Budget:'Budget', Forecast:'Forecast', Actual:'Realizado', Meta:'Meta', Pool:'Pool' };
+  const TYPE_ARgb   = { Budget:'15803D', Forecast:'0369A1', Actual:'1E40AF', Meta:'6D28D9', Pool:'0891B2' };
+  const TYPE_ARGH   = { Budget:'15803D', Forecast:'0369A1', Actual:'1E40AF', Meta:'6D28D9', Pool:'0891B2' };
+  const TYPE_LIGHT  = { Budget:'F0FDF4', Forecast:'E0F2FE', Actual:'EFF6FF', Meta:'F5F3FF', Pool:'F0F9FF' };
+
+  const MONTHS_ABBR = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const START_YEAR = 2026, END_YEAR = 2031;
+  const NAVY = '001F5B', SUB_BG = '0070B8', LIGHT = 'E8EEF8', WHITE = 'FFFFFF';
+
   try {
-    // 1. All projects with their engineers and last forecast update
+    // 1. Projects (engineers see only assigned)
+    const engJoin = role === 'engenheiro'
+      ? `INNER JOIN project_assignments ejoin ON ejoin.project_id=p.id AND ejoin.user_id=${userId}`
+      : '';
     const projRes = await pool.query(`
-      SELECT
-        p.id, p.code, p.name, p.description, p.si_value, p.plants,
+      SELECT p.id, p.code, p.name, p.si_value, p.plants,
         STRING_AGG(DISTINCT u.name, ', ' ORDER BY u.name) AS responsaveis,
         MAX(fe.updated_at) AS ultima_atualizacao
       FROM projects p
-      LEFT JOIN project_assignments pa ON pa.project_id = p.id
-      LEFT JOIN users u ON u.id = pa.user_id AND u.role = 'engenheiro'
-      LEFT JOIN forecast_entries fe
-        ON fe.project_id = p.id AND fe.type = 'Forecast' AND fe.value > 0
-      GROUP BY p.id
-      ORDER BY p.code
+      ${engJoin}
+      LEFT JOIN project_assignments pa ON pa.project_id=p.id
+      LEFT JOIN users u ON u.id=pa.user_id AND u.role='engenheiro'
+      LEFT JOIN forecast_entries fe ON fe.project_id=p.id AND fe.type='Forecast' AND fe.value>0
+      GROUP BY p.id ORDER BY p.code
     `);
     const projects = projRes.rows;
 
-    // 2. All Forecast entries
-    const entriesRes = await pool.query(`
-      SELECT project_id, year, month, SUM(value) AS total
-      FROM forecast_entries
-      WHERE type = 'Forecast'
-      GROUP BY project_id, year, month
-      ORDER BY project_id, year, month
-    `);
+    // 2. Entries for selected types
+    const ph = activeTypes.map((_,i) => `$${i+1}`).join(',');
+    const entries = activeTypes.length > 0
+      ? (await pool.query(
+          `SELECT project_id, type, category, year, month, SUM(value) AS total
+           FROM forecast_entries WHERE type IN (${ph})
+           GROUP BY project_id, type, category, year, month
+           ORDER BY project_id, type, category, year, month`,
+          activeTypes)).rows
+      : [];
 
-    // Build lookup: projectId → { "YEAR-MONTH": total }
+    // lookup[pid][type][cat][`Y-M`] = value
     const lookup = {};
-    for (const e of entriesRes.rows) {
+    for (const e of entries) {
       if (!lookup[e.project_id]) lookup[e.project_id] = {};
-      lookup[e.project_id][`${e.year}-${e.month}`] = parseFloat(e.total) || 0;
+      if (!lookup[e.project_id][e.type]) lookup[e.project_id][e.type] = {};
+      if (!lookup[e.project_id][e.type][e.category]) lookup[e.project_id][e.type][e.category] = {};
+      lookup[e.project_id][e.type][e.category][`${e.year}-${e.month}`] = parseFloat(e.total) || 0;
     }
 
-    // 3. Build column headers: Jan/2026 … Dez/2031
-    const START_YEAR = 2026, END_YEAR = 2031;
-    const MONTHS_ABBR = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const CATEGORIES = ['Viagens','Contratos','POs'];
+
+    function catTotal(pid, type, cat, y, m) {
+      return lookup[pid]?.[type]?.[cat]?.[`${y}-${m}`] || 0;
+    }
+    function typeTotal(pid, type, y, m) {
+      return CATEGORIES.reduce((s, c) => s + catTotal(pid, type, c, y, m), 0);
+    }
+
+    // 3. Build workbook
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'CTG Brasil — Forecast';
+    wb.created = new Date();
+    const ws = wb.addWorksheet('Forecast por Projeto');
+    ws.properties.outlineProperties = { summaryBelow: false, summaryRight: false };
+
+    // ── Helpers ──
+    function cell(r, c) { return ws.getCell(r, c); }
+    function setCell(r, c, value, opts = {}) {
+      const cl = cell(r, c);
+      cl.value     = value;
+      cl.font      = { name:'Calibri', size: opts.size || 9, bold: !!opts.bold,
+                       color: { argb: opts.fg || '000000' }, italic: !!opts.italic };
+      cl.fill      = { type:'pattern', pattern:'solid',
+                       fgColor: { argb: opts.bg || WHITE } };
+      cl.alignment = { horizontal: opts.align || 'left', vertical:'middle', wrapText: !!opts.wrap };
+      if (opts.numFmt) cl.numFmt = opts.numFmt;
+      if (opts.border !== false) {
+        cl.border = {
+          top:    { style:'thin', color:{ argb:'D1D5DB' } },
+          bottom: { style:'thin', color:{ argb:'D1D5DB' } },
+          left:   { style:'thin', color:{ argb:'D1D5DB' } },
+          right:  { style:'thin', color:{ argb:'D1D5DB' } },
+        };
+      }
+    }
+
+    // ── Fixed columns ──
+    // 1=Código, 2=Usina, 3=Projeto/Categoria, 4=Responsável(is), 5=SI, 6=Última Atualização
+    const FIXED = 6;
+    // Data columns: for each year → 12 months → each type (total row) + category sub-rows per type
+    // Layout: [year header] → [month sub-headers] → data rows
+    // Simplified: one column per month, one ROW per type per category under each project
+
+    // ── Build month column array ──
     const monthCols = [];
     for (let y = START_YEAR; y <= END_YEAR; y++) {
-      for (let m = 1; m <= 12; m++) {
-        monthCols.push({ year: y, month: m, label: `${MONTHS_ABBR[m-1]}/${y}` });
-      }
+      for (let m = 1; m <= 12; m++) monthCols.push({ y, m, label: `${MONTHS_ABBR[m-1]}/${y}` });
     }
+    const TOTAL_MONTHS = monthCols.length; // 72
 
-    // 4. Build workbook
-    const wb = new ExcelJS.Workbook();
-    wb.creator  = 'CTG Brasil — Forecast';
-    wb.created  = new Date();
+    // ── ROW 1: Title ──
+    ws.mergeCells(1, 1, 1, FIXED + TOTAL_MONTHS);
+    setCell(1, 1, 'CTG Brasil — Forecast Consolidado', {
+      bg: NAVY, fg: WHITE, size: 12, bold: true, align: 'center', border: false
+    });
+    ws.getRow(1).height = 24;
 
-    const ws = wb.addWorksheet('Forecast por Projeto');
-
-    // ── Style helpers ──
-    const HEADER_BG = '001F5B';  // navy
-    const SUB_BG    = '0070B8';  // blue
-    const MONTH_BG  = 'E0F2FE';  // light blue
-    const YEAR_COLORS = { 2026:'EFF6FF', 2027:'F0FDF4', 2028:'FFFBEB', 2029:'FDF4FF', 2030:'F0F9FF', 2031:'FFF0F0' };
-
-    function hdr(cell, value, bg = HEADER_BG, fg = 'FFFFFF', size = 9, bold = true, hAlign = 'center') {
-      cell.value = value;
-      cell.font  = { bold, size, color: { argb: fg }, name: 'Calibri' };
-      cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
-      cell.alignment = { horizontal: hAlign, vertical: 'middle', wrapText: true };
-      cell.border = {
-        top:    { style:'thin', color:{ argb:'CCCCCC' } },
-        bottom: { style:'thin', color:{ argb:'CCCCCC' } },
-        left:   { style:'thin', color:{ argb:'CCCCCC' } },
-        right:  { style:'thin', color:{ argb:'CCCCCC' } },
-      };
-    }
-
-    // ── Row 1: static headers + year spans ──
-    const FIXED_COLS = 6; // code, name, description, responsaveis, si, ultima_atualizacao
-    hdr(ws.getCell(1, 1), 'Código',           HEADER_BG, 'FFFFFF', 9, true, 'left');
-    hdr(ws.getCell(1, 2), 'Projeto',           HEADER_BG, 'FFFFFF', 9, true, 'left');
-    hdr(ws.getCell(1, 3), 'Descrição',         HEADER_BG, 'FFFFFF', 9, true, 'left');
-    hdr(ws.getCell(1, 4), 'Responsável(is)',   HEADER_BG, 'FFFFFF', 9, true, 'left');
-    hdr(ws.getCell(1, 5), 'SI (R$)',           HEADER_BG, 'FFFFFF', 9, true, 'right');
-    hdr(ws.getCell(1, 6), 'Última Atualização',HEADER_BG, 'FFFFFF', 9, true, 'center');
-
-    // Year headers spanning 12 months each
-    for (let y = START_YEAR; y <= END_YEAR; y++) {
-      const startCol = FIXED_COLS + 1 + (y - START_YEAR) * 12;
-      const endCol   = startCol + 11;
-      const yBg = YEAR_COLORS[y] || 'F8FAFC';
-      ws.mergeCells(1, startCol, 1, endCol);
-      hdr(ws.getCell(1, startCol), `Forecast ${y}`, SUB_BG, 'FFFFFF', 10, true, 'center');
-    }
-
-    // ── Row 2: month column headers ──
-    // Merge fixed col labels across rows 1+2 — fixed already done in row 1
-    // Month labels
-    monthCols.forEach((mc, i) => {
-      const col  = FIXED_COLS + 1 + i;
-      const yBg  = YEAR_COLORS[mc.year] || 'F8FAFC';
-      hdr(ws.getCell(2, col), mc.label, yBg, '374151', 8, false, 'center');
+    // ── ROW 2: Fixed headers + year spans ──
+    const fixedHdrs = ['Código','Usina','Projeto / Categoria','Responsável(is)','SI (R$)','Últ. Atualização'];
+    fixedHdrs.forEach((h, i) => {
+      setCell(2, i+1, h, { bg: NAVY, fg: WHITE, size: 9, bold: true,
+        align: i >= 4 ? 'right' : 'left' });
     });
 
-    // ── Freeze row 2, pin first 2 cols ──
-    ws.views = [{ state: 'frozen', xSplit: FIXED_COLS, ySplit: 2 }];
+    for (let y = START_YEAR; y <= END_YEAR; y++) {
+      const sc = FIXED + 1 + (y - START_YEAR) * 12;
+      const ec = sc + 11;
+      ws.mergeCells(2, sc, 2, ec);
+      setCell(2, sc, `${y}`, { bg: SUB_BG, fg: WHITE, size: 10, bold: true, align: 'center' });
+    }
+    ws.getRow(2).height = 20;
 
-    // ── Data rows ──
-    projects.forEach((p, idx) => {
-      const row = idx + 3;
-      const isEven = idx % 2 === 0;
-      const rowBg  = isEven ? 'FFFFFF' : 'F8FAFC';
+    // ── ROW 3: Month labels ──
+    fixedHdrs.forEach((_, i) => {
+      setCell(3, i+1, '', { bg: LIGHT, fg: NAVY });
+    });
+    monthCols.forEach((mc, i) => {
+      setCell(3, FIXED+1+i, mc.label, { bg: LIGHT, fg: NAVY, size: 8, align: 'center' });
+    });
+    ws.getRow(3).height = 18;
 
-      function dataCell(col, value, numFmt, align = 'left') {
-        const c = ws.getCell(row, col);
-        c.value = value;
-        c.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb: rowBg } };
-        c.font  = { size: 9, name: 'Calibri' };
-        c.alignment = { horizontal: align, vertical: 'middle' };
-        c.border = {
-          bottom: { style:'hair', color:{ argb:'E2E8F0' } },
-          right:  { style:'hair', color:{ argb:'E2E8F0' } },
-        };
-        if (numFmt) c.numFmt = numFmt;
-      }
+    // Freeze
+    ws.views = [{ state:'frozen', xSplit: FIXED, ySplit: 3 }];
 
-      dataCell(1, p.code,          null, 'left');
-      dataCell(2, p.name,          null, 'left');
-      dataCell(3, p.description || '', null, 'left');
-      dataCell(4, p.responsaveis || '—', null, 'left');
-      dataCell(5, parseFloat(p.si_value)||0, '#,##0.00', 'right');
-      dataCell(6,
-        p.ultima_atualizacao ? new Date(p.ultima_atualizacao).toLocaleDateString('pt-BR') : '—',
-        null, 'center'
-      );
+    // ── DATA ROWS ──
+    let currentRow = 4;
 
-      // Forecast months
+    projects.forEach(p => {
+      const plantName = (p.plants || []).join(', ') || '—';
+
+      // Determine how many sub-rows: per selected type, per category
+      // Structure:
+      //   Project row (bold, navy-ish bg)
+      //     Type row (colored by type, category='Total') — one per activeType
+      //       Category rows (Viagens, Contratos, POs) — one per category per type
+
+      const projRow = currentRow++;
+
+      // Project header row
+      setCell(projRow, 1, p.code,         { bg:'EBF3FC', fg: NAVY, bold:true, size:9 });
+      setCell(projRow, 2, plantName,       { bg:'EBF3FC', fg: NAVY, bold:true, size:9 });
+      setCell(projRow, 3, p.name,          { bg:'EBF3FC', fg: NAVY, bold:true, size:9 });
+      setCell(projRow, 4, p.responsaveis || '—', { bg:'EBF3FC', fg:'374151', size:9 });
+      setCell(projRow, 5, parseFloat(p.si_value)||0, { bg:'EBF3FC', fg: NAVY, bold:true, numFmt:'#,##0.00', align:'right', size:9 });
+      setCell(projRow, 6, p.ultima_atualizacao
+        ? new Date(p.ultima_atualizacao).toLocaleDateString('pt-BR') : '—',
+        { bg:'EBF3FC', fg:'374151', align:'center', size:9 });
+
+      // Project totals across all types per month
       monthCols.forEach((mc, i) => {
-        const col   = FIXED_COLS + 1 + i;
-        const val   = lookup[p.id]?.[`${mc.year}-${mc.month}`] || 0;
-        const yBg   = YEAR_COLORS[mc.year] || 'F8FAFC';
-        const cellBg = val > 0 ? yBg : (isEven ? 'FFFFFF' : 'F8FAFC');
-        const c      = ws.getCell(row, col);
-        c.value      = val || null;
-        c.fill       = { type:'pattern', pattern:'solid', fgColor:{ argb: cellBg } };
-        c.font       = { size: 9, name: 'Calibri', color: { argb: val > 0 ? '0369A1' : 'CBD5E1' } };
-        c.alignment  = { horizontal: 'right', vertical: 'middle' };
-        c.numFmt     = '#,##0.00';
-        c.border     = { bottom:{ style:'hair', color:{ argb:'E2E8F0' } }, right:{ style:'hair', color:{ argb:'E2E8F0' } } };
+        const tot = activeTypes.reduce((s, t) => s + typeTotal(p.id, t, mc.y, mc.m), 0);
+        setCell(projRow, FIXED+1+i, tot||null,
+          { bg:'EBF3FC', fg: NAVY, bold:true, numFmt:'#,##0.00', align:'right', size:9 });
+      });
+      ws.getRow(projRow).height = 16;
+
+      // Per type
+      activeTypes.forEach(type => {
+        const typeArg   = TYPE_ARGH[type] || SUB_BG;
+        const typeLight = TYPE_LIGHT[type] || 'F8FAFC';
+        const typeLabel = TYPE_LABELS[type] || type;
+
+        // Type summary row
+        const typeRow = currentRow++;
+        setCell(typeRow, 1, '', { bg: typeLight });
+        setCell(typeRow, 2, '', { bg: typeLight });
+        setCell(typeRow, 3, typeLabel, { bg: typeLight, fg: typeArg, bold:true, size:8, italic:false });
+        setCell(typeRow, 4, '', { bg: typeLight });
+        setCell(typeRow, 5, '', { bg: typeLight });
+        setCell(typeRow, 6, '', { bg: typeLight });
+        monthCols.forEach((mc, i) => {
+          const tot = typeTotal(p.id, type, mc.y, mc.m);
+          setCell(typeRow, FIXED+1+i, tot||null,
+            { bg: typeLight, fg: typeArg, bold:true, numFmt:'#,##0.00', align:'right', size:8 });
+        });
+        ws.getRow(typeRow).height = 14;
+        ws.getRow(typeRow).outlineLevel = 1;
+
+        // Category sub-rows
+        CATEGORIES.forEach(cat => {
+          const catRow = currentRow++;
+          const catBg  = 'F9FAFB';
+          setCell(catRow, 1, '', { bg: catBg });
+          setCell(catRow, 2, '', { bg: catBg });
+          setCell(catRow, 3, `    ${cat}`, { bg: catBg, fg:'6B7280', size:8, italic:true });
+          setCell(catRow, 4, '', { bg: catBg });
+          setCell(catRow, 5, '', { bg: catBg });
+          setCell(catRow, 6, '', { bg: catBg });
+          monthCols.forEach((mc, i) => {
+            const v = catTotal(p.id, type, cat, mc.y, mc.m);
+            setCell(catRow, FIXED+1+i, v||null,
+              { bg: catBg, fg: v > 0 ? typeArg : 'CBD5E1', numFmt:'#,##0.00', align:'right', size:8 });
+          });
+          ws.getRow(catRow).height = 13;
+          ws.getRow(catRow).outlineLevel = 2;
+        });
       });
     });
 
-    // ── Totals row ──
-    const totRow = projects.length + 3;
-    function totCell(col, value, numFmt, align = 'right') {
-      const c = ws.getCell(totRow, col);
-      c.value = value;
-      c.font  = { bold: true, size: 9, name: 'Calibri', color: { argb: 'FFFFFF' } };
-      c.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb: '001F5B' } };
-      c.alignment = { horizontal: align, vertical: 'middle' };
-      if (numFmt) c.numFmt = numFmt;
-    }
-    totCell(1, 'TOTAL', null, 'left');
-    totCell(2, `${projects.length} projetos`, null, 'left');
-    totCell(3, ''); totCell(4, ''); totCell(5, ''); totCell(6, '');
+    // ── TOTAL ROW ──
+    const totRow = currentRow;
+    setCell(totRow, 1, 'TOTAL', { bg: NAVY, fg: WHITE, bold:true, size:9 });
+    setCell(totRow, 2, `${projects.length} projetos`, { bg: NAVY, fg: WHITE, size:9 });
+    setCell(totRow, 3, '', { bg: NAVY });
+    setCell(totRow, 4, '', { bg: NAVY });
+    setCell(totRow, 5, '', { bg: NAVY });
+    setCell(totRow, 6, '', { bg: NAVY });
     monthCols.forEach((mc, i) => {
-      const col = FIXED_COLS + 1 + i;
-      const tot = projects.reduce((s,p) => s + (lookup[p.id]?.[`${mc.year}-${mc.month}`]||0), 0);
-      totCell(col, tot||null, '#,##0.00');
+      const tot = projects.reduce((s, p) =>
+        s + activeTypes.reduce((ts, t) => ts + typeTotal(p.id, t, mc.y, mc.m), 0), 0);
+      setCell(totRow, FIXED+1+i, tot||null,
+        { bg: NAVY, fg: WHITE, bold:true, numFmt:'#,##0.00', align:'right', size:9 });
     });
-
-    // ── Column widths ──
-    ws.getColumn(1).width = 10;
-    ws.getColumn(2).width = 32;
-    ws.getColumn(3).width = 32;
-    ws.getColumn(4).width = 28;
-    ws.getColumn(5).width = 14;
-    ws.getColumn(6).width = 18;
-    monthCols.forEach((_, i) => { ws.getColumn(FIXED_COLS + 1 + i).width = 11; });
-
-    // Row heights
-    ws.getRow(1).height = 22;
-    ws.getRow(2).height = 20;
     ws.getRow(totRow).height = 18;
 
+    // ── Column widths ──
+    ws.getColumn(1).width = 9;
+    ws.getColumn(2).width = 18;
+    ws.getColumn(3).width = 32;
+    ws.getColumn(4).width = 22;
+    ws.getColumn(5).width = 14;
+    ws.getColumn(6).width = 16;
+    for (let i = 1; i <= TOTAL_MONTHS; i++) ws.getColumn(FIXED+i).width = 11;
+
     const filename = `CTG_Forecast_Planejador_${new Date().getFullYear()}.xlsx`;
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition',`attachment; filename="${encodeURIComponent(filename)}"`);
     await wb.xlsx.write(res);
     res.end();
   } catch (err) {

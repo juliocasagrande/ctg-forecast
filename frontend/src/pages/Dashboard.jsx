@@ -7,6 +7,7 @@ import {
   BarChart,
 } from 'recharts';
 import api from '../utils/api.js';
+import { useTypeColors } from '../context/SettingsContext.jsx';
 import { formatBRL, formatBRLShort, MONTHS_PT } from '../utils/format.js';
 
 const fmt = formatBRLShort;
@@ -19,22 +20,57 @@ function fmtAxis(v) {
   return `${v}`;
 }
 
-// Generic tooltip — shows all payload entries
-function ChartTooltip({ active, payload, label }) {
+// Tooltip label helper: "Jan" + year context → "Jan/2026"
+function fmtTooltipLabel(label, period) {
+  if (!label) return label;
+  // Multi-year format already has "/" e.g. "Jan/2026"
+  if (String(label).includes('/')) return label;
+  // Single year — append year from period
+  const yr = period?.start || new Date().getFullYear();
+  return `${label}/${yr}`;
+}
+
+
+// Friendly label map for all chart series
+const SERIES_LABELS = {
+  Budget:        'Budget (mensal)',
+  Forecast:      'Forecast (mensal)',
+  Realizado:     'Realizado (mensal)',
+  Meta:          'Meta (mensal)',
+  Pool:          'Pool (mensal)',
+  BudgetAcum:    'Budget (acum.)',
+  ForecastAcum:  'Forecast (acum.)',
+  RealizadoAcum: 'Realizado (acum.)',
+  MetaAcum:      'Meta (acum.)',
+  PoolAcum:      'Pool (acum.)',
+};
+
+// Generic tooltip — shows all entries, never clips, skips gap internals
+function ChartTooltip({ active, payload, label, period }) {
   if (!active || !payload?.length) return null;
+  const skip = new Set(['GapMax', 'GapMin']);
+  const entries = payload.filter(p => !skip.has(p.name));
+  if (!entries.length) return null;
   return (
     <div style={{
       background: 'var(--bg-card)', border: '1px solid var(--border)',
-      borderRadius: 8, padding: '10px 14px', boxShadow: 'var(--shadow-md)', fontSize: '0.8rem',
-      maxWidth: 220,
+      borderRadius: 8, padding: '10px 14px', boxShadow: 'var(--shadow-lg)',
+      fontSize: '0.8rem', minWidth: 200, zIndex: 9999, pointerEvents: 'none',
     }}>
-      <div style={{ fontWeight: 700, marginBottom: 6, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
-        {label}
+      <div style={{ fontWeight: 700, marginBottom: 7, color: 'var(--ctg-navy)',
+        fontSize: '0.85rem', borderBottom: '1px solid var(--border)', paddingBottom: 5 }}>
+        {fmtTooltipLabel(label, period)}
       </div>
-      {payload.map(p => (
-        <div key={p.name} style={{ color: p.color ?? p.stroke, display: 'flex', gap: 10, justifyContent: 'space-between', marginBottom: 2 }}>
-          <span style={{ opacity: 0.85 }}>{p.name}:</span>
-          <span style={{ fontWeight: 600 }}>{formatBRL(p.value)}</span>
+      {entries.map(p => (
+        <div key={p.name} style={{
+          color: p.color ?? p.stroke ?? p.fill,
+          display: 'flex', gap: 14, justifyContent: 'space-between',
+          marginBottom: 3, fontSize: '0.78rem',
+        }}>
+          <span style={{ opacity: 0.85, whiteSpace: 'nowrap' }}>{SERIES_LABELS[p.name] || p.name}:</span>
+          <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: p.value === 0 ? 'var(--text-muted)' : undefined }}>
+            {p.value === 0 ? '—' : formatBRL(p.value)}
+          </span>
         </div>
       ))}
     </div>
@@ -45,22 +81,24 @@ function ChartTooltip({ active, payload, label }) {
 function ProjectTooltip({ active, payload, label, projectMap }) {
   if (!active || !payload?.length) return null;
   const name = projectMap[label] || label;
+  const entries = payload.filter(p => p.value !== 0);
   return (
     <div style={{
       background: 'var(--bg-card)', border: '1px solid var(--border)',
-      borderRadius: 8, padding: '10px 14px', boxShadow: 'var(--shadow-md)', fontSize: '0.8rem',
-      maxWidth: 240,
+      borderRadius: 8, padding: '10px 14px', boxShadow: 'var(--shadow-lg)',
+      fontSize: '0.8rem', minWidth: 200, zIndex: 9999, pointerEvents: 'none',
     }}>
-      <div style={{ fontWeight: 700, marginBottom: 2, color: 'var(--ctg-navy)', fontSize: '0.78rem', letterSpacing: '0.04em' }}>
+      <div style={{ fontWeight: 700, marginBottom: 2, color: 'var(--ctg-navy)', fontSize: '0.82rem' }}>
         {label}
       </div>
-      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: 6, wordBreak: 'break-word' }}>
+      <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginBottom: 6,
+        wordBreak: 'break-word', borderBottom: '1px solid var(--border)', paddingBottom: 5 }}>
         {name}
       </div>
-      {payload.map(p => (
-        <div key={p.name} style={{ color: p.fill, display: 'flex', gap: 10, justifyContent: 'space-between', marginBottom: 2 }}>
+      {entries.map(p => (
+        <div key={p.name} style={{ color: p.fill, display: 'flex', gap: 14, justifyContent: 'space-between', marginBottom: 3 }}>
           <span style={{ opacity: 0.85 }}>{p.name}:</span>
-          <span style={{ fontWeight: 600 }}>{formatBRL(p.value)}</span>
+          <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{formatBRL(p.value)}</span>
         </div>
       ))}
     </div>
@@ -93,6 +131,7 @@ function daysSince(dateStr) {
 }
 
 function UpdateBadge({ dateStr }) {
+  const C = useTypeColors();
   const days = daysSince(dateStr);
   if (days === null) {
     return (
@@ -110,7 +149,7 @@ function UpdateBadge({ dateStr }) {
       <span style={{
         display: 'inline-flex', alignItems: 'center', gap: 4,
         padding: '2px 8px', borderRadius: 10, fontSize: '0.72rem', fontWeight: 600,
-        background: '#DCFCE7', color: '#15803D',
+        background: '#DCFCE7', color: C.budget,
       }}>
         ● {days === 0 ? 'Hoje' : `${days}d`}
       </span>
@@ -128,6 +167,7 @@ function UpdateBadge({ dateStr }) {
 }
 
 export default function Dashboard({ period, plantFilter = [] }) {
+  const C = useTypeColors();
   const [dashData,     setDashData]     = useState([]);
   const [allSummaries, setAllSummaries] = useState([]);
   const [loading,      setLoading]      = useState(true);
@@ -217,7 +257,7 @@ export default function Dashboard({ period, plantFilter = [] }) {
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: 12 }}>
 
       {/* KPI cards */}
-      <div className="dash-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, flexShrink: 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, flexShrink: 0 }}>
         {[
           { cls: 'budget',   label: `Budget ${periodLabel}`,   val: totalBudget,   sub: `${filtered.length} projeto${filtered.length !== 1 ? 's' : ''}` },
           { cls: 'forecast', label: `Forecast ${periodLabel}`, val: totalForecast, sub: totalBudget ? `${((totalForecast / totalBudget) * 100).toFixed(1)}% do budget` : '—' },
@@ -233,10 +273,10 @@ export default function Dashboard({ period, plantFilter = [] }) {
       </div>
 
       {/* Two charts — 60% / 40% */}
-      <div className="dash-charts-row" style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 12, flexShrink: 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 12, flexShrink: 0 }}>
 
         {/* Combined: bars (monthly) + lines (accumulated) — dual Y axis */}
-        <div className="card dash-chart-combined" style={{ overflow: 'hidden' }}>
+        <div className="card" style={{ overflow: 'visible' }}>
           {cardHeader(`Evolução Mensal + S-Curve — ${periodLabel}`)}
           <div style={{ padding: '10px 8px 6px' }}>
             <ResponsiveContainer width="100%" height={175}>
@@ -264,19 +304,10 @@ export default function Dashboard({ period, plantFilter = [] }) {
                   label={{ value: 'Acumulado', angle: 90, position: 'insideRight', offset: 10, style: { fontSize: 8, fill: '#9CA3AF' } }}
                 />
 
-                <Tooltip content={<ChartTooltip />} />
+                <Tooltip content={<ChartTooltip period={period} />} isAnimationActive={false} wrapperStyle={{ zIndex: 9999 }} allowEscapeViewBox={{ x: true, y: true }} />
                 <Legend
                   wrapperStyle={{ fontSize: '0.72rem', color: '#374151' }}
-                  formatter={(value) => {
-                    const labels = {
-                      Budget: 'Budget (mensal)', Forecast: 'Forecast (mensal)', Realizado: 'Realizado (mensal)',
-                      Meta: 'Meta (mensal)', Pool: 'Pool (mensal)',
-                      BudgetAcum: 'Budget (acum.)', ForecastAcum: 'Forecast (acum.)', RealizadoAcum: 'Realizado (acum.)',
-                      MetaAcum: 'Meta (acum.)', PoolAcum: 'Pool (acum.)',
-                      GapMax: 'Diferença Forecast vs Realizado',
-                    };
-                    return labels[value] || value;
-                  }}
+                  formatter={(value) => SERIES_LABELS[value] || (value === 'GapMax' ? 'Dif. Forecast vs Realizado' : value)}
                 />
 
                 {/* Gap area between Forecast and Realizado (accumulated) */}
@@ -285,25 +316,25 @@ export default function Dashboard({ period, plantFilter = [] }) {
                   baseValue="GapMin" legendType="square" />
 
                 {/* Monthly bars */}
-                <Bar yAxisId="monthly" dataKey="Budget"    fill="#86EFAC" radius={[2,2,0,0]} barSize={6} />
-                <Bar yAxisId="monthly" dataKey="Forecast"  fill="#7DD3FC" radius={[2,2,0,0]} barSize={6} />
-                <Bar yAxisId="monthly" dataKey="Realizado" fill="#93C5FD" radius={[2,2,0,0]} barSize={6} />
-                <Bar yAxisId="monthly" dataKey="Meta"      fill="#DDD6FE" radius={[2,2,0,0]} barSize={6} />
-                <Bar yAxisId="monthly" dataKey="Pool"      fill="#BAE6FD" radius={[2,2,0,0]} barSize={6} />
+                <Bar yAxisId="monthly" dataKey="Budget"    fill={C.budget+'88'} radius={[2,2,0,0]} barSize={6} />
+                <Bar yAxisId="monthly" dataKey="Forecast"  fill={C.forecast+'88'} radius={[2,2,0,0]} barSize={6} />
+                <Bar yAxisId="monthly" dataKey="Realizado" fill={C.actual+'88'} radius={[2,2,0,0]} barSize={6} />
+                <Bar yAxisId="monthly" dataKey="Meta"      fill={C.meta+'88'} radius={[2,2,0,0]} barSize={6} />
+                <Bar yAxisId="monthly" dataKey="Pool"      fill={C.pool+'88'} radius={[2,2,0,0]} barSize={6} />
 
                 {/* Accumulated lines */}
-                <Line yAxisId="acum" type="monotone" dataKey="BudgetAcum"    stroke="#15803D" strokeWidth={2} dot={false} />
-                <Line yAxisId="acum" type="monotone" dataKey="ForecastAcum"  stroke="#0EA5E9" strokeWidth={2} dot={false} />
-                <Line yAxisId="acum" type="monotone" dataKey="RealizadoAcum" stroke="#1E40AF" strokeWidth={2} strokeDasharray="5 3" />
-                <Line yAxisId="acum" type="monotone" dataKey="MetaAcum"      stroke="#7C3AED" strokeWidth={2} strokeDasharray="8 3" />
-                <Line yAxisId="acum" type="monotone" dataKey="PoolAcum"      stroke="#0891B2" strokeWidth={2} strokeDasharray="4 2" />
+                <Line yAxisId="acum" type="monotone" dataKey="BudgetAcum"    stroke={C.budget} strokeWidth={2} dot={false} />
+                <Line yAxisId="acum" type="monotone" dataKey="ForecastAcum"  stroke={C.forecast} strokeWidth={2} dot={false} />
+                <Line yAxisId="acum" type="monotone" dataKey="RealizadoAcum" stroke={C.actual} strokeWidth={2} strokeDasharray="5 3" dot={false} activeDot={{ r: 3 }} />
+                <Line yAxisId="acum" type="monotone" dataKey="MetaAcum"      stroke={C.meta} strokeWidth={2} strokeDasharray="8 3" dot={false} activeDot={{ r: 3 }} />
+                <Line yAxisId="acum" type="monotone" dataKey="PoolAcum"      stroke={C.pool} strokeWidth={2} strokeDasharray="4 2" dot={false} activeDot={{ r: 3 }} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         {/* Por Projeto */}
-        <div className="card dash-chart-project" style={{ overflow: 'hidden' }}>
+        <div className="card" style={{ overflow: 'visible' }}>
           {cardHeader(`Por Projeto — ${periodLabel}`)}
           <div style={{ padding: '10px 8px 6px' }}>
             <ResponsiveContainer width="100%" height={175}>
@@ -319,11 +350,11 @@ export default function Dashboard({ period, plantFilter = [] }) {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#374151' }} />
                 <YAxis tickFormatter={fmtAxis} tick={{ fontSize: 10, fill: '#374151' }} width={54} />
-                <Tooltip content={<ProjectTooltip projectMap={projectMap} />} />
+                <Tooltip content={<ProjectTooltip projectMap={projectMap} />} isAnimationActive={false} wrapperStyle={{ zIndex: 9999 }} allowEscapeViewBox={{ x: true, y: true }} />
                 <Legend wrapperStyle={{ fontSize: '0.72rem', color: '#374151' }} />
-                <Bar dataKey="Budget"    fill="#16A34A" radius={[2,2,0,0]} />
-                <Bar dataKey="Forecast"  fill="#38BDF8" radius={[2,2,0,0]} />
-                <Bar dataKey="Realizado" fill="#2563EB" radius={[2,2,0,0]} />
+                <Bar dataKey="Budget"    fill={C.budget} radius={[2,2,0,0]} />
+                <Bar dataKey="Forecast"  fill={C.forecast} radius={[2,2,0,0]} />
+                <Bar dataKey="Realizado" fill={C.actual} radius={[2,2,0,0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -366,7 +397,7 @@ export default function Dashboard({ period, plantFilter = [] }) {
                   >
                     <td style={{ padding: '8px 14px', fontWeight: 700, color: 'var(--ctg-blue)', fontFamily: 'monospace', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{p.code}</td>
                     <td style={{ padding: '8px 14px', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)', fontWeight: 500 }}>{p.name}</td>
-                    <td className="dash-table-usinas" style={{ padding: '8px 14px', maxWidth: 140 }}>
+                    <td style={{ padding: '8px 14px', maxWidth: 140 }}>
                       <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
                         {(p.plants || []).map(pl => (
                           <span key={pl} className="plant-tag" style={{ fontSize: '0.65rem' }}>
@@ -375,20 +406,20 @@ export default function Dashboard({ period, plantFilter = [] }) {
                         ))}
                       </div>
                     </td>
-                    <td style={{ padding: '8px 14px', textAlign: 'right', color: '#15803D', fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>{fmt(p.budget)}</td>
-                    <td style={{ padding: '8px 14px', textAlign: 'right', color: '#0369A1', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmt(p.forecast)}</td>
-                    <td style={{ padding: '8px 14px', textAlign: 'right', color: '#1E40AF', fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>{fmt(p.actual)}</td>
+                    <td style={{ padding: '8px 14px', textAlign: 'right', color: C.budget, fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>{fmt(p.budget)}</td>
+                    <td style={{ padding: '8px 14px', textAlign: 'right', color: C.forecast, fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmt(p.forecast)}</td>
+                    <td style={{ padding: '8px 14px', textAlign: 'right', color: C.actual, fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>{fmt(p.actual)}</td>
                     <td style={{ padding: '8px 14px', textAlign: 'right' }}>
                       {exec !== '—' ? (
                         <span style={{
                           background: parseFloat(exec) > 100 ? '#FEF3C7' : '#DCFCE7',
-                          color: parseFloat(exec) > 100 ? '#991B1B' : '#15803D',
+                          color: parseFloat(exec) > 100 ? '#991B1B' : C.budget,
                           padding: '2px 7px', borderRadius: 10, fontSize: '0.75rem', fontWeight: 700,
                         }}>{exec}%</span>
                       ) : <span style={{ color: 'var(--text-secondary)' }}>—</span>}
                     </td>
                     <td style={{ padding: '8px 14px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)', fontWeight: 500 }}>{fmt(p.si_value)}</td>
-                    <td className="dash-table-updated" style={{ padding: '8px 14px' }}>
+                    <td style={{ padding: '8px 14px' }}>
                       <UpdateBadge dateStr={p.last_forecast_update} />
                     </td>
                     <td style={{ padding: '8px 14px', textAlign: 'center', color: 'var(--ctg-blue)', fontWeight: 700 }}>→</td>
