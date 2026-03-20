@@ -99,7 +99,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
         {/* Logo */}
         <div className="sidebar-logo">
           <div className="brand">CTG<span>.</span>Forecast</div>
-          <div className="subtitle">v2.0 — {roleLabel}</div>
+          <div className="subtitle">Função — {roleLabel}</div>
         </div>
 
         <div className="sidebar-nav">
