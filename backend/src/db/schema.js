@@ -52,7 +52,7 @@ export async function initDB() {
         id SERIAL PRIMARY KEY,
         project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
         category VARCHAR(20) NOT NULL CHECK (category IN ('Viagens','Contratos','POs')),
-        type VARCHAR(10) NOT NULL CHECK (type IN ('Budget','Forecast','Actual')),
+        type VARCHAR(10) NOT NULL,
         year INTEGER NOT NULL,
         month INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
         value NUMERIC(15,2) DEFAULT 0,
@@ -62,13 +62,40 @@ export async function initDB() {
         UNIQUE(project_id, category, type, year, month)
       );
 
+      CREATE TABLE IF NOT EXISTS actual_consolidated (
+        id SERIAL PRIMARY KEY,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        value NUMERIC(15,2) DEFAULT 0,
+        comment TEXT,
+        updated_by INTEGER REFERENCES users(id),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(project_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS project_checkins (
+        id SERIAL PRIMARY KEY,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        checked_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS project_activity_log (
+        id SERIAL PRIMARY KEY,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        role VARCHAR(20) NOT NULL,
+        action VARCHAR(40) NOT NULL,
+        acted_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
       CREATE TABLE IF NOT EXISTS project_notes (
         id SERIAL PRIMARY KEY,
         project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
         user_id INTEGER REFERENCES users(id),
         note_date DATE,
         content TEXT NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW()
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
       );
 
       CREATE TABLE IF NOT EXISTS messages (
@@ -91,18 +118,33 @@ export async function initDB() {
       CREATE INDEX IF NOT EXISTS idx_messages_project ON messages(project_id);
       CREATE INDEX IF NOT EXISTS idx_assignments_user ON project_assignments(user_id);
       CREATE INDEX IF NOT EXISTS idx_assignments_project ON project_assignments(project_id);
+      CREATE INDEX IF NOT EXISTS idx_checkins_project ON project_checkins(project_id);
+      CREATE INDEX IF NOT EXISTS idx_activity_project ON project_activity_log(project_id);
     `);
     console.log('✅ Database initialized');
+
+    // Incremental migrations
     await client.query(`
       ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_approval BOOLEAN DEFAULT false;
       ALTER TABLE projects ADD COLUMN IF NOT EXISTS plants TEXT[] DEFAULT '{}';
+      ALTER TABLE project_notes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
     `);
-    // Alter role CHECK to include planejador (drop old constraint, add new)
+
+    // Role constraint
     await client.query(`
       ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
       ALTER TABLE users ADD CONSTRAINT users_role_check
         CHECK (role IN ('admin','gestor','engenheiro','planejador'));
     `);
+
+    // Expand forecast_entries type to include Meta and Pool
+    await client.query(`
+      ALTER TABLE forecast_entries DROP CONSTRAINT IF EXISTS forecast_entries_type_check;
+      ALTER TABLE forecast_entries ADD CONSTRAINT forecast_entries_type_check
+        CHECK (type IN ('Budget','Forecast','Actual','Meta','Pool'));
+    `);
+
+    console.log('✅ Migrations applied');
   } finally {
     client.release();
   }

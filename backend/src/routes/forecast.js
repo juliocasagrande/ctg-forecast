@@ -17,7 +17,7 @@ router.get('/project/:projectId', requireProjectAccess, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Bulk upsert — engenheiro can only update Forecast; gestor/admin can update all
+// Bulk upsert — role-based type restrictions + activity log
 router.post('/project/:projectId/bulk', requireProjectAccess, async (req, res) => {
   const { projectId } = req.params;
   const { entries } = req.body;
@@ -26,10 +26,11 @@ router.post('/project/:projectId/bulk', requireProjectAccess, async (req, res) =
   try {
     await client.query('BEGIN');
     const results = [];
+    const ENGENHEIRO_TYPES = ['Forecast', 'Actual'];
+    const PLANEJADOR_TYPES = ['Budget', 'Actual', 'Meta', 'Pool'];
     for (const e of entries) {
-      // Role-based type restrictions
-      if (role === 'engenheiro' && e.type !== 'Forecast') continue;
-      if (role === 'planejador' && e.type !== 'Budget') continue;
+      if (role === 'engenheiro'  && !ENGENHEIRO_TYPES.includes(e.type)) continue;
+      if (role === 'planejador'  && !PLANEJADOR_TYPES.includes(e.type)) continue;
       const r = await client.query(`
         INSERT INTO forecast_entries (project_id, category, type, year, month, value, comment, updated_by, updated_at)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
@@ -41,6 +42,12 @@ router.post('/project/:projectId/bulk', requireProjectAccess, async (req, res) =
       results.push(r.rows[0]);
     }
     await client.query('COMMIT');
+    // Activity log
+    await pool.query(
+      `INSERT INTO project_activity_log (project_id, user_id, role, action, acted_at)
+       VALUES ($1,$2,$3,'forecast_update',NOW())`,
+      [projectId, userId, role]
+    );
     res.json({ count: results.length });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -97,7 +104,10 @@ router.get('/dashboard', async (req, res) => {
       SELECT p.id, p.code, p.name, p.si_value, p.pool_value, p.plants,
         COALESCE(SUM(CASE WHEN fe.type='Budget'   THEN fe.value ELSE 0 END),0) AS budget,
         COALESCE(SUM(CASE WHEN fe.type='Forecast' THEN fe.value ELSE 0 END),0) AS forecast,
-        COALESCE(SUM(CASE WHEN fe.type='Actual'   THEN fe.value ELSE 0 END),0) AS actual
+        COALESCE(SUM(CASE WHEN fe.type='Actual'   THEN fe.value ELSE 0 END),0) AS actual,
+        COALESCE(SUM(CASE WHEN fe.type='Meta'     THEN fe.value ELSE 0 END),0) AS meta,
+        COALESCE(SUM(CASE WHEN fe.type='Pool'     THEN fe.value ELSE 0 END),0) AS pool,
+        MAX(fe.updated_at) AS last_forecast_update
       FROM projects p ${joinClause}
       LEFT JOIN forecast_entries fe
         ON fe.project_id=p.id AND fe.year BETWEEN $1 AND $2
@@ -134,6 +144,105 @@ router.delete('/notes/:noteId', requireRole('admin', 'gestor'), async (req, res)
   try {
     await pool.query('DELETE FROM project_notes WHERE id=$1', [req.params.noteId]);
     res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+
+// ── Consolidated Actual ──────────────────────────────────────────────────────
+router.get('/project/:projectId/actual-consolidated', requireProjectAccess, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT * FROM actual_consolidated WHERE project_id=$1', [req.params.projectId]);
+    res.json(r.rows[0] || { value: 0, comment: '' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/project/:projectId/actual-consolidated', requireProjectAccess, async (req, res) => {
+  const { role, id: userId } = req.user;
+  if (!['gestor','planejador','admin'].includes(role))
+    return res.status(403).json({ error: 'Sem permissão' });
+  try {
+    const { value, comment } = req.body;
+    const r = await pool.query(`
+      INSERT INTO actual_consolidated (project_id, value, comment, updated_by, updated_at)
+      VALUES ($1,$2,$3,$4,NOW())
+      ON CONFLICT (project_id) DO UPDATE
+        SET value=$2, comment=$3, updated_by=$4, updated_at=NOW()
+      RETURNING *
+    `, [req.params.projectId, value||0, comment||'', userId]);
+    await pool.query(
+      `INSERT INTO project_activity_log (project_id,user_id,role,action,acted_at) VALUES ($1,$2,$3,'actual_consolidated',NOW())`,
+      [req.params.projectId, userId, role]
+    );
+    res.json(r.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Check-in ─────────────────────────────────────────────────────────────────
+router.post('/project/:projectId/checkin', requireProjectAccess, async (req, res) => {
+  const { id: userId, role } = req.user;
+  try {
+    const r = await pool.query(
+      `INSERT INTO project_checkins (project_id,user_id,checked_at) VALUES ($1,$2,NOW()) RETURNING *`,
+      [req.params.projectId, userId]
+    );
+    await pool.query(
+      `INSERT INTO project_activity_log (project_id,user_id,role,action,acted_at) VALUES ($1,$2,$3,'checkin',NOW())`,
+      [req.params.projectId, userId, role]
+    );
+    res.json(r.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Activity log — last update per role ──────────────────────────────────────
+router.get('/project/:projectId/activity', requireProjectAccess, async (req, res) => {
+  try {
+    const pid = req.params.projectId;
+    const forecastR = await pool.query(`
+      SELECT u.role, u.name AS user_name, MAX(fe.updated_at) AS last_at
+      FROM forecast_entries fe INNER JOIN users u ON u.id=fe.updated_by
+      WHERE fe.project_id=$1 GROUP BY u.role, u.name ORDER BY last_at DESC
+    `, [pid]);
+    const checkinR = await pool.query(`
+      SELECT DISTINCT ON (u.role) u.role, u.name AS user_name, pc.checked_at AS last_at, 'checkin' AS action
+      FROM project_checkins pc INNER JOIN users u ON u.id=pc.user_id
+      WHERE pc.project_id=$1 ORDER BY u.role, pc.checked_at DESC
+    `, [pid]);
+    const consolidatedR = await pool.query(`
+      SELECT u.role, u.name AS user_name, ac.updated_at AS last_at, 'actual_consolidated' AS action
+      FROM actual_consolidated ac INNER JOIN users u ON u.id=ac.updated_by
+      WHERE ac.project_id=$1
+    `, [pid]);
+    res.json({ forecast: forecastR.rows, checkins: checkinR.rows, consolidated: consolidatedR.rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Notes CRUD ────────────────────────────────────────────────────────────────
+router.put('/notes/:noteId', async (req, res) => {
+  const { id: userId, role } = req.user;
+  try {
+    const noteR = await pool.query('SELECT * FROM project_notes WHERE id=$1', [req.params.noteId]);
+    if (!noteR.rows.length) return res.status(404).json({ error: 'Nota não encontrada' });
+    const note = noteR.rows[0];
+    if (note.user_id !== userId && !['gestor','planejador','admin'].includes(role))
+      return res.status(403).json({ error: 'Sem permissão' });
+    const r = await pool.query(
+      `UPDATE project_notes SET content=$1, note_date=$2, updated_at=NOW() WHERE id=$3 RETURNING *`,
+      [req.body.content, req.body.note_date || note.note_date, req.params.noteId]
+    );
+    res.json(r.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/notes/:noteId', async (req, res) => {
+  const { id: userId, role } = req.user;
+  try {
+    const noteR = await pool.query('SELECT * FROM project_notes WHERE id=$1', [req.params.noteId]);
+    if (!noteR.rows.length) return res.status(404).json({ error: 'Nota não encontrada' });
+    const note = noteR.rows[0];
+    if (note.user_id !== userId && !['gestor','planejador','admin'].includes(role))
+      return res.status(403).json({ error: 'Sem permissão' });
+    await pool.query('DELETE FROM project_notes WHERE id=$1', [req.params.noteId]);
+    res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

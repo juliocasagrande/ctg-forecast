@@ -361,4 +361,198 @@ router.get('/project/:projectId', requireProjectAccess, async (req, res) => {
   }
 });
 
+// ── Planejador export: all projects × months forecast ──────────────────────
+router.get('/planejador', async (req, res) => {
+  const { role } = req.user;
+  if (!['admin', 'gestor', 'planejador'].includes(role))
+    return res.status(403).json({ error: 'Sem permissão' });
+
+  try {
+    // 1. All projects with their engineers and last forecast update
+    const projRes = await pool.query(`
+      SELECT
+        p.id, p.code, p.name, p.description, p.si_value, p.plants,
+        STRING_AGG(DISTINCT u.name, ', ' ORDER BY u.name) AS responsaveis,
+        MAX(fe.updated_at) AS ultima_atualizacao
+      FROM projects p
+      LEFT JOIN project_assignments pa ON pa.project_id = p.id
+      LEFT JOIN users u ON u.id = pa.user_id AND u.role = 'engenheiro'
+      LEFT JOIN forecast_entries fe
+        ON fe.project_id = p.id AND fe.type = 'Forecast' AND fe.value > 0
+      GROUP BY p.id
+      ORDER BY p.code
+    `);
+    const projects = projRes.rows;
+
+    // 2. All Forecast entries
+    const entriesRes = await pool.query(`
+      SELECT project_id, year, month, SUM(value) AS total
+      FROM forecast_entries
+      WHERE type = 'Forecast'
+      GROUP BY project_id, year, month
+      ORDER BY project_id, year, month
+    `);
+
+    // Build lookup: projectId → { "YEAR-MONTH": total }
+    const lookup = {};
+    for (const e of entriesRes.rows) {
+      if (!lookup[e.project_id]) lookup[e.project_id] = {};
+      lookup[e.project_id][`${e.year}-${e.month}`] = parseFloat(e.total) || 0;
+    }
+
+    // 3. Build column headers: Jan/2026 … Dez/2031
+    const START_YEAR = 2026, END_YEAR = 2031;
+    const MONTHS_ABBR = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const monthCols = [];
+    for (let y = START_YEAR; y <= END_YEAR; y++) {
+      for (let m = 1; m <= 12; m++) {
+        monthCols.push({ year: y, month: m, label: `${MONTHS_ABBR[m-1]}/${y}` });
+      }
+    }
+
+    // 4. Build workbook
+    const wb = new ExcelJS.Workbook();
+    wb.creator  = 'CTG Brasil — Forecast';
+    wb.created  = new Date();
+
+    const ws = wb.addWorksheet('Forecast por Projeto');
+
+    // ── Style helpers ──
+    const HEADER_BG = '001F5B';  // navy
+    const SUB_BG    = '0070B8';  // blue
+    const MONTH_BG  = 'E0F2FE';  // light blue
+    const YEAR_COLORS = { 2026:'EFF6FF', 2027:'F0FDF4', 2028:'FFFBEB', 2029:'FDF4FF', 2030:'F0F9FF', 2031:'FFF0F0' };
+
+    function hdr(cell, value, bg = HEADER_BG, fg = 'FFFFFF', size = 9, bold = true, hAlign = 'center') {
+      cell.value = value;
+      cell.font  = { bold, size, color: { argb: fg }, name: 'Calibri' };
+      cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+      cell.alignment = { horizontal: hAlign, vertical: 'middle', wrapText: true };
+      cell.border = {
+        top:    { style:'thin', color:{ argb:'CCCCCC' } },
+        bottom: { style:'thin', color:{ argb:'CCCCCC' } },
+        left:   { style:'thin', color:{ argb:'CCCCCC' } },
+        right:  { style:'thin', color:{ argb:'CCCCCC' } },
+      };
+    }
+
+    // ── Row 1: static headers + year spans ──
+    const FIXED_COLS = 6; // code, name, description, responsaveis, si, ultima_atualizacao
+    hdr(ws.getCell(1, 1), 'Código',           HEADER_BG, 'FFFFFF', 9, true, 'left');
+    hdr(ws.getCell(1, 2), 'Projeto',           HEADER_BG, 'FFFFFF', 9, true, 'left');
+    hdr(ws.getCell(1, 3), 'Descrição',         HEADER_BG, 'FFFFFF', 9, true, 'left');
+    hdr(ws.getCell(1, 4), 'Responsável(is)',   HEADER_BG, 'FFFFFF', 9, true, 'left');
+    hdr(ws.getCell(1, 5), 'SI (R$)',           HEADER_BG, 'FFFFFF', 9, true, 'right');
+    hdr(ws.getCell(1, 6), 'Última Atualização',HEADER_BG, 'FFFFFF', 9, true, 'center');
+
+    // Year headers spanning 12 months each
+    for (let y = START_YEAR; y <= END_YEAR; y++) {
+      const startCol = FIXED_COLS + 1 + (y - START_YEAR) * 12;
+      const endCol   = startCol + 11;
+      const yBg = YEAR_COLORS[y] || 'F8FAFC';
+      ws.mergeCells(1, startCol, 1, endCol);
+      hdr(ws.getCell(1, startCol), `Forecast ${y}`, SUB_BG, 'FFFFFF', 10, true, 'center');
+    }
+
+    // ── Row 2: month column headers ──
+    // Merge fixed col labels across rows 1+2 — fixed already done in row 1
+    // Month labels
+    monthCols.forEach((mc, i) => {
+      const col  = FIXED_COLS + 1 + i;
+      const yBg  = YEAR_COLORS[mc.year] || 'F8FAFC';
+      hdr(ws.getCell(2, col), mc.label, yBg, '374151', 8, false, 'center');
+    });
+
+    // ── Freeze row 2, pin first 2 cols ──
+    ws.views = [{ state: 'frozen', xSplit: FIXED_COLS, ySplit: 2 }];
+
+    // ── Data rows ──
+    projects.forEach((p, idx) => {
+      const row = idx + 3;
+      const isEven = idx % 2 === 0;
+      const rowBg  = isEven ? 'FFFFFF' : 'F8FAFC';
+
+      function dataCell(col, value, numFmt, align = 'left') {
+        const c = ws.getCell(row, col);
+        c.value = value;
+        c.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb: rowBg } };
+        c.font  = { size: 9, name: 'Calibri' };
+        c.alignment = { horizontal: align, vertical: 'middle' };
+        c.border = {
+          bottom: { style:'hair', color:{ argb:'E2E8F0' } },
+          right:  { style:'hair', color:{ argb:'E2E8F0' } },
+        };
+        if (numFmt) c.numFmt = numFmt;
+      }
+
+      dataCell(1, p.code,          null, 'left');
+      dataCell(2, p.name,          null, 'left');
+      dataCell(3, p.description || '', null, 'left');
+      dataCell(4, p.responsaveis || '—', null, 'left');
+      dataCell(5, parseFloat(p.si_value)||0, '#,##0.00', 'right');
+      dataCell(6,
+        p.ultima_atualizacao ? new Date(p.ultima_atualizacao).toLocaleDateString('pt-BR') : '—',
+        null, 'center'
+      );
+
+      // Forecast months
+      monthCols.forEach((mc, i) => {
+        const col   = FIXED_COLS + 1 + i;
+        const val   = lookup[p.id]?.[`${mc.year}-${mc.month}`] || 0;
+        const yBg   = YEAR_COLORS[mc.year] || 'F8FAFC';
+        const cellBg = val > 0 ? yBg : (isEven ? 'FFFFFF' : 'F8FAFC');
+        const c      = ws.getCell(row, col);
+        c.value      = val || null;
+        c.fill       = { type:'pattern', pattern:'solid', fgColor:{ argb: cellBg } };
+        c.font       = { size: 9, name: 'Calibri', color: { argb: val > 0 ? '0369A1' : 'CBD5E1' } };
+        c.alignment  = { horizontal: 'right', vertical: 'middle' };
+        c.numFmt     = '#,##0.00';
+        c.border     = { bottom:{ style:'hair', color:{ argb:'E2E8F0' } }, right:{ style:'hair', color:{ argb:'E2E8F0' } } };
+      });
+    });
+
+    // ── Totals row ──
+    const totRow = projects.length + 3;
+    function totCell(col, value, numFmt, align = 'right') {
+      const c = ws.getCell(totRow, col);
+      c.value = value;
+      c.font  = { bold: true, size: 9, name: 'Calibri', color: { argb: 'FFFFFF' } };
+      c.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb: '001F5B' } };
+      c.alignment = { horizontal: align, vertical: 'middle' };
+      if (numFmt) c.numFmt = numFmt;
+    }
+    totCell(1, 'TOTAL', null, 'left');
+    totCell(2, `${projects.length} projetos`, null, 'left');
+    totCell(3, ''); totCell(4, ''); totCell(5, ''); totCell(6, '');
+    monthCols.forEach((mc, i) => {
+      const col = FIXED_COLS + 1 + i;
+      const tot = projects.reduce((s,p) => s + (lookup[p.id]?.[`${mc.year}-${mc.month}`]||0), 0);
+      totCell(col, tot||null, '#,##0.00');
+    });
+
+    // ── Column widths ──
+    ws.getColumn(1).width = 10;
+    ws.getColumn(2).width = 32;
+    ws.getColumn(3).width = 32;
+    ws.getColumn(4).width = 28;
+    ws.getColumn(5).width = 14;
+    ws.getColumn(6).width = 18;
+    monthCols.forEach((_, i) => { ws.getColumn(FIXED_COLS + 1 + i).width = 11; });
+
+    // Row heights
+    ws.getRow(1).height = 22;
+    ws.getRow(2).height = 20;
+    ws.getRow(totRow).height = 18;
+
+    const filename = `CTG_Forecast_Planejador_${new Date().getFullYear()}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('Planejador export error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

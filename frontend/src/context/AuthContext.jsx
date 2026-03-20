@@ -57,7 +57,9 @@ export function useRole() {
     isEngenheiro:  user?.role === 'engenheiro',
     isPlanejador:  user?.role === 'planejador',
     canEdit:       user?.role !== 'admin',
-    canManage:     user?.role === 'admin' || user?.role === 'gestor',
+    canManage:     user?.role === 'admin' || user?.role === 'gestor' || user?.role === 'planejador',
     canViewAll:    user?.role === 'admin' || user?.role === 'gestor' || user?.role === 'planejador',
   };
 }
+
+export default AuthContext;

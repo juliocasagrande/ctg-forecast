@@ -141,9 +141,9 @@ export default function ProjectsPage({ projects, period, plantFilter = [], onEdi
                         <YAxis tickFormatter={fmt} tick={{ fontSize: 11, fill: '#374151' }} width={72} />
                         <Tooltip formatter={v => fmt(v)} />
                         <Legend />
-                        <Bar dataKey="Budget"    fill="#2563EB" radius={[2, 2, 0, 0]} />
-                        <Bar dataKey="Forecast"  fill="#16A34A" radius={[2, 2, 0, 0]} />
-                        <Bar dataKey="Realizado" fill="#D97706" radius={[2, 2, 0, 0]} />
+                        <Bar dataKey="Budget"    fill="#16A34A" radius={[2, 2, 0, 0]} />
+                        <Bar dataKey="Forecast"  fill="#38BDF8" radius={[2, 2, 0, 0]} />
+                        <Bar dataKey="Realizado" fill="#2563EB" radius={[2, 2, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>

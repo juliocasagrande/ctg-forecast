@@ -62,7 +62,7 @@ router.get('/:id', requireProjectAccess, async (req, res) => {
 });
 
 // POST /api/projects — gestor/admin only
-router.post('/', requireRole('admin', 'gestor'), async (req, res) => {
+router.post('/', requireRole('admin', 'gestor', 'planejador'), async (req, res) => {
   try {
     const { code, name, description, si_value, pool_value, plants, engineer_ids } = req.body;
     const r = await pool.query(
@@ -88,7 +88,7 @@ router.post('/', requireRole('admin', 'gestor'), async (req, res) => {
 });
 
 // PUT /api/projects/:id — gestor/admin
-router.put('/:id', requireRole('admin', 'gestor'), async (req, res) => {
+router.put('/:id', requireRole('admin', 'gestor', 'planejador'), async (req, res) => {
   try {
     const { code, name, description, si_value, pool_value, plants, engineer_ids } = req.body;
     const r = await pool.query(
@@ -132,7 +132,7 @@ router.get('/:id/engineers', requireProjectAccess, async (req, res) => {
 });
 
 // POST /api/projects/:id/engineers — assign engineer
-router.post('/:id/engineers', requireRole('admin', 'gestor'), async (req, res) => {
+router.post('/:id/engineers', requireRole('admin', 'gestor', 'planejador'), async (req, res) => {
   try {
     const { user_id } = req.body;
     await pool.query(
@@ -144,7 +144,7 @@ router.post('/:id/engineers', requireRole('admin', 'gestor'), async (req, res) =
 });
 
 // DELETE /api/projects/:id/engineers/:userId — remove assignment
-router.delete('/:id/engineers/:userId', requireRole('admin', 'gestor'), async (req, res) => {
+router.delete('/:id/engineers/:userId', requireRole('admin', 'gestor', 'planejador'), async (req, res) => {
   try {
     await pool.query(
       'DELETE FROM project_assignments WHERE project_id=$1 AND user_id=$2',

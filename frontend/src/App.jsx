@@ -234,7 +234,7 @@ function getPageMeta(pathname) {
 // ── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const { user, loading } = useAuth();
-  const { isAdmin } = useRole();
+  const { isAdmin, isPlanejador } = useRole();
   const [sidebarOpen, setSidebarOpen]       = useState(false);
   const [projects, setProjects]             = useState([]);
   const [projectFormOpen, setProjectFormOpen] = useState(false);
@@ -300,6 +300,35 @@ export default function App() {
           {/* Right: alerts + plant filter + period slider */}
           {showControls && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {isPlanejador && (
+                <button
+                  onClick={async () => {
+                    try {
+                      const token = localStorage.getItem('ctg_token');
+                      const base  = import.meta.env.VITE_API_URL || '/api';
+                      const res   = await fetch(`${base}/export/planejador`, {
+                        headers: { 'Authorization': `Bearer ${token}` },
+                      });
+                      if (!res.ok) throw new Error();
+                      const blob = await res.blob();
+                      const link = document.createElement('a');
+                      link.href  = URL.createObjectURL(blob);
+                      link.download = `CTG_Forecast_Planejador_${new Date().getFullYear()}.xlsx`;
+                      link.click();
+                      URL.revokeObjectURL(link.href);
+                    } catch { alert('Erro ao exportar'); }
+                  }}
+                  style={{
+                    padding: '6px 14px', borderRadius: 'var(--radius-sm)',
+                    border: '1.5px solid #15803D', background: '#F0FDF4',
+                    color: '#15803D', fontWeight: 600, fontSize: '0.8rem',
+                    cursor: 'pointer', fontFamily: 'var(--font-body)',
+                    whiteSpace: 'nowrap', transition: 'all 0.15s',
+                  }}
+                >
+                  ⬇ Relatório Geral
+                </button>
+              )}
               <AlertBell />
               <PlantFilter
                 activePlants={activePlants}

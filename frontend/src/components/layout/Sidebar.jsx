@@ -112,7 +112,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
             <div className="nav-section-label">Visão Geral</div>
             {navItem('/', IC.dashboard, 'Dashboard')}
             {navItem('/projects', IC.projects, 'Projetos')}
-            {isGestor && (
+            {(isGestor || isPlanejador) && (
               <button className="nav-item" onClick={() => { onNewProject?.(); onClose(); }}>
                 {IC.add}<span>Novo Projeto</span>
               </button>

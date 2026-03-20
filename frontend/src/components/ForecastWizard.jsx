@@ -1,473 +1,612 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../utils/api.js';
 import { useToast } from './ui/Toast.jsx';
-import { MONTHS_FULL_PT, formatBRL } from '../utils/format.js';
+import { MONTHS_FULL_PT, MONTHS_PT, formatBRL } from '../utils/format.js';
 
 const CATEGORIES = ['Viagens', 'Contratos', 'POs'];
 const CAT_DESCRIPTIONS = {
-  Viagens:   'Despesas com deslocamentos, hospedagem, alimentação e transporte relacionados ao projeto.',
-  Contratos: 'Pagamentos previstos a fornecedores contratados — medições, parcelas e marcos contratuais.',
-  POs:       'Ordens de compra (Purchase Orders) — materiais, equipamentos e serviços pontuais.',
+  Viagens:   'Despesas com deslocamentos, hospedagem, alimentação e transporte.',
+  Contratos: 'Pagamentos previstos a fornecedores contratados — medições, parcelas e marcos.',
+  POs:       'Ordens de compra — materiais, equipamentos e serviços pontuais.',
 };
 const CAT_ICONS = { Viagens: 'VGS', Contratos: 'CTR', POs: 'POs' };
 
-// Config by editType
-const TYPE_CONFIG = {
-  Forecast: {
-    label:       'Forecast',
-    labelFull:   'Forecast',
-    badgeCls:    'forecast',
-    color:       '#15803D',
-    bgColor:     'var(--forecast-bg)',
-    borderColor: 'var(--forecast-border)',
-    description: 'Sua previsão atualizada de desembolso. Isso que você preenche.',
-    intro:       'Você irá preencher o Forecast — sua previsão de desembolso mês a mês — para cada categoria de custo do projeto.',
-    editIntro:   'Seus valores já salvos estão carregados em cada campo. Altere apenas o que precisar e salve ao final.',
-    startBtn:    'Iniciar preenchimento',
-    editBtn:     'Editar valores',
-  },
-  Budget: {
-    label:       'Budget',
-    labelFull:   'Budget',
-    badgeCls:    'budget',
-    color:       '#1E40AF',
-    bgColor:     'var(--budget-bg)',
-    borderColor: 'var(--budget-border)',
-    description: 'Valor planejado aprovado para o projeto. Você define o orçamento base.',
-    intro:       'Você irá preencher o Budget — o valor de orçamento aprovado — mês a mês para cada categoria de custo do projeto.',
-    editIntro:   'Seus valores de Budget já salvos estão carregados. Altere apenas o que precisar e salve ao final.',
-    startBtn:    'Iniciar preenchimento do Budget',
-    editBtn:     'Editar Budget',
-  },
+// ── Theme per type ────────────────────────────────────────────────────────────
+const TYPE_THEME = {
+  Budget:   { label:'Budget',    color:'#15803D', light:'#F0FDF4', border:'#BBF7D0', row:'#DCFCE7', text:'#15803D' },
+  Forecast: { label:'Forecast',  color:'#0EA5E9', light:'#F0F9FF', border:'#BAE6FD', row:'#E0F2FE', text:'#0369A1' },
+  Actual:   { label:'Realizado', color:'#1E40AF', light:'#EFF6FF', border:'#BFDBFE', row:'#DBEAFE', text:'#1E40AF' },
+  Meta:     { label:'Meta',      color:'#7C3AED', light:'#F5F3FF', border:'#DDD6FE', row:'#EDE9FE', text:'#6D28D9' },
+  Pool:     { label:'Pool',      color:'#0891B2', light:'#F0F9FF', border:'#BAE6FD', row:'#E0F2FE', text:'#0369A1' },
 };
 
-function buildMap(entries, year, type) {
-  const map = {};
-  for (const e of entries) {
-    if (parseInt(e.year) === parseInt(year) && e.type === type) {
-      map[`${e.category}|${e.month}`] = {
-        value:   parseFloat(e.value) || 0,
-        comment: e.comment || '',
-      };
-    }
-  }
-  return map;
-}
+const REF_TYPE = { Budget:'Forecast', Forecast:'Budget', Actual:'Forecast', Meta:'Budget', Pool:'Budget' };
 
 function fmtInput(val) {
   if (!val || val === 0) return '';
   return val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-
 function parseInput(str) {
   if (!str) return 0;
-  return parseFloat(str.replace(/\./g, '').replace(',', '.')) || 0;
+  return parseFloat(String(str).replace(/\./g,'').replace(',','.')) || 0;
+}
+function fmtNum(v) {
+  return v > 0 ? v.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) : '—';
 }
 
-// ── MonthRow ─────────────────────────────────────────────────────────────────
-function MonthRow({ month, year, value, comment, onChange, refValue, refLabel }) {
-  const [localVal,     setLocalVal]     = useState(fmtInput(value));
-  const [localComment, setLocalComment] = useState(comment);
-  const didMountRef = useRef(false);
+// ── Month input row ───────────────────────────────────────────────────────────
+function MonthRow({ month, year, value, comment, onChange, refValue, refLabel, theme }) {
+  const [localVal, setLocalVal]   = useState(fmtInput(value));
+  const [localCmt, setLocalCmt]   = useState(comment);
+  const didMount                  = useRef(false);
 
   useEffect(() => {
-    if (!didMountRef.current) { didMountRef.current = true; return; }
+    if (!didMount.current) { didMount.current = true; return; }
     setLocalVal(fmtInput(value));
-    setLocalComment(comment);
+    setLocalCmt(comment);
   }, [value, comment]);
 
-  const isCurrentMonth =
-    new Date().getMonth() + 1 === month &&
-    new Date().getFullYear() === parseInt(year);
+  const isCurrent = new Date().getMonth() + 1 === month && new Date().getFullYear() === parseInt(year);
+  const parsed    = parseInput(localVal);
+  const diff      = refValue != null ? parsed - refValue : null;
+  const isOver    = diff != null && diff > 0.01;
+  const isUnder   = diff != null && diff < -0.01;
 
-  const handleValueBlur = () => {
-    const parsed = parseInput(localVal);
-    setLocalVal(fmtInput(parsed));
-    onChange(month, parsed, localComment);
-  };
-
-  const handleCommentBlur = () => onChange(month, parseInput(localVal), localComment);
-
-  const diff = refValue != null ? parseInput(localVal) - refValue : null;
+  const commitVal = () => { const p = parseInput(localVal); setLocalVal(fmtInput(p)); onChange(month, p, localCmt); };
+  const commitCmt = () => onChange(month, parseInput(localVal), localCmt);
 
   return (
-    <div className={`wizard-month-row ${isCurrentMonth ? 'current-month' : ''}`}>
-      <div className="wmr-month">
-        <span className="wmr-month-name">{MONTHS_FULL_PT[month - 1]}</span>
-        {isCurrentMonth && <span className="wmr-badge">Mês atual</span>}
+    <div style={{
+      display:'grid', gridTemplateColumns:'140px 1fr 1fr', gap:12,
+      padding:'10px 20px', borderBottom:`1px solid ${theme.border}`,
+      background: isCurrent ? theme.row : 'transparent',
+    }}>
+      <div style={{display:'flex',alignItems:'center',gap:6}}>
+        <span style={{fontSize:'0.86rem',fontWeight:600,color:'var(--text-primary)'}}>{MONTHS_FULL_PT[month-1]}</span>
+        {isCurrent && (
+          <span style={{fontSize:'0.58rem',fontWeight:700,background:theme.color,color:'#fff',padding:'1px 5px',borderRadius:8}}>Atual</span>
+        )}
       </div>
-      <div className="wmr-fields">
-        <div className="wmr-value-wrap">
-          <span className="wmr-prefix">R$</span>
+      <div style={{display:'flex',flexDirection:'column',gap:3}}>
+        <div style={{display:'flex',alignItems:'center',gap:6}}>
+          <span style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:600,flexShrink:0}}>R$</span>
           <input
-            className="wmr-input"
-            type="text"
-            inputMode="decimal"
-            placeholder="0,00"
+            style={{
+              flex:1,border:`1.5px solid ${isOver?'#FCA5A5':isUnder?'#BBF7D0':'var(--border-strong)'}`,
+              borderRadius:'var(--radius-sm)',padding:'7px 10px',
+              fontFamily:'var(--font-body)',fontSize:'0.9rem',
+              textAlign:'right',outline:'none',fontVariantNumeric:'tabular-nums',
+              background:isOver?'#FEF2F2':'transparent',transition:'border-color 0.15s',
+            }}
+            type="text" inputMode="decimal" placeholder="0,00"
             value={localVal}
             onChange={e => setLocalVal(e.target.value)}
             onFocus={e => e.target.select()}
-            onBlur={handleValueBlur}
-            onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
+            onBlur={commitVal}
+            onKeyDown={e => { if (e.key==='Enter') e.target.blur(); }}
           />
           {diff != null && Math.abs(diff) > 0.01 && (
-            <span className={`wmr-diff ${diff > 0 ? 'over' : 'under'}`}>
-              {diff > 0 ? '▲' : '▼'} {formatBRL(Math.abs(diff))}
+            <span style={{fontSize:'0.68rem',fontWeight:700,flexShrink:0,color:isOver?'#DC2626':'#15803D'}}>
+              {isOver?'▲':'▼'} {formatBRL(Math.abs(diff))}
             </span>
           )}
         </div>
         {refValue != null && (
-          <div className="wmr-budget-ref">
-            {refLabel}: {refValue === 0 ? '—' : formatBRL(refValue)}
+          <div style={{fontSize:'0.62rem',color:'var(--text-muted)',textAlign:'right',paddingRight:4}}>
+            {refLabel}: {refValue===0?'—':formatBRL(refValue)}
           </div>
         )}
       </div>
-      <div className="wmr-comment">
-        <input
-          className="wmr-comment-input"
-          type="text"
-          placeholder="Justificativa / observação (opcional)..."
-          value={localComment}
-          onChange={e => setLocalComment(e.target.value)}
-          onBlur={handleCommentBlur}
-          onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
-        />
-      </div>
+      <input
+        style={{
+          width:'100%',border:`1.5px solid ${theme.border}`,borderRadius:'var(--radius-sm)',
+          padding:'7px 10px',fontFamily:'var(--font-body)',fontSize:'0.82rem',
+          outline:'none',background:'transparent',color:'var(--text-secondary)',
+        }}
+        type="text" placeholder="Observação (opcional)..."
+        value={localCmt}
+        onChange={e => setLocalCmt(e.target.value)}
+        onBlur={commitCmt}
+        onKeyDown={e => { if (e.key==='Enter') e.target.blur(); }}
+      />
     </div>
   );
 }
 
-// ── ForecastWizard ────────────────────────────────────────────────────────────
-// editType: 'Forecast' (engenheiro) | 'Budget' (planejador)
-export default function ForecastWizard({ projectId, entries, year, onSaved, editType = 'Forecast' }) {
-  const [step,      setStep]      = useState(0);
-  const [localData, setLocalData] = useState({});
-  const [saving,    setSaving]    = useState(false);
-  const [saved,     setSaved]     = useState(false);
+// ── Detail table (shown in bottom "Tabela" tab) ───────────────────────────────
+// ── SI Warning ────────────────────────────────────────────────────────────────
+function SIWarning({ si, totalForecast, totalActual, consolidatedActual }) {
+  const over = totalForecast + totalActual + parseFloat(consolidatedActual||0) - si;
+  if (!si || over <= 0) return null;
+  return (
+    <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 20px',background:'#FEF2F2',borderBottom:'1.5px solid #FCA5A5',fontSize:'0.78rem',color:'#991B1B',fontWeight:600}}>
+      ⚠ Realizado + Forecast excede a SI ({formatBRL(si)}) em {formatBRL(over)}
+    </div>
+  );
+}
+
+// ── Main ForecastWizard ───────────────────────────────────────────────────────
+export default function ForecastWizard({
+  projectId, entries, year, onYearChange, onSaved,
+  editType = 'Forecast',
+  availableTypes,
+  siValue = 0,
+  consolidatedActual = 0,
+}) {
+  const types = availableTypes?.length ? availableTypes : [editType];
+  const YEARS = [2026, 2027, 2028, 2029, 2030, 2031];
+
+  // ── state ──
+  const [activeType, setActiveType] = useState(types.includes(editType) ? editType : types[0]);
+  const [step,       setStep]       = useState(0);
+  const [localData,  setLocalData]  = useState({});
+  const [saving,     setSaving]     = useState(false);
+  const [saved,      setSaved]      = useState(false);
   const { toast } = useToast();
 
-  const cfg = TYPE_CONFIG[editType];
+  const theme = TYPE_THEME[activeType] || TYPE_THEME.Forecast;
 
-  // The "reference" type shown alongside — Budget shows Forecast as ref, and vice versa
-  const refType  = editType === 'Forecast' ? 'Budget' : 'Forecast';
-  const refLabel = editType === 'Forecast' ? 'Budget' : 'Forecast atual';
-
+  // Reset on year/editType change
   useEffect(() => {
-    setLocalData(buildMap(entries, year, editType));
+    setLocalData(buildAll(entries, year));
     setStep(0);
     setSaved(false);
-  }, [entries, year, editType]);
+  }, [entries, year]);
 
-  const getRef = useCallback((cat, month) => {
-    const e = entries.find(e =>
-      e.category === cat && e.type === refType &&
-      parseInt(e.year) === parseInt(year) && parseInt(e.month) === month
-    );
+  useEffect(() => {
+    if (types.includes(editType)) setActiveType(editType);
+  }, [editType]);
+
+  function buildAll(entries, year) {
+    const map = {};
+    for (const e of entries) {
+      if (parseInt(e.year) !== parseInt(year)) continue;
+      map[`${e.type}|${e.category}|${e.month}`] = { value: parseFloat(e.value)||0, comment: e.comment||'' };
+    }
+    return map;
+  }
+
+  const getValue   = (type, cat, month) => localData[`${type}|${cat}|${month}`]?.value   ?? 0;
+  const getComment = (type, cat, month) => localData[`${type}|${cat}|${month}`]?.comment ?? '';
+  const getRef     = useCallback((type, cat, month) => {
+    const rt = REF_TYPE[type];
+    const e  = entries.find(e=>e.category===cat&&e.type===rt&&parseInt(e.year)===parseInt(year)&&parseInt(e.month)===month);
     return e ? parseFloat(e.value) : null;
-  }, [entries, year, refType]);
+  }, [entries, year]);
 
-  const getValue   = (cat, month) => localData[`${cat}|${month}`]?.value   ?? 0;
-  const getComment = (cat, month) => localData[`${cat}|${month}`]?.comment ?? '';
-
-  const handleChange = (cat, month, value, comment) => {
-    setLocalData(prev => ({ ...prev, [`${cat}|${month}`]: { value, comment } }));
+  const handleChange = (type, cat, month, value, comment) => {
+    setLocalData(prev => ({ ...prev, [`${type}|${cat}|${month}`]: { value, comment } }));
     setSaved(false);
   };
 
-  const getCatTotal = (cat) =>
-    Array.from({ length: 12 }, (_, i) => getValue(cat, i + 1)).reduce((s, v) => s + v, 0);
+  const getCatTotal  = (type, cat) => Array.from({length:12},(_,i)=>i+1).reduce((s,m)=>s+getValue(type,cat,m),0);
+  const getTypeTotal = (type)      => CATEGORIES.reduce((s,c)=>s+getCatTotal(type,c),0);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const bulk = CATEGORIES.flatMap(cat =>
-        Array.from({ length: 12 }, (_, i) => i + 1).map(m => ({
-          category: cat,
-          type:     editType,
-          year:     parseInt(year),
-          month:    m,
-          value:    getValue(cat, m),
-          comment:  getComment(cat, m),
-        }))
-      );
+      const bulk = [];
+      types.forEach(type => CATEGORIES.forEach(cat => {
+        for (let m=1; m<=12; m++) bulk.push({
+          category:cat, type, year:parseInt(year), month:m,
+          value:getValue(type,cat,m), comment:getComment(type,cat,m),
+        });
+      }));
       await api.post(`/forecast/project/${projectId}/bulk`, { entries: bulk });
       setSaved(true);
-      toast(`${cfg.label} salvo com sucesso!`, 'success');
+      toast('Dados salvos com sucesso!', 'success');
       onSaved?.();
-    } catch {
-      toast('Erro ao salvar. Tente novamente.', 'error');
-    } finally {
-      setSaving(false);
-    }
+    } catch { toast('Erro ao salvar.', 'error'); }
+    finally { setSaving(false); }
   };
 
-  const totalValue = CATEGORIES.reduce((s, c) => s + getCatTotal(c), 0);
+  // SI
+  const si = parseFloat(siValue)||0;
+  const totalForecast = types.includes('Forecast') ? getTypeTotal('Forecast') : entries.filter(e=>e.type==='Forecast').reduce((s,e)=>s+parseFloat(e.value||0),0);
+  const totalActual   = types.includes('Actual')   ? getTypeTotal('Actual')   : entries.filter(e=>e.type==='Actual').reduce((s,e)=>s+parseFloat(e.value||0),0);
 
-  // ── STEP 0: Intro ──────────────────────────────────────────────────────────
-  if (step === 0) {
-    const hasExistingData = Object.values(localData).some(d => d.value > 0);
-    return (
-      <div className="wizard-container">
-        <div className="wizard-intro">
-          <h2 className="wizard-intro-title">
-            {hasExistingData ? `Editar ${cfg.label} ${year}` : `Preenchimento do ${cfg.label} ${year}`}
-          </h2>
-          <p className="wizard-intro-text">
-            {hasExistingData ? cfg.editIntro : cfg.intro}
-          </p>
+  const hasData = (type) => CATEGORIES.some(cat => Array.from({length:12},(_,i)=>i+1).some(m => getValue(type,cat,m)>0));
 
-          <div className="wizard-glossary">
-            <div className="gloss-item">
-              <span className={`gloss-badge ${cfg.badgeCls}`}>{cfg.label}</span>
-              <span className="gloss-desc">{cfg.description}</span>
-            </div>
-            <div className="gloss-item">
-              <span className={`gloss-badge ${refType === 'Budget' ? 'budget' : 'forecast'}`}>{refLabel}</span>
-              <span className="gloss-desc">
-                {refType === 'Budget'
-                  ? 'Valor de orçamento aprovado. Exibido como referência ao preencher o Forecast.'
-                  : 'Previsão atualizada de desembolso. Exibida como referência ao preencher o Budget.'}
-              </span>
-            </div>
-          </div>
+  // ── WRAPPER com barra de tipo no topo ─────────────────────────────────────
+  const WrapperWithTypeBar = ({ children }) => (
+    <div style={{
+      width:'100%', background:theme.light, border:`1.5px solid ${theme.border}`,
+      borderRadius:'var(--radius-lg)', overflow:'hidden',
+      transition:'background 0.2s, border-color 0.2s',
+    }}>
+      {/* Row 1: Year tabs */}
+      <div style={{
+        display:'flex', alignItems:'stretch',
+        background:'var(--ctg-navy)',
+        borderBottom:'1px solid rgba(255,255,255,0.1)',
+      }}>
+        {YEARS.map(y => {
+          const isActive = parseInt(year) === y;
+          return (
+            <button key={y} onClick={() => { onYearChange?.(y); setStep(0); }} style={{
+              padding:'9px 18px', border:'none', cursor:'pointer',
+              background: isActive ? 'rgba(255,255,255,0.15)' : 'transparent',
+              color: isActive ? '#fff' : 'rgba(255,255,255,0.5)',
+              fontWeight: isActive ? 700 : 400,
+              fontSize:'0.88rem', fontFamily:'var(--font-display)',
+              borderBottom: isActive ? '3px solid #fff' : '3px solid transparent',
+              transition:'all 0.15s',
+            }}>{y}</button>
+          );
+        })}
+      </div>
 
-          {hasExistingData && (
-            <div style={{
-              background: cfg.bgColor, border: `1.5px solid ${cfg.borderColor}`,
-              borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 20,
-              display: 'flex', gap: 20, flexWrap: 'wrap', justifyContent: 'center',
+      {/* Row 2: Type tabs + totals + save */}
+      <div style={{
+        display:'flex', alignItems:'stretch',
+        background:`linear-gradient(135deg, ${theme.color}EE, ${theme.color}BB)`,
+        flexWrap:'wrap',
+      }}>
+        {types.map(t => {
+          const th = TYPE_THEME[t], isActive = activeType===t;
+          return (
+            <button key={t} onClick={()=>{ setActiveType(t); setStep(0); }} style={{
+              padding:'10px 20px', border:'none', cursor:'pointer',
+              background: isActive?'rgba(255,255,255,0.2)':'transparent',
+              color: isActive?'#fff':'rgba(255,255,255,0.6)',
+              fontWeight: isActive?700:500, fontSize:'0.86rem',
+              fontFamily:'var(--font-body)',
+              borderBottom: isActive?'3px solid #fff':'3px solid transparent',
+              transition:'all 0.15s', display:'flex', flexDirection:'column', alignItems:'center', gap:1,
             }}>
-              {CATEGORIES.map(cat => (
-                <div key={cat} style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.68rem', fontWeight: 700, color: cfg.color, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                    {CAT_ICONS[cat]} {cat}
-                  </div>
-                  <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.05rem', color: 'var(--ctg-navy)' }}>
-                    {formatBRL(getCatTotal(cat))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="wizard-steps-preview">
-            {CATEGORIES.map((cat, i) => {
-              const hasData = Array.from({ length: 12 }, (_, m) => getValue(cat, m + 1)).some(v => v > 0);
-              return (
-                <div key={cat} className="wsp-item" style={{ position: 'relative' }}>
-                  <span className="wsp-num">{i + 1}</span>
-                  <span className="wsp-label">{cat}</span>
-                  {hasData && (
-                    <span style={{
-                      position: 'absolute', top: -4, right: -4,
-                      background: cfg.color, color: '#fff',
-                      fontSize: '0.55rem', fontWeight: 700, borderRadius: '50%',
-                      width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>✓</span>
-                  )}
-                </div>
-              );
-            })}
-            <div className="wsp-item">
-              <span className="wsp-num">4</span>
-              <span className="wsp-label">Revisão</span>
+              <span>{th.label}</span>
+              {hasData(t) && <span style={{fontSize:'0.55rem',color:isActive?'rgba(255,255,255,0.8)':'rgba(255,255,255,0.5)'}}>✓ preenchido</span>}
+            </button>
+          );
+        })}
+        {/* Totals + Save */}
+        <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:0}}>
+          <div style={{display:'flex',alignItems:'center',gap:18,padding:'0 20px',flexWrap:'wrap'}}>
+            {CATEGORIES.map(cat => (
+              <div key={cat} style={{textAlign:'center'}}>
+                <div style={{fontSize:'0.56rem',fontWeight:700,color:'rgba(255,255,255,0.55)',textTransform:'uppercase',letterSpacing:'0.08em'}}>{cat}</div>
+                <div style={{fontFamily:'var(--font-display)',fontSize:'0.9rem',color:'#fff'}}>{formatBRL(getCatTotal(activeType,cat))}</div>
+              </div>
+            ))}
+            <div style={{borderLeft:'1px solid rgba(255,255,255,0.25)',paddingLeft:16,textAlign:'center'}}>
+              <div style={{fontSize:'0.56rem',fontWeight:700,color:'rgba(255,255,255,0.55)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Total</div>
+              <div style={{fontFamily:'var(--font-display)',fontSize:'1rem',color:'#fff',fontWeight:600}}>{formatBRL(getTypeTotal(activeType))}</div>
             </div>
           </div>
-
-          <button className="btn btn-primary wizard-start-btn" onClick={() => setStep(1)}>
-            {hasExistingData ? `${cfg.editBtn} →` : `${cfg.startBtn} →`}
-          </button>
+          <button onClick={handleSave} disabled={saving} style={{
+            padding:'0 22px', alignSelf:'stretch', border:'none', cursor:saving?'wait':'pointer',
+            background:saved?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.12)',
+            color:'#fff', fontWeight:700, fontSize:'0.82rem', fontFamily:'var(--font-body)',
+            borderLeft:'1px solid rgba(255,255,255,0.2)', whiteSpace:'nowrap',
+            transition:'background 0.15s',
+          }}
+          onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.28)'}
+          onMouseLeave={e=>e.currentTarget.style.background=saved?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.12)'}
+          >{saving?'Salvando...':saved?'✓ Salvo':'💾 Salvar'}</button>
         </div>
       </div>
-    );
-  }
 
-  // ── STEPS 1–3: Category input ──────────────────────────────────────────────
-  if (step >= 1 && step <= 3) {
-    const cat      = CATEGORIES[step - 1];
-    const catTotal = getCatTotal(cat);
-    const refTotal = Array.from({ length: 12 }, (_, i) => getRef(cat, i + 1))
-      .reduce((s, v) => s + (v ?? 0), 0);
-    const diff = catTotal - refTotal;
+      <SIWarning si={si} totalForecast={totalForecast} totalActual={totalActual} consolidatedActual={consolidatedActual}/>
 
+      {children}
+    </div>
+  );
+
+  // ── STEP 0: Intro ─────────────────────────────────────────────────────────
+  if (step === 0) {
+    const hasExisting = types.some(t => hasData(t));
     return (
-      <div className="wizard-container">
-        <div className="wizard-progress">
-          {[1, 2, 3, 4].map(s => (
-            <div key={s} className={`wp-step ${s < step ? 'done' : s === step ? 'active' : ''}`}>
-              <div className="wp-dot">{s < step ? '✓' : s}</div>
-              <div className="wp-label">{s <= 3 ? CATEGORIES[s - 1] : 'Revisão'}</div>
-            </div>
-          ))}
-          <div className="wp-line" style={{ width: `${((step - 1) / 3) * 100}%` }} />
-        </div>
+      <WrapperWithTypeBar>
+        <div style={{padding:'36px 40px',textAlign:'center',background:'rgba(255,255,255,0.6)'}}>
+          <h2 style={{fontFamily:'var(--font-display)',fontSize:'1.7rem',color:'var(--ctg-navy)',marginBottom:10}}>
+            {hasExisting ? `Editar ${theme.label} ${year}` : `Preenchimento do ${theme.label} ${year}`}
+          </h2>
+          <p style={{fontSize:'0.9rem',color:'var(--text-secondary)',lineHeight:1.7,marginBottom:28,maxWidth:500,margin:'0 auto 24px'}}>
+            {hasExisting
+              ? 'Seus valores já salvos estão carregados. Altere o que precisar e salve.'
+              : `Preencha o ${theme.label} mês a mês para cada categoria de custo do projeto.`}
+          </p>
 
-        <div className="wizard-cat-header">
-          <div style={{
-            width: 40, height: 40, borderRadius: 'var(--radius-sm)',
-            background: cfg.bgColor, border: `2px solid ${cfg.color}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '0.65rem', fontWeight: 800, color: cfg.color, flexShrink: 0,
-          }}>
-            {CAT_ICONS[cat]}
-          </div>
-          <div>
-            <h2 className="wizard-cat-title">{cat}</h2>
-            <p className="wizard-cat-desc">{CAT_DESCRIPTIONS[cat]}</p>
-          </div>
-          <div className="wizard-cat-total">
-            <div className="wct-label">{cfg.label} {year}</div>
-            <div className="wct-value">{formatBRL(catTotal)}</div>
-            {refTotal > 0 && (
-              <div className={`wct-diff ${diff > 0 ? 'over' : diff < 0 ? 'under' : ''}`}>
-                {diff === 0
-                  ? `= ${refLabel}`
-                  : diff > 0
-                    ? `▲ ${formatBRL(Math.abs(diff))} acima`
-                    : `▼ ${formatBRL(Math.abs(diff))} abaixo`}
+          {/* Glossary */}
+          <div style={{background:'rgba(255,255,255,0.7)',borderRadius:'var(--radius-lg)',padding:'16px 20px',marginBottom:28,textAlign:'left',maxWidth:560,margin:'0 auto 24px',border:`1px solid ${theme.border}`}}>
+            <div style={{display:'flex',alignItems:'flex-start',gap:12,marginBottom:10}}>
+              <span style={{background:theme.light,color:theme.text,border:`1px solid ${theme.border}`,padding:'3px 10px',borderRadius:12,fontSize:'0.75rem',fontWeight:700,flexShrink:0}}>{theme.label}</span>
+              <span style={{fontSize:'0.83rem',color:'var(--text-secondary)'}}>{TYPE_THEME[activeType]?.description || ''}</span>
+            </div>
+            {REF_TYPE[activeType] && (
+              <div style={{display:'flex',alignItems:'flex-start',gap:12,paddingTop:10,borderTop:`1px solid ${theme.border}`}}>
+                <span style={{background:TYPE_THEME[REF_TYPE[activeType]]?.light,color:TYPE_THEME[REF_TYPE[activeType]]?.text,border:`1px solid ${TYPE_THEME[REF_TYPE[activeType]]?.border}`,padding:'3px 10px',borderRadius:12,fontSize:'0.75rem',fontWeight:700,flexShrink:0,whiteSpace:'nowrap'}}>
+                  {TYPE_THEME[REF_TYPE[activeType]]?.label} — ref.
+                </span>
+                <span style={{fontSize:'0.83rem',color:'var(--text-secondary)'}}>Exibido como referência em cada linha para facilitar o preenchimento.</span>
               </div>
             )}
           </div>
-        </div>
 
-        <div className="wizard-months">
-          <div className="wizard-months-header">
-            <span>Mês</span>
-            <span>Valor {cfg.label} (R$)</span>
-            <span>Justificativa</span>
+          {/* Category preview with totals */}
+          {hasExisting && (
+            <div style={{display:'flex',gap:12,justifyContent:'center',marginBottom:28,flexWrap:'wrap'}}>
+              {CATEGORIES.map((cat,i) => {
+                const total = getCatTotal(activeType, cat);
+                return (
+                  <div key={cat} onClick={()=>setStep(i+1)} style={{
+                    padding:'14px 20px', borderRadius:'var(--radius-md)', cursor:'pointer',
+                    background: total>0 ? theme.row : 'rgba(255,255,255,0.5)',
+                    border: `2px solid ${total>0 ? theme.color : theme.border}`,
+                    minWidth:140, textAlign:'center', transition:'all 0.15s',
+                  }}>
+                    <div style={{fontSize:'0.65rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:theme.text,marginBottom:4}}>{CAT_ICONS[cat]} {cat}</div>
+                    <div style={{fontFamily:'var(--font-display)',fontSize:'1.1rem',color:total>0?theme.color:'var(--text-muted)'}}>{total>0?formatBRL(total):'—'}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Steps preview */}
+          <div style={{display:'flex',gap:8,justifyContent:'center',marginBottom:28,flexWrap:'wrap'}}>
+            {CATEGORIES.map((cat,i)=>(
+              <div key={cat} onClick={()=>setStep(i+1)} style={{
+                padding:'10px 16px',borderRadius:'var(--radius-md)',cursor:'pointer',
+                background: getCatTotal(activeType,cat)>0 ? theme.color : 'rgba(255,255,255,0.6)',
+                border:`1px solid ${theme.border}`,
+                display:'flex',flexDirection:'column',alignItems:'center',gap:3,
+                transition:'all 0.15s', minWidth:100,
+              }}>
+                <div style={{width:26,height:26,borderRadius:'50%',background: getCatTotal(activeType,cat)>0?'rgba(255,255,255,0.25)':theme.light,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.8rem',fontWeight:700,color:getCatTotal(activeType,cat)>0?'#fff':theme.color}}>
+                  {getCatTotal(activeType,cat)>0?'✓':i+1}
+                </div>
+                <span style={{fontSize:'0.78rem',fontWeight:600,color:getCatTotal(activeType,cat)>0?'#fff':theme.text}}>{cat}</span>
+              </div>
+            ))}
+            <div onClick={()=>setStep(4)} style={{
+              padding:'10px 16px',borderRadius:'var(--radius-md)',cursor:'pointer',
+              background:'rgba(255,255,255,0.6)',border:`1px solid ${theme.border}`,
+              display:'flex',flexDirection:'column',alignItems:'center',gap:3,minWidth:100,
+            }}>
+              <div style={{width:26,height:26,borderRadius:'50%',background:theme.light,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.8rem',fontWeight:700,color:theme.color}}>4</div>
+              <span style={{fontSize:'0.78rem',fontWeight:600,color:theme.text}}>Revisão</span>
+            </div>
           </div>
-          {Array.from({ length: 12 }, (_, i) => i + 1).map(month => (
-            <MonthRow
-              key={`${cat}|${month}|${year}|${getValue(cat, month)}`}
-              month={month}
-              year={year}
-              value={getValue(cat, month)}
-              comment={getComment(cat, month)}
-              refValue={getRef(cat, month)}
-              refLabel={refLabel}
-              onChange={(m, v, c) => handleChange(cat, m, v, c)}
-            />
-          ))}
-        </div>
 
-        <div className="wizard-nav">
-          <button className="btn btn-secondary" onClick={() => setStep(s => s - 1)}>
-            ← {step === 1 ? 'Início' : CATEGORIES[step - 2]}
-          </button>
-          <button className="btn btn-primary" onClick={() => setStep(s => s + 1)}>
-            {step === 3 ? 'Revisar →' : `${CATEGORIES[step]} →`}
+          <button style={{
+            padding:'13px 36px',borderRadius:'var(--radius-md)',border:'none',cursor:'pointer',
+            background:theme.color,color:'#fff',fontWeight:700,fontSize:'1rem',
+            fontFamily:'var(--font-body)',transition:'opacity 0.15s',
+          }}
+          onClick={()=>setStep(1)}
+          onMouseEnter={e=>e.currentTarget.style.opacity='0.88'}
+          onMouseLeave={e=>e.currentTarget.style.opacity='1'}
+          >
+            {hasExisting ? `Editar ${theme.label} →` : `Iniciar preenchimento →`}
           </button>
         </div>
-      </div>
+      </WrapperWithTypeBar>
     );
   }
 
-  // ── STEP 4: Review ────────────────────────────────────────────────────────
-  return (
-    <div className="wizard-container">
-      <div className="wizard-progress">
-        {[1, 2, 3, 4].map(s => (
-          <div key={s} className={`wp-step ${s < 4 ? 'done' : 'active'}`}>
-            <div className="wp-dot">{s < 4 ? '✓' : s}</div>
-            <div className="wp-label">{s <= 3 ? CATEGORIES[s - 1] : 'Revisão'}</div>
-          </div>
-        ))}
-        <div className="wp-line" style={{ width: '100%' }} />
-      </div>
+  // ── STEPS 1-3: Category input ──────────────────────────────────────────────
+  if (step >= 1 && step <= 3) {
+    const cat         = CATEGORIES[step-1];
+    const catTotal    = getCatTotal(activeType, cat);
+    const refTotalCat = Array.from({length:12},(_,i)=>i+1).reduce((s,m)=>s+(getRef(activeType,cat,m)??0),0);
+    const diff        = catTotal - refTotalCat;
 
-      <div className="wizard-review">
-        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem', color: 'var(--ctg-navy)', marginBottom: 4 }}>
-          Revisão do {cfg.label} {year}
-        </h2>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: 20 }}>
-          Confira os totais antes de salvar. Clique em uma categoria para voltar e editar.
-        </p>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginBottom: 24 }}>
-          {CATEGORIES.map(cat => {
-            const total    = getCatTotal(cat);
-            const refTotal = Array.from({ length: 12 }, (_, i) => getRef(cat, i + 1))
-              .reduce((s, v) => s + (v ?? 0), 0);
+    return (
+      <WrapperWithTypeBar>
+        {/* Progress bar */}
+        <div style={{display:'flex',alignItems:'center',padding:'14px 20px',background:'rgba(255,255,255,0.5)',borderBottom:`1px solid ${theme.border}`,gap:8,flexWrap:'wrap'}}>
+          {[1,2,3,4].map(s=>{
+            const done = s < step, active = s === step;
+            const label = s<=3 ? CATEGORIES[s-1] : 'Revisão';
             return (
-              <div key={cat} className="review-cat-card" onClick={() => setStep(CATEGORIES.indexOf(cat) + 1)}>
+              <div key={s} onClick={()=>setStep(s)} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',opacity:done||active?1:0.45}}>
                 <div style={{
-                  width: 36, height: 36, borderRadius: 'var(--radius-sm)',
-                  background: cfg.bgColor, border: `2px solid ${cfg.color}`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '0.6rem', fontWeight: 800, color: cfg.color,
+                  width:26,height:26,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',
+                  background: done?theme.color : active?theme.color:'var(--bg-app)',
+                  color: done||active?'#fff':theme.text,
+                  fontWeight:700,fontSize:'0.78rem',border:`2px solid ${done||active?theme.color:theme.border}`,
+                  flexShrink:0,
                 }}>
-                  {CAT_ICONS[cat]}
+                  {done?'✓':s}
                 </div>
-                <div>
-                  <div className="rcc-label">{cat}</div>
-                  <div className="rcc-value">{formatBRL(total)}</div>
-                  {refTotal > 0 && (
-                    <div className="rcc-budget">{refLabel}: {formatBRL(refTotal)}</div>
-                  )}
-                </div>
-                <div className="rcc-edit">✎</div>
+                <span style={{fontSize:'0.82rem',fontWeight:active?700:500,color:active?theme.color:'var(--text-secondary)'}}>{label}</span>
+                {s<4 && <span style={{color:'var(--text-muted)',fontSize:'0.8rem',marginRight:4}}>›</span>}
               </div>
             );
           })}
         </div>
 
-        <div className="review-total-banner" style={{ background: `linear-gradient(135deg, ${cfg.color}, ${cfg.color}CC)` }}>
-          <div>
-            <div style={{ fontSize: '0.75rem', opacity: 0.75 }}>TOTAL {cfg.label.toUpperCase()} {year}</div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: '2rem', lineHeight: 1 }}>
-              {formatBRL(totalValue)}
-            </div>
+        {/* Category header */}
+        <div style={{
+          display:'flex',alignItems:'flex-start',gap:14,padding:'16px 20px',
+          background:`${theme.color}10`,borderBottom:`1px solid ${theme.border}`,
+          flexWrap:'wrap',
+        }}>
+          <div style={{
+            width:42,height:42,borderRadius:'var(--radius-sm)',background:theme.light,
+            border:`2px solid ${theme.color}`,display:'flex',alignItems:'center',justifyContent:'center',
+            fontSize:'0.65rem',fontWeight:800,color:theme.color,flexShrink:0,
+          }}>{CAT_ICONS[cat]}</div>
+          <div style={{flex:1}}>
+            <h2 style={{fontFamily:'var(--font-display)',fontSize:'1.2rem',color:'var(--ctg-navy)',marginBottom:2}}>{cat}</h2>
+            <p style={{fontSize:'0.8rem',color:'var(--text-secondary)',lineHeight:1.5}}>{CAT_DESCRIPTIONS[cat]}</p>
           </div>
-          {saved && <span style={{ fontSize: '0.85rem', opacity: 0.85 }}>✓ Salvo</span>}
+          <div style={{textAlign:'right',flexShrink:0}}>
+            <div style={{fontSize:'0.62rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:theme.text,marginBottom:2}}>Total {year}</div>
+            <div style={{fontFamily:'var(--font-display)',fontSize:'1.3rem',color:theme.color}}>{formatBRL(catTotal)}</div>
+            {refTotalCat>0 && (
+              <div style={{fontSize:'0.68rem',color:diff>0?'#DC2626':diff<0?'#15803D':'var(--text-muted)',fontWeight:600}}>
+                {diff===0?`= ${TYPE_THEME[REF_TYPE[activeType]]?.label}`:diff>0?`▲ ${formatBRL(Math.abs(diff))} acima`:`▼ ${formatBRL(Math.abs(diff))} abaixo`}
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="table-wrapper" style={{ marginBottom: 20 }}>
-          <table className="forecast-table">
+        {/* Month rows header */}
+        <div style={{
+          display:'grid',gridTemplateColumns:'140px 1fr 1fr',gap:12,padding:'8px 20px',
+          background:`${theme.color}12`,borderBottom:`1px solid ${theme.border}`,
+          fontSize:'0.68rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:theme.color,
+        }}>
+          <span>Mês</span>
+          <span>Valor {theme.label} (R$)</span>
+          <span>Observação</span>
+        </div>
+
+        {/* Month rows */}
+        <div style={{background:'rgba(255,255,255,0.65)'}}>
+          {Array.from({length:12},(_,i)=>i+1).map(month=>(
+            <MonthRow
+              key={`${activeType}|${cat}|${month}|${year}|${getValue(activeType,cat,month)}`}
+              month={month} year={year}
+              value={getValue(activeType,cat,month)}
+              comment={getComment(activeType,cat,month)}
+              refValue={getRef(activeType,cat,month)}
+              refLabel={`Ref. ${TYPE_THEME[REF_TYPE[activeType]]?.label||''}`}
+              theme={theme}
+              onChange={(m,v,c)=>handleChange(activeType,cat,m,v,c)}
+            />
+          ))}
+        </div>
+
+        {/* Navigation */}
+        <div style={{display:'flex',justifyContent:'space-between',padding:'12px 20px',background:'rgba(255,255,255,0.5)',borderTop:`1px solid ${theme.border}`}}>
+          <button onClick={()=>setStep(s=>s-1)} style={{
+            padding:'9px 20px',borderRadius:'var(--radius-sm)',border:`1.5px solid ${theme.border}`,
+            background:'transparent',cursor:'pointer',color:theme.text,fontWeight:600,fontSize:'0.85rem',fontFamily:'var(--font-body)',
+          }}>
+            ← {step===1?'Início':CATEGORIES[step-2]}
+          </button>
+          <button onClick={()=>setStep(s=>s+1)} style={{
+            padding:'9px 24px',borderRadius:'var(--radius-sm)',border:'none',
+            background:theme.color,cursor:'pointer',color:'#fff',fontWeight:700,fontSize:'0.85rem',fontFamily:'var(--font-body)',
+          }}>
+            {step===3?'Revisar →':`${CATEGORIES[step]} →`}
+          </button>
+        </div>
+
+      </WrapperWithTypeBar>
+    );
+  }
+
+  // ── STEP 4: Revisão ───────────────────────────────────────────────────────
+  const totalValue = getTypeTotal(activeType);
+  return (
+    <WrapperWithTypeBar>
+      {/* Progress */}
+      <div style={{display:'flex',alignItems:'center',padding:'14px 20px',background:'rgba(255,255,255,0.5)',borderBottom:`1px solid ${theme.border}`,gap:8,flexWrap:'wrap'}}>
+        {[1,2,3,4].map(s=>{
+          const done = s < 4, active = s === 4;
+          const label = s<=3 ? CATEGORIES[s-1] : 'Revisão';
+          return (
+            <div key={s} onClick={()=>setStep(s)} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer'}}>
+              <div style={{
+                width:26,height:26,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',
+                background: done?theme.color:active?theme.color:'var(--bg-app)',
+                color:'#fff',fontWeight:700,fontSize:'0.78rem',border:`2px solid ${theme.color}`,flexShrink:0,
+              }}>{done?'✓':s}</div>
+              <span style={{fontSize:'0.82rem',fontWeight:active?700:500,color:active?theme.color:'var(--text-secondary)'}}>{label}</span>
+              {s<4 && <span style={{color:'var(--text-muted)',fontSize:'0.8rem',marginRight:4}}>›</span>}
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{padding:'24px 28px',background:'rgba(255,255,255,0.65)'}}>
+        <h2 style={{fontFamily:'var(--font-display)',fontSize:'1.4rem',color:'var(--ctg-navy)',marginBottom:4}}>
+          Revisão do {theme.label} {year}
+        </h2>
+        <p style={{color:'var(--text-muted)',fontSize:'0.85rem',marginBottom:20}}>
+          Confira os totais antes de salvar. Clique em uma categoria para voltar e editar.
+        </p>
+
+        {/* Category cards */}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:12,marginBottom:22}}>
+          {CATEGORIES.map(cat=>{
+            const total = getCatTotal(activeType,cat);
+            const refT  = Array.from({length:12},(_,i)=>i+1).reduce((s,m)=>s+(getRef(activeType,cat,m)??0),0);
+            return (
+              <div key={cat} onClick={()=>setStep(CATEGORIES.indexOf(cat)+1)} style={{
+                padding:'14px 16px',borderRadius:'var(--radius-md)',cursor:'pointer',
+                background: total>0?theme.row:theme.light,
+                border:`1.5px solid ${total>0?theme.color:theme.border}`,
+                display:'flex',alignItems:'center',gap:12,transition:'all 0.15s',
+              }}>
+                <div style={{
+                  width:36,height:36,borderRadius:'var(--radius-sm)',background:theme.light,
+                  border:`2px solid ${theme.color}`,display:'flex',alignItems:'center',justifyContent:'center',
+                  fontSize:'0.6rem',fontWeight:800,color:theme.color,flexShrink:0,
+                }}>{CAT_ICONS[cat]}</div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:'0.72rem',fontWeight:700,color:theme.text,marginBottom:2}}>{cat}</div>
+                  <div style={{fontFamily:'var(--font-display)',fontSize:'1rem',color:total>0?theme.color:'var(--text-muted)'}}>{formatBRL(total)}</div>
+                  {refT>0 && <div style={{fontSize:'0.62rem',color:'var(--text-muted)'}}>{TYPE_THEME[REF_TYPE[activeType]]?.label}: {formatBRL(refT)}</div>}
+                </div>
+                <span style={{color:theme.color,opacity:0.5,fontSize:'0.8rem'}}>✎</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Grand total banner */}
+        <div style={{
+          background:`linear-gradient(135deg, ${theme.color}, ${theme.color}CC)`,
+          borderRadius:'var(--radius-md)',padding:'16px 22px',
+          display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,color:'#fff',
+        }}>
+          <div>
+            <div style={{fontSize:'0.72rem',opacity:0.75,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em'}}>Total {theme.label.toUpperCase()} {year}</div>
+            <div style={{fontFamily:'var(--font-display)',fontSize:'2rem',lineHeight:1}}>{formatBRL(totalValue)}</div>
+          </div>
+          {saved && <span style={{fontSize:'0.9rem',opacity:0.9,fontWeight:700}}>✓ Salvo</span>}
+        </div>
+
+        {/* Summary table in review */}
+        <div style={{overflowX:'auto',borderRadius:'var(--radius-md)',border:`1px solid ${theme.border}`,marginBottom:20}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.8rem'}}>
             <thead>
               <tr>
-                <th className="col-label">Categoria</th>
-                {Array.from({ length: 12 }, (_, i) => (
-                  <th key={i} style={{ fontSize: '0.7rem' }}>{MONTHS_FULL_PT[i].slice(0, 3)}</th>
-                ))}
-                <th>Total</th>
+                <th style={{background:theme.color,color:'#fff',padding:'7px 14px',textAlign:'left',fontWeight:700,fontSize:'0.7rem',textTransform:'uppercase'}}>Categoria</th>
+                {MONTHS_PT.map(m=><th key={m} style={{background:theme.color,color:'rgba(255,255,255,0.85)',padding:'7px 6px',textAlign:'right',fontSize:'0.68rem',fontWeight:600}}>{m}</th>)}
+                <th style={{background:theme.color,color:'#fff',padding:'7px 12px',textAlign:'right',fontWeight:700,fontSize:'0.7rem'}}>Total</th>
               </tr>
             </thead>
             <tbody>
-              {CATEGORIES.map(cat => (
-                <tr
-                  key={cat}
-                  className={editType === 'Budget' ? 'row-budget' : 'row-forecast'}
-                  onClick={() => setStep(CATEGORIES.indexOf(cat) + 1)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <td className="td-label">{CAT_ICONS[cat]} {cat}</td>
-                  {Array.from({ length: 12 }, (_, i) => {
-                    const v = getValue(cat, i + 1);
-                    return (
-                      <td key={i} style={{ fontSize: '0.75rem' }}>
-                        {v > 0 ? v.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) : '—'}
-                      </td>
-                    );
-                  })}
-                  <td style={{ fontWeight: 700 }}>{formatBRL(getCatTotal(cat))}</td>
+              {CATEGORIES.map(cat=>(
+                <tr key={cat} onClick={()=>setStep(CATEGORIES.indexOf(cat)+1)} style={{cursor:'pointer',background:theme.light}}>
+                  <td style={{padding:'7px 14px',fontWeight:600,color:theme.text,borderBottom:`1px solid ${theme.border}`,borderLeft:`3px solid ${theme.color}`}}>
+                    {CAT_ICONS[cat]} {cat}
+                  </td>
+                  {Array.from({length:12},(_,i)=>i+1).map(m=>(
+                    <td key={m} style={{padding:'7px 6px',textAlign:'right',fontVariantNumeric:'tabular-nums',color:getValue(activeType,cat,m)>0?theme.text:'var(--text-muted)',borderBottom:`1px solid ${theme.border}`,fontSize:'0.78rem'}}>
+                      {fmtNum(getValue(activeType,cat,m))}
+                    </td>
+                  ))}
+                  <td style={{padding:'7px 12px',textAlign:'right',fontWeight:700,color:theme.text,borderBottom:`1px solid ${theme.border}`,fontVariantNumeric:'tabular-nums'}}>
+                    {fmtNum(getCatTotal(activeType,cat))}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
 
-        <div className="wizard-nav">
-          <button className="btn btn-secondary" onClick={() => setStep(3)}>← Voltar</button>
-          <button
-            className="btn btn-primary"
-            style={{ padding: '12px 28px', fontSize: '0.95rem' }}
-            onClick={handleSave}
-            disabled={saving}
-          >
-            {saving ? 'Salvando...' : saved ? `✓ ${cfg.label} Salvo!` : `Salvar ${cfg.label}`}
+        {/* Nav */}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <button onClick={()=>setStep(3)} style={{
+            padding:'9px 20px',borderRadius:'var(--radius-sm)',border:`1.5px solid ${theme.border}`,
+            background:'transparent',cursor:'pointer',color:theme.text,fontWeight:600,fontSize:'0.85rem',fontFamily:'var(--font-body)',
+          }}>← Voltar</button>
+          <button onClick={handleSave} disabled={saving} style={{
+            padding:'12px 32px',borderRadius:'var(--radius-sm)',border:'none',
+            background:theme.color,cursor:saving?'wait':'pointer',color:'#fff',fontWeight:700,fontSize:'0.95rem',fontFamily:'var(--font-body)',
+          }}>
+            {saving?'Salvando...':saved?`✓ ${theme.label} Salvo!`:`💾 Salvar ${theme.label}`}
           </button>
         </div>
       </div>
-    </div>
+
+    </WrapperWithTypeBar>
   );
 }
