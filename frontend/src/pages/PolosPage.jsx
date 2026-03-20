@@ -94,7 +94,7 @@ function PoloRow({ polo, projects, open, onToggle, C }) {
             fontWeight:700, fontSize:'0.85rem', whiteSpace:'nowrap',
             background: col.colorKey && v!==0 ? C[col.colorKey]+'30' : 'transparent',
             borderLeft:'1px solid rgba(255,255,255,0.05)',
-          }}>{v===0?'—':fmtBRL(v)}</td>
+          }} className={col.key==='variacao'?'polos-col-variacao':''}>{v===0?'—':fmtBRL(v)}</td>
         );
       })}
     </tr>
@@ -200,7 +200,7 @@ export default function PolosPage({ period: externalPeriod }) {
         <div className="card" style={{ overflow:'hidden' }}>
           {/* 9. Table with sticky header rows */}
           <div style={{ overflowX:'auto', overflowY:'auto', WebkitOverflowScrolling:'touch' }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', minWidth:820 }}>
+            <table className="polos-table" style={{ width:'100%', borderCollapse:'collapse', minWidth:820 }}>
 
               {/* ── Sticky column headers ── */}
               <thead style={{ position:'sticky', top:0, zIndex:20 }}>
@@ -221,7 +221,7 @@ export default function PolosPage({ period: externalPeriod }) {
                       letterSpacing:'0.06em', whiteSpace:'nowrap',
                       borderLeft:'1px solid rgba(255,255,255,0.12)',
                       borderBottom:'2px solid rgba(255,255,255,0.15)',
-                    }}>
+                    }} className={col.key==='variacao'?'polos-col-variacao':''}>
                       {col.label}
                     </th>
                   ))}

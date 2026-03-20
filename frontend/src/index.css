@@ -1314,34 +1314,9 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
   .dash-chart-project  .recharts-responsive-container { height: 180px !important; }
 }
 
-/* ── Mobile page header: controls below title ── */
-@media(max-width:768px){
-  .page-header {
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    gap: 10px !important;
-    padding: 10px 14px 10px !important;
-  }
-  .page-header > div:last-child {
-    width: 100%;
-    justify-content: flex-start !important;
-    flex-wrap: wrap !important;
-    gap: 8px !important;
-  }
-  /* Period slider: full width on mobile */
-  .period-selector { min-width: unset !important; width: 100% !important; }
-  .period-tracks { width: 100% !important; }
-  /* Plant filter: compact */
-  .plant-filter-btn { font-size: 0.75rem !important; padding: 5px 8px !important; }
-  /* Alert bell stays right */
-  .alert-bell-btn { margin-left: auto; }
-  /* Export button in header */
-  .header-export-btn { font-size: 0.72rem !important; padding: 5px 10px !important; }
-  /* Page title smaller on mobile */
-}
+/* old mobile header block removed */
 
 @media(max-width:480px){
-  .page-header { padding: 8px 12px 8px !important; }
   /* Stat cards: tighter */
   .stat-card { padding: 10px 10px !important; }
   .stat-value { font-size: 1rem !important; }
@@ -1555,4 +1530,96 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
   .mobile-header-title .page-title { font-size: 1rem !important; }
   .stat-card  { padding: 8px 10px !important; }
   .stat-value { font-size: 0.95rem !important; }
+}
+
+/* ── PolosPage: mobile table fixes ── */
+@media(max-width:768px){
+  /* Shrink the sticky name column */
+  .polos-table th:first-child,
+  .polos-table td:first-child { min-width: 110px !important; max-width: 130px !important; }
+
+  /* Smaller font throughout */
+  .polos-table th { font-size: 0.6rem !important; padding: 6px 7px !important; }
+  .polos-table td { font-size: 0.7rem !important; padding: 5px 7px !important; }
+
+  /* Tighter number columns */
+  .polos-table th:not(:first-child),
+  .polos-table td:not(:first-child) { min-width: 60px !important; }
+
+  /* Remove minWidth from table so it can be narrower */
+  .polos-table { min-width: unset !important; }
+
+  /* Hide Variação column on very small screens */
+  .polos-col-variacao { display: none !important; }
+}
+
+@media(max-width:480px){
+  .polos-table th:first-child,
+  .polos-table td:first-child { min-width: 90px !important; max-width: 110px !important; }
+  .polos-table th { font-size: 0.55rem !important; }
+  .polos-table td { font-size: 0.65rem !important; }
+}
+
+/* ── ForecastWizard: mobile fixes ── */
+@media(max-width:768px){
+  /* Year tabs: smaller, fit all 6 in one row */
+  .wizard-year-row button {
+    padding: 7px 10px !important;
+    font-size: 0.75rem !important;
+  }
+  /* Type tabs: compact */
+  .wizard-type-row button {
+    padding: 8px 12px !important;
+    font-size: 0.75rem !important;
+  }
+  /* Totals bar: wrap nicely */
+  .wizard-totals-bar {
+    padding: 6px 12px !important;
+    gap: 12px !important;
+    flex-wrap: wrap !important;
+  }
+  .wizard-totals-bar .wizard-cat-total { gap: 2px !important; }
+  .wizard-totals-bar .wizard-cat-label { font-size: 0.5rem !important; }
+  .wizard-totals-bar .wizard-cat-value { font-size: 0.8rem !important; }
+  /* Save button: compact */
+  .wizard-save-btn {
+    padding: 8px 12px !important;
+    font-size: 0.8rem !important;
+  }
+  /* Month rows: compact */
+  .wizard-month-row {
+    padding: 8px 12px !important;
+  }
+  .wizard-month-row .wizard-month-label { font-size: 0.78rem !important; }
+  .wizard-month-row input { font-size: 0.85rem !important; padding: 5px 8px !important; }
+}
+
+/* ── PolosPage table: proper scroll, no overlap ── */
+@media(max-width:768px){
+  /* Let the table container scroll horizontally only */
+  .polos-scroll-container {
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Remove min-width override — let table be as wide as needed and scroll */
+  .polos-table { min-width: 520px !important; }
+  /* First column: fixed narrow width */
+  .polos-table th:first-child,
+  .polos-table td:first-child {
+    min-width: 100px !important;
+    max-width: 120px !important;
+    font-size: 0.65rem !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* All other columns: compact */
+  .polos-table th { font-size: 0.58rem !important; padding: 5px 6px !important; white-space: nowrap; }
+  .polos-table td { font-size: 0.66rem !important; padding: 5px 6px !important; white-space: nowrap; }
+  /* Data cells: fixed narrow width */
+  .polos-table th:not(:first-child),
+  .polos-table td:not(:first-child) { min-width: 58px !important; }
+  /* Hide variacao on mobile */
+  .polos-col-variacao { display: none !important; }
 }

@@ -222,7 +222,7 @@ export default function ForecastWizard({
       transition:'background 0.2s, border-color 0.2s',
     }}>
       {/* Row 1: Year tabs */}
-      <div style={{
+      <div className="wizard-year-row" style={{
         display:'flex', alignItems:'stretch',
         background:'var(--ctg-navy)',
         borderBottom:'1px solid rgba(255,255,255,0.1)',
@@ -244,7 +244,7 @@ export default function ForecastWizard({
       </div>
 
       {/* Row 2: Type tabs + totals + save */}
-      <div style={{
+      <div className="wizard-type-row" style={{
         display:'flex', alignItems:'stretch',
         background:`linear-gradient(135deg, ${theme.color}EE, ${theme.color}BB)`,
         flexWrap:'wrap',
@@ -268,11 +268,11 @@ export default function ForecastWizard({
         })}
         {/* Totals + Save */}
         <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:0}}>
-          <div style={{display:'flex',alignItems:'center',gap:18,padding:'0 20px',flexWrap:'wrap'}}>
+          <div className="wizard-totals-bar" style={{display:'flex',alignItems:'center',gap:18,padding:'0 20px',flexWrap:'wrap'}}>
             {CATEGORIES.map(cat => (
               <div key={cat} style={{textAlign:'center'}}>
-                <div style={{fontSize:'0.56rem',fontWeight:700,color:'rgba(255,255,255,0.55)',textTransform:'uppercase',letterSpacing:'0.08em'}}>{cat}</div>
-                <div style={{fontFamily:'var(--font-display)',fontSize:'0.9rem',color:'#fff'}}>{formatBRL(getCatTotal(activeType,cat))}</div>
+                <div className="wizard-cat-label" style={{fontSize:'0.56rem',fontWeight:700,color:'rgba(255,255,255,0.55)',textTransform:'uppercase',letterSpacing:'0.08em'}}>{cat}</div>
+                <div className="wizard-cat-value" style={{fontFamily:'var(--font-display)',fontSize:'0.9rem',color:'#fff'}}>{formatBRL(getCatTotal(activeType,cat))}</div>
               </div>
             ))}
             <div style={{borderLeft:'1px solid rgba(255,255,255,0.25)',paddingLeft:16,textAlign:'center'}}>

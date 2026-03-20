@@ -513,7 +513,7 @@ export default function App() {
 
           {/* Title */}
           <div className="mobile-header-title">
-            <h1 className="page-title" style={{ fontSize: '2rem', lineHeight: 1 }}>{title}</h1>
+            <h1 className="page-title">{title}</h1>
             {sub && <div className="page-subtitle">{sub}</div>}
           </div>
 
