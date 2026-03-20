@@ -12,6 +12,7 @@ import ProjectForm from './components/ProjectForm.jsx';
 import Profile from './components/Profile.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import PolosPage from './pages/PolosPage.jsx';
+import ReportPage from './pages/ReportPage.jsx';
 import AdminPanel from './components/admin/AdminPanel.jsx';
 import AlertBell from './components/ui/AlertBell.jsx';
 import api from './utils/api.js';
@@ -372,6 +373,7 @@ function getPageMeta(pathname) {
   if (pathname === '/profile') return { title: 'Meu Perfil', sub: null };
   if (pathname === '/settings') return { title: 'Configurações', sub: null };
   if (pathname === '/polos') return { title: 'Visão Geral Consolidada — CTG Brasil', sub: null };
+  if (pathname === '/report') return { title: 'Relatório HTML', sub: 'Configurar e exportar' };
   if (pathname.startsWith('/projects/')) return { title: 'Projetos', sub: null };
   return { title: 'CTG Forecast', sub: null };
 }
@@ -515,6 +517,7 @@ export default function App() {
             <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
             <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
             <Route path="/polos" element={<RequireAuth><PolosPage period={period} /></RequireAuth>} />
+            <Route path="/report" element={<RequireAuth><ReportPage /></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
