@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import api from '../utils/api.js';
+import { useRole } from '../context/AuthContext.jsx';
 import { useTypeColors } from '../context/SettingsContext.jsx';
 
 const MIN_YEAR = 2023, MAX_YEAR = new Date().getFullYear() + 3;
@@ -371,6 +372,7 @@ document.addEventListener('DOMContentLoaded',function(){
 // ── React Page ────────────────────────────────────────────────────────────────
 export default function ReportPage() {
   const C = useTypeColors();
+  const { isEngenheiro } = useRole();
   const currentYear = new Date().getFullYear();
 
   const [config, setConfig] = useState({
@@ -451,6 +453,15 @@ export default function ReportPage() {
               onChange={e => upd('subtitle', e.target.value)}
               style={{ width:'100%', padding:'7px 10px' }} />
           </label>
+          {isEngenheiro && (
+            <div style={{
+              marginTop:10, padding:'8px 10px', borderRadius:'var(--radius-sm)',
+              background:'#EFF6FF', borderLeft:'3px solid var(--ctg-blue)',
+              fontSize:'0.75rem', color:'#1E40AF', lineHeight:1.5,
+            }}>
+              ℹ Você verá apenas os projetos atribuídos a você.
+            </div>
+          )}
         </div>
 
         {/* Period */}
@@ -537,24 +548,67 @@ export default function ReportPage() {
           })}
         </div>
 
-        {/* Actions */}
-        <button className="btn btn-primary" onClick={generate} disabled={loading}
-          style={{ width:'100%', justifyContent:'center', padding:'10px', fontSize:'0.88rem' }}>
-          {loading ? '⏳ Gerando...' : '▶ Gerar Relatório'}
-        </button>
+        {/* Actions — generate + download icons on same row */}
+        <div style={{ display:'flex', gap:8, alignItems:'stretch' }}>
+          <button className="btn btn-primary" onClick={generate} disabled={loading}
+            style={{ flex:1, justifyContent:'center', padding:'10px', fontSize:'0.88rem' }}>
+            {loading ? '⏳ Gerando...' : '▶ Gerar Relatório'}
+          </button>
 
-        {generated && (
-          <div style={{ display:'flex', gap:8 }}>
-            <button className="btn btn-export" onClick={download}
-              style={{ flex:1, justifyContent:'center' }}>
-              ⬇ Baixar .html
-            </button>
-            <button className="btn btn-secondary" onClick={print}
-              style={{ flex:1, justifyContent:'center' }}>
-              🖨 Imprimir
-            </button>
-          </div>
-        )}
+          {/* HTML download */}
+          <button
+            onClick={download}
+            disabled={!generated}
+            title="Baixar como .html"
+            style={{
+              width:42, flexShrink:0,
+              display:'flex', alignItems:'center', justifyContent:'center',
+              background: generated ? '#F0FDF4' : 'var(--bg-app)',
+              border: `1.5px solid ${generated ? '#15803D' : 'var(--border)'}`,
+              borderRadius:'var(--radius-sm)',
+              cursor: generated ? 'pointer' : 'not-allowed',
+              opacity: generated ? 1 : 0.4,
+              transition:'all 0.15s',
+              padding:0,
+            }}
+            onMouseEnter={e => generated && (e.currentTarget.style.background='#DCFCE7')}
+            onMouseLeave={e => generated && (e.currentTarget.style.background='#F0FDF4')}
+          >
+            {/* HTML file icon */}
+            <svg viewBox="0 0 20 20" fill="none" width="18" height="18">
+              <rect x="3" y="2" width="10" height="16" rx="1.5" stroke="#15803D" strokeWidth="1.4" fill="none"/>
+              <path d="M13 2l4 4h-4V2z" fill="#15803D" opacity="0.6"/>
+              <text x="4.5" y="14" fontSize="4.5" fontWeight="700" fill="#15803D" fontFamily="monospace">&lt;/&gt;</text>
+            </svg>
+          </button>
+
+          {/* PDF print/save */}
+          <button
+            onClick={print}
+            disabled={!generated}
+            title="Imprimir / Salvar como PDF"
+            style={{
+              width:42, flexShrink:0,
+              display:'flex', alignItems:'center', justifyContent:'center',
+              background: generated ? '#FFF7ED' : 'var(--bg-app)',
+              border: `1.5px solid ${generated ? '#EA580C' : 'var(--border)'}`,
+              borderRadius:'var(--radius-sm)',
+              cursor: generated ? 'pointer' : 'not-allowed',
+              opacity: generated ? 1 : 0.4,
+              transition:'all 0.15s',
+              padding:0,
+            }}
+            onMouseEnter={e => generated && (e.currentTarget.style.background='#FFEDD5')}
+            onMouseLeave={e => generated && (e.currentTarget.style.background='#FFF7ED')}
+          >
+            {/* PDF icon */}
+            <svg viewBox="0 0 20 20" fill="none" width="18" height="18">
+              <rect x="3" y="2" width="10" height="16" rx="1.5" stroke="#EA580C" strokeWidth="1.4" fill="none"/>
+              <path d="M13 2l4 4h-4V2z" fill="#EA580C" opacity="0.6"/>
+              <text x="4" y="14" fontSize="4.5" fontWeight="700" fill="#EA580C" fontFamily="sans-serif">PDF</text>
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* ── RIGHT PANEL: preview ── */}

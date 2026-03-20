@@ -257,7 +257,7 @@ export default function Dashboard({ period, plantFilter = [] }) {
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: 12 }}>
 
       {/* KPI cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, flexShrink: 0 }}>
+      <div className="dash-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, flexShrink: 0 }}>
         {[
           { cls: 'budget',   label: `Budget ${periodLabel}`,   val: totalBudget,   sub: `${filtered.length} projeto${filtered.length !== 1 ? 's' : ''}` },
           { cls: 'forecast', label: `Forecast ${periodLabel}`, val: totalForecast, sub: totalBudget ? `${((totalForecast / totalBudget) * 100).toFixed(1)}% do budget` : '—' },
@@ -273,10 +273,10 @@ export default function Dashboard({ period, plantFilter = [] }) {
       </div>
 
       {/* Two charts — 60% / 40% */}
-      <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 12, flexShrink: 0 }}>
+      <div className="dash-charts-row" style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 12, flexShrink: 0 }}>
 
         {/* Combined: bars (monthly) + lines (accumulated) — dual Y axis */}
-        <div className="card" style={{ overflow: 'visible' }}>
+        <div className="card dash-chart-combined" style={{ overflow: 'visible' }}>
           {cardHeader(`Evolução Mensal + S-Curve — ${periodLabel}`)}
           <div style={{ padding: '10px 8px 6px' }}>
             <ResponsiveContainer width="100%" height={175}>
@@ -305,10 +305,7 @@ export default function Dashboard({ period, plantFilter = [] }) {
                 />
 
                 <Tooltip content={<ChartTooltip period={period} />} isAnimationActive={false} wrapperStyle={{ zIndex: 9999 }} allowEscapeViewBox={{ x: true, y: true }} />
-                <Legend
-                  wrapperStyle={{ fontSize: '0.72rem', color: '#374151' }}
-                  formatter={(value) => SERIES_LABELS[value] || (value === 'GapMax' ? 'Dif. Forecast vs Realizado' : value)}
-                />
+                <Legend wrapperStyle={{ fontSize: '0.68rem', color: '#374151', paddingTop: 4 }} formatter={(value) => SERIES_LABELS[value] || (value === 'GapMax' ? 'Dif. Forecast vs Realizado' : value)} className="dash-legend" />
 
                 {/* Gap area between Forecast and Realizado (accumulated) */}
                 <Area yAxisId="acum" type="monotone" dataKey="GapMax"
@@ -334,7 +331,7 @@ export default function Dashboard({ period, plantFilter = [] }) {
         </div>
 
         {/* Por Projeto */}
-        <div className="card" style={{ overflow: 'visible' }}>
+        <div className="card dash-chart-project" style={{ overflow: 'visible' }}>
           {cardHeader(`Por Projeto — ${periodLabel}`)}
           <div style={{ padding: '10px 8px 6px' }}>
             <ResponsiveContainer width="100%" height={175}>
@@ -351,7 +348,7 @@ export default function Dashboard({ period, plantFilter = [] }) {
                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#374151' }} />
                 <YAxis tickFormatter={fmtAxis} tick={{ fontSize: 10, fill: '#374151' }} width={54} />
                 <Tooltip content={<ProjectTooltip projectMap={projectMap} />} isAnimationActive={false} wrapperStyle={{ zIndex: 9999 }} allowEscapeViewBox={{ x: true, y: true }} />
-                <Legend wrapperStyle={{ fontSize: '0.72rem', color: '#374151' }} />
+                <Legend wrapperStyle={{ fontSize: '0.68rem', color: '#374151', paddingTop: 4 }} className="dash-legend" />
                 <Bar dataKey="Budget"    fill={C.budget} radius={[2,2,0,0]} />
                 <Bar dataKey="Forecast"  fill={C.forecast} radius={[2,2,0,0]} />
                 <Bar dataKey="Realizado" fill={C.actual} radius={[2,2,0,0]} />

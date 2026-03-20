@@ -635,7 +635,7 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
   }
 
   /* Dashboard KPI: 2 cols tiny */
-  .dash-kpi-grid { grid-template-columns: 1fr 1fr !important; gap: 8px !important; }
+  
 
   /* Wizard intro: compact */
   .wizard-intro-title { font-size: 1.2rem !important; }
@@ -1306,4 +1306,50 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
 .dash-chart-combined .recharts-responsive-container,
 .dash-chart-project  .recharts-responsive-container {
   overflow: visible !important;
+}
+
+@media(max-width:768px){
+  .dash-kpi-grid{grid-template-columns:1fr 1fr !important; gap:8px !important;}
+  .dash-charts-row{grid-template-columns:1fr !important; gap:8px !important;}
+  .dash-legend { display: none !important; }
+  .dash-chart-combined .recharts-responsive-container,
+  .dash-chart-project  .recharts-responsive-container { height: 180px !important; }
+}
+
+/* ── Mobile page header: controls below title ── */
+@media(max-width:768px){
+  .page-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+    padding: 10px 14px 10px !important;
+  }
+  .page-header > div:last-child {
+    width: 100%;
+    justify-content: flex-start !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+  /* Period slider: full width on mobile */
+  .period-selector { min-width: unset !important; width: 100% !important; }
+  .period-tracks { width: 100% !important; }
+  /* Plant filter: compact */
+  .plant-filter-btn { font-size: 0.75rem !important; padding: 5px 8px !important; }
+  /* Alert bell stays right */
+  .alert-bell-btn { margin-left: auto; }
+  /* Export button in header */
+  .header-export-btn { font-size: 0.72rem !important; padding: 5px 10px !important; }
+  /* Page title smaller on mobile */
+  .page-title { font-size: 1.4rem !important; }
+}
+
+@media(max-width:480px){
+  .page-header { padding: 8px 12px 8px !important; }
+  .page-title { font-size: 1.2rem !important; }
+  /* Stat cards: tighter */
+  .stat-card { padding: 10px 10px !important; }
+  .stat-value { font-size: 1rem !important; }
+  .stat-label { font-size: 0.6rem !important; }
+  /* Hide Acumulado Y axis label on tiny screens */
+  .recharts-label { display: none; }
 }

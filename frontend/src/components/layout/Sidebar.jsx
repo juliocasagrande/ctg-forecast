@@ -143,7 +143,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
               )}
             </div>
             {navItem('/polos', IC.polos || IC.dashboard, 'Visão Geral')}
-            {(isGestor || isPlanejador) && navItem('/report', IC.report || IC.dashboard, 'Relatório HTML')}
+            {!isAdmin && navItem('/report', IC.report || IC.dashboard, 'Relatório HTML')}
           </>}
 
           {/* Projects grouped by plant */}
