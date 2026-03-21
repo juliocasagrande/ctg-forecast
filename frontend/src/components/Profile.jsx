@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
 import { useToast } from './ui/Toast.jsx';
+import PasswordInput, { getPasswordStrength } from './ui/PasswordInput.jsx';
 
 const ROLE_LABELS = { admin:'Administrador', gestor:'Gestor', engenheiro:'Engenheiro' };
 
@@ -85,18 +86,33 @@ export default function Profile() {
               onChange={e=>setPwForm(f=>({...f,current_password:e.target.value}))} placeholder="••••••••"/>
           </div>
           <div className="form-group">
-            <label className="form-label">Nova senha</label>
-            <input className="form-input" type="password" value={pwForm.new_password}
-              onChange={e=>setPwForm(f=>({...f,new_password:e.target.value}))} placeholder="Mínimo 6 caracteres"/>
+            <label className="form-label">Senha atual</label>
+            <input className="form-input" type="password" value={pwForm.current_password}
+              onChange={e=>setPwForm(f=>({...f,current_password:e.target.value}))} placeholder="••••••••"/>
           </div>
+          <PasswordInput
+            label="Nova senha"
+            value={pwForm.new_password}
+            onChange={v=>setPwForm(f=>({...f,new_password:v}))}
+            placeholder="Crie uma senha segura"
+            confirm
+            confirmValue={pwForm.confirm}
+          />
           <div className="form-group" style={{marginBottom:0}}>
             <label className="form-label">Confirmar nova senha</label>
             <input className="form-input" type="password" value={pwForm.confirm}
               onChange={e=>setPwForm(f=>({...f,confirm:e.target.value}))} placeholder="Repita a nova senha"/>
+            {pwForm.confirm.length > 0 && pwForm.new_password !== pwForm.confirm && (
+              <div style={{fontSize:'0.72rem',color:'#DC2626',marginTop:4,fontWeight:600}}>✕ Senhas não coincidem</div>
+            )}
+            {pwForm.confirm.length > 0 && pwForm.new_password === pwForm.confirm && pwForm.new_password.length > 0 && (
+              <div style={{fontSize:'0.72rem',color:'#16A34A',marginTop:4,fontWeight:600}}>✓ Senhas coincidem</div>
+            )}
           </div>
         </div>
         <div style={{padding:'0 20px 16px',display:'flex',justifyContent:'flex-end'}}>
-          <button className="btn btn-primary" onClick={handleChangePassword} disabled={changingPw}>
+          <button className="btn btn-primary" onClick={handleChangePassword}
+            disabled={changingPw || !getPasswordStrength(pwForm.new_password).allPassed || pwForm.new_password !== pwForm.confirm}>
             {changingPw ? 'Alterando...' : 'Alterar Senha'}
           </button>
         </div>

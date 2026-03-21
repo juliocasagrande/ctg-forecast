@@ -22,6 +22,10 @@ router.post('/project/:projectId/bulk', requireProjectAccess, async (req, res) =
   const { projectId } = req.params;
   const { entries } = req.body;
   const { role, id: userId } = req.user;
+  if (!Array.isArray(entries) || entries.length === 0)
+    return res.status(400).json({ error: 'Nenhuma entrada fornecida' });
+  const VALID_CATS = ['Viagens', 'Contratos', 'POs'];
+  const VALID_TYPES = ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'];
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -31,6 +35,12 @@ router.post('/project/:projectId/bulk', requireProjectAccess, async (req, res) =
     for (const e of entries) {
       if (role === 'engenheiro'  && !ENGENHEIRO_TYPES.includes(e.type)) continue;
       if (role === 'planejador'  && !PLANEJADOR_TYPES.includes(e.type)) continue;
+      if (!VALID_CATS.includes(e.category) || !VALID_TYPES.includes(e.type)) continue;
+      const month = parseInt(e.month);
+      const year = parseInt(e.year);
+      if (!month || month < 1 || month > 12 || !year || year < 2020 || year > 2050) continue;
+      const val = Math.max(0, parseFloat(e.value) || 0);
+      const comment = e.comment ? String(e.comment).slice(0, 500) : null;
       const r = await client.query(`
         INSERT INTO forecast_entries (project_id, category, type, year, month, value, comment, updated_by, updated_at)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
@@ -38,7 +48,7 @@ router.post('/project/:projectId/bulk', requireProjectAccess, async (req, res) =
         DO UPDATE SET value=EXCLUDED.value, comment=EXCLUDED.comment,
           updated_by=EXCLUDED.updated_by, updated_at=NOW()
         RETURNING *
-      `, [projectId, e.category, e.type, e.year, e.month, e.value||0, e.comment||null, userId]);
+      `, [projectId, e.category, e.type, year, month, val, comment, userId]);
       results.push(r.rows[0]);
     }
     await client.query('COMMIT');
@@ -62,10 +72,18 @@ router.put('/project/:projectId', requireProjectAccess, async (req, res) => {
     const { role, id: userId } = req.user;
     const ENGENHEIRO_TYPES = ['Forecast', 'Actual'];
     const PLANEJADOR_TYPES = ['Budget', 'Actual', 'Meta', 'Pool'];
+    const VALID_CATS = ['Viagens', 'Contratos', 'POs'];
     if (role === 'engenheiro' && !ENGENHEIRO_TYPES.includes(type))
       return res.status(403).json({ error: 'Engenheiros só podem editar Forecast e Realizado' });
     if (role === 'planejador' && !PLANEJADOR_TYPES.includes(type))
       return res.status(403).json({ error: 'Planejadores só podem editar Budget, Realizado, Meta e Pool' });
+    if (!VALID_CATS.includes(category))
+      return res.status(400).json({ error: 'Categoria inválida' });
+    const m = parseInt(month), y = parseInt(year);
+    if (!m || m < 1 || m > 12) return res.status(400).json({ error: 'Mês inválido' });
+    if (!y || y < 2020 || y > 2050) return res.status(400).json({ error: 'Ano inválido' });
+    const val = Math.max(0, parseFloat(value) || 0);
+    const cmt = comment ? String(comment).slice(0, 500) : null;
 
     const r = await pool.query(`
       INSERT INTO forecast_entries (project_id, category, type, year, month, value, comment, updated_by, updated_at)
@@ -74,7 +92,7 @@ router.put('/project/:projectId', requireProjectAccess, async (req, res) => {
       DO UPDATE SET value=EXCLUDED.value, comment=EXCLUDED.comment,
         updated_by=EXCLUDED.updated_by, updated_at=NOW()
       RETURNING *
-    `, [req.params.projectId, category, type, year, month, value||0, comment||null, userId]);
+    `, [req.params.projectId, category, type, y, m, val, cmt, userId]);
     res.json(r.rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -393,10 +411,9 @@ router.get('/polo-summary', async (req, res) => {
     const joinClause = isEng
       ? `INNER JOIN project_assignments pa ON pa.project_id=p.id AND pa.user_id=$3`
       : '';
-    const params = isEng ? [yrStart, yrEnd, userId] : [yrStart, yrEnd];
-    const mineJoin = isEng
-      ? `LEFT JOIN project_assignments pa_mine ON pa_mine.project_id=p.id AND pa_mine.user_id=$3`
-      : `LEFT JOIN project_assignments pa_mine ON pa_mine.project_id=p.id AND pa_mine.user_id=${userId}`;
+    const mineParam = isEng ? '$3' : '$3';
+    const mineJoin = `LEFT JOIN project_assignments pa_mine ON pa_mine.project_id=p.id AND pa_mine.user_id=${mineParam}`;
+    const params = [yrStart, yrEnd, userId];
 
     const r = await pool.query(`
       SELECT

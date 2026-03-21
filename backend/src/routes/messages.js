@@ -41,6 +41,7 @@ router.post('/', requireProjectAccess, async (req, res) => {
     const { projectId } = req.params;
     const { content } = req.body;
     if (!content?.trim()) return res.status(400).json({ error: 'Mensagem vazia' });
+    if (content.length > 2000) return res.status(400).json({ error: 'Mensagem muito longa (máx. 2000 caracteres)' });
 
     const r = await pool.query(`
       INSERT INTO messages (project_id, user_id, content) VALUES ($1,$2,$3)

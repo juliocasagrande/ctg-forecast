@@ -69,7 +69,9 @@ router.get('/engineers', requireRole('admin', 'gestor', 'planejador'), async (re
 router.post('/', requireRole('admin'), async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
-    if (!name || !email || !password) return res.status(400).json({ error: 'Campos obrigatórios faltando' });
+    if (!name?.trim() || !email?.trim() || !password) return res.status(400).json({ error: 'Campos obrigatórios faltando' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Formato de email inválido' });
+    if (password.length < 6) return res.status(400).json({ error: 'Senha deve ter ao menos 6 caracteres' });
     const hash = await bcrypt.hash(password, 10);
     const av = initials(name);
     const r = await pool.query(

@@ -33,7 +33,8 @@ function fmtInput(val) {
 }
 function parseInput(str) {
   if (!str) return 0;
-  return parseFloat(String(str).replace(/\./g,'').replace(',','.')) || 0;
+  const val = parseFloat(String(str).replace(/\./g,'').replace(',','.')) || 0;
+  return Math.max(0, val);
 }
 function fmtNum(v) {
   return v > 0 ? v.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) : '—';

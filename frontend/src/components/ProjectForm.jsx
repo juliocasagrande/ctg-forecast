@@ -146,11 +146,11 @@ export default function ProjectForm({ open, onClose, project, onSaved }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 4 }}>
         <div className="form-group" style={{ marginBottom: 0 }}>
           <label className="form-label">Valor SI (R$)</label>
-          <input className="form-input input-currency" type="number" step="0.01" placeholder="0.00" value={form.si_value} onChange={set('si_value')} />
+          <input className="form-input input-currency" type="number" step="0.01" min="0" placeholder="0.00" value={form.si_value} onChange={set('si_value')} />
         </div>
         <div className="form-group" style={{ marginBottom: 0 }}>
           <label className="form-label">POOL (R$)</label>
-          <input className="form-input input-currency" type="number" step="0.01" placeholder="0.00" value={form.pool_value} onChange={set('pool_value')} />
+          <input className="form-input input-currency" type="number" step="0.01" min="0" placeholder="0.00" value={form.pool_value} onChange={set('pool_value')} />
         </div>
       </div>
 

@@ -766,7 +766,7 @@ export default function ProjectDetail({ onEdit }) {
                   <YAxis yAxisId="acum" orientation="right" tickFormatter={v=>fmt(v)} tick={{fontSize:10,fill:'#6B7280'}} width={68}
                     label={{value:'Acumulado',angle:90,position:'insideRight',offset:10,style:{fontSize:9,fill:'#9CA3AF'}}} />
                   <Tooltip formatter={v=>formatBRL(v)} labelFormatter={label=>`${label}/${selectedYear}`} isAnimationActive={false} />
-                  <Legend wrapperStyle={{fontSize:'0.78rem'}}/>
+                  <Legend wrapperStyle={{fontSize:'0.78rem'}} className="project-chart-legend"/>
 
                   {/* Monthly bars */}
                   <Bar yAxisId="monthly" dataKey="Budget"    fill={C.budget+'88'} radius={[2,2,0,0]} barSize={8} name="Budget (mensal)" />
@@ -787,7 +787,7 @@ export default function ProjectDetail({ onEdit }) {
           </div>
 
           {/* 2. Row: Donut by category + Execution bar */}
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
+          <div className="project-charts-row">
 
             {/* Donut: Forecast distribution by category */}
             <div className="card">
@@ -823,7 +823,7 @@ export default function ProjectDetail({ onEdit }) {
                     <XAxis type="number" tickFormatter={v=>fmt(v)} tick={{fontSize:10,fill:'#374151'}} />
                     <YAxis type="category" dataKey="name" tick={{fontSize:12,fill:'#374151'}} width={72} />
                     <Tooltip formatter={v=>formatBRL(v)} isAnimationActive={false} />
-                    <Legend wrapperStyle={{fontSize:'0.78rem'}} />
+                    <Legend wrapperStyle={{fontSize:'0.78rem'}} className="project-chart-legend" />
                     <Bar dataKey="Forecast"  fill={C.forecast} radius={[0,3,3,0]} barSize={14} />
                     <Bar dataKey="Realizado" fill={C.actual} radius={[0,3,3,0]} barSize={14} />
                   </BarChart>
@@ -851,7 +851,7 @@ export default function ProjectDetail({ onEdit }) {
                   <XAxis dataKey="name" tick={{fontSize:12,fill:'#374151'}} />
                   <YAxis tickFormatter={v=>fmt(v)} tick={{fontSize:10,fill:'#374151'}} width={68} />
                   <Tooltip formatter={v=>formatBRL(v)} isAnimationActive={false} />
-                  <Legend wrapperStyle={{fontSize:'0.78rem'}} />
+                  <Legend wrapperStyle={{fontSize:'0.78rem'}} className="project-chart-legend" />
                   <Bar dataKey="Budget"   fill={C.budget} radius={[3,3,0,0]} />
                   <Bar dataKey="Forecast" fill={C.forecast} radius={[3,3,0,0]} />
                 </BarChart>

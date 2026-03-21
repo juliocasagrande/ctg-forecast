@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
+import PasswordInput, { getPasswordStrength } from '../components/ui/PasswordInput.jsx';
 
 const ROLE_OPTIONS = [
   {
@@ -180,11 +181,12 @@ export default function Login() {
                     <input className="form-input" type="email" placeholder="seu@ctgbrasil.com"
                       value={regEmail} onChange={e => setRegEmail(e.target.value)} required />
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">Senha</label>
-                    <input className="form-input" type="password" placeholder="Mínimo 6 caracteres"
-                      value={regPassword} onChange={e => setRegPassword(e.target.value)} required />
-                  </div>
+                  <PasswordInput
+                    label="Senha"
+                    value={regPassword}
+                    onChange={setRegPassword}
+                    placeholder="Crie uma senha segura"
+                  />
 
                   <div className="form-group" style={{ marginBottom: 16 }}>
                     <label className="form-label">Meu perfil no sistema</label>
@@ -214,7 +216,7 @@ export default function Login() {
 
                   <button type="submit" className="btn btn-primary"
                     style={{ width: '100%', padding: '12px', fontSize: '0.95rem' }}
-                    disabled={regLoading}>
+                    disabled={regLoading || !getPasswordStrength(regPassword).allPassed}>
                     {regLoading ? 'Enviando...' : 'Solicitar Acesso'}
                   </button>
                 </form>

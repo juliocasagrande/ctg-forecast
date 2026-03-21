@@ -1,5 +1,5 @@
 import Icon from './components/ui/Icon.jsx';
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate, NavLink } from 'react-router-dom';
 import { useAuth, useRole } from './context/AuthContext.jsx';
 import Sidebar from './components/layout/Sidebar.jsx';
@@ -16,6 +16,60 @@ import ReportPage from './pages/ReportPage.jsx';
 import AdminPanel from './components/admin/AdminPanel.jsx';
 import AlertBell from './components/ui/AlertBell.jsx';
 import api from './utils/api.js';
+
+// ── Error Boundary ──────────────────────────────────────────────────────────
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
+  componentDidCatch(error, info) { console.error('ErrorBoundary caught:', error, info); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: '#F8FAFC', padding: 40,
+        }}>
+          <div style={{
+            maxWidth: 480, textAlign: 'center', background: '#fff',
+            borderRadius: 16, padding: '40px 32px', boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
+            border: '1px solid #E2E8F0',
+          }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: 16 }}>⚠️</div>
+            <h1 style={{ fontFamily: 'Georgia, serif', fontSize: '1.4rem', color: '#001F5B', marginBottom: 8 }}>
+              Algo deu errado
+            </h1>
+            <p style={{ fontSize: '0.88rem', color: '#64748B', lineHeight: 1.6, marginBottom: 24 }}>
+              Ocorreu um erro inesperado na aplicação. Tente recarregar a página.
+            </p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+              <button onClick={() => window.location.reload()} style={{
+                padding: '10px 24px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                background: '#001F5B', color: '#fff', fontWeight: 600, fontSize: '0.9rem',
+              }}>
+                Recarregar página
+              </button>
+              <button onClick={() => { window.location.href = '/'; }} style={{
+                padding: '10px 24px', borderRadius: 8, border: '1.5px solid #CBD5E1', cursor: 'pointer',
+                background: '#fff', color: '#475569', fontWeight: 600, fontSize: '0.9rem',
+              }}>
+                Ir ao Dashboard
+              </button>
+            </div>
+            {this.state.error && (
+              <details style={{ marginTop: 20, textAlign: 'left' }}>
+                <summary style={{ fontSize: '0.75rem', color: '#94A3B8', cursor: 'pointer' }}>Detalhes técnicos</summary>
+                <pre style={{ fontSize: '0.7rem', color: '#DC2626', background: '#FEF2F2', padding: 12, borderRadius: 8, marginTop: 8, overflow: 'auto', maxHeight: 120 }}>
+                  {this.state.error.toString()}
+                </pre>
+              </details>
+            )}
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const MIN_YEAR = 2023;
 const MAX_YEAR = new Date().getFullYear() + 3;
@@ -495,6 +549,7 @@ export default function App() {
   const activePlants = ALL_PLANTS.filter(pl => projects.some(p => (p.plants || []).includes(pl)));
 
   return (
+    <ErrorBoundary>
     <div className="app-layout">
       <ToastProvider />
 
@@ -644,5 +699,6 @@ export default function App() {
         />
       )}
     </div>
+    </ErrorBoundary>
   );
 }

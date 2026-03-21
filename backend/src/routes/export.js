@@ -413,8 +413,9 @@ router.get('/planejador', async (req, res) => {
 
   try {
     // 1. Projects (engineers see only assigned)
-    const engJoin = role === 'engenheiro'
-      ? `INNER JOIN project_assignments ejoin ON ejoin.project_id=p.id AND ejoin.user_id=${userId}`
+    const isEng = role === 'engenheiro';
+    const engJoin = isEng
+      ? `INNER JOIN project_assignments ejoin ON ejoin.project_id=p.id AND ejoin.user_id=$1`
       : '';
     const projRes = await pool.query(`
       SELECT p.id, p.code, p.name, p.si_value, p.plants,
@@ -426,7 +427,7 @@ router.get('/planejador', async (req, res) => {
       LEFT JOIN users u ON u.id=pa.user_id AND u.role='engenheiro'
       LEFT JOIN forecast_entries fe ON fe.project_id=p.id AND fe.type='Forecast' AND fe.value>0
       GROUP BY p.id ORDER BY p.code
-    `);
+    `, isEng ? [userId] : []);
     const projects = projRes.rows;
 
     // 2. Entries for selected types

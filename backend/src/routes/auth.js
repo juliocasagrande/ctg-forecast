@@ -13,8 +13,10 @@ function initials(name) {
 router.post('/register', async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
-    if (!name || !email || !password)
+    if (!name?.trim() || !email?.trim() || !password)
       return res.status(400).json({ error: 'Nome, email e senha são obrigatórios' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      return res.status(400).json({ error: 'Formato de email inválido' });
     if (!['gestor', 'engenheiro'].includes(role))
       return res.status(400).json({ error: 'Perfil inválido' });
     if (password.length < 6)

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../../utils/api.js';
 import { useToast } from '../ui/Toast.jsx';
 import Modal from '../ui/Modal.jsx';
+import PasswordInput, { getPasswordStrength } from '../ui/PasswordInput.jsx';
 
 const ROLE_LABELS = { admin: 'Administrador', gestor: 'Gestor', engenheiro: 'Engenheiro', planejador: 'Planejador' };
 const ROLE_COLORS = { admin: '#001F5B', gestor: '#0070B8', engenheiro: '#166534', planejador: '#7C3AED' };
@@ -259,7 +260,10 @@ export default function AdminPanel() {
         title={editingUser ? 'Editar Usuário' : 'Novo Usuário'}
         footer={<>
           <button className="btn btn-secondary" onClick={() => setModalOpen(false)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Salvando...' : 'Salvar'}</button>
+          <button className="btn btn-primary" onClick={handleSave}
+            disabled={saving || (!editingUser && !getPasswordStrength(form.password).allPassed)}>
+            {saving ? 'Salvando...' : 'Salvar'}
+          </button>
         </>}>
         <div className="form-group">
           <label className="form-label">Nome completo *</label>
@@ -270,10 +274,12 @@ export default function AdminPanel() {
           <input className="form-input" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="email@ctgbrasil.com" />
         </div>
         {!editingUser && (
-          <div className="form-group">
-            <label className="form-label">Senha *</label>
-            <input className="form-input" type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Mínimo 6 caracteres" />
-          </div>
+          <PasswordInput
+            label="Senha *"
+            value={form.password}
+            onChange={v => setForm(f => ({ ...f, password: v }))}
+            placeholder="Crie uma senha segura"
+          />
         )}
         <div className="form-group" style={{ marginBottom: 0 }}>
           <label className="form-label">Perfil</label>
@@ -291,13 +297,16 @@ export default function AdminPanel() {
         title={`Redefinir Senha — ${resetModal?.name}`}
         footer={<>
           <button className="btn btn-secondary" onClick={() => setResetModal(null)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={handleResetPassword}>Redefinir</button>
+          <button className="btn btn-primary" onClick={handleResetPassword}
+            disabled={!getPasswordStrength(newPassword).allPassed}>Redefinir</button>
         </>}>
-        <div className="form-group" style={{ marginBottom: 0 }}>
-          <label className="form-label">Nova Senha</label>
-          <input className="form-input" type="password" value={newPassword}
-            onChange={e => setNewPassword(e.target.value)} placeholder="Mínimo 6 caracteres" autoFocus />
-        </div>
+        <PasswordInput
+          label="Nova Senha"
+          value={newPassword}
+          onChange={setNewPassword}
+          placeholder="Crie uma senha segura"
+          autoFocus
+        />
       </Modal>
     </div>
   );

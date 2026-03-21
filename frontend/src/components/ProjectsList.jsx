@@ -14,7 +14,7 @@ const ORDERED_PLANTS = [
 ];
 
 export default function ProjectsList({ projects, onEditProject, onProjectsChange }) {
-  const { canManage } = useRole();
+  const { canManage, isAdmin } = useRole();
   const navigate      = useNavigate();
   const { toast }     = useToast();
 
@@ -116,7 +116,7 @@ export default function ProjectsList({ projects, onEditProject, onProjectsChange
                       onClick={e => { e.stopPropagation(); onEditProject(p); }}>
                       ✎ Editar
                     </button>
-                    <button className="btn btn-danger btn-sm" onClick={e => handleDelete(e, p)}>✕</button>
+                    {isAdmin && <button className="btn btn-danger btn-sm" onClick={e => handleDelete(e, p)}>✕</button>}
                   </div>
                 )}
               </div>
