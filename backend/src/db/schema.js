@@ -115,11 +115,16 @@ export async function initDB() {
 
       CREATE INDEX IF NOT EXISTS idx_forecast_project ON forecast_entries(project_id);
       CREATE INDEX IF NOT EXISTS idx_forecast_year ON forecast_entries(year);
+      CREATE INDEX IF NOT EXISTS idx_forecast_project_year_type ON forecast_entries(project_id, year, type);
+      CREATE INDEX IF NOT EXISTS idx_forecast_type_year ON forecast_entries(type, year);
       CREATE INDEX IF NOT EXISTS idx_messages_project ON messages(project_id);
+      CREATE INDEX IF NOT EXISTS idx_messages_project_user ON messages(project_id, user_id);
+      CREATE INDEX IF NOT EXISTS idx_message_reads_user ON message_reads(user_id);
       CREATE INDEX IF NOT EXISTS idx_assignments_user ON project_assignments(user_id);
       CREATE INDEX IF NOT EXISTS idx_assignments_project ON project_assignments(project_id);
       CREATE INDEX IF NOT EXISTS idx_checkins_project ON project_checkins(project_id);
       CREATE INDEX IF NOT EXISTS idx_activity_project ON project_activity_log(project_id);
+      CREATE INDEX IF NOT EXISTS idx_notes_project ON project_notes(project_id);
     `);
     console.log('✅ Database initialized');
 

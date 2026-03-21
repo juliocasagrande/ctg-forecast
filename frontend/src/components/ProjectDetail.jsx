@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import api from '../utils/api.js';
@@ -460,10 +460,16 @@ export default function ProjectDetail({ onEdit }) {
 
   const totalFor = (type) => entries.filter(e=>e.type===type&&parseInt(e.year)===selectedYear).reduce((s,e)=>s+parseFloat(e.value||0),0);
 
-  const chartData = MONTHS_PT.map((m,i) => {
+  const chartData = useMemo(() => MONTHS_PT.map((m,i) => {
     const get = type => entries.filter(e=>parseInt(e.year)===selectedYear&&parseInt(e.month)===i+1&&e.type===type).reduce((s,e)=>s+parseFloat(e.value||0),0);
     return { month:m, Budget:get('Budget'), Forecast:get('Forecast'), Realizado:get('Actual'), Meta:get('Meta'), Pool:get('Pool') };
-  });
+  }), [entries, selectedYear]);
+
+  const sCurveData = useMemo(() => chartData.reduce((acc,d,i) => {
+    const p = acc[i-1] || {Budget:0,Forecast:0,Realizado:0,Meta:0,Pool:0};
+    acc.push({month:d.month, Budget:p.Budget+d.Budget, Forecast:p.Forecast+d.Forecast, Realizado:p.Realizado+d.Realizado, Meta:p.Meta+d.Meta, Pool:p.Pool+d.Pool});
+    return acc;
+  }, []), [chartData]);
 
   // Handlers
   const handleAssign = async (userId) => {
@@ -708,7 +714,7 @@ export default function ProjectDetail({ onEdit }) {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/>
                   <XAxis dataKey="month" tick={{fontSize:11,fill:'#374151'}}/>
                   <YAxis tickFormatter={v=>fmt(v)} tick={{fontSize:11,fill:'#374151'}} width={72}/>
-                  <Tooltip formatter={v=>formatBRL(v)} labelFormatter={label=>`${label}/${year}`} contentStyle={{minWidth:200,zIndex:9999}} wrapperStyle={{zIndex:9999}} allowEscapeViewBox={{x:true,y:true}} isAnimationActive={false} />
+                  <Tooltip formatter={v=>formatBRL(v)} labelFormatter={label=>`${label}/${selectedYear}`} contentStyle={{minWidth:200,zIndex:9999}} wrapperStyle={{zIndex:9999}} allowEscapeViewBox={{x:true,y:true}} isAnimationActive={false} />
                   <Legend wrapperStyle={{fontSize:'0.82rem'}}/>
                   <Bar dataKey="Budget"    fill={C.budget} radius={[3,3,0,0]}/>
                   <Bar dataKey="Forecast"  fill={C.forecast} radius={[3,3,0,0]}/>
@@ -724,17 +730,13 @@ export default function ProjectDetail({ onEdit }) {
             <div className="card-body">
               <ResponsiveContainer width="100%" height={260}>
                 <LineChart
-                  data={chartData.reduce((acc,d,i)=>{
-                    const p=acc[i-1]||{Budget:0,Forecast:0,Realizado:0,Meta:0,Pool:0};
-                    acc.push({month:d.month,Budget:p.Budget+d.Budget,Forecast:p.Forecast+d.Forecast,Realizado:p.Realizado+d.Realizado,Meta:p.Meta+d.Meta,Pool:p.Pool+d.Pool});
-                    return acc;
-                  },[])}
+                  data={sCurveData}
                   margin={{top:4,right:8,left:0,bottom:0}}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/>
                   <XAxis dataKey="month" tick={{fontSize:11,fill:'#374151'}}/>
                   <YAxis tickFormatter={v=>fmt(v)} tick={{fontSize:11,fill:'#374151'}} width={72}/>
-                  <Tooltip formatter={v=>formatBRL(v)} labelFormatter={label=>`${label}/${year}`} contentStyle={{minWidth:200,zIndex:9999}} wrapperStyle={{zIndex:9999}} allowEscapeViewBox={{x:true,y:true}} isAnimationActive={false} />
+                  <Tooltip formatter={v=>formatBRL(v)} labelFormatter={label=>`${label}/${selectedYear}`} contentStyle={{minWidth:200,zIndex:9999}} wrapperStyle={{zIndex:9999}} allowEscapeViewBox={{x:true,y:true}} isAnimationActive={false} />
                   <Legend wrapperStyle={{fontSize:'0.82rem'}}/>
                   <Line type="monotone" dataKey="Budget"    stroke={C.budget} strokeWidth={2} dot={false}/>
                   <Line type="monotone" dataKey="Forecast"  stroke={C.forecast} strokeWidth={2} dot={false}/>

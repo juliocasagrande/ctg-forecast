@@ -59,21 +59,17 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
   const [unreadMap, setUnreadMap]     = useState({});
   const [collapsed, setCollapsed]     = useState({});
 
-  // Poll unread message counts
+  // Poll unread message counts (single batch request)
   useEffect(() => {
     if (!projects?.length) return;
-    const fetch = async () => {
-      const counts = {};
-      await Promise.all(projects.map(async p => {
-        try {
-          const r = await api.get(`/projects/${p.id}/messages/unread-count`);
-          counts[p.id] = r.data.unread;
-        } catch {}
-      }));
-      setUnreadMap(counts);
+    const fetchUnread = async () => {
+      try {
+        const r = await api.get('/forecast/unread-counts');
+        setUnreadMap(r.data);
+      } catch {}
     };
-    fetch();
-    const t = setInterval(fetch, 15000);
+    fetchUnread();
+    const t = setInterval(fetchUnread, 60000);
     return () => clearInterval(t);
   }, [projects]);
 
@@ -195,7 +191,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
                       </span>
 
                       {/* Unread badge for group */}
-                      {groupUnread > 0 && isCollapsed && (
+                      {groupUnread > 0 && plantCollapsed && (
                         <span style={{
                           background: '#00AEEF', color: '#fff',
                           fontSize: '0.58rem', fontWeight: 700,

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head><title>Gerador de Ícones PWA</title></head>
+<body>
+<h2>Gerador de Ícones PWA — CTG Forecast</h2>
+<p>Abra este arquivo no navegador. Os ícones serão baixados automaticamente.</p>
+<canvas id="c192" width="192" height="192"></canvas>
+<canvas id="c512" width="512" height="512"></canvas>
+<script>
+const SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <rect width="200" height="200" rx="44" fill="#001F5B"/>
+  <rect x="24" y="128" width="22" height="48" rx="4" fill="#0070B8" opacity="0.7"/>
+  <rect x="52" y="104" width="22" height="72" rx="4" fill="#0070B8" opacity="0.85"/>
+  <rect x="80" y="80" width="22" height="96" rx="4" fill="#00AEEF"/>
+  <rect x="108" y="56" width="22" height="120" rx="4" fill="#00AEEF" opacity="0.85"/>
+  <polyline points="24,150 52,120 80,88 108,64 148,40" fill="none" stroke="#00AEEF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+  <text x="100" y="36" font-family="Georgia, serif" font-size="22" font-weight="700" fill="#FFFFFF" text-anchor="middle" letter-spacing="3">CTG</text>
+  <text x="100" y="190" font-family="Georgia, serif" font-size="16" font-weight="400" fill="#94A3B8" text-anchor="middle" letter-spacing="2">FORECAST</text>
+</svg>`;
+
+function render(size, canvasId, filename) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  const img = new Image();
+  const blob = new Blob([SVG], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  img.onload = () => {
+    ctx.drawImage(img, 0, 0, size, size);
+    URL.revokeObjectURL(url);
+    canvas.toBlob(b => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(b);
+      a.download = filename;
+      a.click();
+    }, 'image/png');
+  };
+  img.src = url;
+}
+
+setTimeout(() => render(192, 'c192', 'pwa-192x192.png'), 100);
+setTimeout(() => render(512, 'c512', 'pwa-512x512.png'), 500);
+</script>
+</body>
+</html>

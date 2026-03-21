@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ComposedChart, Bar, Line, Area,
@@ -177,31 +177,28 @@ export default function Dashboard({ period, plantFilter = [] }) {
     const fetchAll = async () => {
       setLoading(true);
       try {
-        const dashRes = await api.get('/forecast/dashboard', {
-          params: { yearStart: period.start, yearEnd: period.end },
-        });
+        const [dashRes, sumRes] = await Promise.all([
+          api.get('/forecast/dashboard', {
+            params: { yearStart: period.start, yearEnd: period.end },
+          }),
+          api.get('/forecast/summaries', {
+            params: { yearStart: period.start, yearEnd: period.end },
+          }),
+        ]);
         setDashData(dashRes.data);
-
-        const summaries = [];
-        await Promise.all(dashRes.data.map(async proj => {
-          try {
-            const r = await api.get(`/forecast/project/${proj.id}/summary`);
-            r.data.forEach(row => {
-              if (parseInt(row.year) >= period.start && parseInt(row.year) <= period.end)
-                summaries.push({ ...row, project_id: proj.id });
-            });
-          } catch {}
-        }));
-        setAllSummaries(summaries);
+        setAllSummaries(sumRes.data);
       } catch {}
       setLoading(false);
     };
     fetchAll();
   }, [period.start, period.end]);
 
-  const filtered = plantFilter.length > 0
-    ? dashData.filter(p => plantFilter.some(f => (p.plants || []).includes(f)))
-    : dashData;
+  const filtered = useMemo(() =>
+    plantFilter.length > 0
+      ? dashData.filter(p => plantFilter.some(f => (p.plants || []).includes(f)))
+      : dashData,
+    [dashData, plantFilter]
+  );
 
   const totalBudget   = filtered.reduce((s, p) => s + parseFloat(p.budget    || 0), 0);
   const totalForecast = filtered.reduce((s, p) => s + parseFloat(p.forecast   || 0), 0);
@@ -211,14 +208,17 @@ export default function Dashboard({ period, plantFilter = [] }) {
   const isSingle    = period.start === period.end;
   const periodLabel = isSingle ? `${period.start}` : `${period.start}–${period.end}`;
 
-  const filteredSummaries = allSummaries.filter(s =>
-    plantFilter.length === 0 || filtered.some(p => String(p.id) === String(s.project_id))
+  const filteredSummaries = useMemo(() =>
+    allSummaries.filter(s =>
+      plantFilter.length === 0 || filtered.some(p => String(p.id) === String(s.project_id))
+    ),
+    [allSummaries, plantFilter, filtered]
   );
 
-  const monthlyData = buildMonthlyData(filteredSummaries, period);
+  const monthlyData = useMemo(() => buildMonthlyData(filteredSummaries, period), [filteredSummaries, period]);
 
   // Combined S-Curve: bars = monthly, lines = accumulated
-  const combinedData = monthlyData.reduce((acc, d, i) => {
+  const combinedData = useMemo(() => monthlyData.reduce((acc, d, i) => {
     const prev = acc[i - 1] || { BudgetAcum: 0, ForecastAcum: 0, RealizadoAcum: 0, MetaAcum: 0, PoolAcum: 0 };
     acc.push({
       month:          d.month,
@@ -232,16 +232,18 @@ export default function Dashboard({ period, plantFilter = [] }) {
       RealizadoAcum:  prev.RealizadoAcum + d.Realizado,
       MetaAcum:       prev.MetaAcum      + d.Meta,
       PoolAcum:       prev.PoolAcum      + d.Pool,
-      // Gap area = [Realizado acum, Forecast acum] — shows execution gap
       GapMin:         prev.RealizadoAcum + d.Realizado,
       GapMax:         prev.ForecastAcum  + d.Forecast,
     });
     return acc;
-  }, []);
+  }, []), [monthlyData]);
 
   // project code → name map for tooltip
-  const projectMap = {};
-  filtered.forEach(p => { projectMap[p.code] = p.name; });
+  const projectMap = useMemo(() => {
+    const map = {};
+    filtered.forEach(p => { map[p.code] = p.name; });
+    return map;
+  }, [filtered]);
 
   const tickInterval = period.end - period.start >= 2 ? 5 : 0;
 

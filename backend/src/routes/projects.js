@@ -9,32 +9,25 @@ router.use(requireAuth);
 router.get('/', async (req, res) => {
   try {
     const { role, id: userId } = req.user;
+    const isEng = role === 'engenheiro';
+    const engJoin = isEng
+      ? `INNER JOIN project_assignments pa_self ON pa_self.project_id = p.id AND pa_self.user_id = $1`
+      : '';
+    const params = isEng ? [userId] : [];
 
-    let query, params = [];
-    if (role === 'admin' || role === 'gestor' || role === 'planejador') {
-      query = `
-        SELECT p.*,
-          COALESCE(SUM(CASE WHEN fe.type='Budget' THEN fe.value ELSE 0 END),0) AS total_budget,
-          COALESCE(SUM(CASE WHEN fe.type='Forecast' THEN fe.value ELSE 0 END),0) AS total_forecast,
-          COALESCE(SUM(CASE WHEN fe.type='Actual' THEN fe.value ELSE 0 END),0) AS total_actual,
-          (SELECT COUNT(*) FROM project_assignments pa WHERE pa.project_id = p.id) AS engineer_count,
-          (SELECT COUNT(*) FROM messages m WHERE m.project_id = p.id) AS message_count
-        FROM projects p
-        LEFT JOIN forecast_entries fe ON fe.project_id = p.id
-        GROUP BY p.id ORDER BY p.code`;
-    } else {
-      query = `
-        SELECT p.*,
-          COALESCE(SUM(CASE WHEN fe.type='Budget' THEN fe.value ELSE 0 END),0) AS total_budget,
-          COALESCE(SUM(CASE WHEN fe.type='Forecast' THEN fe.value ELSE 0 END),0) AS total_forecast,
-          COALESCE(SUM(CASE WHEN fe.type='Actual' THEN fe.value ELSE 0 END),0) AS total_actual,
-          (SELECT COUNT(*) FROM messages m WHERE m.project_id = p.id) AS message_count
-        FROM projects p
-        INNER JOIN project_assignments pa ON pa.project_id = p.id AND pa.user_id = $1
-        LEFT JOIN forecast_entries fe ON fe.project_id = p.id
-        GROUP BY p.id ORDER BY p.code`;
-      params = [userId];
-    }
+    const query = `
+      SELECT p.*,
+        COALESCE(SUM(CASE WHEN fe.type='Budget' THEN fe.value ELSE 0 END),0) AS total_budget,
+        COALESCE(SUM(CASE WHEN fe.type='Forecast' THEN fe.value ELSE 0 END),0) AS total_forecast,
+        COALESCE(SUM(CASE WHEN fe.type='Actual' THEN fe.value ELSE 0 END),0) AS total_actual,
+        COUNT(DISTINCT pa_cnt.user_id) AS engineer_count,
+        COUNT(DISTINCT msg.id) AS message_count
+      FROM projects p
+      ${engJoin}
+      LEFT JOIN forecast_entries fe ON fe.project_id = p.id
+      LEFT JOIN project_assignments pa_cnt ON pa_cnt.project_id = p.id
+      LEFT JOIN messages msg ON msg.project_id = p.id
+      GROUP BY p.id ORDER BY p.code`;
 
     const r = await pool.query(query, params);
     res.json(r.rows);

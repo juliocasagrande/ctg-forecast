@@ -42,8 +42,22 @@ export default function ProjectChat({ projectId }) {
 
   useEffect(() => {
     fetchMessages();
-    pollRef.current = setInterval(() => fetchMessages(true), 8000);
-    return () => clearInterval(pollRef.current);
+    let interval = setInterval(() => fetchMessages(true), 10000);
+
+    // Pause polling when tab is hidden (saves battery/bandwidth on mobile)
+    const handleVisibility = () => {
+      clearInterval(interval);
+      if (!document.hidden) {
+        fetchMessages(true);
+        interval = setInterval(() => fetchMessages(true), 10000);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [projectId]);
 
   useEffect(() => {

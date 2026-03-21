@@ -60,10 +60,12 @@ router.put('/project/:projectId', requireProjectAccess, async (req, res) => {
   try {
     const { category, type, year, month, value, comment } = req.body;
     const { role, id: userId } = req.user;
-    if (role === 'engenheiro' && type !== 'Forecast')
-      return res.status(403).json({ error: 'Engenheiros só podem editar Forecast' });
-    if (role === 'planejador' && type !== 'Budget')
-      return res.status(403).json({ error: 'Planejadores só podem editar Budget' });
+    const ENGENHEIRO_TYPES = ['Forecast', 'Actual'];
+    const PLANEJADOR_TYPES = ['Budget', 'Actual', 'Meta', 'Pool'];
+    if (role === 'engenheiro' && !ENGENHEIRO_TYPES.includes(type))
+      return res.status(403).json({ error: 'Engenheiros só podem editar Forecast e Realizado' });
+    if (role === 'planejador' && !PLANEJADOR_TYPES.includes(type))
+      return res.status(403).json({ error: 'Planejadores só podem editar Budget, Realizado, Meta e Pool' });
 
     const r = await pool.query(`
       INSERT INTO forecast_entries (project_id, category, type, year, month, value, comment, updated_by, updated_at)
@@ -89,6 +91,49 @@ router.get('/project/:projectId/summary', requireProjectAccess, async (req, res)
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Batch unread message counts — single query instead of N per-project requests
+router.get('/unread-counts', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const r = await pool.query(`
+      SELECT m.project_id, COUNT(*) AS unread
+      FROM messages m
+      WHERE m.user_id != $1
+        AND NOT EXISTS (
+          SELECT 1 FROM message_reads mr WHERE mr.message_id = m.id AND mr.user_id = $1
+        )
+      GROUP BY m.project_id
+    `, [userId]);
+    const map = {};
+    r.rows.forEach(row => { map[row.project_id] = parseInt(row.unread); });
+    res.json(map);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Batch monthly summary for ALL projects the user can access (Dashboard charts)
+router.get('/summaries', async (req, res) => {
+  try {
+    const { yearStart, yearEnd } = req.query;
+    const currentYear = new Date().getFullYear();
+    const yrStart = parseInt(yearStart || currentYear);
+    const yrEnd   = parseInt(yearEnd   || currentYear);
+    const { role, id: userId } = req.user;
+    const isEng = role === 'engenheiro';
+    const joinClause = isEng
+      ? `INNER JOIN project_assignments pa ON pa.project_id=fe.project_id AND pa.user_id=$3`
+      : '';
+    const params = isEng ? [yrStart, yrEnd, userId] : [yrStart, yrEnd];
+    const r = await pool.query(`
+      SELECT fe.project_id, fe.year, fe.month, fe.type, SUM(fe.value) AS total
+      FROM forecast_entries fe ${joinClause}
+      WHERE fe.year BETWEEN $1 AND $2
+      GROUP BY fe.project_id, fe.year, fe.month, fe.type
+      ORDER BY fe.project_id, fe.year, fe.month, fe.type
+    `, params);
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // Dashboard — all projects (filtered by role), supports year range
 router.get('/dashboard', async (req, res) => {
   try {
@@ -97,9 +142,11 @@ router.get('/dashboard', async (req, res) => {
     const yrStart = parseInt(yearStart || year || currentYear);
     const yrEnd   = parseInt(yearEnd   || year || currentYear);
     const { role, id: userId } = req.user;
-    const joinClause = role === 'engenheiro'
-      ? `INNER JOIN project_assignments pa ON pa.project_id=p.id AND pa.user_id=${userId}`
+    const isEng = role === 'engenheiro';
+    const joinClause = isEng
+      ? `INNER JOIN project_assignments pa ON pa.project_id=p.id AND pa.user_id=$3`
       : '';
+    const params = isEng ? [yrStart, yrEnd, userId] : [yrStart, yrEnd];
     const r = await pool.query(`
       SELECT p.id, p.code, p.name, p.si_value, p.pool_value, p.plants,
         COALESCE(SUM(CASE WHEN fe.type='Budget'   THEN fe.value ELSE 0 END),0) AS budget,
@@ -112,7 +159,7 @@ router.get('/dashboard', async (req, res) => {
       LEFT JOIN forecast_entries fe
         ON fe.project_id=p.id AND fe.year BETWEEN $1 AND $2
       GROUP BY p.id ORDER BY p.code
-    `, [yrStart, yrEnd]);
+    `, params);
     res.json(r.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -140,12 +187,6 @@ router.post('/project/:projectId/notes', requireProjectAccess, async (req, res) 
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.delete('/notes/:noteId', requireRole('admin', 'gestor'), async (req, res) => {
-  try {
-    await pool.query('DELETE FROM project_notes WHERE id=$1', [req.params.noteId]);
-    res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
 
 
 // ── Consolidated Actual ──────────────────────────────────────────────────────
@@ -246,8 +287,6 @@ router.delete('/notes/:noteId', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-export default router;
-
 // GET /api/forecast/alerts — consolidated alerts for current user
 router.get('/alerts', async (req, res) => {
   try {
@@ -262,15 +301,17 @@ router.get('/alerts', async (req, res) => {
     staleDate.setDate(staleDate.getDate() - staleDays);
 
     // Which projects does this user have access to?
-    const projFilter = role === 'engenheiro'
-      ? `INNER JOIN project_assignments pa ON pa.project_id = p.id AND pa.user_id = ${userId}`
+    const isEng = role === 'engenheiro';
+    const projJoin = isEng
+      ? `INNER JOIN project_assignments pa ON pa.project_id = p.id AND pa.user_id = $2`
       : '';
+    const projParams = isEng ? [currentYear, userId] : [currentYear];
 
     // 1. Unread messages per project
     const unreadRes = await pool.query(`
       SELECT m.project_id, COUNT(*) AS unread_count
       FROM messages m
-      ${role === 'engenheiro'
+      ${isEng
         ? `INNER JOIN project_assignments pa ON pa.project_id = m.project_id AND pa.user_id = $1`
         : `INNER JOIN projects p ON p.id = m.project_id`}
       WHERE m.user_id != $1
@@ -284,7 +325,7 @@ router.get('/alerts', async (req, res) => {
     // 2. Projects with zero Forecast entries for current year
     const emptyForecastRes = await pool.query(`
       SELECT p.id, p.code, p.name
-      FROM projects p ${projFilter}
+      FROM projects p ${projJoin}
       WHERE NOT EXISTS (
         SELECT 1 FROM forecast_entries fe
         WHERE fe.project_id = p.id
@@ -293,13 +334,17 @@ router.get('/alerts', async (req, res) => {
           AND fe.value > 0
       )
       ORDER BY p.code
-    `, [currentYear]);
+    `, projParams);
 
-    // 3. Projects with no Forecast update in last 30 days
+    // 3. Projects with no Forecast update in last N days
+    const staleParams = isEng ? [currentYear, staleDate.toISOString(), userId] : [currentYear, staleDate.toISOString()];
+    const staleJoin = isEng
+      ? `INNER JOIN project_assignments pa ON pa.project_id = p.id AND pa.user_id = $3`
+      : '';
     const staleRes = await pool.query(`
       SELECT p.id, p.code, p.name,
         MAX(fe.updated_at) AS last_update
-      FROM projects p ${projFilter}
+      FROM projects p ${staleJoin}
       INNER JOIN forecast_entries fe ON fe.project_id = p.id
         AND fe.type = 'Forecast'
         AND fe.year = $1
@@ -307,7 +352,7 @@ router.get('/alerts', async (req, res) => {
       GROUP BY p.id
       HAVING MAX(fe.updated_at) < $2
       ORDER BY last_update ASC
-    `, [currentYear, staleDate.toISOString()]);
+    `, staleParams);
 
     const unreadMap = {};
     unreadRes.rows.forEach(r => { unreadMap[r.project_id] = parseInt(r.unread_count); });
@@ -344,10 +389,14 @@ router.get('/polo-summary', async (req, res) => {
     const yrEnd   = parseInt(yearEnd   || year || currentYear);
     const { role, id: userId } = req.user;
 
-    // Role-based project filter
-    const joinClause = role === 'engenheiro'
-      ? `INNER JOIN project_assignments pa ON pa.project_id=p.id AND pa.user_id=${userId}`
+    const isEng = role === 'engenheiro';
+    const joinClause = isEng
+      ? `INNER JOIN project_assignments pa ON pa.project_id=p.id AND pa.user_id=$3`
       : '';
+    const params = isEng ? [yrStart, yrEnd, userId] : [yrStart, yrEnd];
+    const mineJoin = isEng
+      ? `LEFT JOIN project_assignments pa_mine ON pa_mine.project_id=p.id AND pa_mine.user_id=$3`
+      : `LEFT JOIN project_assignments pa_mine ON pa_mine.project_id=p.id AND pa_mine.user_id=${userId}`;
 
     const r = await pool.query(`
       SELECT
@@ -363,11 +412,13 @@ router.get('/polo-summary', async (req, res) => {
       LEFT JOIN forecast_entries fe ON fe.project_id=p.id
       LEFT JOIN project_assignments pa2 ON pa2.project_id=p.id
       LEFT JOIN users u ON u.id=pa2.user_id AND u.role='engenheiro'
-      LEFT JOIN project_assignments pa_mine ON pa_mine.project_id=p.id AND pa_mine.user_id=${userId}
+      ${mineJoin}
       GROUP BY p.id
       ORDER BY p.code
-    `, [yrStart, yrEnd]);
+    `, params);
 
     res.json(r.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+export default router;
