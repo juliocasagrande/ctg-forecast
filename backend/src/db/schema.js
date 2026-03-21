@@ -168,8 +168,28 @@ export async function initDB() {
         ('color_pool',           '#0891B2'),
         ('export_include_meta',  'true'),
         ('export_include_pool',  'true'),
-        ('fiscal_year_start',    '1')
+        ('fiscal_year_start',    '1'),
+        ('active_year_start',    '2026'),
+        ('active_year_end',      '2031')
       ON CONFLICT (key) DO NOTHING;
+    `);
+
+    // Consolidated yearly values (for closed/past years — single value per type+category+year)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS year_consolidated (
+        id SERIAL PRIMARY KEY,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        year INTEGER NOT NULL,
+        category VARCHAR(20) NOT NULL CHECK (category IN ('Viagens','Contratos','POs')),
+        type VARCHAR(10) NOT NULL CHECK (type IN ('Budget','Forecast','Actual','Meta','Pool')),
+        value NUMERIC(15,2) DEFAULT 0,
+        comment TEXT,
+        consolidated_by INTEGER REFERENCES users(id),
+        consolidated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(project_id, year, category, type)
+      );
+      CREATE INDEX IF NOT EXISTS idx_year_consolidated_project ON year_consolidated(project_id);
+      CREATE INDEX IF NOT EXISTS idx_year_consolidated_year ON year_consolidated(project_id, year);
     `);
 
     console.log('✅ Migrations applied');

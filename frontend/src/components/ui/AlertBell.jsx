@@ -20,6 +20,16 @@ export default function AlertBell() {
     try {
       const r = await api.get('/forecast/alerts');
       setAlerts(r.data);
+
+      // Sync PWA app badge (icon notification count)
+      if ('setAppBadge' in navigator) {
+        const count = r.data?.total ?? 0;
+        if (count > 0) {
+          navigator.setAppBadge(count).catch(() => {});
+        } else {
+          navigator.clearAppBadge().catch(() => {});
+        }
+      }
     } catch {}
   }, []);
 

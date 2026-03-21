@@ -33,46 +33,99 @@ function fmtTooltipLabel(label, period) {
 
 // Friendly label map for all chart series
 const SERIES_LABELS = {
-  Budget:        'Budget (mensal)',
-  Forecast:      'Forecast (mensal)',
-  Realizado:     'Realizado (mensal)',
-  Meta:          'Meta (mensal)',
-  Pool:          'Pool (mensal)',
-  BudgetAcum:    'Budget (acum.)',
-  ForecastAcum:  'Forecast (acum.)',
-  RealizadoAcum: 'Realizado (acum.)',
-  MetaAcum:      'Meta (acum.)',
-  PoolAcum:      'Pool (acum.)',
+  Budget:        'Budget',
+  Forecast:      'Forecast',
+  Realizado:     'Realizado',
+  Meta:          'Meta',
+  Pool:          'Pool',
+  BudgetAcum:    'Budget',
+  ForecastAcum:  'Forecast',
+  RealizadoAcum: 'Realizado',
+  MetaAcum:      'Meta',
+  PoolAcum:      'Pool',
 };
 
-// Generic tooltip — shows all entries, never clips, skips gap internals
+// Tooltip group order
+const MONTHLY_KEYS = ['Budget', 'Forecast', 'Realizado', 'Meta', 'Pool'];
+const ACUM_KEYS    = ['BudgetAcum', 'ForecastAcum', 'RealizadoAcum', 'MetaAcum', 'PoolAcum'];
+
+// Generic tooltip — grouped sections + variation
 function ChartTooltip({ active, payload, label, period }) {
   if (!active || !payload?.length) return null;
-  const skip = new Set(['GapMax', 'GapMin']);
-  const entries = payload.filter(p => !skip.has(p.name));
-  if (!entries.length) return null;
+
+  const dataMap = {};
+  payload.forEach(p => { dataMap[p.name] = p; });
+
+  const monthlyEntries = MONTHLY_KEYS.map(k => dataMap[k]).filter(Boolean);
+  const acumEntries    = ACUM_KEYS.map(k => dataMap[k]).filter(Boolean);
+
+  // Variation: Forecast acum - Realizado acum
+  const forecastAcum  = dataMap['ForecastAcum']?.value  ?? 0;
+  const realizadoAcum = dataMap['RealizadoAcum']?.value ?? 0;
+  const variation     = forecastAcum - realizadoAcum;
+
+  const renderRow = (p) => (
+    <div key={p.name} style={{
+      display: 'flex', gap: 10, justifyContent: 'space-between',
+      marginBottom: 2, fontSize: '0.76rem',
+    }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+        <span style={{ width: 8, height: 8, borderRadius: 2, background: p.color ?? p.stroke ?? p.fill, flexShrink: 0 }} />
+        <span style={{ opacity: 0.85, whiteSpace: 'nowrap' }}>{SERIES_LABELS[p.name] || p.name}</span>
+      </span>
+      <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: p.value === 0 ? 'var(--text-muted)' : undefined }}>
+        {p.value === 0 ? '—' : formatBRL(p.value)}
+      </span>
+    </div>
+  );
+
+  const sectionHeader = (title) => (
+    <div style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginTop: 6, marginBottom: 3, paddingTop: 5, borderTop: '1px solid var(--border)' }}>
+      {title}
+    </div>
+  );
+
   return (
     <div style={{
       background: 'var(--bg-card)', border: '1px solid var(--border)',
       borderRadius: 8, padding: '10px 14px', boxShadow: 'var(--shadow-lg)',
-      fontSize: '0.8rem', minWidth: 180, maxWidth: 260, zIndex: 9999, pointerEvents: 'none',
+      fontSize: '0.8rem', minWidth: 200, maxWidth: 280, zIndex: 9999, pointerEvents: 'none',
     }}>
-      <div style={{ fontWeight: 700, marginBottom: 7, color: 'var(--ctg-navy)',
+      <div style={{ fontWeight: 700, marginBottom: 5, color: 'var(--ctg-navy)',
         fontSize: '0.85rem', borderBottom: '1px solid var(--border)', paddingBottom: 5 }}>
         {fmtTooltipLabel(label, period)}
       </div>
-      {entries.map(p => (
-        <div key={p.name} style={{
-          color: p.color ?? p.stroke ?? p.fill,
-          display: 'flex', gap: 14, justifyContent: 'space-between',
-          marginBottom: 3, fontSize: '0.78rem',
-        }}>
-          <span style={{ opacity: 0.85, whiteSpace: 'nowrap' }}>{SERIES_LABELS[p.name] || p.name}:</span>
-          <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: p.value === 0 ? 'var(--text-muted)' : undefined }}>
-            {p.value === 0 ? '—' : formatBRL(p.value)}
-          </span>
-        </div>
-      ))}
+
+      {monthlyEntries.length > 0 && (
+        <>
+          {sectionHeader('Valores Mensais')}
+          {monthlyEntries.map(renderRow)}
+        </>
+      )}
+
+      {acumEntries.length > 0 && (
+        <>
+          {sectionHeader('Acumulado')}
+          {acumEntries.map(renderRow)}
+        </>
+      )}
+
+      {/* Variation: Forecast vs Realizado */}
+      {(forecastAcum > 0 || realizadoAcum > 0) && (
+        <>
+          {sectionHeader('Variação')}
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            fontSize: '0.76rem', fontWeight: 700,
+            color: variation > 0 ? '#0369A1' : variation < 0 ? '#DC2626' : 'var(--text-muted)',
+          }}>
+            <span style={{ opacity: 0.85 }}>Forecast − Realizado:</span>
+            <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {variation === 0 ? '—' : `${variation > 0 ? '+' : ''}${formatBRL(variation)}`}
+            </span>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -245,7 +298,8 @@ export default function Dashboard({ period, plantFilter = [] }) {
     return map;
   }, [filtered]);
 
-  const tickInterval = period.end - period.start >= 2 ? 5 : 0;
+  const yearSpan = period.end - period.start;
+  const tickInterval = yearSpan === 0 ? 0 : yearSpan === 1 ? 2 : 5;
 
   const cardHeader = (title) => (
     <div style={{ background: 'var(--ctg-navy)', borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0', padding: '7px 14px' }}>
@@ -307,7 +361,16 @@ export default function Dashboard({ period, plantFilter = [] }) {
                 />
 
                 <Tooltip content={<ChartTooltip period={period} />} isAnimationActive={false} wrapperStyle={{ zIndex: 9999, maxWidth: 'min(260px, 70vw)' }} allowEscapeViewBox={{ x: false, y: true }} />
-                <Legend wrapperStyle={{ fontSize: '0.68rem', color: '#374151', paddingTop: 4 }} formatter={(value) => SERIES_LABELS[value] || (value === 'GapMax' ? 'Dif. Forecast vs Realizado' : value)} className="dash-legend" />
+                <Legend wrapperStyle={{ fontSize: '0.68rem', color: '#374151', paddingTop: 4 }} formatter={(value) => {
+                  const LEGEND_LABELS = {
+                    Budget: 'Budget (mensal)', Forecast: 'Forecast (mensal)', Realizado: 'Realizado (mensal)',
+                    Meta: 'Meta (mensal)', Pool: 'Pool (mensal)',
+                    BudgetAcum: 'Budget (acum.)', ForecastAcum: 'Forecast (acum.)', RealizadoAcum: 'Realizado (acum.)',
+                    MetaAcum: 'Meta (acum.)', PoolAcum: 'Pool (acum.)',
+                    GapMax: 'Dif. Forecast vs Realizado',
+                  };
+                  return LEGEND_LABELS[value] || value;
+                }} className="dash-legend" />
 
                 {/* Gap area between Forecast and Realizado (accumulated) */}
                 <Area yAxisId="acum" type="monotone" dataKey="GapMax"

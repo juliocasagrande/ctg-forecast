@@ -421,4 +421,121 @@ router.get('/polo-summary', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── Year Consolidated: GET for a project ─────────────────────────────────────
+router.get('/project/:projectId/year-consolidated', requireProjectAccess, async (req, res) => {
+  try {
+    const { year } = req.query;
+    let q = 'SELECT * FROM year_consolidated WHERE project_id=$1';
+    const p = [req.params.projectId];
+    if (year) { q += ' AND year=$2'; p.push(parseInt(year)); }
+    q += ' ORDER BY year, category, type';
+    res.json((await pool.query(q, p)).rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Year Consolidated: Upsert single value ───────────────────────────────────
+router.post('/project/:projectId/year-consolidated', requireProjectAccess, async (req, res) => {
+  const { role, id: userId } = req.user;
+  if (!['planejador', 'admin'].includes(role))
+    return res.status(403).json({ error: 'Apenas planejadores podem editar valores consolidados' });
+  try {
+    const { year, category, type, value, comment } = req.body;
+    const r = await pool.query(`
+      INSERT INTO year_consolidated (project_id, year, category, type, value, comment, consolidated_by, consolidated_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+      ON CONFLICT (project_id, year, category, type)
+      DO UPDATE SET value=EXCLUDED.value, comment=EXCLUDED.comment,
+        consolidated_by=EXCLUDED.consolidated_by, consolidated_at=NOW()
+      RETURNING *
+    `, [req.params.projectId, year, category, type, parseFloat(value)||0, comment||null, userId]);
+    res.json(r.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Year Consolidated: Bulk upsert ───────────────────────────────────────────
+router.post('/project/:projectId/year-consolidated/bulk', requireProjectAccess, async (req, res) => {
+  const { role, id: userId } = req.user;
+  if (!['planejador', 'admin'].includes(role))
+    return res.status(403).json({ error: 'Apenas planejadores podem editar valores consolidados' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { entries } = req.body;
+    for (const e of entries) {
+      await client.query(`
+        INSERT INTO year_consolidated (project_id, year, category, type, value, comment, consolidated_by, consolidated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+        ON CONFLICT (project_id, year, category, type)
+        DO UPDATE SET value=EXCLUDED.value, comment=EXCLUDED.comment,
+          consolidated_by=EXCLUDED.consolidated_by, consolidated_at=NOW()
+      `, [req.params.projectId, e.year, e.category, e.type, parseFloat(e.value)||0, e.comment||null, userId]);
+    }
+    await client.query('COMMIT');
+    res.json({ count: entries.length });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
+});
+
+// ── Close Year: auto-consolidate monthly entries into year_consolidated ───────
+router.post('/close-year', requireRole('planejador', 'admin'), async (req, res) => {
+  const { year } = req.body;
+  const { id: userId } = req.user;
+  if (!year) return res.status(400).json({ error: 'Ano obrigatório' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Sum all monthly entries by project+category+type for the given year
+    const sumRes = await client.query(`
+      SELECT project_id, category, type, SUM(value) AS total
+      FROM forecast_entries
+      WHERE year = $1
+      GROUP BY project_id, category, type
+    `, [year]);
+
+    let count = 0;
+    for (const row of sumRes.rows) {
+      await client.query(`
+        INSERT INTO year_consolidated (project_id, year, category, type, value, comment, consolidated_by, consolidated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+        ON CONFLICT (project_id, year, category, type)
+        DO UPDATE SET value = EXCLUDED.value, comment = EXCLUDED.comment,
+          consolidated_by = EXCLUDED.consolidated_by, consolidated_at = NOW()
+      `, [row.project_id, year, row.category, row.type, parseFloat(row.total)||0,
+          `Consolidado automaticamente em ${new Date().toLocaleDateString('pt-BR')}`, userId]);
+      count++;
+    }
+
+    // Optionally delete monthly entries for the closed year (keep data clean)
+    // await client.query('DELETE FROM forecast_entries WHERE year = $1', [year]);
+
+    await client.query('COMMIT');
+    res.json({ success: true, consolidated: count, year });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
+});
+
+// ── Get consolidated summaries for all projects (for Dashboard) ──────────────
+router.get('/year-consolidated-summaries', async (req, res) => {
+  try {
+    const { role, id: userId } = req.user;
+    const isEng = role === 'engenheiro';
+    const joinClause = isEng
+      ? `INNER JOIN project_assignments pa ON pa.project_id=yc.project_id AND pa.user_id=$1`
+      : '';
+    const params = isEng ? [userId] : [];
+    const r = await pool.query(`
+      SELECT yc.project_id, yc.year, yc.category, yc.type, yc.value
+      FROM year_consolidated yc ${joinClause}
+      ORDER BY yc.project_id, yc.year, yc.category, yc.type
+    `, params);
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 export default router;

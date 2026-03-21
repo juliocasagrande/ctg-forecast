@@ -137,16 +137,27 @@ export default function ForecastWizard({
   availableTypes,
   siValue = 0,
   consolidatedActual = 0,
+  yearConfig,
 }) {
   const C = useTypeColors();
   const TYPE_THEME = getTypeTheme(C);
   const types = availableTypes?.length ? availableTypes : [editType];
-  const YEARS = [2026, 2027, 2028, 2029, 2030, 2031];
+
+  // Year configuration from settings
+  const activeStart = yearConfig?.activeStart || 2026;
+  const activeEnd   = yearConfig?.activeEnd   || 2031;
+  const YEARS = [];
+  for (let y = activeStart; y <= activeEnd; y++) YEARS.push(y);
+
+  // Consolidated (past) years = years before activeStart that have data or activeStart-1
+  const consolidatedYears = yearConfig?.consolidatedYears || [activeStart - 1];
+  const isConsolidatedYear = consolidatedYears.includes(parseInt(year));
 
   // ── state ──
   const [activeType, setActiveType] = useState(types.includes(editType) ? editType : types[0]);
   const [step,       setStep]       = useState(0);
   const [localData,  setLocalData]  = useState({});
+  const [consData,   setConsData]   = useState({}); // consolidated year data: { "type|cat": value }
   const [saving,     setSaving]     = useState(false);
   const [saved,      setSaved]      = useState(false);
   const { toast } = useToast();
@@ -159,6 +170,18 @@ export default function ForecastWizard({
     setStep(0);
     setSaved(false);
   }, [entries, year]);
+
+  // Load consolidated year data when switching to a consolidated year
+  useEffect(() => {
+    if (!isConsolidatedYear) return;
+    api.get(`/forecast/project/${projectId}/year-consolidated?year=${year}`)
+      .then(r => {
+        const map = {};
+        (r.data || []).forEach(e => { map[`${e.type}|${e.category}`] = parseFloat(e.value) || 0; });
+        setConsData(map);
+      })
+      .catch(() => {});
+  }, [projectId, year, isConsolidatedYear]);
 
   useEffect(() => {
     if (types.includes(editType)) setActiveType(editType);
@@ -226,7 +249,30 @@ export default function ForecastWizard({
         display:'flex', alignItems:'stretch',
         background:'var(--ctg-navy)',
         borderBottom:'1px solid rgba(255,255,255,0.1)',
+        overflowX:'auto', WebkitOverflowScrolling:'touch',
       }}>
+        {/* Consolidated past years */}
+        {consolidatedYears.map(y => {
+          const isActive = parseInt(year) === y;
+          return (
+            <button key={y} onClick={() => { onYearChange?.(y, 'consolidated'); setStep(0); }} style={{
+              padding:'9px 14px', border:'none', cursor:'pointer',
+              background: isActive ? 'rgba(255,200,50,0.2)' : 'transparent',
+              color: isActive ? '#FCD34D' : 'rgba(255,255,255,0.35)',
+              fontWeight: isActive ? 700 : 400,
+              fontSize:'0.82rem', fontFamily:'var(--font-display)',
+              borderBottom: isActive ? '3px solid #FCD34D' : '3px solid transparent',
+              transition:'all 0.15s', whiteSpace:'nowrap', flexShrink:0,
+            }}>
+              {y} <span style={{fontSize:'0.58rem',opacity:0.7}}>consolidado</span>
+            </button>
+          );
+        })}
+        {/* Separator */}
+        {consolidatedYears.length > 0 && (
+          <div style={{width:1,background:'rgba(255,255,255,0.15)',margin:'6px 2px',flexShrink:0}} />
+        )}
+        {/* Active years (monthly detail) */}
         {YEARS.map(y => {
           const isActive = parseInt(year) === y;
           return (
@@ -237,7 +283,7 @@ export default function ForecastWizard({
               fontWeight: isActive ? 700 : 400,
               fontSize:'0.88rem', fontFamily:'var(--font-display)',
               borderBottom: isActive ? '3px solid #fff' : '3px solid transparent',
-              transition:'all 0.15s',
+              transition:'all 0.15s', whiteSpace:'nowrap', flexShrink:0,
             }}>{y}</button>
           );
         })}
@@ -298,6 +344,125 @@ export default function ForecastWizard({
       {children}
     </div>
   );
+
+  // ── CONSOLIDATED YEAR: simplified single-value-per-category view ──────────
+  if (isConsolidatedYear) {
+    const consGetVal = (type, cat) => consData[`${type}|${cat}`] ?? 0;
+    const consTotal  = (type) => CATEGORIES.reduce((s, c) => s + consGetVal(type, c), 0);
+
+    const handleConsChange = (type, cat, val) => {
+      setConsData(prev => ({ ...prev, [`${type}|${cat}`]: val }));
+      setSaved(false);
+    };
+
+    const handleConsSave = async () => {
+      setSaving(true);
+      try {
+        const bulk = [];
+        types.forEach(type => CATEGORIES.forEach(cat => {
+          bulk.push({ year: parseInt(year), category: cat, type, value: consGetVal(type, cat) });
+        }));
+        await api.post(`/forecast/project/${projectId}/year-consolidated/bulk`, { entries: bulk });
+        setSaved(true);
+        toast(`Valores consolidados de ${year} salvos!`, 'success');
+        onSaved?.();
+      } catch { toast('Erro ao salvar.', 'error'); }
+      finally { setSaving(false); }
+    };
+
+    return (
+      <WrapperWithTypeBar>
+        <div style={{ padding: '24px 28px', background: 'rgba(255,255,255,0.65)' }}>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+            <div style={{
+              width: 44, height: 44, borderRadius: 'var(--radius-md)',
+              background: '#FEF3C7', border: '2px solid #F59E0B',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '1.2rem', flexShrink: 0,
+            }}>📦</div>
+            <div>
+              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem', color: 'var(--ctg-navy)', marginBottom: 2 }}>
+                {year} — Valores Consolidados
+              </h2>
+              <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                Ano encerrado — insira um valor total por categoria (sem detalhamento mensal).
+              </p>
+            </div>
+          </div>
+
+          {/* Table per type */}
+          {types.map(t => {
+            const th = TYPE_THEME[t];
+            return (
+              <div key={t} style={{ marginBottom: 20, borderRadius: 'var(--radius-md)', border: `1.5px solid ${th.border}`, overflow: 'hidden' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '10px 16px', background: `linear-gradient(135deg, ${th.color}EE, ${th.color}BB)`,
+                  color: '#fff',
+                }}>
+                  <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{th.label}</span>
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.1rem' }}>
+                    {formatBRL(consTotal(t))}
+                  </span>
+                </div>
+                <div style={{ background: th.light }}>
+                  {CATEGORIES.map(cat => {
+                    const val = consGetVal(t, cat);
+                    return (
+                      <div key={cat} style={{
+                        display: 'grid', gridTemplateColumns: '140px 1fr', gap: 12,
+                        padding: '10px 16px', borderBottom: `1px solid ${th.border}`,
+                        alignItems: 'center',
+                      }}>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          {CAT_ICONS[cat]} {cat}
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, flexShrink: 0 }}>R$</span>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="0,00"
+                            value={val ? val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
+                            onChange={e => {
+                              const raw = e.target.value;
+                              handleConsChange(t, cat, raw);
+                            }}
+                            onBlur={e => {
+                              const parsed = parseFloat(String(e.target.value).replace(/\./g, '').replace(',', '.')) || 0;
+                              handleConsChange(t, cat, parsed);
+                            }}
+                            style={{
+                              flex: 1, border: `1.5px solid ${th.border}`, borderRadius: 'var(--radius-sm)',
+                              padding: '8px 12px', fontFamily: 'var(--font-body)', fontSize: '0.9rem',
+                              outline: 'none', background: 'rgba(255,255,255,0.8)', color: th.text,
+                              fontWeight: 600,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Save button */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+            <button onClick={handleConsSave} disabled={saving} style={{
+              padding: '12px 32px', borderRadius: 'var(--radius-sm)', border: 'none',
+              background: theme.color, cursor: saving ? 'wait' : 'pointer',
+              color: '#fff', fontWeight: 700, fontSize: '0.95rem', fontFamily: 'var(--font-body)',
+            }}>
+              {saving ? 'Salvando...' : saved ? '✓ Consolidado salvo!' : '💾 Salvar Consolidado'}
+            </button>
+          </div>
+        </div>
+      </WrapperWithTypeBar>
+    );
+  }
 
   // ── STEP 0: Intro ─────────────────────────────────────────────────────────
   if (step === 0) {

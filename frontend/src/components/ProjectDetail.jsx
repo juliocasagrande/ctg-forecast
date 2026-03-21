@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { ComposedChart, BarChart, Bar, LineChart, Line, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import api from '../utils/api.js';
-import { useTypeColors } from '../context/SettingsContext.jsx';
+import { useTypeColors, useSettings } from '../context/SettingsContext.jsx';
 import { useAuth, useRole } from '../context/AuthContext.jsx';
 import { formatBRL, formatBRLShort, MONTHS_PT, CATEGORIES } from '../utils/format.js';
 import ForecastWizard from './ForecastWizard.jsx';
@@ -72,8 +72,8 @@ function ReadOnlyTable({ entries, year, siValue, consolidatedActual }) {
           </thead>
           <tbody>
             {CATEGORIES.map(cat=>(
-              <>
-                <tr key={`h-${cat}`} className="cat-header-row"><td colSpan={14}>{cat}</td></tr>
+              <Fragment key={cat}>
+                <tr className="cat-header-row"><td colSpan={14}>{cat}</td></tr>
                 {['Budget','Forecast','Actual','Meta','Pool'].map(type=>(
                   <tr key={`${cat}-${type}`} className={`row-${type === 'Actual' ? 'actual' : type === 'Meta' ? 'meta' : type === 'Pool' ? 'pool' : type.toLowerCase()}`}>
                     <td className="td-label">{type}</td>
@@ -81,7 +81,7 @@ function ReadOnlyTable({ entries, year, siValue, consolidatedActual }) {
                     <td style={{fontWeight:700}}>{f(rowTotal(cat,type))}</td>
                   </tr>
                 ))}
-              </>
+              </Fragment>
             ))}
             <tr className="cat-header-row"><td colSpan={14}>TOTAL GERAL</td></tr>
             {['Budget','Forecast','Actual','Meta','Pool'].map(type=>{
@@ -370,10 +370,20 @@ function ExportModal({ open, onClose, onConfirm, role, isEngenheiro }) {
 
 export default function ProjectDetail({ onEdit }) {
   const C = useTypeColors();
+  const settings = useSettings();
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { isEngenheiro, isPlanejador, isGestor, isAdmin, canManage } = useRole();
+
+  // Year config from settings
+  const activeStart = parseInt(settings.active_year_start) || 2026;
+  const activeEnd   = parseInt(settings.active_year_end)   || 2031;
+  const yearConfig = useMemo(() => ({
+    activeStart,
+    activeEnd,
+    consolidatedYears: [activeStart - 1],
+  }), [activeStart, activeEnd]);
 
   const [project,      setProject]    = useState(null);
   const [entries,      setEntries]    = useState([]);
@@ -677,6 +687,7 @@ export default function ProjectDetail({ onEdit }) {
               availableTypes={roleForecastTabs.filter(t => t.id !== 'ActualConsolidated').map(t => t.id)}
               siValue={project.si_value}
               consolidatedActual={consolidated.value}
+              yearConfig={yearConfig}
             />
           )}
         </>
@@ -697,7 +708,42 @@ export default function ProjectDetail({ onEdit }) {
       )}
 
       {/* ── Charts tab ── */}
-      {mainTab==='charts' && (
+      {mainTab==='charts' && (() => {
+        // Donut data: total by category for Forecast
+        const donutData = CATEGORIES.map(cat => ({
+          name: cat,
+          value: chartData.reduce((s, d) => s + (entries.filter(e=>e.category===cat&&e.type==='Forecast'&&parseInt(e.year)===selectedYear&&parseInt(e.month)===(MONTHS_PT.indexOf(d.month)+1)).reduce((ss,e)=>ss+parseFloat(e.value||0),0)), 0),
+        })).filter(d => d.value > 0);
+        const CAT_COLORS = ['#0EA5E9', '#8B5CF6', '#F59E0B'];
+
+        // Execution: Realizado / Forecast per category
+        const execData = CATEGORIES.map(cat => {
+          const fc = entries.filter(e=>e.category===cat&&e.type==='Forecast'&&parseInt(e.year)===selectedYear).reduce((s,e)=>s+parseFloat(e.value||0),0);
+          const ac = entries.filter(e=>e.category===cat&&e.type==='Actual'&&parseInt(e.year)===selectedYear).reduce((s,e)=>s+parseFloat(e.value||0),0);
+          return { name: cat, Forecast: fc, Realizado: ac, pct: fc > 0 ? ((ac/fc)*100).toFixed(1) : '0.0' };
+        });
+
+        // Budget vs Forecast comparison per category
+        const budgetVsForecast = CATEGORIES.map(cat => {
+          const bg = entries.filter(e=>e.category===cat&&e.type==='Budget'&&parseInt(e.year)===selectedYear).reduce((s,e)=>s+parseFloat(e.value||0),0);
+          const fc = entries.filter(e=>e.category===cat&&e.type==='Forecast'&&parseInt(e.year)===selectedYear).reduce((s,e)=>s+parseFloat(e.value||0),0);
+          return { name: cat, Budget: bg, Forecast: fc };
+        });
+
+        // Combined data for main chart
+        const combinedChartData = chartData.map((d, i) => {
+          const prev = i > 0 ? sCurveData[i] : { Budget:0, Forecast:0, Realizado:0 };
+          return {
+            ...d,
+            BudgetAcum: sCurveData[i]?.Budget || 0,
+            ForecastAcum: sCurveData[i]?.Forecast || 0,
+            RealizadoAcum: sCurveData[i]?.Realizado || 0,
+            MetaAcum: sCurveData[i]?.Meta || 0,
+            PoolAcum: sCurveData[i]?.Pool || 0,
+          };
+        });
+
+        return (
         <div style={{display:'flex',flexDirection:'column',gap:20}}>
           <div style={{display:'flex',justifyContent:'flex-end'}}>
             <div className="year-selector">
@@ -706,49 +752,115 @@ export default function ProjectDetail({ onEdit }) {
               <button className="year-btn" onClick={()=>setSelectedYear(y=>y+1)}>›</button>
             </div>
           </div>
+
+          {/* 1. Combined: bars (monthly) + lines (accumulated) — like Dashboard */}
           <div className="card">
-            <div className="card-header"><span className="card-title">Evolução Mensal — {selectedYear}</span></div>
+            <div className="card-header"><span className="card-title">Evolução Mensal + S-Curve — {selectedYear}</span></div>
             <div className="card-body">
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={chartData} margin={{top:4,right:8,left:0,bottom:0}}>
+              <ResponsiveContainer width="100%" height={300}>
+                <ComposedChart data={combinedChartData} margin={{top:4,right:8,left:0,bottom:0}}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/>
                   <XAxis dataKey="month" tick={{fontSize:11,fill:'#374151'}}/>
-                  <YAxis tickFormatter={v=>fmt(v)} tick={{fontSize:11,fill:'#374151'}} width={72}/>
-                  <Tooltip formatter={v=>formatBRL(v)} labelFormatter={label=>`${label}/${selectedYear}`} contentStyle={{minWidth:200,zIndex:9999}} wrapperStyle={{zIndex:9999}} allowEscapeViewBox={{x:true,y:true}} isAnimationActive={false} />
-                  <Legend wrapperStyle={{fontSize:'0.82rem'}}/>
-                  <Bar dataKey="Budget"    fill={C.budget} radius={[3,3,0,0]}/>
-                  <Bar dataKey="Forecast"  fill={C.forecast} radius={[3,3,0,0]}/>
-                  <Bar dataKey="Realizado" fill={C.actual} radius={[3,3,0,0]}/>
-                  <Bar dataKey="Meta"      fill={C.meta} radius={[3,3,0,0]}/>
-                  <Bar dataKey="Pool"      fill={C.pool} radius={[3,3,0,0]}/>
+                  <YAxis yAxisId="monthly" orientation="left" tickFormatter={v=>fmt(v)} tick={{fontSize:10,fill:'#6B7280'}} width={68}
+                    label={{value:'Mensal',angle:-90,position:'insideLeft',offset:10,style:{fontSize:9,fill:'#9CA3AF'}}} />
+                  <YAxis yAxisId="acum" orientation="right" tickFormatter={v=>fmt(v)} tick={{fontSize:10,fill:'#6B7280'}} width={68}
+                    label={{value:'Acumulado',angle:90,position:'insideRight',offset:10,style:{fontSize:9,fill:'#9CA3AF'}}} />
+                  <Tooltip formatter={v=>formatBRL(v)} labelFormatter={label=>`${label}/${selectedYear}`} isAnimationActive={false} />
+                  <Legend wrapperStyle={{fontSize:'0.78rem'}}/>
+
+                  {/* Monthly bars */}
+                  <Bar yAxisId="monthly" dataKey="Budget"    fill={C.budget+'88'} radius={[2,2,0,0]} barSize={8} name="Budget (mensal)" />
+                  <Bar yAxisId="monthly" dataKey="Forecast"  fill={C.forecast+'88'} radius={[2,2,0,0]} barSize={8} name="Forecast (mensal)" />
+                  <Bar yAxisId="monthly" dataKey="Realizado" fill={C.actual+'88'} radius={[2,2,0,0]} barSize={8} name="Realizado (mensal)" />
+                  <Bar yAxisId="monthly" dataKey="Meta"      fill={C.meta+'88'} radius={[2,2,0,0]} barSize={8} name="Meta (mensal)" />
+                  <Bar yAxisId="monthly" dataKey="Pool"      fill={C.pool+'88'} radius={[2,2,0,0]} barSize={8} name="Pool (mensal)" />
+
+                  {/* Accumulated lines */}
+                  <Line yAxisId="acum" type="monotone" dataKey="BudgetAcum"    stroke={C.budget} strokeWidth={2} dot={false} name="Budget (acum.)" />
+                  <Line yAxisId="acum" type="monotone" dataKey="ForecastAcum"  stroke={C.forecast} strokeWidth={2} dot={false} name="Forecast (acum.)" />
+                  <Line yAxisId="acum" type="monotone" dataKey="RealizadoAcum" stroke={C.actual} strokeWidth={2} strokeDasharray="5 3" dot={false} name="Realizado (acum.)" />
+                  <Line yAxisId="acum" type="monotone" dataKey="MetaAcum"      stroke={C.meta} strokeWidth={2} strokeDasharray="8 3" dot={false} name="Meta (acum.)" />
+                  <Line yAxisId="acum" type="monotone" dataKey="PoolAcum"      stroke={C.pool} strokeWidth={2} strokeDasharray="4 2" dot={false} name="Pool (acum.)" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* 2. Row: Donut by category + Execution bar */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
+
+            {/* Donut: Forecast distribution by category */}
+            <div className="card">
+              <div className="card-header"><span className="card-title">Forecast por Categoria — {selectedYear}</span></div>
+              <div className="card-body" style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:220}}>
+                {donutData.length === 0 ? (
+                  <span style={{color:'var(--text-muted)',fontSize:'0.85rem'}}>Sem dados de Forecast</span>
+                ) : (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <PieChart>
+                      <Pie data={donutData} cx="50%" cy="50%" innerRadius={55} outerRadius={85}
+                        paddingAngle={3} dataKey="value" nameKey="name"
+                        label={({name, percent}) => `${name} ${(percent*100).toFixed(0)}%`}
+                        labelLine={{stroke:'#94A3B8',strokeWidth:1}}
+                        style={{fontSize:'0.75rem'}}
+                      >
+                        {donutData.map((_, idx) => <Cell key={idx} fill={CAT_COLORS[idx % CAT_COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip formatter={v=>formatBRL(v)} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+
+            {/* Execution: Forecast vs Realizado per category */}
+            <div className="card">
+              <div className="card-header"><span className="card-title">Execução por Categoria — {selectedYear}</span></div>
+              <div className="card-body">
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={execData} layout="vertical" margin={{top:4,right:16,left:4,bottom:0}}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false}/>
+                    <XAxis type="number" tickFormatter={v=>fmt(v)} tick={{fontSize:10,fill:'#374151'}} />
+                    <YAxis type="category" dataKey="name" tick={{fontSize:12,fill:'#374151'}} width={72} />
+                    <Tooltip formatter={v=>formatBRL(v)} isAnimationActive={false} />
+                    <Legend wrapperStyle={{fontSize:'0.78rem'}} />
+                    <Bar dataKey="Forecast"  fill={C.forecast} radius={[0,3,3,0]} barSize={14} />
+                    <Bar dataKey="Realizado" fill={C.actual} radius={[0,3,3,0]} barSize={14} />
+                  </BarChart>
+                </ResponsiveContainer>
+                {/* Execution percentages */}
+                <div style={{display:'flex',gap:12,justifyContent:'center',paddingTop:8,flexWrap:'wrap'}}>
+                  {execData.map(d => (
+                    <div key={d.name} style={{textAlign:'center',padding:'6px 14px',borderRadius:'var(--radius-md)',background:parseFloat(d.pct)>100?'#FEF2F2':parseFloat(d.pct)>0?'#F0FDF4':'var(--bg-app)',border:`1px solid ${parseFloat(d.pct)>100?'#FCA5A5':parseFloat(d.pct)>0?'#BBF7D0':'var(--border)'}`}}>
+                      <div style={{fontSize:'0.68rem',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase'}}>{d.name}</div>
+                      <div style={{fontSize:'1rem',fontWeight:700,color:parseFloat(d.pct)>100?'#DC2626':parseFloat(d.pct)>0?'#166534':'var(--text-muted)'}}>{d.pct}%</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Budget vs Forecast comparison */}
+          <div className="card">
+            <div className="card-header"><span className="card-title">Budget vs Forecast por Categoria — {selectedYear}</span></div>
+            <div className="card-body">
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={budgetVsForecast} margin={{top:4,right:16,left:0,bottom:0}}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/>
+                  <XAxis dataKey="name" tick={{fontSize:12,fill:'#374151'}} />
+                  <YAxis tickFormatter={v=>fmt(v)} tick={{fontSize:10,fill:'#374151'}} width={68} />
+                  <Tooltip formatter={v=>formatBRL(v)} isAnimationActive={false} />
+                  <Legend wrapperStyle={{fontSize:'0.78rem'}} />
+                  <Bar dataKey="Budget"   fill={C.budget} radius={[3,3,0,0]} />
+                  <Bar dataKey="Forecast" fill={C.forecast} radius={[3,3,0,0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="card">
-            <div className="card-header"><span className="card-title">S-Curve Acumulado — {selectedYear}</span></div>
-            <div className="card-body">
-              <ResponsiveContainer width="100%" height={260}>
-                <LineChart
-                  data={sCurveData}
-                  margin={{top:4,right:8,left:0,bottom:0}}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/>
-                  <XAxis dataKey="month" tick={{fontSize:11,fill:'#374151'}}/>
-                  <YAxis tickFormatter={v=>fmt(v)} tick={{fontSize:11,fill:'#374151'}} width={72}/>
-                  <Tooltip formatter={v=>formatBRL(v)} labelFormatter={label=>`${label}/${selectedYear}`} contentStyle={{minWidth:200,zIndex:9999}} wrapperStyle={{zIndex:9999}} allowEscapeViewBox={{x:true,y:true}} isAnimationActive={false} />
-                  <Legend wrapperStyle={{fontSize:'0.82rem'}}/>
-                  <Line type="monotone" dataKey="Budget"    stroke={C.budget} strokeWidth={2} dot={false}/>
-                  <Line type="monotone" dataKey="Forecast"  stroke={C.forecast} strokeWidth={2} dot={false}/>
-                  <Line type="monotone" dataKey="Realizado" stroke={C.actual} strokeWidth={2} strokeDasharray="5 3" dot={false} activeDot={{ r: 3 }}/>
-                  <Line type="monotone" dataKey="Meta"      stroke={C.meta} strokeWidth={2} strokeDasharray="8 3" dot={false} activeDot={{ r: 3 }}/>
-                  <Line type="monotone" dataKey="Pool"      stroke={C.pool} strokeWidth={2} strokeDasharray="4 2" dot={false} activeDot={{ r: 3 }}/>
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* ── Chat tab ── */}
       {mainTab==='chat' && <ProjectChat projectId={id}/>}

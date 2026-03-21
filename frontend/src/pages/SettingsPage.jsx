@@ -2,9 +2,75 @@ import { useState, useEffect } from 'react';
 import api from '../utils/api.js';
 import { useToast } from '../components/ui/Toast.jsx';
 
+function CloseYearPanel({ settings, toast }) {
+  const currentYear = new Date().getFullYear();
+  const activeStart = parseInt(settings.active_year_start) || 2026;
+  const yearsToClose = [];
+  for (let y = activeStart - 3; y < activeStart; y++) yearsToClose.push(y);
+  // Also allow closing the previous active year
+  if (!yearsToClose.includes(currentYear - 1)) yearsToClose.push(currentYear - 1);
+
+  const [selectedYear, setSelectedYear] = useState(activeStart - 1);
+  const [closing, setClosing] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const handleClose = async () => {
+    if (!confirm(`Tem certeza que deseja consolidar o ano ${selectedYear}?\n\nTodos os valores mensais serão somados em um único valor consolidado por projeto/categoria/tipo.\n\nOs dados mensais NÃO serão apagados.`))
+      return;
+    setClosing(true);
+    setResult(null);
+    try {
+      const r = await api.post('/forecast/close-year', { year: selectedYear });
+      setResult(r.data);
+      toast(`Ano ${selectedYear} consolidado com sucesso! (${r.data.consolidated} registros)`, 'success');
+    } catch (err) {
+      toast('Erro ao consolidar ano', 'error');
+    } finally { setClosing(false); }
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <select
+          value={selectedYear}
+          onChange={e => { setSelectedYear(parseInt(e.target.value)); setResult(null); }}
+          className="form-select"
+          style={{ width: 'auto', minWidth: 120 }}
+        >
+          {yearsToClose.sort().map(y => (
+            <option key={y} value={y}>{y}</option>
+          ))}
+        </select>
+        <button
+          className="btn btn-primary"
+          onClick={handleClose}
+          disabled={closing}
+          style={{ whiteSpace: 'nowrap' }}
+        >
+          {closing ? 'Consolidando...' : `🔒 Fechar ano ${selectedYear}`}
+        </button>
+      </div>
+      {result && (
+        <div style={{
+          padding: '10px 14px', borderRadius: 'var(--radius-md)',
+          background: '#F0FDF4', border: '1px solid #BBF7D0',
+          fontSize: '0.83rem', color: '#166534',
+        }}>
+          ✓ Ano {result.year} consolidado: {result.consolidated} registros processados.
+        </div>
+      )}
+      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 12, lineHeight: 1.6 }}>
+        O fechamento cria valores consolidados na tabela de anos anteriores. Os dados mensais originais são preservados como histórico.
+        Após consolidar, você pode ajustar o "Ano inicial" acima para refletir o novo período ativo.
+      </p>
+    </div>
+  );
+}
+
 const SECTIONS = [
   { id: 'alerts',  label: '🔔 Alertas',        icon: '🔔' },
   { id: 'colors',  label: '🎨 Cores',           icon: '🎨' },
+  { id: 'period',  label: '📆 Período',         icon: '📆' },
   { id: 'export',  label: '📊 Exportação',      icon: '📊' },
   { id: 'fiscal',  label: '📅 Ano Fiscal',      icon: '📅' },
 ];
@@ -21,6 +87,8 @@ const DEFAULTS = {
   export_include_meta:   'true',
   export_include_pool:   'true',
   fiscal_year_start:     '1',
+  active_year_start:     '2026',
+  active_year_end:       '2031',
 };
 
 const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
@@ -271,6 +339,43 @@ export default function SettingsPage() {
               <button className="btn btn-secondary" onClick={handleReset}>
                 Restaurar cores padrão
               </button>
+            </SectionCard>
+          </>
+        )}
+
+        {/* ── PERÍODO / ANOS ── */}
+        {activeSection === 'period' && (
+          <>
+            <SectionCard
+              title="Anos ativos (detalhamento mensal)"
+              description="Define o intervalo de anos que aparecem no Wizard de Forecast com detalhamento mês a mês. Anos fora desse intervalo são tratados como consolidados (valor único por categoria/tipo)."
+            >
+              <NumberInput
+                label="Ano inicial"
+                description="Primeiro ano disponível no Wizard para preenchimento mensal."
+                value={settings.active_year_start}
+                onChange={v => set('active_year_start', v)}
+                min={2020} max={2040}
+              />
+              <NumberInput
+                label="Ano final"
+                description="Último ano disponível no Wizard para preenchimento mensal."
+                value={settings.active_year_end}
+                onChange={v => set('active_year_end', v)}
+                min={2020} max={2040}
+              />
+              <div style={{ padding: '12px 0', fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                <strong>Anos ativos:</strong> {settings.active_year_start} a {settings.active_year_end} (detalhamento mensal)
+                <br />
+                <strong>Anos anteriores a {settings.active_year_start}:</strong> apenas valores consolidados (um total por categoria)
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              title="Fechamento de ano"
+              description="Consolida automaticamente todos os valores mensais de um ano em um único valor por projeto/categoria/tipo. Isso é útil ao encerrar um exercício — os dados mensais ficam preservados, e o valor consolidado é criado para referência rápida."
+            >
+              <CloseYearPanel settings={settings} toast={toast} />
             </SectionCard>
           </>
         )}
