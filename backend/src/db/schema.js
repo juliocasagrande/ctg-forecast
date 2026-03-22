@@ -192,6 +192,22 @@ export async function initDB() {
       CREATE INDEX IF NOT EXISTS idx_year_consolidated_year ON year_consolidated(project_id, year);
     `);
 
+    // Feedback / suggestions table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS feedback (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        type VARCHAR(20) NOT NULL DEFAULT 'suggestion',
+        subject TEXT NOT NULL,
+        message TEXT NOT NULL,
+        user_name VARCHAR(120),
+        user_email VARCHAR(120),
+        user_role VARCHAR(20),
+        status VARCHAR(20) DEFAULT 'new',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
     console.log('✅ Migrations applied');
   } finally {
     client.release();

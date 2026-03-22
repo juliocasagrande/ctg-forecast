@@ -67,12 +67,104 @@ function CloseYearPanel({ settings, toast }) {
   );
 }
 
+const TYPE_ICONS = { suggestion: '💡', bug: '🐛', usability: '🎯', other: '💬' };
+const TYPE_LABELS_FB = { suggestion: 'Sugestão', bug: 'Problema', usability: 'Usabilidade', other: 'Outro' };
+const TYPE_COLORS_FB = { suggestion: '#0EA5E9', bug: '#DC2626', usability: '#7C3AED', other: '#6B7280' };
+const STATUS_LABELS = { new: 'Novo', read: 'Lido', done: 'Resolvido' };
+
+function FeedbackList({ toast }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('');
+
+  useEffect(() => {
+    api.get('/feedback').then(r => setItems(r.data)).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  const filtered = filter ? items.filter(f => f.type === filter) : items;
+
+  if (loading) return <div className="loading-spinner"><div className="spinner" /></div>;
+
+  return (
+    <div>
+      {/* Stats */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+        <button onClick={() => setFilter('')} style={{
+          padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer',
+          background: !filter ? 'var(--ctg-navy)' : 'var(--bg-app)',
+          color: !filter ? '#fff' : 'var(--text-secondary)',
+          fontSize: '0.78rem', fontWeight: 600, fontFamily: 'var(--font-body)',
+        }}>
+          Todos ({items.length})
+        </button>
+        {Object.entries(TYPE_LABELS_FB).map(([key, label]) => {
+          const count = items.filter(f => f.type === key).length;
+          if (!count) return null;
+          return (
+            <button key={key} onClick={() => setFilter(filter === key ? '' : key)} style={{
+              padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer',
+              background: filter === key ? TYPE_COLORS_FB[key] + '20' : 'var(--bg-app)',
+              color: filter === key ? TYPE_COLORS_FB[key] : 'var(--text-secondary)',
+              fontSize: '0.78rem', fontWeight: 600, fontFamily: 'var(--font-body)',
+            }}>
+              {TYPE_ICONS[key]} {label} ({count})
+            </button>
+          );
+        })}
+      </div>
+
+      {/* List */}
+      {filtered.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: '2rem', marginBottom: 8 }}>📭</div>
+          Nenhum feedback recebido ainda.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {filtered.map(f => (
+            <div key={f.id} style={{
+              background: 'var(--bg-card)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)', padding: '14px 16px',
+              borderLeft: `4px solid ${TYPE_COLORS_FB[f.type] || '#6B7280'}`,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                <span style={{
+                  fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: 10,
+                  background: TYPE_COLORS_FB[f.type] + '18', color: TYPE_COLORS_FB[f.type],
+                }}>
+                  {TYPE_ICONS[f.type]} {TYPE_LABELS_FB[f.type] || f.type}
+                </span>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                  {new Date(f.created_at).toLocaleDateString('pt-BR')} {new Date(f.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+                <span style={{ marginLeft: 'auto', fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                  {f.user_name} ({f.user_role})
+                </span>
+              </div>
+              <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--ctg-navy)', marginBottom: 4 }}>
+                {f.subject}
+              </div>
+              <div style={{ fontSize: '0.83rem', color: 'var(--text-secondary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                {f.message}
+              </div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 6 }}>
+                {f.user_email}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const SECTIONS = [
   { id: 'alerts',  label: '🔔 Alertas',        icon: '🔔' },
   { id: 'colors',  label: '🎨 Cores',           icon: '🎨' },
   { id: 'period',  label: '📆 Período',         icon: '📆' },
   { id: 'export',  label: '📊 Exportação',      icon: '📊' },
   { id: 'fiscal',  label: '📅 Ano Fiscal',      icon: '📅' },
+  { id: 'feedback',label: '💡 Feedbacks',       icon: '💡' },
 ];
 
 const DEFAULTS = {
@@ -415,6 +507,11 @@ export default function SettingsPage() {
               options={MONTHS_PT.map((m, i) => ({ value: String(i + 1), label: m }))}
             />
           </SectionCard>
+        )}
+
+        {/* ── FEEDBACKS ── */}
+        {activeSection === 'feedback' && (
+          <FeedbackList toast={toast} />
         )}
       </div>
 

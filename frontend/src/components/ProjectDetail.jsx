@@ -9,6 +9,7 @@ import ForecastWizard from './ForecastWizard.jsx';
 import ProjectChat from './ProjectChat.jsx';
 import Modal from './ui/Modal.jsx';
 import { useToast } from './ui/Toast.jsx';
+import ChartTooltip from './ui/ChartTooltip.jsx';
 
 const fmt = formatBRLShort;
 
@@ -260,7 +261,7 @@ function ExportModal({ open, onClose, onConfirm, role, isEngenheiro }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">⬇ Exportar Excel</span>
+          <span className="modal-title">📊 Exportar Excel</span>
           <button className="btn btn-ghost btn-icon" onClick={onClose} style={{ color:'rgba(255,255,255,0.7)' }}>✕</button>
         </div>
         <div className="modal-body">
@@ -360,7 +361,7 @@ function ExportModal({ open, onClose, onConfirm, role, isEngenheiro }) {
           <button className="btn btn-export"
             disabled={selTypes.length === 0 || (exportScope==='projeto' && selCats.length === 0)}
             onClick={() => { onConfirm(selCats, selTypes, exportScope); onClose(); }}>
-            ⬇ Exportar
+            📊 Exportar
           </button>
         </div>
       </div>
@@ -622,7 +623,7 @@ export default function ProjectDetail({ onEdit }) {
             )}
             <button className="btn btn-export btn-sm" onClick={() => setExportModal(true)}
               style={{width:'100%',justifyContent:'center'}}>
-              ⬇ Excel
+              📊 Excel
             </button>
             <button className="btn btn-sm" onClick={handleCheckin}
               style={{width:'100%',justifyContent:'center',background:'var(--ctg-blue)',color:'#fff',border:'none'}}>
@@ -765,7 +766,7 @@ export default function ProjectDetail({ onEdit }) {
                     label={{value:'Mensal',angle:-90,position:'insideLeft',offset:10,style:{fontSize:9,fill:'#9CA3AF'}}} />
                   <YAxis yAxisId="acum" orientation="right" tickFormatter={v=>fmt(v)} tick={{fontSize:10,fill:'#6B7280'}} width={68}
                     label={{value:'Acumulado',angle:90,position:'insideRight',offset:10,style:{fontSize:9,fill:'#9CA3AF'}}} />
-                  <Tooltip formatter={v=>formatBRL(v)} labelFormatter={label=>`${label}/${selectedYear}`} isAnimationActive={false} />
+                  <Tooltip content={<ChartTooltip year={selectedYear} />} isAnimationActive={false} wrapperStyle={{zIndex:9999}} allowEscapeViewBox={{x:false,y:true}} />
                   <Legend wrapperStyle={{fontSize:'0.78rem'}} className="project-chart-legend"/>
 
                   {/* Monthly bars */}
@@ -806,7 +807,7 @@ export default function ProjectDetail({ onEdit }) {
                       >
                         {donutData.map((_, idx) => <Cell key={idx} fill={CAT_COLORS[idx % CAT_COLORS.length]} />)}
                       </Pie>
-                      <Tooltip formatter={v=>formatBRL(v)} />
+                      <Tooltip content={<ChartTooltip year={selectedYear} />} isAnimationActive={false} wrapperStyle={{zIndex:9999}} />
                     </PieChart>
                   </ResponsiveContainer>
                 )}
@@ -822,7 +823,7 @@ export default function ProjectDetail({ onEdit }) {
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false}/>
                     <XAxis type="number" tickFormatter={v=>fmt(v)} tick={{fontSize:10,fill:'#374151'}} />
                     <YAxis type="category" dataKey="name" tick={{fontSize:12,fill:'#374151'}} width={72} />
-                    <Tooltip formatter={v=>formatBRL(v)} isAnimationActive={false} />
+                    <Tooltip content={<ChartTooltip year={selectedYear} />} isAnimationActive={false} wrapperStyle={{zIndex:9999}} />
                     <Legend wrapperStyle={{fontSize:'0.78rem'}} className="project-chart-legend" />
                     <Bar dataKey="Forecast"  fill={C.forecast} radius={[0,3,3,0]} barSize={14} />
                     <Bar dataKey="Realizado" fill={C.actual} radius={[0,3,3,0]} barSize={14} />
@@ -850,7 +851,7 @@ export default function ProjectDetail({ onEdit }) {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/>
                   <XAxis dataKey="name" tick={{fontSize:12,fill:'#374151'}} />
                   <YAxis tickFormatter={v=>fmt(v)} tick={{fontSize:10,fill:'#374151'}} width={68} />
-                  <Tooltip formatter={v=>formatBRL(v)} isAnimationActive={false} />
+                  <Tooltip content={<ChartTooltip year={selectedYear} />} isAnimationActive={false} wrapperStyle={{zIndex:9999}} />
                   <Legend wrapperStyle={{fontSize:'0.78rem'}} className="project-chart-legend" />
                   <Bar dataKey="Budget"   fill={C.budget} radius={[3,3,0,0]} />
                   <Bar dataKey="Forecast" fill={C.forecast} radius={[3,3,0,0]} />

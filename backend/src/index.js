@@ -12,6 +12,7 @@ import messagesRouter from './routes/messages.js';
 import exportRouter from './routes/export.js';
 import settingsRouter from './routes/settings.js';
 import reportRouter from './routes/report.js';
+import feedbackRouter from './routes/feedback.js';
 
 dotenv.config();
 
@@ -33,6 +34,7 @@ app.use('/api/forecast', forecastRouter);
 app.use('/api/export', exportRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/report', reportRouter);
+app.use('/api/feedback', feedbackRouter);
 
 app.get('/api/health', (_, res) => res.json({ status: 'ok', version: '2.0.0' }));
 

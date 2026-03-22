@@ -381,7 +381,7 @@ export default function ReportPage() {
     yearStart:   currentYear,
     yearEnd:     currentYear,
     sections:    ['kpis','table','scurve','bars','notes'],
-    detailLevel: 'polo-usina', // 'polo-usina' | 'full'
+    detailLevel: 'full', // 'polo-usina' | 'full'
   });
   const [loading,    setLoading]    = useState(false);
   const [previewSrc, setPreviewSrc] = useState(null);

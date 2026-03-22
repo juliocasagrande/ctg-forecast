@@ -13,6 +13,8 @@ import Profile from './components/Profile.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import PolosPage from './pages/PolosPage.jsx';
 import ReportPage from './pages/ReportPage.jsx';
+import TutorialPage from './pages/TutorialPage.jsx';
+import FeedbackPage from './pages/FeedbackPage.jsx';
 import AdminPanel from './components/admin/AdminPanel.jsx';
 import AlertBell from './components/ui/AlertBell.jsx';
 import api from './utils/api.js';
@@ -366,7 +368,7 @@ function PlanejadorExportModal({ open, onClose }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">⬇ Relatório Geral</span>
+          <span className="modal-title">📊 Relatório Geral</span>
           <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer',
             color:'rgba(255,255,255,0.7)', fontSize:'1.1rem', padding:'0 4px' }}>✕</button>
         </div>
@@ -412,7 +414,7 @@ function PlanejadorExportModal({ open, onClose }) {
           <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
           <button className="btn btn-export" onClick={handleExport}
             disabled={selTypes.length === 0 || exporting}>
-            {exporting ? 'Gerando...' : '⬇ Exportar'}
+            {exporting ? 'Gerando...' : '📊 Exportar'}
           </button>
         </div>
       </div>
@@ -472,13 +474,6 @@ function MobileFilterModal({ open, onClose, period, onPeriod, activePlants, plan
           </div>
         )}
 
-        {isPlanejador && (
-          <button className="btn btn-export" style={{ width:'100%', justifyContent:'center', marginTop:4 }}
-            onClick={() => { onClose(); onOpenExport(); }}>
-            ⬇ Relatório Geral
-          </button>
-        )}
-        
         <button className="btn btn-secondary" style={{ width:'100%', justifyContent:'center', marginTop:8 }}
           onClick={onClose}>
           Fechar
@@ -496,6 +491,8 @@ function getPageMeta(pathname) {
   if (pathname === '/settings') return { title: 'Configurações', sub: null };
   if (pathname === '/polos') return { title: 'Visão Geral Consolidada — CTG Brasil', sub: null };
   if (pathname === '/report') return { title: 'Relatório HTML', sub: 'Configurar e exportar' };
+  if (pathname === '/tutorial') return { title: 'Tutorial', sub: 'Como utilizar o sistema' };
+  if (pathname === '/feedback') return { title: 'Sugestões e Feedback', sub: 'Envie sua contribuição' };
   if (pathname.startsWith('/projects/')) return { title: 'Projetos', sub: null };
   return { title: 'CTG Forecast', sub: null };
 }
@@ -576,21 +573,6 @@ export default function App() {
           <div className="header-controls-desktop">
             {showControls && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                {isPlanejador && (
-                  <button
-                    className="header-export-btn"
-                    onClick={() => setPlanjExportModal(true)}
-                    style={{
-                      padding: '6px 14px', borderRadius: 'var(--radius-sm)',
-                      border: '1.5px solid #15803D', background: '#F0FDF4',
-                      color: '#15803D', fontWeight: 600, fontSize: '0.8rem',
-                      cursor: 'pointer', fontFamily: 'var(--font-body)',
-                      whiteSpace: 'nowrap', transition: 'all 0.15s',
-                    }}
-                  >
-                    ⬇ Relatório Geral
-                  </button>
-                )}
                 <AlertBell />
                 <PlantFilter
                   activePlants={activePlants}
@@ -673,6 +655,8 @@ export default function App() {
             <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
             <Route path="/polos" element={<RequireAuth><PolosPage period={period} /></RequireAuth>} />
             <Route path="/report" element={<RequireAuth><ReportPage /></RequireAuth>} />
+            <Route path="/tutorial" element={<RequireAuth><TutorialPage /></RequireAuth>} />
+            <Route path="/feedback" element={<RequireAuth><FeedbackPage /></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

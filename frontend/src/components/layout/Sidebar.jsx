@@ -264,6 +264,22 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
 
         {/* User footer */}
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', padding: '10px 8px' }}>
+          {/* Help & Feedback — above user info */}
+          <div style={{ display: 'flex', gap: 4, padding: '0 8px 6px', borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: 6 }}>
+            <NavLink to="/tutorial" onClick={onClose}
+              className={({ isActive }) => `nav-item sidebar-footer-item ${isActive ? 'active' : ''}`}
+              style={{ flex: 1, justifyContent: 'center', padding: '6px 0', fontSize: '0.72rem' }}>
+              <Icon name="question-circle" style={{ width: 14, textAlign: 'center' }} />
+              <span>Tutorial</span>
+            </NavLink>
+            <NavLink to="/feedback" onClick={onClose}
+              className={({ isActive }) => `nav-item sidebar-footer-item ${isActive ? 'active' : ''}`}
+              style={{ flex: 1, justifyContent: 'center', padding: '6px 0', fontSize: '0.72rem' }}>
+              <Icon name="lightbulb" style={{ width: 14, textAlign: 'center' }} />
+              <span>Sugestões</span>
+            </NavLink>
+          </div>
+
           {/* Avatar + name row */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', marginBottom: 4 }}>
             <div style={{
