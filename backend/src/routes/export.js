@@ -419,14 +419,22 @@ router.get('/planejador', async (req, res) => {
       : '';
     const projRes = await pool.query(`
       SELECT p.id, p.code, p.name, p.si_value, p.plants,
-        STRING_AGG(DISTINCT u.name, ', ' ORDER BY u.name) AS responsaveis,
-        MAX(fe.updated_at) AS ultima_atualizacao
+        eng_agg.responsaveis,
+        fe_agg.ultima_atualizacao
       FROM projects p
       ${engJoin}
-      LEFT JOIN project_assignments pa ON pa.project_id=p.id
-      LEFT JOIN users u ON u.id=pa.user_id AND u.role='engenheiro'
-      LEFT JOIN forecast_entries fe ON fe.project_id=p.id AND fe.type='Forecast' AND fe.value>0
-      GROUP BY p.id ORDER BY p.code
+      LEFT JOIN (
+        SELECT pa.project_id, STRING_AGG(DISTINCT u.name, ', ' ORDER BY u.name) AS responsaveis
+        FROM project_assignments pa
+        JOIN users u ON u.id = pa.user_id AND u.role = 'engenheiro'
+        GROUP BY pa.project_id
+      ) eng_agg ON eng_agg.project_id = p.id
+      LEFT JOIN (
+        SELECT project_id, MAX(updated_at) AS ultima_atualizacao
+        FROM forecast_entries WHERE type='Forecast' AND value>0
+        GROUP BY project_id
+      ) fe_agg ON fe_agg.project_id = p.id
+      ORDER BY p.code
     `, isEng ? [userId] : []);
     const projects = projRes.rows;
 

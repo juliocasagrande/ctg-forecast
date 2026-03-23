@@ -17,17 +17,29 @@ router.get('/', async (req, res) => {
 
     const query = `
       SELECT p.*,
-        COALESCE(SUM(CASE WHEN fe.type='Budget' THEN fe.value ELSE 0 END),0) AS total_budget,
-        COALESCE(SUM(CASE WHEN fe.type='Forecast' THEN fe.value ELSE 0 END),0) AS total_forecast,
-        COALESCE(SUM(CASE WHEN fe.type='Actual' THEN fe.value ELSE 0 END),0) AS total_actual,
-        COUNT(DISTINCT pa_cnt.user_id) AS engineer_count,
-        COUNT(DISTINCT msg.id) AS message_count
+        COALESCE(fe_agg.total_budget, 0)   AS total_budget,
+        COALESCE(fe_agg.total_forecast, 0) AS total_forecast,
+        COALESCE(fe_agg.total_actual, 0)   AS total_actual,
+        COALESCE(pa_agg.engineer_count, 0) AS engineer_count,
+        COALESCE(msg_agg.message_count, 0) AS message_count
       FROM projects p
       ${engJoin}
-      LEFT JOIN forecast_entries fe ON fe.project_id = p.id
-      LEFT JOIN project_assignments pa_cnt ON pa_cnt.project_id = p.id
-      LEFT JOIN messages msg ON msg.project_id = p.id
-      GROUP BY p.id ORDER BY p.code`;
+      LEFT JOIN (
+        SELECT project_id,
+          SUM(CASE WHEN type='Budget'   THEN value ELSE 0 END) AS total_budget,
+          SUM(CASE WHEN type='Forecast' THEN value ELSE 0 END) AS total_forecast,
+          SUM(CASE WHEN type='Actual'   THEN value ELSE 0 END) AS total_actual
+        FROM forecast_entries GROUP BY project_id
+      ) fe_agg ON fe_agg.project_id = p.id
+      LEFT JOIN (
+        SELECT project_id, COUNT(DISTINCT user_id) AS engineer_count
+        FROM project_assignments GROUP BY project_id
+      ) pa_agg ON pa_agg.project_id = p.id
+      LEFT JOIN (
+        SELECT project_id, COUNT(*) AS message_count
+        FROM messages GROUP BY project_id
+      ) msg_agg ON msg_agg.project_id = p.id
+      ORDER BY p.code`;
 
     const r = await pool.query(query, params);
     res.json(r.rows);

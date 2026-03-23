@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ComposedChart, BarChart, Bar, LineChart, Line, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import api from '../utils/api.js';
@@ -56,17 +57,44 @@ function SIWarning({ forecastTotal, actualTotal, consolidatedActual, siValue }) 
 // ── Read-only table (gestor) ──────────────────────────────────────────────────
 function ReadOnlyTable({ entries, year, siValue, consolidatedActual }) {
   const C = useTypeColors();
-  const get = (cat, type, month) =>
-    parseFloat(entries.find(e=>e.category===cat&&e.type===type&&parseInt(e.year)===year&&parseInt(e.month)===month)?.value||0);
+  const [tooltip, setTooltip] = useState(null); // { x, y, comments: [{user, type, text}] }
+  const getEntry = (cat, type, month) =>
+    entries.find(e=>e.category===cat&&e.type===type&&parseInt(e.year)===year&&parseInt(e.month)===month);
+  const get = (cat, type, month) => parseFloat(getEntry(cat,type,month)?.value||0);
+  const getComment = (cat, type, month) => getEntry(cat,type,month)?.comment || '';
+  const getCommentUser = (cat, type, month) => getEntry(cat,type,month)?.updated_by_name || '';
   const rowTotal = (cat, type) => Array.from({length:12},(_,i)=>i+1).reduce((s,m)=>s+get(cat,type,m),0);
   const colTotal = (month, type) => CATEGORIES.reduce((s,c)=>s+get(c,type,month),0);
   const grandTotal = (type) => Array.from({length:12},(_,i)=>i+1).reduce((s,m)=>s+colTotal(m,type),0);
   const f = v => v ? v.toLocaleString('pt-BR',{maximumFractionDigits:0}) : '—';
+
+  // Gather all comments for a given cat+month across all types
+  const getAllComments = (cat, month) => {
+    const TYPE_LABELS = { Budget:'Budget', Forecast:'Forecast', Actual:'Realizado', Meta:'Meta', Pool:'Pool' };
+    return ['Budget','Forecast','Actual','Meta','Pool']
+      .map(type => {
+        const comment = getComment(cat, type, month);
+        if (!comment) return null;
+        return { user: getCommentUser(cat, type, month), type: TYPE_LABELS[type], text: comment };
+      })
+      .filter(Boolean);
+  };
+
+  const handleCellEnter = (e, cat, month) => {
+    const comments = getAllComments(cat, month);
+    if (comments.length === 0) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    setTooltip({ x: rect.left + rect.width / 2, y: rect.top - 8, comments, month, cat });
+  };
+  const handleCellLeave = () => setTooltip(null);
+
+  const TYPE_COLORS = { Budget: C.budget, Forecast: C.forecast, Realizado: C.actual, Meta: C.meta, Pool: C.pool };
+
   return (
     <>
       <SIWarning forecastTotal={grandTotal('Forecast')} actualTotal={grandTotal('Actual')}
         consolidatedActual={consolidatedActual} siValue={siValue} />
-      <div className="table-wrapper">
+      <div className="table-wrapper" style={{position:'relative'}}>
         <table className="forecast-table">
           <thead>
             <tr><th className="col-label">Categoria / Tipo</th>{MONTHS_PT.map(m=><th key={m}>{m}</th>)}<th>Total</th></tr>
@@ -78,7 +106,16 @@ function ReadOnlyTable({ entries, year, siValue, consolidatedActual }) {
                 {['Budget','Forecast','Actual','Meta','Pool'].map(type=>(
                   <tr key={`${cat}-${type}`} className={`row-${type === 'Actual' ? 'actual' : type === 'Meta' ? 'meta' : type === 'Pool' ? 'pool' : type.toLowerCase()}`}>
                     <td className="td-label">{type}</td>
-                    {Array.from({length:12},(_,i)=>i+1).map(m=><td key={m}>{f(get(cat,type,m))}</td>)}
+                    {Array.from({length:12},(_,i)=>i+1).map(m=>{
+                      const hasComment = !!getComment(cat,type,m);
+                      return (
+                        <td key={m}
+                          onMouseEnter={e => handleCellEnter(e, cat, m)}
+                          onMouseLeave={handleCellLeave}
+                          style={hasComment ? { cursor:'help' } : undefined}
+                        >{f(get(cat,type,m))}</td>
+                      );
+                    })}
                     <td style={{fontWeight:700}}>{f(rowTotal(cat,type))}</td>
                   </tr>
                 ))}
@@ -109,7 +146,174 @@ function ReadOnlyTable({ entries, year, siValue, consolidatedActual }) {
           </tbody>
         </table>
       </div>
+
+      {/* Floating comment tooltip — portaled to body to escape overflow */}
+      {tooltip && createPortal(
+        <div style={{
+          position:'fixed', left: tooltip.x, top: tooltip.y,
+          transform:'translate(-50%, -100%)',
+          background:'var(--bg-card)', border:'1px solid var(--border)',
+          borderRadius:8, padding:'10px 14px', boxShadow:'0 4px 20px rgba(0,0,0,0.12)',
+          fontSize:'0.8rem', minWidth:220, maxWidth:340, zIndex:9999, pointerEvents:'none',
+        }}>
+          <div style={{ fontWeight:700, marginBottom:6, color:'var(--ctg-navy)', fontSize:'0.82rem',
+            borderBottom:'1px solid var(--border)', paddingBottom:5 }}>
+            {MONTHS_PT[tooltip.month - 1]} — {tooltip.cat}
+          </div>
+          {tooltip.comments.map((c, i) => (
+            <div key={i} style={{ marginBottom: i < tooltip.comments.length - 1 ? 8 : 0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
+                <span style={{ width:8, height:8, borderRadius:2, background: TYPE_COLORS[c.type] || 'var(--ctg-blue)', flexShrink:0 }}/>
+                <span style={{ fontSize:'0.7rem', fontWeight:700, color: TYPE_COLORS[c.type] || 'var(--text-primary)' }}>{c.type}</span>
+                {c.user && <span style={{ fontSize:'0.65rem', color:'var(--text-muted)', fontWeight:500 }}>— {c.user}</span>}
+              </div>
+              <div style={{ fontSize:'0.76rem', color:'var(--text-secondary)', paddingLeft:14, lineHeight:1.4 }}>
+                {c.text}
+              </div>
+            </div>
+          ))}
+        </div>,
+        document.body
+      )}
     </>
+  );
+}
+
+// ── Consolidated Year Table — summary view for past years ────────────────────
+function ConsolidatedYearTable({ yearConsData, year }) {
+  const C = useTypeColors();
+  const TYPES = ['Budget','Forecast','Actual','Meta','Pool'];
+  const TYPE_LABELS = { Budget:'Budget', Forecast:'Forecast', Actual:'Realizado', Meta:'Meta', Pool:'Pool' };
+  const getVal = (type, cat) => {
+    const row = yearConsData.find(e => parseInt(e.year) === year && e.type === type && e.category === cat);
+    return parseFloat(row?.value) || 0;
+  };
+  const catTotal = (type) => CATEGORIES.reduce((s,c) => s + getVal(type, c), 0);
+  const f = v => v ? v.toLocaleString('pt-BR',{maximumFractionDigits:0}) : '—';
+  const hasAny = yearConsData.some(e => parseInt(e.year) === year && parseFloat(e.value) > 0);
+
+  if (!hasAny) {
+    return (
+      <div style={{textAlign:'center',padding:'40px 20px',color:'var(--text-muted)',fontSize:'0.9rem'}}>
+        <p style={{marginBottom:8,fontSize:'1.1rem'}}>📦</p>
+        <p>Nenhum valor consolidado registrado para {year}.</p>
+        <p style={{fontSize:'0.8rem',marginTop:4}}>Acesse a aba <strong>Forecast</strong> → <strong>{year} consolidado</strong> para inserir os valores.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="table-wrapper">
+      <table className="forecast-table">
+        <thead>
+          <tr>
+            <th className="col-label">Tipo</th>
+            {CATEGORIES.map(c => <th key={c}>{c}</th>)}
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {TYPES.map(type => {
+            const colors = {
+              Budget: C.budget, Forecast: C.forecast, Actual: C.actual, Meta: C.meta, Pool: C.pool,
+            };
+            const color = colors[type];
+            return (
+              <tr key={type} style={{background: color + '15'}}>
+                <td className="td-label" style={{fontWeight:700, color, borderLeft:`4px solid ${color}`}}>
+                  {TYPE_LABELS[type]}
+                </td>
+                {CATEGORIES.map(cat => (
+                  <td key={cat} style={{fontWeight:600, color, textAlign:'right', fontVariantNumeric:'tabular-nums'}}>
+                    {f(getVal(type, cat))}
+                  </td>
+                ))}
+                <td style={{fontWeight:800, color, textAlign:'right', fontVariantNumeric:'tabular-nums', fontSize:'0.88rem'}}>
+                  {f(catTotal(type))}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── Consolidated Year Charts — bar comparison for past years ─────────────────
+function ConsolidatedYearCharts({ yearConsData, year }) {
+  const C = useTypeColors();
+  const getVal = (type, cat) => {
+    const row = yearConsData.find(e => parseInt(e.year) === year && e.type === type && e.category === cat);
+    return parseFloat(row?.value) || 0;
+  };
+  const hasAny = yearConsData.some(e => parseInt(e.year) === year && parseFloat(e.value) > 0);
+
+  if (!hasAny) {
+    return (
+      <div style={{textAlign:'center',padding:'40px 20px',color:'var(--text-muted)',fontSize:'0.9rem'}}>
+        Nenhum dado consolidado para {year}.
+      </div>
+    );
+  }
+
+  const barData = CATEGORIES.map(cat => ({
+    name: cat,
+    Budget:    getVal('Budget', cat),
+    Forecast:  getVal('Forecast', cat),
+    Realizado: getVal('Actual', cat),
+    Meta:      getVal('Meta', cat),
+    Pool:      getVal('Pool', cat),
+  }));
+
+  const totalData = [{
+    name: 'Total',
+    Budget:    CATEGORIES.reduce((s,c) => s + getVal('Budget',c), 0),
+    Forecast:  CATEGORIES.reduce((s,c) => s + getVal('Forecast',c), 0),
+    Realizado: CATEGORIES.reduce((s,c) => s + getVal('Actual',c), 0),
+    Meta:      CATEGORIES.reduce((s,c) => s + getVal('Meta',c), 0),
+    Pool:      CATEGORIES.reduce((s,c) => s + getVal('Pool',c), 0),
+  }];
+
+  return (
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+      <div className="card">
+        <div className="card-header"><span className="card-title">Por Categoria — {year}</span></div>
+        <div className="card-body">
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={barData} margin={{top:8,right:8,left:0,bottom:4}}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/>
+              <XAxis dataKey="name" tick={{fontSize:12}}/>
+              <YAxis tickFormatter={fmt} tick={{fontSize:11}} width={72}/>
+              <Tooltip formatter={v=>formatBRL(v)}/>
+              <Legend/>
+              <Bar dataKey="Budget"    fill={C.budget}   radius={[3,3,0,0]}/>
+              <Bar dataKey="Forecast"  fill={C.forecast} radius={[3,3,0,0]}/>
+              <Bar dataKey="Realizado" fill={C.actual}   radius={[3,3,0,0]}/>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+      <div className="card">
+        <div className="card-header"><span className="card-title">Total Consolidado — {year}</span></div>
+        <div className="card-body">
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={totalData} margin={{top:8,right:8,left:0,bottom:4}}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/>
+              <XAxis dataKey="name" tick={{fontSize:12}}/>
+              <YAxis tickFormatter={fmt} tick={{fontSize:11}} width={72}/>
+              <Tooltip formatter={v=>formatBRL(v)}/>
+              <Legend/>
+              <Bar dataKey="Budget"    fill={C.budget}   radius={[3,3,0,0]}/>
+              <Bar dataKey="Forecast"  fill={C.forecast} radius={[3,3,0,0]}/>
+              <Bar dataKey="Realizado" fill={C.actual}   radius={[3,3,0,0]}/>
+              <Bar dataKey="Meta"      fill={C.meta}     radius={[3,3,0,0]}/>
+              <Bar dataKey="Pool"      fill={C.pool}     radius={[3,3,0,0]}/>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -392,6 +596,7 @@ export default function ProjectDetail({ onEdit }) {
   const [engineers,    setEngineers]  = useState([]);
   const [allEngineers, setAllEngineers] = useState([]);
   const [consolidated, setConsolidated] = useState({ value:0 });
+  const [yearConsData, setYearConsData] = useState([]); // year_consolidated entries
   const [unreadCount,  setUnreadCount] = useState(0);
   const [loading,      setLoading]    = useState(true);
 
@@ -422,18 +627,20 @@ export default function ProjectDetail({ onEdit }) {
 
   const fetchProject = useCallback(async () => {
     try {
-      const [pRes, eRes, nRes, engRes, consRes] = await Promise.all([
+      const [pRes, eRes, nRes, engRes, consRes, ycRes] = await Promise.all([
         api.get(`/projects/${id}`),
         api.get(`/forecast/project/${id}`),
         api.get(`/forecast/project/${id}/notes`),
         api.get(`/projects/${id}/engineers`),
         api.get(`/forecast/project/${id}/actual-consolidated`),
+        api.get(`/forecast/project/${id}/year-consolidated`),
       ]);
       setProject(pRes.data);
       setEntries(eRes.data);
       setNotes(nRes.data);
       setEngineers(engRes.data);
       setConsolidated(consRes.data || { value:0 });
+      setYearConsData(ycRes.data || []);
     } catch { navigate('/'); }
     finally { setLoading(false); }
   }, [id]);
@@ -469,7 +676,20 @@ export default function ProjectDetail({ onEdit }) {
   const siValue       = parseFloat(project?.si_value)||0;
   const overSI        = siValue && (totalForecast + totalActual + parseFloat(consolidated.value||0)) > siValue;
 
-  const totalFor = (type) => entries.filter(e=>e.type===type&&parseInt(e.year)===selectedYear).reduce((s,e)=>s+parseFloat(e.value||0),0);
+  const totalFor = (type) => {
+    if (isConsolidatedYear) return getConsTotal(type === 'Actual' ? 'Actual' : type);
+    return entries.filter(e=>e.type===type&&parseInt(e.year)===selectedYear).reduce((s,e)=>s+parseFloat(e.value||0),0);
+  };
+
+  // Consolidated year detection
+  const isConsolidatedYear = yearConfig.consolidatedYears.includes(selectedYear);
+
+  // Helper to get consolidated values for current selectedYear
+  const getConsVal = (type, cat) => {
+    const row = yearConsData.find(e => parseInt(e.year) === selectedYear && e.type === type && e.category === cat);
+    return parseFloat(row?.value) || 0;
+  };
+  const getConsTotal = (type) => CATEGORIES.reduce((s, c) => s + getConsVal(type, c), 0);
 
   const chartData = useMemo(() => MONTHS_PT.map((m,i) => {
     const get = type => entries.filter(e=>parseInt(e.year)===selectedYear&&parseInt(e.month)===i+1&&e.type===type).reduce((s,e)=>s+parseFloat(e.value||0),0);
@@ -654,11 +874,14 @@ export default function ProjectDetail({ onEdit }) {
               <div style={{display:'flex',justifyContent:'flex-end',marginBottom:12}}>
                 <div className="year-selector">
                   <button className="year-btn" onClick={()=>setSelectedYear(y=>y-1)}>‹</button>
-                  <span className="year-display">{selectedYear}</span>
+                  <span className="year-display">{selectedYear}{isConsolidatedYear ? ' (consolidado)' : ''}</span>
                   <button className="year-btn" onClick={()=>setSelectedYear(y=>y+1)}>›</button>
                 </div>
               </div>
-              <ReadOnlyTable entries={entries} year={selectedYear} siValue={project.si_value} consolidatedActual={consolidated.value}/>
+              {isConsolidatedYear
+                ? <ConsolidatedYearTable yearConsData={yearConsData} year={selectedYear}/>
+                : <ReadOnlyTable entries={entries} year={selectedYear} siValue={project.si_value} consolidatedActual={consolidated.value}/>
+              }
             </>
           )}
 
@@ -700,16 +923,31 @@ export default function ProjectDetail({ onEdit }) {
           <div style={{display:'flex',justifyContent:'flex-end',marginBottom:12}}>
             <div className="year-selector">
               <button className="year-btn" onClick={()=>setSelectedYear(y=>y-1)}>‹</button>
-              <span className="year-display">{selectedYear}</span>
+              <span className="year-display">{selectedYear}{isConsolidatedYear ? ' (consolidado)' : ''}</span>
               <button className="year-btn" onClick={()=>setSelectedYear(y=>y+1)}>›</button>
             </div>
           </div>
-          <ReadOnlyTable entries={entries} year={selectedYear} siValue={project.si_value} consolidatedActual={consolidated.value}/>
+          {isConsolidatedYear
+            ? <ConsolidatedYearTable yearConsData={yearConsData} year={selectedYear}/>
+            : <ReadOnlyTable entries={entries} year={selectedYear} siValue={project.si_value} consolidatedActual={consolidated.value}/>
+          }
         </>
       )}
 
       {/* ── Charts tab ── */}
-      {mainTab==='charts' && (() => {
+      {mainTab==='charts' && isConsolidatedYear && (
+        <>
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:12}}>
+            <div className="year-selector">
+              <button className="year-btn" onClick={()=>setSelectedYear(y=>y-1)}>‹</button>
+              <span className="year-display">{selectedYear} (consolidado)</span>
+              <button className="year-btn" onClick={()=>setSelectedYear(y=>y+1)}>›</button>
+            </div>
+          </div>
+          <ConsolidatedYearCharts yearConsData={yearConsData} year={selectedYear}/>
+        </>
+      )}
+      {mainTab==='charts' && !isConsolidatedYear && (() => {
         // Donut data: total by category for Forecast
         const donutData = CATEGORIES.map(cat => ({
           name: cat,

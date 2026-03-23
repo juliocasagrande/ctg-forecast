@@ -9,10 +9,13 @@ router.use(requireAuth);
 router.get('/project/:projectId', requireProjectAccess, async (req, res) => {
   try {
     const { year } = req.query;
-    let q = 'SELECT * FROM forecast_entries WHERE project_id=$1';
+    let q = `SELECT fe.*, u.name AS updated_by_name
+      FROM forecast_entries fe
+      LEFT JOIN users u ON u.id = fe.updated_by
+      WHERE fe.project_id=$1`;
     const p = [req.params.projectId];
-    if (year) { q += ' AND year=$2'; p.push(parseInt(year)); }
-    q += ' ORDER BY category, type, year, month';
+    if (year) { q += ' AND fe.year=$2'; p.push(parseInt(year)); }
+    q += ' ORDER BY fe.category, fe.type, fe.year, fe.month';
     res.json((await pool.query(q, p)).rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -411,26 +414,34 @@ router.get('/polo-summary', async (req, res) => {
     const joinClause = isEng
       ? `INNER JOIN project_assignments pa ON pa.project_id=p.id AND pa.user_id=$3`
       : '';
-    const mineParam = isEng ? '$3' : '$3';
-    const mineJoin = `LEFT JOIN project_assignments pa_mine ON pa_mine.project_id=p.id AND pa_mine.user_id=${mineParam}`;
     const params = [yrStart, yrEnd, userId];
 
     const r = await pool.query(`
       SELECT
         p.id, p.code, p.name, p.plants,
-        COALESCE(SUM(CASE WHEN fe.type='Budget'   AND fe.year BETWEEN $1 AND $2 THEN fe.value ELSE 0 END),0) AS budget,
-        COALESCE(SUM(CASE WHEN fe.type='Forecast' AND fe.year BETWEEN $1 AND $2 THEN fe.value ELSE 0 END),0) AS forecast,
-        COALESCE(SUM(CASE WHEN fe.type='Actual'   AND fe.year BETWEEN $1 AND $2 THEN fe.value ELSE 0 END),0) AS actual,
-        COALESCE(SUM(CASE WHEN fe.type='Pool'     AND fe.year BETWEEN $1 AND $2 THEN fe.value ELSE 0 END),0) AS pool,
-        STRING_AGG(DISTINCT u.name, ', ' ORDER BY u.name) AS engineers,
-        BOOL_OR(pa_mine.user_id IS NOT NULL) AS is_mine
+        COALESCE(fe_agg.budget, 0)   AS budget,
+        COALESCE(fe_agg.forecast, 0) AS forecast,
+        COALESCE(fe_agg.actual, 0)   AS actual,
+        COALESCE(fe_agg.pool, 0)     AS pool,
+        eng_agg.engineers,
+        (pa_mine.user_id IS NOT NULL) AS is_mine
       FROM projects p
       ${joinClause}
-      LEFT JOIN forecast_entries fe ON fe.project_id=p.id
-      LEFT JOIN project_assignments pa2 ON pa2.project_id=p.id
-      LEFT JOIN users u ON u.id=pa2.user_id AND u.role='engenheiro'
-      ${mineJoin}
-      GROUP BY p.id
+      LEFT JOIN (
+        SELECT project_id,
+          SUM(CASE WHEN type='Budget'   AND year BETWEEN $1 AND $2 THEN value ELSE 0 END) AS budget,
+          SUM(CASE WHEN type='Forecast' AND year BETWEEN $1 AND $2 THEN value ELSE 0 END) AS forecast,
+          SUM(CASE WHEN type='Actual'   AND year BETWEEN $1 AND $2 THEN value ELSE 0 END) AS actual,
+          SUM(CASE WHEN type='Pool'     AND year BETWEEN $1 AND $2 THEN value ELSE 0 END) AS pool
+        FROM forecast_entries GROUP BY project_id
+      ) fe_agg ON fe_agg.project_id = p.id
+      LEFT JOIN (
+        SELECT pa2.project_id, STRING_AGG(DISTINCT u.name, ', ' ORDER BY u.name) AS engineers
+        FROM project_assignments pa2
+        JOIN users u ON u.id = pa2.user_id AND u.role = 'engenheiro'
+        GROUP BY pa2.project_id
+      ) eng_agg ON eng_agg.project_id = p.id
+      LEFT JOIN project_assignments pa_mine ON pa_mine.project_id = p.id AND pa_mine.user_id = $3
       ORDER BY p.code
     `, params);
 

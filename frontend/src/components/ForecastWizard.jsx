@@ -120,6 +120,59 @@ function MonthRow({ month, year, value, comment, onChange, refValue, refLabel, t
 }
 
 // ── Detail table (shown in bottom "Tabela" tab) ───────────────────────────────
+// ── Consolidated input row — local state keeps focus & accepts comma ──────────
+function ConsInputRow({ cat, value, theme, onChange }) {
+  const [localVal, setLocalVal] = useState(value ? fmtInput(value) : '');
+  const didMount = useRef(false);
+
+  useEffect(() => {
+    if (!didMount.current) { didMount.current = true; return; }
+    // Only sync from parent when the parsed numeric value actually changed
+    const parentNum = value || 0;
+    const localNum  = parseInput(localVal);
+    if (Math.abs(parentNum - localNum) > 0.001) {
+      setLocalVal(parentNum ? fmtInput(parentNum) : '');
+    }
+  }, [value]);
+
+  const commit = () => {
+    const parsed = parseInput(localVal);
+    setLocalVal(parsed ? fmtInput(parsed) : '');
+    onChange(parsed);
+  };
+
+  return (
+    <div style={{
+      display: 'grid', gridTemplateColumns: '140px 1fr', gap: 12,
+      padding: '10px 16px', borderBottom: `1px solid ${theme.border}`,
+      alignItems: 'center',
+    }}>
+      <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+        {cat}
+      </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, flexShrink: 0 }}>R$</span>
+        <input
+          type="text"
+          inputMode="decimal"
+          placeholder="0,00"
+          value={localVal}
+          onChange={e => setLocalVal(e.target.value)}
+          onFocus={e => e.target.select()}
+          onBlur={commit}
+          onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
+          style={{
+            flex: 1, border: `1.5px solid ${theme.border}`, borderRadius: 'var(--radius-sm)',
+            padding: '8px 12px', fontFamily: 'var(--font-body)', fontSize: '0.9rem',
+            textAlign: 'right', outline: 'none', background: 'rgba(255,255,255,0.8)', color: theme.text,
+            fontWeight: 600, fontVariantNumeric: 'tabular-nums',
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 // ── SI Warning ────────────────────────────────────────────────────────────────
 function SIWarning({ si, totalForecast, totalActual, consolidatedActual }) {
   const over = totalForecast + totalActual + parseFloat(consolidatedActual||0) - si;
@@ -238,13 +291,67 @@ export default function ForecastWizard({
 
   const hasData = (type) => CATEGORIES.some(cat => Array.from({length:12},(_,i)=>i+1).some(m => getValue(type,cat,m)>0));
 
+  // ── Consolidated helpers (available for both WrapperWithTypeBar and consolidated view) ──
+  const consGetVal = (type, cat) => consData[`${type}|${cat}`] ?? 0;
+  const consTotal  = (type) => CATEGORIES.reduce((s, c) => s + consGetVal(type, c), 0);
+
+  const handleConsChange = (type, cat, val) => {
+    setConsData(prev => ({ ...prev, [`${type}|${cat}`]: val }));
+    setSaved(false);
+  };
+
+  const handleConsSave = async () => {
+    setSaving(true);
+    try {
+      const bulk = [];
+      types.forEach(type => CATEGORIES.forEach(cat => {
+        bulk.push({ year: parseInt(year), category: cat, type, value: consGetVal(type, cat) });
+      }));
+      await api.post(`/forecast/project/${projectId}/year-consolidated/bulk`, { entries: bulk });
+      setSaved(true);
+      toast(`Valores consolidados de ${year} salvos!`, 'success');
+      onSaved?.();
+    } catch { toast('Erro ao salvar.', 'error'); }
+    finally { setSaving(false); }
+  };
+
+  // Determine which save to use
+  const activeSave = isConsolidatedYear ? handleConsSave : handleSave;
+
+  // ── Block browser navigation while saving ──────────────────────────────────
+  useEffect(() => {
+    if (!saving) return;
+    const handler = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [saving]);
+
   // ── WRAPPER com barra de tipo no topo ─────────────────────────────────────
   const WrapperWithTypeBar = ({ children }) => (
     <div style={{
       width:'100%', background:theme.light, border:`1.5px solid ${theme.border}`,
       borderRadius:'var(--radius-lg)', overflow:'hidden',
       transition:'background 0.2s, border-color 0.2s',
+      position:'relative',
     }}>
+      {/* Saving overlay */}
+      {saving && (
+        <div style={{
+          position:'absolute', inset:0, zIndex:50,
+          background:'rgba(255,255,255,0.7)', backdropFilter:'blur(2px)',
+          display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+          gap:12,
+        }}>
+          <div style={{
+            width:40, height:40, border:`3.5px solid ${theme.border}`,
+            borderTopColor: theme.color,
+            borderRadius:'50%',
+            animation:'spin 0.8s linear infinite',
+          }}/>
+          <span style={{ fontSize:'0.9rem', fontWeight:700, color: theme.color }}>Salvando dados…</span>
+          <span style={{ fontSize:'0.72rem', color:'var(--text-muted)' }}>Não feche a página.</span>
+        </div>
+      )}
       {/* Row 1: Year tabs */}
       <div className="wizard-year-row" style={{
         display:'flex', alignItems:'stretch',
@@ -319,15 +426,15 @@ export default function ForecastWizard({
             {CATEGORIES.map(cat => (
               <div key={cat} style={{textAlign:'center'}}>
                 <div className="wizard-cat-label" style={{fontSize:'0.56rem',fontWeight:700,color:'rgba(255,255,255,0.55)',textTransform:'uppercase',letterSpacing:'0.08em'}}>{cat}</div>
-                <div className="wizard-cat-value" style={{fontFamily:'var(--font-display)',fontSize:'0.9rem',color:'#fff'}}>{formatBRL(getCatTotal(activeType,cat))}</div>
+                <div className="wizard-cat-value" style={{fontFamily:'var(--font-display)',fontSize:'0.9rem',color:'#fff'}}>{formatBRL(isConsolidatedYear ? consGetVal(activeType,cat) : getCatTotal(activeType,cat))}</div>
               </div>
             ))}
             <div style={{borderLeft:'1px solid rgba(255,255,255,0.25)',paddingLeft:16,textAlign:'center'}}>
               <div style={{fontSize:'0.56rem',fontWeight:700,color:'rgba(255,255,255,0.55)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Total</div>
-              <div style={{fontFamily:'var(--font-display)',fontSize:'1rem',color:'#fff',fontWeight:600}}>{formatBRL(getTypeTotal(activeType))}</div>
+              <div style={{fontFamily:'var(--font-display)',fontSize:'1rem',color:'#fff',fontWeight:600}}>{formatBRL(isConsolidatedYear ? consTotal(activeType) : getTypeTotal(activeType))}</div>
             </div>
           </div>
-          <button onClick={handleSave} disabled={saving} style={{
+          <button onClick={activeSave} disabled={saving} style={{
             padding:'0 22px', alignSelf:'stretch', border:'none', cursor:saving?'wait':'pointer',
             background:saved?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.12)',
             color:'#fff', fontWeight:700, fontSize:'0.82rem', fontFamily:'var(--font-body)',
@@ -348,29 +455,6 @@ export default function ForecastWizard({
 
   // ── CONSOLIDATED YEAR: simplified single-value-per-category view ──────────
   if (isConsolidatedYear) {
-    const consGetVal = (type, cat) => consData[`${type}|${cat}`] ?? 0;
-    const consTotal  = (type) => CATEGORIES.reduce((s, c) => s + consGetVal(type, c), 0);
-
-    const handleConsChange = (type, cat, val) => {
-      setConsData(prev => ({ ...prev, [`${type}|${cat}`]: val }));
-      setSaved(false);
-    };
-
-    const handleConsSave = async () => {
-      setSaving(true);
-      try {
-        const bulk = [];
-        types.forEach(type => CATEGORIES.forEach(cat => {
-          bulk.push({ year: parseInt(year), category: cat, type, value: consGetVal(type, cat) });
-        }));
-        await api.post(`/forecast/project/${projectId}/year-consolidated/bulk`, { entries: bulk });
-        setSaved(true);
-        toast(`Valores consolidados de ${year} salvos!`, 'success');
-        onSaved?.();
-      } catch { toast('Erro ao salvar.', 'error'); }
-      finally { setSaving(false); }
-    };
-
     return (
       <WrapperWithTypeBar>
         <div style={{ padding: '24px 28px', background: 'rgba(255,255,255,0.65)' }}>
@@ -392,11 +476,12 @@ export default function ForecastWizard({
             </div>
           </div>
 
-          {/* Table per type */}
-          {types.map(t => {
+          {/* Only show the active type */}
+          {(() => {
+            const t = activeType;
             const th = TYPE_THEME[t];
             return (
-              <div key={t} style={{ marginBottom: 20, borderRadius: 'var(--radius-md)', border: `1.5px solid ${th.border}`, overflow: 'hidden' }}>
+              <div style={{ marginBottom: 20, borderRadius: 'var(--radius-md)', border: `1.5px solid ${th.border}`, overflow: 'hidden' }}>
                 <div style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   padding: '10px 16px', background: `linear-gradient(135deg, ${th.color}EE, ${th.color}BB)`,
@@ -408,58 +493,19 @@ export default function ForecastWizard({
                   </span>
                 </div>
                 <div style={{ background: th.light }}>
-                  {CATEGORIES.map(cat => {
-                    const val = consGetVal(t, cat);
-                    return (
-                      <div key={cat} style={{
-                        display: 'grid', gridTemplateColumns: '140px 1fr', gap: 12,
-                        padding: '10px 16px', borderBottom: `1px solid ${th.border}`,
-                        alignItems: 'center',
-                      }}>
-                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                          {CAT_ICONS[cat]} {cat}
-                        </span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, flexShrink: 0 }}>R$</span>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="0,00"
-                            value={val ? val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
-                            onChange={e => {
-                              const raw = e.target.value;
-                              handleConsChange(t, cat, raw);
-                            }}
-                            onBlur={e => {
-                              const parsed = parseFloat(String(e.target.value).replace(/\./g, '').replace(',', '.')) || 0;
-                              handleConsChange(t, cat, parsed);
-                            }}
-                            style={{
-                              flex: 1, border: `1.5px solid ${th.border}`, borderRadius: 'var(--radius-sm)',
-                              padding: '8px 12px', fontFamily: 'var(--font-body)', fontSize: '0.9rem',
-                              outline: 'none', background: 'rgba(255,255,255,0.8)', color: th.text,
-                              fontWeight: 600,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {CATEGORIES.map(cat => (
+                    <ConsInputRow
+                      key={`${t}|${cat}`}
+                      cat={cat}
+                      value={consGetVal(t, cat)}
+                      theme={th}
+                      onChange={(val) => handleConsChange(t, cat, val)}
+                    />
+                  ))}
                 </div>
               </div>
             );
-          })}
-
-          {/* Save button */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-            <button onClick={handleConsSave} disabled={saving} style={{
-              padding: '12px 32px', borderRadius: 'var(--radius-sm)', border: 'none',
-              background: theme.color, cursor: saving ? 'wait' : 'pointer',
-              color: '#fff', fontWeight: 700, fontSize: '0.95rem', fontFamily: 'var(--font-body)',
-            }}>
-              {saving ? 'Salvando...' : saved ? '✓ Consolidado salvo!' : '💾 Salvar Consolidado'}
-            </button>
-          </div>
+          })()}
         </div>
       </WrapperWithTypeBar>
     );
@@ -508,7 +554,7 @@ export default function ForecastWizard({
                     border: `2px solid ${total>0 ? theme.color : theme.border}`,
                     minWidth:140, textAlign:'center', transition:'all 0.15s',
                   }}>
-                    <div style={{fontSize:'0.65rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:theme.text,marginBottom:4}}>{CAT_ICONS[cat]} {cat}</div>
+                    <div style={{fontSize:'0.65rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:theme.text,marginBottom:4}}>{cat}</div>
                     <div style={{fontFamily:'var(--font-display)',fontSize:'1.1rem',color:total>0?theme.color:'var(--text-muted)'}}>{total>0?formatBRL(total):'—'}</div>
                   </div>
                 );
@@ -749,7 +795,7 @@ export default function ForecastWizard({
               {CATEGORIES.map(cat=>(
                 <tr key={cat} onClick={()=>setStep(CATEGORIES.indexOf(cat)+1)} style={{cursor:'pointer',background:theme.light}}>
                   <td style={{padding:'7px 14px',fontWeight:600,color:theme.text,borderBottom:`1px solid ${theme.border}`,borderLeft:`3px solid ${theme.color}`}}>
-                    {CAT_ICONS[cat]} {cat}
+                    {cat}
                   </td>
                   {Array.from({length:12},(_,i)=>i+1).map(m=>(
                     <td key={m} style={{padding:'7px 6px',textAlign:'right',fontVariantNumeric:'tabular-nums',color:getValue(activeType,cat,m)>0?theme.text:'var(--text-muted)',borderBottom:`1px solid ${theme.border}`,fontSize:'0.78rem'}}>

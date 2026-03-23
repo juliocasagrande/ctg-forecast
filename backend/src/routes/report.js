@@ -53,18 +53,31 @@ router.get('/data', async (req, res) => {
     // All projects with totals
     const projRes = await pool.query(`
       SELECT p.id, p.code, p.name, p.plants, p.si_value, p.pool_value,
-        COALESCE(SUM(CASE WHEN fe.type='Budget'   AND fe.year BETWEEN $1 AND $2 THEN fe.value END),0) AS budget,
-        COALESCE(SUM(CASE WHEN fe.type='Forecast' AND fe.year BETWEEN $1 AND $2 THEN fe.value END),0) AS forecast,
-        COALESCE(SUM(CASE WHEN fe.type='Actual'   AND fe.year BETWEEN $1 AND $2 THEN fe.value END),0) AS actual,
-        COALESCE(SUM(CASE WHEN fe.type='Pool'     AND fe.year BETWEEN $1 AND $2 THEN fe.value END),0) AS pool,
-        COALESCE(SUM(CASE WHEN fe.type='Meta'     AND fe.year BETWEEN $1 AND $2 THEN fe.value END),0) AS meta,
-        STRING_AGG(DISTINCT u.name, ', ' ORDER BY u.name) AS engineers,
-        MAX(fe.updated_at) AS last_update
+        COALESCE(fe_agg.budget, 0)   AS budget,
+        COALESCE(fe_agg.forecast, 0) AS forecast,
+        COALESCE(fe_agg.actual, 0)   AS actual,
+        COALESCE(fe_agg.pool, 0)     AS pool,
+        COALESCE(fe_agg.meta, 0)     AS meta,
+        eng_agg.engineers,
+        fe_agg.last_update
       FROM projects p ${engJoin}
-      LEFT JOIN forecast_entries fe ON fe.project_id=p.id
-      LEFT JOIN project_assignments pa ON pa.project_id=p.id
-      LEFT JOIN users u ON u.id=pa.user_id AND u.role='engenheiro'
-      GROUP BY p.id ORDER BY p.code
+      LEFT JOIN (
+        SELECT project_id,
+          SUM(CASE WHEN type='Budget'   AND year BETWEEN $1 AND $2 THEN value ELSE 0 END) AS budget,
+          SUM(CASE WHEN type='Forecast' AND year BETWEEN $1 AND $2 THEN value ELSE 0 END) AS forecast,
+          SUM(CASE WHEN type='Actual'   AND year BETWEEN $1 AND $2 THEN value ELSE 0 END) AS actual,
+          SUM(CASE WHEN type='Pool'     AND year BETWEEN $1 AND $2 THEN value ELSE 0 END) AS pool,
+          SUM(CASE WHEN type='Meta'     AND year BETWEEN $1 AND $2 THEN value ELSE 0 END) AS meta,
+          MAX(updated_at) AS last_update
+        FROM forecast_entries GROUP BY project_id
+      ) fe_agg ON fe_agg.project_id = p.id
+      LEFT JOIN (
+        SELECT pa.project_id, STRING_AGG(DISTINCT u.name, ', ' ORDER BY u.name) AS engineers
+        FROM project_assignments pa
+        JOIN users u ON u.id = pa.user_id AND u.role = 'engenheiro'
+        GROUP BY pa.project_id
+      ) eng_agg ON eng_agg.project_id = p.id
+      ORDER BY p.code
     `, [yrS, yrE]);
 
     // Monthly data for each project (for charts)
