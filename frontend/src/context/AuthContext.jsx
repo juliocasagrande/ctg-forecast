@@ -8,28 +8,38 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Try to restore session via httpOnly cookie (server reads it automatically)
+    // Also supports legacy localStorage token during migration period
     const token = localStorage.getItem('ctg_token');
     if (token) {
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      api.get('/auth/me')
-        .then(r => setUser(r.data))
-        .catch(() => { localStorage.removeItem('ctg_token'); })
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
     }
+
+    api.get('/auth/me')
+      .then(r => setUser(r.data))
+      .catch(() => {
+        localStorage.removeItem('ctg_token');
+        delete api.defaults.headers.common['Authorization'];
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const login = useCallback(async (email, password) => {
     const r = await api.post('/auth/login', { email, password });
     const { token, user } = r.data;
+
+    // Store token in localStorage as fallback during migration period
+    // Primary auth is via httpOnly cookie set by the server
     localStorage.setItem('ctg_token', token);
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     setUser(user);
     return user;
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try {
+      await api.post('/auth/logout'); // server clears httpOnly cookie
+    } catch { /* ignore */ }
     localStorage.removeItem('ctg_token');
     delete api.defaults.headers.common['Authorization'];
     setUser(null);

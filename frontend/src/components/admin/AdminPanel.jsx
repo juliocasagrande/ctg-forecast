@@ -109,7 +109,7 @@ export default function AdminPanel() {
   };
 
   const handleResetPassword = async () => {
-    if (!newPassword || newPassword.length < 6) return toast('Mínimo 6 caracteres', 'error');
+    if (!newPassword || newPassword.length < 8) return toast('Mínimo 8 caracteres', 'error');
     try {
       await api.post(`/users/${resetModal.id}/reset-password`, { new_password: newPassword });
       toast('Senha redefinida', 'success');

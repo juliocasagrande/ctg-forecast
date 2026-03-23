@@ -163,6 +163,16 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
             </NavLink>
           </div>
 
+          {/* Feedback Inbox — only for developer */}
+          {user?.email === 'julio.casagrande@ctgbr.com.br' && (
+            <NavLink to="/feedback/inbox" onClick={onClose}
+              className={({ isActive }) => `nav-item sidebar-footer-item ${isActive ? 'active' : ''}`}
+              style={{ padding: '6px 8px', fontSize: '0.72rem', marginBottom: 4 }}>
+              <Icon name="inbox" style={{ width: 14, textAlign: 'center' }} />
+              <span>Inbox de Feedback</span>
+            </NavLink>
+          )}
+
           {/* Avatar + name row */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', marginBottom: 4 }}>
             <div style={{
@@ -184,7 +194,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
           </div>
 
           {/* Nav items — one per line */}
-          {isPlanejador && (
+          {(isPlanejador || isGestor) && (
             <NavLink to="/settings" onClick={onClose}
               className={({ isActive }) => `nav-item sidebar-footer-item ${isActive ? 'active' : ''}`}>
               <Icon name="gear" style={{ width: 16, textAlign: 'center' }} />

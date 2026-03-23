@@ -2,22 +2,24 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
-  headers: { 'Content-Type': 'application/json' }
+  headers: { 'Content-Type': 'application/json' },
+  withCredentials: true, // send httpOnly cookies with every request
 });
 
-// Auto-set token on every request if present
+// Auto-set token from localStorage as fallback (migration period)
+// Primary auth is via httpOnly cookie (sent automatically with withCredentials: true)
 api.interceptors.request.use(config => {
   const token = localStorage.getItem('ctg_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// Redirect to login on 401
+// Redirect to login on 401, clean up localStorage
 api.interceptors.response.use(
   r => r,
   err => {
     if (err.response?.status === 401) {
-      localStorage.removeItem('ctg_token');
+      localStorage.removeItem('ctg_token'); // clean up legacy token
       window.location.href = '/login';
     }
     return Promise.reject(err);

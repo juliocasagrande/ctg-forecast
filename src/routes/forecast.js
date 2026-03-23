@@ -504,14 +504,10 @@ router.get('/project/:projectId/year-consolidated', requireProjectAccess, async 
 // ── Year Consolidated: Upsert single value ───────────────────────────────────
 router.post('/project/:projectId/year-consolidated', requireProjectAccess, async (req, res) => {
   const { role, id: userId } = req.user;
-  const { year, category, type, value, comment } = req.body;
-  // Engenheiros can only save Forecast and Actual consolidated
-  const ENGENHEIRO_CONS_TYPES = ['Forecast', 'Actual'];
-  if (role === 'engenheiro' && !ENGENHEIRO_CONS_TYPES.includes(type))
-    return res.status(403).json({ error: 'Engenheiros só podem editar Forecast e Realizado consolidado' });
-  if (!['gestor', 'planejador', 'admin', 'engenheiro'].includes(role))
-    return res.status(403).json({ error: 'Sem permissão para editar valores consolidados' });
+  if (!['gestor', 'planejador', 'admin'].includes(role))
+    return res.status(403).json({ error: 'Apenas planejadores podem editar valores consolidados' });
   try {
+    const { year, category, type, value, comment } = req.body;
     const r = await pool.query(`
       INSERT INTO year_consolidated (project_id, year, category, type, value, comment, consolidated_by, consolidated_at)
       VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
@@ -527,17 +523,13 @@ router.post('/project/:projectId/year-consolidated', requireProjectAccess, async
 // ── Year Consolidated: Bulk upsert ───────────────────────────────────────────
 router.post('/project/:projectId/year-consolidated/bulk', requireProjectAccess, async (req, res) => {
   const { role, id: userId } = req.user;
-  // Engenheiros can only save Forecast and Actual consolidated
-  const ENGENHEIRO_CONS_TYPES = ['Forecast', 'Actual'];
-  if (!['gestor', 'planejador', 'admin', 'engenheiro'].includes(role))
-    return res.status(403).json({ error: 'Sem permissão para editar valores consolidados' });
+  if (!['gestor', 'planejador', 'admin'].includes(role))
+    return res.status(403).json({ error: 'Apenas planejadores podem editar valores consolidados' });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const { entries } = req.body;
     for (const e of entries) {
-      // Skip types the engenheiro can't edit
-      if (role === 'engenheiro' && !ENGENHEIRO_CONS_TYPES.includes(e.type)) continue;
       await client.query(`
         INSERT INTO year_consolidated (project_id, year, category, type, value, comment, consolidated_by, consolidated_at)
         VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())

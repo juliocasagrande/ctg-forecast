@@ -30,7 +30,14 @@ const FORECAST_TABS = {
     { id: 'Forecast', label: 'Forecast'  },
     { id: 'Actual',   label: 'Realizado' },
   ],
-  gestor: [],
+  gestor: [
+    { id: 'Budget',              label: 'Budget'             },
+    { id: 'Forecast',            label: 'Forecast'           },
+    { id: 'Actual',              label: 'Realizado'          },
+    { id: 'ActualConsolidated',  label: 'Realizado Anterior' },
+    { id: 'Pool',                label: 'Pool'               },
+    { id: 'Meta',                label: 'Meta'               },
+  ],
 };
 
 function Avatar({ name, initials, role, size=32 }) {
@@ -121,7 +128,7 @@ function ReadOnlyTable({ entries, year, siValue, consolidatedActual }) {
                 ))}
               </Fragment>
             ))}
-            <tr className="cat-header-row"><td colSpan={14}>TOTAL GERAL</td></tr>
+            <tr className="cat-header-row total-geral"><td colSpan={14}>TOTAL GERAL</td></tr>
             {['Budget','Forecast','Actual','Meta','Pool'].map(type=>{
               const th = {
                 Budget:  { row:C.budget+'22', midBg:C.budget+'66', text:C.budget, border:C.budget },
@@ -445,7 +452,7 @@ const MAIN_TABS = [
 const EXPORT_CATEGORIES = ['Viagens', 'Contratos', 'POs'];
 const EXPORT_TYPES_BY_ROLE = {
   engenheiro: ['Forecast', 'Actual'],
-  gestor:     ['Budget', 'Forecast', 'Actual'],
+  gestor:     ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'],
   planejador: ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'],
   admin:      ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'],
 };
@@ -670,15 +677,35 @@ export default function ProjectDetail({ onEdit }) {
     }
   };
 
-  // Totals for SI warning
-  const totalForecast = entries.filter(e=>e.type==='Forecast').reduce((s,e)=>s+parseFloat(e.value||0),0);
-  const totalActual   = entries.filter(e=>e.type==='Actual').reduce((s,e)=>s+parseFloat(e.value||0),0);
+  // Totals for SI warning (includes consolidated years)
+  const totalForecast = entries.filter(e=>e.type==='Forecast').reduce((s,e)=>s+parseFloat(e.value||0),0)
+    + (yearConsData || []).filter(e=>e.type==='Forecast'
+      && !new Set(entries.filter(x=>x.type==='Forecast'&&parseFloat(x.value||0)>0).map(x=>parseInt(x.year))).has(parseInt(e.year)))
+      .reduce((s,e)=>s+parseFloat(e.value||0),0);
+  const totalActual = entries.filter(e=>e.type==='Actual').reduce((s,e)=>s+parseFloat(e.value||0),0)
+    + (yearConsData || []).filter(e=>e.type==='Actual'
+      && !new Set(entries.filter(x=>x.type==='Actual'&&parseFloat(x.value||0)>0).map(x=>parseInt(x.year))).has(parseInt(e.year)))
+      .reduce((s,e)=>s+parseFloat(e.value||0),0);
   const siValue       = parseFloat(project?.si_value)||0;
   const overSI        = siValue && (totalForecast + totalActual + parseFloat(consolidated.value||0)) > siValue;
 
   const totalFor = (type) => {
     if (isConsolidatedYear) return getConsTotal(type === 'Actual' ? 'Actual' : type);
     return entries.filter(e=>e.type===type&&parseInt(e.year)===selectedYear).reduce((s,e)=>s+parseFloat(e.value||0),0);
+  };
+
+  // Total across ALL years (for header cards — no year filter)
+  // Includes both forecast_entries AND year_consolidated data
+  const totalAllFor = (type) => {
+    // Sum from monthly entries (forecast_entries)
+    const fromEntries = entries.filter(e=>e.type===type).reduce((s,e)=>s+parseFloat(e.value||0),0);
+    // Sum from consolidated years (year_consolidated)
+    // Only add consolidated years that DON'T overlap with entry years
+    const entryYears = new Set(entries.filter(e=>e.type===type && parseFloat(e.value||0)>0).map(e=>parseInt(e.year)));
+    const fromConsolidated = (yearConsData || [])
+      .filter(e => e.type === type && !entryYears.has(parseInt(e.year)))
+      .reduce((s,e) => s + parseFloat(e.value||0), 0);
+    return fromEntries + fromConsolidated;
   };
 
   // Consolidated year detection
@@ -749,9 +776,9 @@ export default function ProjectDetail({ onEdit }) {
       const url = isGeral
         ? `${base}/export/planejador${qs}`
         : `${base}/export/project/${id}${qs}`;
-      const res   = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
+      const fetchOpts = { credentials: 'include' };
+      if (token) fetchOpts.headers = { 'Authorization': `Bearer ${token}` };
+      const res   = await fetch(url, fetchOpts);
       if (!res.ok) throw new Error('Erro ao gerar arquivo');
       const blob     = await res.blob();
       const filename = isGeral
@@ -776,9 +803,11 @@ export default function ProjectDetail({ onEdit }) {
   // Determine type tabs for current role
   const roleForecastTabs = isPlanejador
     ? FORECAST_TABS.planejador
-    : isEngenheiro
-      ? FORECAST_TABS.engenheiro
-      : FORECAST_TABS.gestor;
+    : isGestor
+      ? FORECAST_TABS.gestor
+      : isEngenheiro
+        ? FORECAST_TABS.engenheiro
+        : FORECAST_TABS.gestor;
 
   return (
     <div>
@@ -813,15 +842,15 @@ export default function ProjectDetail({ onEdit }) {
           {/* Totals — 4 cards side by side, filling full height */}
           <div className="project-detail-totals" style={{display:'flex',flexDirection:'row',gap:6,flexShrink:0,alignSelf:'stretch'}}>
             {[
-              {label:'Budget',   v:totalFor('Budget'),   cls:'budget'},
-              {label:'Forecast', v:totalFor('Forecast'), cls:'forecast'},
-              {label:'Realizado',v:totalFor('Actual'),   cls:'actual'},
-              {label:'SI', v:project.si_value, cls: overSI ? 'actual' : '', border: overSI ? '1.5px solid #FCA5A5' : 'none'},
+              {label:'Budget',   v:totalAllFor('Budget'),   cls:'budget'},
+              {label:'Forecast', v:totalAllFor('Forecast'), cls:'forecast'},
+              {label:'Realizado',v:totalAllFor('Actual'),   cls:'actual'},
+              {label:'SI', v:project.si_value, cls: overSI ? 'actual' : ''},
             ].map(s=>(
               <div key={s.label} style={{
                 padding:'0 14px',
                 background:s.cls?`var(--${s.cls}-bg)`:'var(--bg-app)',
-                border:s.border||`1px solid ${s.cls?`var(--${s.cls}-border)`:'var(--border)'}`,
+                border:`1px solid ${s.cls?`var(--${s.cls}-border)`:'var(--border)'}`,
                 borderRadius:'var(--radius-md)',
                 minWidth:90,
                 display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',

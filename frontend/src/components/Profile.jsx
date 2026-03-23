@@ -31,7 +31,7 @@ export default function Profile() {
 
   const handleChangePassword = async () => {
     if (pwForm.new_password !== pwForm.confirm) return toast('As senhas não coincidem', 'error');
-    if (pwForm.new_password.length < 6) return toast('Mínimo 6 caracteres', 'error');
+    if (pwForm.new_password.length < 8) return toast('Mínimo 8 caracteres', 'error');
     setChangingPw(true);
     try {
       await api.post('/auth/change-password', { current_password: pwForm.current_password, new_password: pwForm.new_password });

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 const RULES = [
-  { id: 'length',    label: 'Mínimo 6 caracteres',    test: pw => pw.length >= 6 },
+  { id: 'length',    label: 'Mínimo 8 caracteres',    test: pw => pw.length >= 8 },
   { id: 'uppercase', label: 'Uma letra maiúscula',    test: pw => /[A-Z]/.test(pw) },
   { id: 'lowercase', label: 'Uma letra minúscula',    test: pw => /[a-z]/.test(pw) },
   { id: 'number',    label: 'Um número',              test: pw => /[0-9]/.test(pw) },

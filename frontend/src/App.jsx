@@ -15,6 +15,7 @@ import PolosPage from './pages/PolosPage.jsx';
 import ReportPage from './pages/ReportPage.jsx';
 import TutorialPage from './pages/TutorialPage.jsx';
 import FeedbackPage from './pages/FeedbackPage.jsx';
+import FeedbackInbox from './pages/FeedbackInbox.jsx';
 import AdminPanel from './components/admin/AdminPanel.jsx';
 import AlertBell from './components/ui/AlertBell.jsx';
 import api from './utils/api.js';
@@ -348,9 +349,9 @@ function PlanejadorExportModal({ open, onClose }) {
       const base   = import.meta.env.VITE_API_URL || '/api';
       const params = new URLSearchParams();
       selTypes.forEach(t => params.append('types', t));
-      const res = await fetch(`${base}/export/planejador?${params.toString()}`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
+      const fetchOpts = { credentials: 'include' };
+      if (token) fetchOpts.headers = { 'Authorization': `Bearer ${token}` };
+      const res = await fetch(`${base}/export/planejador?${params.toString()}`, fetchOpts);
       if (!res.ok) throw new Error();
       const blob = await res.blob();
       const link = document.createElement('a');
@@ -493,6 +494,7 @@ function getPageMeta(pathname) {
   if (pathname === '/report') return { title: 'Relatório HTML', sub: 'Configurar e exportar' };
   if (pathname === '/tutorial') return { title: 'Tutorial', sub: 'Como utilizar o sistema' };
   if (pathname === '/feedback') return { title: 'Sugestões e Feedback', sub: 'Envie sua contribuição' };
+  if (pathname === '/feedback/inbox') return { title: 'Inbox de Feedback', sub: 'Mensagens dos usuários do sistema' };
   if (pathname.startsWith('/projects/')) return { title: 'Projetos', sub: null };
   return { title: 'CTG Forecast', sub: null };
 }
@@ -505,7 +507,7 @@ export default function App() {
   const [projects, setProjects]             = useState([]);
   const [projectFormOpen, setProjectFormOpen] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
-  const [period, setPeriod]                 = useState({ start: new Date().getFullYear(), end: new Date().getFullYear() });
+  const [period, setPeriod]                 = useState({ start: 2025, end: 2027 });
   const [filterModalOpen,   setFilterModalOpen]   = useState(false);
   const [planjExportModal, setPlanjExportModal] = useState(false);
   const [plantFilter, setPlantFilter]       = useState([]);
@@ -657,6 +659,7 @@ export default function App() {
             <Route path="/report" element={<RequireAuth><ReportPage /></RequireAuth>} />
             <Route path="/tutorial" element={<RequireAuth><TutorialPage /></RequireAuth>} />
             <Route path="/feedback" element={<RequireAuth><FeedbackPage /></RequireAuth>} />
+            <Route path="/feedback/inbox" element={<RequireAuth><FeedbackInbox /></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

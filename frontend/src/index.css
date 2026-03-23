@@ -104,7 +104,8 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
 .row-meta td.td-label{background:#F5F3FF;}
 .row-pool td{background:#F0F9FF;color:#0369A1;}
 .row-pool td.td-label{background:#F0F9FF;}
-.cat-header-row td{background:var(--ctg-light)!important;color:var(--ctg-navy)!important;font-weight:700;font-size:0.76rem;text-transform:uppercase;letter-spacing:0.05em;padding:7px 9px;border-top:2px solid var(--ctg-blue);}
+.cat-header-row td{background:var(--ctg-light)!important;color:var(--ctg-navy)!important;font-weight:700;font-size:0.76rem;text-transform:uppercase;letter-spacing:0.05em;padding:7px 9px;border-top:2px solid var(--ctg-blue);text-align:left;}
+.cat-header-row.total-geral td{text-align:right;}
 .total-row td{background:var(--ctg-navy)!important;color:#fff!important;font-weight:700;}
 
 /* ─── PROJECT GRID ─── */
