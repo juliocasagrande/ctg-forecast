@@ -30,7 +30,9 @@ router.get('/', async (req, res) => {
         COALESCE(fe_agg.total_forecast, 0) + COALESCE(yc_agg.cons_forecast, 0) AS total_forecast,
         COALESCE(fe_agg.total_actual, 0) + COALESCE(yc_agg.cons_actual, 0)   AS total_actual,
         COALESCE(pa_agg.engineer_count, 0) AS engineer_count,
-        COALESCE(msg_agg.message_count, 0) AS message_count
+        COALESCE(msg_agg.message_count, 0) AS message_count,
+        eng_agg.engineer_names,
+        eng_agg.engineer_initials
       FROM projects p
       ${engJoin}
       LEFT JOIN (
@@ -50,6 +52,14 @@ router.get('/', async (req, res) => {
         SELECT project_id, COUNT(DISTINCT user_id) AS engineer_count
         FROM project_assignments GROUP BY project_id
       ) pa_agg ON pa_agg.project_id = p.id
+      LEFT JOIN (
+        SELECT pa2.project_id,
+          STRING_AGG(DISTINCT u2.name, ', ' ORDER BY u2.name) AS engineer_names,
+          STRING_AGG(DISTINCT u2.avatar_initials, ', ' ORDER BY u2.avatar_initials) AS engineer_initials
+        FROM project_assignments pa2
+        JOIN users u2 ON u2.id = pa2.user_id AND u2.role = 'engenheiro'
+        GROUP BY pa2.project_id
+      ) eng_agg ON eng_agg.project_id = p.id
       LEFT JOIN (
         SELECT project_id, COUNT(*) AS message_count
         FROM messages GROUP BY project_id

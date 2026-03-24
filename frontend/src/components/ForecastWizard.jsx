@@ -61,35 +61,38 @@ function MonthRow({ month, year, value, comment, onChange, refValue, refLabel, t
   const commitVal = () => { const p = parseInput(localVal); setLocalVal(fmtInput(p)); onChange(month, p, localCmt); };
   const commitCmt = () => onChange(month, parseInput(localVal), localCmt);
 
-  // Filter other comments that actually have content
   const visibleOtherComments = (otherComments || []).filter(c => c.comment && c.comment.trim());
 
   return (
-    <div style={{
+    <div className="wz-month-row" style={{
       display:'flex', flexDirection:'column',
       borderBottom:`1px solid ${theme.border}`,
       background: isCurrent ? theme.row : 'transparent',
     }}>
-      <div style={{
-        display:'grid', gridTemplateColumns:'140px 1fr 1fr', gap:12,
-        padding:'10px 20px',
+      {/* Main row — responsive: 3-col on desktop, stacked on mobile */}
+      <div className="wz-month-grid" style={{
+        display:'grid', gridTemplateColumns:'110px 1fr 1fr', gap:12,
+        padding:'10px 16px',
       }}>
-        <div style={{display:'flex',alignItems:'center',gap:6}}>
-          <span style={{fontSize:'0.86rem',fontWeight:600,color:'var(--text-primary)'}}>{MONTHS_FULL_PT[month-1]}</span>
+        {/* Month label */}
+        <div style={{display:'flex',alignItems:'center',gap:6, minWidth:0}}>
+          <span style={{fontSize:'0.84rem',fontWeight:600,color:'var(--text-primary)'}}>{MONTHS_FULL_PT[month-1]}</span>
           {isCurrent && (
-            <span style={{fontSize:'0.58rem',fontWeight:700,background:theme.color,color:'#fff',padding:'1px 5px',borderRadius:8}}>Atual</span>
+            <span style={{fontSize:'0.55rem',fontWeight:700,background:theme.color,color:'#fff',padding:'1px 5px',borderRadius:8,flexShrink:0}}>Atual</span>
           )}
         </div>
-        <div style={{display:'flex',flexDirection:'column',gap:3}}>
+        {/* Value input */}
+        <div style={{display:'flex',flexDirection:'column',gap:3, minWidth:0}}>
           <div style={{display:'flex',alignItems:'center',gap:6}}>
             <span style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:600,flexShrink:0}}>R$</span>
             <input
               style={{
-                flex:1,border:`1.5px solid ${isOver?'#FCA5A5':isUnder?'#BBF7D0':'var(--border-strong)'}`,
+                flex:1, minWidth:0, border:`1.5px solid ${isOver?'#FCA5A5':isUnder?'#BBF7D0':'var(--border-strong)'}`,
                 borderRadius:'var(--radius-sm)',padding:'7px 10px',
                 fontFamily:'var(--font-body)',fontSize:'0.9rem',
                 textAlign:'right',outline:'none',fontVariantNumeric:'tabular-nums',
                 background:isOver?'#FEF2F2':'transparent',transition:'border-color 0.15s',
+                boxSizing:'border-box',
               }}
               type="text" inputMode="decimal" placeholder="0,00"
               value={localVal}
@@ -99,40 +102,44 @@ function MonthRow({ month, year, value, comment, onChange, refValue, refLabel, t
               onKeyDown={e => { if (e.key==='Enter') e.target.blur(); }}
             />
             {diff != null && Math.abs(diff) > 0.01 && (
-              <span style={{fontSize:'0.68rem',fontWeight:700,flexShrink:0,color:isOver?'#DC2626':'#166534'}}>
+              <span style={{fontSize:'0.65rem',fontWeight:700,flexShrink:0,color:isOver?'#DC2626':'#166534', whiteSpace:'nowrap'}}>
                 {isOver?'▲':'▼'} {formatBRL(Math.abs(diff))}
               </span>
             )}
           </div>
           {refValue != null && (
-            <div style={{fontSize:'0.62rem',color:'var(--text-muted)',textAlign:'right',paddingRight:4}}>
+            <div style={{fontSize:'0.6rem',color:'var(--text-muted)',textAlign:'right',paddingRight:4}}>
               {refLabel}: {refValue===0?'—':formatBRL(refValue)}
             </div>
           )}
         </div>
+        {/* Comment input */}
         <input
+          className="wz-month-comment"
           style={{
-            width:'100%',border:`1.5px solid ${theme.border}`,borderRadius:'var(--radius-sm)',
+            width:'100%', minWidth:0, border:`1.5px solid ${theme.border}`,borderRadius:'var(--radius-sm)',
             padding:'7px 10px',fontFamily:'var(--font-body)',fontSize:'0.82rem',
             outline:'none',background:'transparent',color:'var(--text-secondary)',
+            boxSizing:'border-box',
           }}
-          type="text" placeholder="Observação (opcional)..."
+          type="text" placeholder="Observação..."
           value={localCmt}
           onChange={e => setLocalCmt(e.target.value)}
           onBlur={commitCmt}
           onKeyDown={e => { if (e.key==='Enter') e.target.blur(); }}
         />
       </div>
-      {/* Other users' comments for this same month/category (read-only) */}
+      {/* Other users' comments */}
       {visibleOtherComments.length > 0 && (
-        <div style={{ padding:'0 20px 8px', paddingLeft:172, display:'flex', flexDirection:'column', gap:3 }}>
+        <div className="wz-other-comments" style={{ padding:'0 16px 8px', paddingLeft:138, display:'flex', flexDirection:'column', gap:3 }}>
           {visibleOtherComments.map((c, i) => (
             <div key={i} style={{
               display:'flex', alignItems:'baseline', gap:6,
-              fontSize:'0.72rem', color:'var(--text-muted)', lineHeight:1.4,
+              fontSize:'0.7rem', color:'var(--text-muted)', lineHeight:1.4,
+              flexWrap:'wrap',
             }}>
               <span style={{
-                fontSize:'0.6rem', fontWeight:700, textTransform:'uppercase',
+                fontSize:'0.58rem', fontWeight:700, textTransform:'uppercase',
                 letterSpacing:'0.04em', color: c.typeColor || '#6B7280',
                 background: (c.typeColor || '#6B7280') + '18',
                 padding:'1px 5px', borderRadius:4, flexShrink:0, whiteSpace:'nowrap',
@@ -143,7 +150,7 @@ function MonthRow({ month, year, value, comment, onChange, refValue, refLabel, t
                 "{c.comment}"
               </span>
               {c.updatedBy && (
-                <span style={{ fontSize:'0.6rem', color:'var(--text-muted)', flexShrink:0, whiteSpace:'nowrap' }}>
+                <span style={{ fontSize:'0.58rem', color:'var(--text-muted)', flexShrink:0, whiteSpace:'nowrap' }}>
                   — {c.updatedBy}
                 </span>
               )}
@@ -775,7 +782,7 @@ export default function ForecastWizard({
 
         {/* Month rows header */}
         <div style={{
-          display:'grid',gridTemplateColumns:'140px 1fr 1fr',gap:12,padding:'8px 20px',
+          display:'grid',gridTemplateColumns:'110px 1fr 1fr',gap:12,padding:'8px 16px',
           background:`${theme.color}12`,borderBottom:`1px solid ${theme.border}`,
           fontSize:'0.68rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:theme.color,
         }}>

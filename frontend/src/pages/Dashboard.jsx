@@ -8,6 +8,8 @@ import {
 } from 'recharts';
 import api from '../utils/api.js';
 import { useTypeColors } from '../context/SettingsContext.jsx';
+import { useRole } from '../context/AuthContext.jsx';
+import { EngineerBadges } from '../components/ui/EngineerBadge.jsx';
 import { formatBRL, formatBRLShort, MONTHS_PT } from '../utils/format.js';
 
 const fmt = formatBRLShort;
@@ -114,6 +116,8 @@ function UpdateBadge({ dateStr }) {
 
 export default function Dashboard({ period, plantFilter = [] }) {
   const C = useTypeColors();
+  const { isEngenheiro } = useRole();
+  const showEngCol = !isEngenheiro; // show engineer column for managers
   const [dashData,     setDashData]     = useState([]);
   const [allSummaries, setAllSummaries] = useState([]);
   const [loading,      setLoading]      = useState(true);
@@ -319,10 +323,10 @@ export default function Dashboard({ period, plantFilter = [] }) {
           <table className="dash-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
             <thead>
               <tr>
-                {['Código','Projeto','Usinas','Budget','Forecast','Realizado','% Exec.','SI','Atualizado',''].map(h => (
+                {['Código','Projeto','Usinas',...(showEngCol ? ['Eng.'] : []),'Budget','Forecast','Realizado','% Exec.','SI','Atualizado',''].map(h => (
                   <th key={h} style={{
                     background: 'var(--ctg-navy)', color: '#fff', padding: '8px 14px',
-                    textAlign: ['Código','Projeto','Usinas','Atualizado'].includes(h) ? 'left' : h === '' ? 'center' : 'right',
+                    textAlign: ['Código','Projeto','Usinas','Atualizado','Eng.'].includes(h) ? 'left' : h === '' ? 'center' : 'right',
                     fontWeight: 700, fontSize: '0.72rem', whiteSpace: 'nowrap',
                     letterSpacing: '0.04em', textTransform: 'uppercase',
                     position: 'sticky', top: 0, zIndex: 1,
@@ -332,7 +336,7 @@ export default function Dashboard({ period, plantFilter = [] }) {
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={10} style={{ textAlign: 'center', padding: 30, color: 'var(--text-secondary)' }}>Nenhum projeto</td></tr>
+                <tr><td colSpan={showEngCol ? 11 : 10} style={{ textAlign: 'center', padding: 30, color: 'var(--text-secondary)' }}>Nenhum projeto</td></tr>
               ) : filtered.map((p, i) => {
                 const f    = parseFloat(p.forecast) || 0;
                 const a    = parseFloat(p.actual)   || 0;
@@ -353,6 +357,11 @@ export default function Dashboard({ period, plantFilter = [] }) {
                         ))}
                       </div>
                     </td>
+                    {showEngCol && (
+                      <td style={{ padding: '8px 10px' }}>
+                        <EngineerBadges engineers={p.engineers} engineerInitials={p.engineer_initials} size={26} />
+                      </td>
+                    )}
                     <td style={{ padding: '8px 14px', textAlign: 'right', color: C.budget, fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>{fmt(p.budget)}</td>
                     <td style={{ padding: '8px 14px', textAlign: 'right', color: C.forecast, fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmt(p.forecast)}</td>
                     <td style={{ padding: '8px 14px', textAlign: 'right', color: C.actual, fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>{fmt(p.actual)}</td>

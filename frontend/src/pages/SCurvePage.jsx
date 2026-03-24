@@ -1,10 +1,13 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import api from '../utils/api.js';
 import { useTypeColors } from '../context/SettingsContext.jsx';
+import { useRole } from '../context/AuthContext.jsx';
+import { EngineerBadges } from '../components/ui/EngineerBadge.jsx';
 import { formatBRL, formatBRLShort, MONTHS_PT } from '../utils/format.js';
 import ChartTooltip from '../components/ui/ChartTooltip.jsx';
 
@@ -108,8 +111,27 @@ function MultiSelect({ label, options, selected, onChange, renderOption }) {
 }
 
 // ── Main page ────────────────────────────────────────────────────────────────
+// ── Helpers for update badge ────────────────────────────────────────────────
+function daysSince(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d)) return null;
+  return Math.floor((Date.now() - d.getTime()) / 86400000);
+}
+
+function UpdateBadge({ dateStr }) {
+  const C = useTypeColors();
+  const days = daysSince(dateStr);
+  if (days === null) return <span style={{ display:'inline-flex',alignItems:'center',gap:4,padding:'2px 8px',borderRadius:10,fontSize:'0.72rem',fontWeight:600,background:'#FEF3C7',color:'#92400E' }}>Sem dados</span>;
+  if (days <= 30) return <span style={{ display:'inline-flex',alignItems:'center',gap:4,padding:'2px 8px',borderRadius:10,fontSize:'0.72rem',fontWeight:600,background:'#DCFCE7',color:C.budget }}>● {days === 0 ? 'Hoje' : `${days}d`}</span>;
+  return <span style={{ display:'inline-flex',alignItems:'center',gap:4,padding:'2px 8px',borderRadius:10,fontSize:'0.72rem',fontWeight:600,background:'#FEE2E2',color:'#991B1B' }}>● {days}d</span>;
+}
+
 export default function SCurvePage({ period }) {
   const C = useTypeColors();
+  const { isEngenheiro } = useRole();
+  const showEngCol = !isEngenheiro;
+  const navigate = useNavigate();
   const [dashData,     setDashData]     = useState([]);
   const [allSummaries, setAllSummaries] = useState([]);
   const [loading,      setLoading]      = useState(true);
@@ -335,44 +357,61 @@ export default function SCurvePage({ period }) {
           </span>
         </div>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
             <thead>
               <tr>
-                {['Código','Projeto','Usinas','Budget','Forecast','Realizado','% Exec.'].map(h => (
+                {['Código','Projeto','Usinas',...(showEngCol ? ['Eng.'] : []),'Budget','Forecast','Realizado','% Exec.','SI','Atualizado',''].map(h => (
                   <th key={h} style={{
-                    background: '#F1F5F9', padding: '8px 12px',
-                    textAlign: ['Código','Projeto','Usinas'].includes(h) ? 'left' : 'right',
-                    fontWeight: 700, fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.04em',
-                    color: 'var(--text-secondary)', borderBottom: '2px solid var(--border)',
+                    background: 'var(--ctg-navy)', color: '#fff', padding: '8px 14px',
+                    textAlign: ['Código','Projeto','Usinas','Atualizado','Eng.'].includes(h) ? 'left' : h === '' ? 'center' : 'right',
+                    fontWeight: 700, fontSize: '0.72rem', whiteSpace: 'nowrap',
+                    letterSpacing: '0.04em', textTransform: 'uppercase',
+                    position: 'sticky', top: 0, zIndex: 1,
                   }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {filteredProjects.map((p, i) => {
+              {filteredProjects.length === 0 ? (
+                <tr><td colSpan={showEngCol ? 11 : 10} style={{ textAlign: 'center', padding: 30, color: 'var(--text-secondary)' }}>Nenhum projeto</td></tr>
+              ) : filteredProjects.map((p, i) => {
                 const f = parseFloat(p.forecast) || 0;
                 const a = parseFloat(p.actual) || 0;
                 const exec = f ? ((a / f) * 100).toFixed(1) : '—';
                 return (
-                  <tr key={p.id} style={{ background: i % 2 ? '#F8FAFC' : 'var(--bg-card)', borderBottom: '1px solid #E2E8F0' }}>
-                    <td style={{ padding: '7px 12px', fontWeight: 700, color: 'var(--ctg-blue)', fontFamily: 'monospace', fontSize: '0.8rem' }}>{p.code}</td>
-                    <td style={{ padding: '7px 12px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</td>
-                    <td style={{ padding: '7px 12px' }}>
+                  <tr key={p.id} style={{ background: i % 2 ? '#F8FAFC' : 'var(--bg-card)', cursor: 'pointer', borderBottom: '1px solid #E2E8F0' }}
+                    onClick={() => navigate(`/projects/${p.id}`)}>
+                    <td style={{ padding: '8px 14px', fontWeight: 700, color: 'var(--ctg-blue)', fontFamily: 'monospace', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{p.code}</td>
+                    <td style={{ padding: '8px 14px', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)', fontWeight: 500 }}>{p.name}</td>
+                    <td style={{ padding: '8px 14px', maxWidth: 140 }}>
                       <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
                         {(p.plants || []).map(pl => (
-                          <span key={pl} className="plant-tag" style={{ fontSize: '0.62rem' }}>{pl.replace('UHE ','').replace('PCH ','')}</span>
+                          <span key={pl} className="plant-tag" style={{ fontSize: '0.65rem' }}>{pl.replace('UHE ','').replace('PCH ','')}</span>
                         ))}
                       </div>
                     </td>
-                    <td style={{ padding: '7px 12px', textAlign: 'right', color: C.budget, fontVariantNumeric: 'tabular-nums' }}>{fmt(p.budget)}</td>
-                    <td style={{ padding: '7px 12px', textAlign: 'right', color: C.forecast, fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmt(p.forecast)}</td>
-                    <td style={{ padding: '7px 12px', textAlign: 'right', color: C.actual, fontVariantNumeric: 'tabular-nums' }}>{fmt(p.actual)}</td>
-                    <td style={{ padding: '7px 12px', textAlign: 'right' }}>
-                      {exec !== '—'
-                        ? <span style={{ background: parseFloat(exec) > 100 ? '#FEF3C7' : '#DCFCE7', color: parseFloat(exec) > 100 ? '#991B1B' : C.budget, padding: '2px 7px', borderRadius: 10, fontSize: '0.72rem', fontWeight: 700 }}>{exec}%</span>
-                        : <span style={{ color: 'var(--text-secondary)' }}>—</span>
-                      }
+                    {showEngCol && (
+                      <td style={{ padding: '8px 10px' }}>
+                        <EngineerBadges engineers={p.engineers} engineerInitials={p.engineer_initials} size={26} />
+                      </td>
+                    )}
+                    <td style={{ padding: '8px 14px', textAlign: 'right', color: C.budget, fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>{fmt(p.budget)}</td>
+                    <td style={{ padding: '8px 14px', textAlign: 'right', color: C.forecast, fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmt(p.forecast)}</td>
+                    <td style={{ padding: '8px 14px', textAlign: 'right', color: C.actual, fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>{fmt(p.actual)}</td>
+                    <td style={{ padding: '8px 14px', textAlign: 'right' }}>
+                      {exec !== '—' ? (
+                        <span style={{
+                          background: parseFloat(exec) > 100 ? '#FEF3C7' : '#DCFCE7',
+                          color: parseFloat(exec) > 100 ? '#991B1B' : C.budget,
+                          padding: '2px 7px', borderRadius: 10, fontSize: '0.75rem', fontWeight: 700,
+                        }}>{exec}%</span>
+                      ) : <span style={{ color: 'var(--text-secondary)' }}>—</span>}
                     </td>
+                    <td style={{ padding: '8px 14px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)', fontWeight: 500 }}>{fmt(p.si_value)}</td>
+                    <td style={{ padding: '8px 14px' }}>
+                      <UpdateBadge dateStr={p.last_forecast_update} />
+                    </td>
+                    <td style={{ padding: '8px 14px', textAlign: 'center', color: 'var(--ctg-blue)', fontWeight: 700 }}>→</td>
                   </tr>
                 );
               })}

@@ -130,67 +130,81 @@ function buildHTML(data, config, C) {
   // ── Table rows ──
   function tableBody() {
     let html = '';
-    let totBudget=0, totForecast=0, totActual=0, totActFcst=0;
+    let totBudget=0, totPool=0, totActual=0, totForecast=0, totActFcst=0;
 
     polos.forEach(polo => {
       const poloProjs = polo.plants.flatMap(pl => getPlantProjects(pl));
       if (!poloProjs.length) return;
-      const pb = poloProjs.reduce((s,p)=>s+parseFloat(p.budget||0),0);
-      const pf = poloProjs.reduce((s,p)=>s+parseFloat(p.forecast||0),0);
-      const pa = poloProjs.reduce((s,p)=>s+parseFloat(p.actual||0),0);
-      totBudget+=pb; totForecast+=pf; totActual+=pa; totActFcst+=(pa+pf);
+      const pb  = poloProjs.reduce((s,p)=>s+parseFloat(p.budget||0),0);
+      const pp  = poloProjs.reduce((s,p)=>s+parseFloat(p.pool||0),0);
+      const pa  = poloProjs.reduce((s,p)=>s+parseFloat(p.actual||0),0);
+      const pf  = poloProjs.reduce((s,p)=>s+parseFloat(p.forecast||0),0);
+      const paf = poloProjs.reduce((s,p)=>s+(p.act_forecast||0),0);
+      const pvar = pb - paf;
+      totBudget+=pb; totPool+=pp; totActual+=pa; totForecast+=pf; totActFcst+=paf;
 
       html += `<tr class="row-polo">
         <td colspan="2"><span class="expand-btn" onclick="toggleGroup('polo_${polo.id}')">▼</span> ${polo.name}</td>
         <td class="num c-budget">${fmtBRL(pb)}</td>
-        <td class="num c-forecast">${fmtBRL(pf)}</td>
+        <td class="num" style="color:#EF4444">${fmtBRL(pp)}</td>
         <td class="num c-actual">${fmtBRL(pa)}</td>
-        <td class="num">${fmtBRL(pa+pf)}</td>
-        <td class="num ${(pf-pa)<0?'neg':''}">${fmtBRL(pf-pa)}</td>
+        <td class="num c-forecast">${fmtBRL(pf)}</td>
+        <td class="num">${fmtBRL(paf)}</td>
+        <td class="num ${pvar<0?'neg':''}">${fmtBRL(pvar)}</td>
       </tr>`;
 
       polo.plants.forEach(plant => {
         const plantProjs = getPlantProjects(plant);
         if (!plantProjs.length) return;
-        const ub = plantProjs.reduce((s,p)=>s+parseFloat(p.budget||0),0);
-        const uf = plantProjs.reduce((s,p)=>s+parseFloat(p.forecast||0),0);
-        const ua = plantProjs.reduce((s,p)=>s+parseFloat(p.actual||0),0);
+        const ub  = plantProjs.reduce((s,p)=>s+parseFloat(p.budget||0),0);
+        const up  = plantProjs.reduce((s,p)=>s+parseFloat(p.pool||0),0);
+        const ua  = plantProjs.reduce((s,p)=>s+parseFloat(p.actual||0),0);
+        const uf  = plantProjs.reduce((s,p)=>s+parseFloat(p.forecast||0),0);
+        const uaf = plantProjs.reduce((s,p)=>s+(p.act_forecast||0),0);
+        const uvar = ub - uaf;
 
         html += `<tr class="row-plant group-polo_${polo.id}">
           <td></td>
           <td><span class="expand-btn" onclick="toggleGroup('plant_${plant.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'')}')">▼</span> ${plant}</td>
           <td class="num c-budget">${fmtBRL(ub)}</td>
-          <td class="num c-forecast">${fmtBRL(uf)}</td>
+          <td class="num" style="color:#EF4444">${fmtBRL(up)}</td>
           <td class="num c-actual">${fmtBRL(ua)}</td>
-          <td class="num">${fmtBRL(ua+uf)}</td>
-          <td class="num ${(uf-ua)<0?'neg':''}">${fmtBRL(uf-ua)}</td>
+          <td class="num c-forecast">${fmtBRL(uf)}</td>
+          <td class="num">${fmtBRL(uaf)}</td>
+          <td class="num ${uvar<0?'neg':''}">${fmtBRL(uvar)}</td>
         </tr>`;
 
         if (detailLevel === 'full') {
           plantProjs.forEach(p => {
             const pKey = `plant_${plant.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'')}`;
-            const vari = parseFloat(p.forecast||0) - parseFloat(p.actual||0);
+            const projB  = parseFloat(p.budget||0);
+            const projP  = parseFloat(p.pool||0);
+            const projAF = p.act_forecast || 0;
+            const projVar = projB - projAF;
             html += `<tr class="row-proj group-${pKey}">
               <td class="proj-code">${p.code}</td>
               <td>${p.name}</td>
               <td class="num c-budget">${fmtBRL(p.budget)}</td>
-              <td class="num c-forecast">${fmtBRL(p.forecast)}</td>
+              <td class="num" style="color:#EF4444">${fmtBRL(projP)}</td>
               <td class="num c-actual">${fmtBRL(p.actual)}</td>
-              <td class="num">${fmtBRL(parseFloat(p.actual||0)+parseFloat(p.forecast||0))}</td>
-              <td class="num ${vari<0?'neg':''}">${fmtBRL(vari)}</td>
+              <td class="num c-forecast">${fmtBRL(p.forecast)}</td>
+              <td class="num">${fmtBRL(projAF)}</td>
+              <td class="num ${projVar<0?'neg':''}">${fmtBRL(projVar)}</td>
             </tr>`;
           });
         }
       });
     });
 
+    const totVar = totBudget - totActFcst;
     html += `<tr class="row-total">
       <td colspan="2">Total Geral</td>
       <td class="num">${fmtBRL(totBudget)}</td>
-      <td class="num">${fmtBRL(totForecast)}</td>
+      <td class="num">${fmtBRL(totPool)}</td>
       <td class="num">${fmtBRL(totActual)}</td>
+      <td class="num">${fmtBRL(totForecast)}</td>
       <td class="num">${fmtBRL(totActFcst)}</td>
-      <td class="num ${(totForecast-totActual)<0?'neg':''}">${fmtBRL(totForecast-totActual)}</td>
+      <td class="num ${totVar<0?'neg':''}">${fmtBRL(totVar)}</td>
     </tr>`;
     return html;
   }

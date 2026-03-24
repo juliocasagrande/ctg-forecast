@@ -1032,11 +1032,11 @@ export default function ProjectDetail({ onEdit }) {
                   <Bar yAxisId="monthly" dataKey="Pool"      fill={C.pool+'88'} radius={[2,2,0,0]} barSize={8} name="Pool (mensal)" />
 
                   {/* Accumulated lines */}
-                  <Line yAxisId="acum" type="monotone" dataKey="BudgetAcum"    stroke={C.budget} strokeWidth={2} dot={false} name="Budget (acum.)" />
-                  <Line yAxisId="acum" type="monotone" dataKey="ForecastAcum"  stroke={C.forecast} strokeWidth={2} dot={false} name="Forecast (acum.)" />
-                  <Line yAxisId="acum" type="monotone" dataKey="RealizadoAcum" stroke={C.actual} strokeWidth={2} strokeDasharray="5 3" dot={false} name="Realizado (acum.)" />
-                  <Line yAxisId="acum" type="monotone" dataKey="MetaAcum"      stroke={C.meta} strokeWidth={2} strokeDasharray="8 3" dot={false} name="Meta (acum.)" />
-                  <Line yAxisId="acum" type="monotone" dataKey="PoolAcum"      stroke={C.pool} strokeWidth={2} strokeDasharray="4 2" dot={false} name="Pool (acum.)" />
+                  <Line yAxisId="acum" type="linear" dataKey="BudgetAcum"    stroke={C.budget} strokeWidth={2} dot={false} name="Budget (acum.)" />
+                  <Line yAxisId="acum" type="linear" dataKey="ForecastAcum"  stroke={C.forecast} strokeWidth={2} dot={false} name="Forecast (acum.)" />
+                  <Line yAxisId="acum" type="linear" dataKey="RealizadoAcum" stroke={C.actual} strokeWidth={2} strokeDasharray="5 3" dot={false} name="Realizado (acum.)" />
+                  <Line yAxisId="acum" type="linear" dataKey="MetaAcum"      stroke={C.meta} strokeWidth={2} strokeDasharray="8 3" dot={false} name="Meta (acum.)" />
+                  <Line yAxisId="acum" type="linear" dataKey="PoolAcum"      stroke={C.pool} strokeWidth={2} strokeDasharray="4 2" dot={false} name="Pool (acum.)" />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>

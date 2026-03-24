@@ -191,7 +191,8 @@ router.get('/dashboard', async (req, res) => {
         COALESCE(SUM(CASE WHEN combined.type='Actual'   THEN combined.value ELSE 0 END),0) AS actual,
         COALESCE(SUM(CASE WHEN combined.type='Meta'     THEN combined.value ELSE 0 END),0) AS meta,
         COALESCE(SUM(CASE WHEN combined.type='Pool'     THEN combined.value ELSE 0 END),0) AS pool,
-        MAX(combined.updated_at) AS last_forecast_update
+        MAX(combined.updated_at) AS last_forecast_update,
+        eng_agg.engineers, eng_agg.engineer_initials
       FROM projects p ${joinClause}
       LEFT JOIN (
         SELECT fe.project_id, fe.type, fe.value, fe.updated_at, 'entries' AS source
@@ -209,7 +210,16 @@ router.get('/dashboard', async (req, res) => {
         FROM year_consolidated yc
         WHERE yc.year BETWEEN $1 AND $2 AND yc.value > 0
       ) combined ON combined.project_id = p.id
-      GROUP BY p.id ORDER BY p.code
+      LEFT JOIN (
+        SELECT pa.project_id,
+          STRING_AGG(DISTINCT u.name, ', ' ORDER BY u.name) AS engineers,
+          STRING_AGG(DISTINCT u.avatar_initials, ', ' ORDER BY u.avatar_initials) AS engineer_initials
+        FROM project_assignments pa
+        JOIN users u ON u.id = pa.user_id AND u.role = 'engenheiro'
+        GROUP BY pa.project_id
+      ) eng_agg ON eng_agg.project_id = p.id
+      GROUP BY p.id, eng_agg.engineers, eng_agg.engineer_initials
+      ORDER BY p.code
     `, params);
     res.json(r.rows);
   } catch (err) { safeError(res, err); }
@@ -608,41 +618,33 @@ router.get('/polo-summary', async (req, res) => {
       : '';
     const params = [yrStart, yrEnd, userId];
 
+    // Main aggregation — budget/forecast/actual/pool totals
     const r = await pool.query(`
       SELECT
         p.id, p.code, p.name, p.plants,
-        COALESCE(fe_agg.budget, 0)   AS budget,
-        COALESCE(fe_agg.forecast, 0) AS forecast,
-        COALESCE(fe_agg.actual, 0)   AS actual,
-        COALESCE(fe_agg.pool, 0)     AS pool,
+        COALESCE(SUM(CASE WHEN combined.type='Budget' THEN combined.value ELSE 0 END),0)
+          + COALESCE(SUM(CASE WHEN combined.source='consolidated' AND combined.type='Actual' THEN combined.value ELSE 0 END),0) AS budget,
+        COALESCE(SUM(CASE WHEN combined.type='Forecast' THEN combined.value ELSE 0 END),0) AS forecast,
+        COALESCE(SUM(CASE WHEN combined.type='Actual'   THEN combined.value ELSE 0 END),0) AS actual,
+        COALESCE(SUM(CASE WHEN combined.type='Pool'     THEN combined.value ELSE 0 END),0) AS pool,
         eng_agg.engineers,
         (pa_mine.user_id IS NOT NULL) AS is_mine
       FROM projects p
       ${joinClause}
       LEFT JOIN (
-        SELECT project_id,
-          SUM(CASE WHEN type='Budget'   THEN value ELSE 0 END) AS budget,
-          SUM(CASE WHEN type='Forecast' THEN value ELSE 0 END) AS forecast,
-          SUM(CASE WHEN type='Actual'   THEN value ELSE 0 END) AS actual,
-          SUM(CASE WHEN type='Pool'     THEN value ELSE 0 END) AS pool
-        FROM (
-          -- Monthly entries: only for project+type+year combos WITHOUT a consolidated value
-          SELECT fe.project_id, fe.type, fe.value FROM forecast_entries fe
-          WHERE fe.year BETWEEN $1 AND $2
-            AND NOT EXISTS (
-              SELECT 1 FROM year_consolidated yc2
-              WHERE yc2.project_id = fe.project_id
-                AND yc2.year = fe.year
-                AND (yc2.type = fe.type OR (yc2.type = 'Actual' AND yc2.category = 'Total' AND fe.type = 'Actual'))
-                AND yc2.value > 0
-            )
-          UNION ALL
-          -- Consolidated values always included when they exist
-          SELECT yc.project_id, yc.type, yc.value FROM year_consolidated yc
-          WHERE yc.year BETWEEN $1 AND $2 AND yc.value > 0
-        ) combined
-        GROUP BY project_id
-      ) fe_agg ON fe_agg.project_id = p.id
+        SELECT fe.project_id, fe.type, fe.value, 'entries' AS source FROM forecast_entries fe
+        WHERE fe.year BETWEEN $1 AND $2
+          AND NOT EXISTS (
+            SELECT 1 FROM year_consolidated yc2
+            WHERE yc2.project_id = fe.project_id
+              AND yc2.year = fe.year
+              AND (yc2.type = fe.type OR (yc2.type = 'Actual' AND yc2.category = 'Total' AND fe.type = 'Actual'))
+              AND yc2.value > 0
+          )
+        UNION ALL
+        SELECT yc.project_id, yc.type, yc.value, 'consolidated' AS source FROM year_consolidated yc
+        WHERE yc.year BETWEEN $1 AND $2 AND yc.value > 0
+      ) combined ON combined.project_id = p.id
       LEFT JOIN (
         SELECT pa2.project_id, STRING_AGG(DISTINCT u.name, ', ' ORDER BY u.name) AS engineers
         FROM project_assignments pa2
@@ -650,10 +652,78 @@ router.get('/polo-summary', async (req, res) => {
         GROUP BY pa2.project_id
       ) eng_agg ON eng_agg.project_id = p.id
       LEFT JOIN project_assignments pa_mine ON pa_mine.project_id = p.id AND pa_mine.user_id = $3
+      GROUP BY p.id, p.code, p.name, p.plants, eng_agg.engineers, pa_mine.user_id
       ORDER BY p.code
     `, params);
 
-    res.json(r.rows);
+    // Calculate act_forecast per project using monthly data
+    // Logic: for each month, use Actual if > 0, else use Forecast
+    const monthlyRes = await pool.query(`
+      SELECT project_id, year, month, type, SUM(value) AS total
+      FROM forecast_entries
+      WHERE year BETWEEN $1 AND $2 AND type IN ('Actual','Forecast')
+      GROUP BY project_id, year, month, type
+    `, [yrStart, yrEnd]);
+
+    // Also get consolidated totals per project (for years without monthly breakdown)
+    const consRes = await pool.query(`
+      SELECT project_id, type, SUM(value) AS total
+      FROM year_consolidated
+      WHERE year BETWEEN $1 AND $2 AND value > 0 AND type IN ('Actual','Forecast')
+      GROUP BY project_id, type
+    `, [yrStart, yrEnd]);
+
+    // Build monthly lookup: { projectId: { "year-month": { Actual, Forecast } } }
+    const monthlyLookup = {};
+    for (const row of monthlyRes.rows) {
+      const pid = row.project_id;
+      const key = `${row.year}-${row.month}`;
+      if (!monthlyLookup[pid]) monthlyLookup[pid] = {};
+      if (!monthlyLookup[pid][key]) monthlyLookup[pid][key] = {};
+      monthlyLookup[pid][key][row.type] = parseFloat(row.total) || 0;
+    }
+
+    // Build consolidated lookup: { projectId: { Actual, Forecast } }
+    const consLookup = {};
+    for (const row of consRes.rows) {
+      if (!consLookup[row.project_id]) consLookup[row.project_id] = {};
+      consLookup[row.project_id][row.type] = (consLookup[row.project_id][row.type] || 0) + (parseFloat(row.total) || 0);
+    }
+
+    // Calculate act_forecast for each project
+    const projects = r.rows.map(p => {
+      let actForecast = 0;
+      const months = monthlyLookup[p.id] || {};
+      const monthKeys = Object.keys(months);
+
+      if (monthKeys.length > 0) {
+        // Has monthly data — per-month logic
+        for (const key of monthKeys) {
+          const actual = months[key].Actual || 0;
+          const forecast = months[key].Forecast || 0;
+          actForecast += actual > 0 ? actual : forecast;
+        }
+        // Add any months that only have Forecast but no entry at all for Actual
+        // (already handled above since both types share same keys)
+      }
+
+      // Add consolidated values for years that don't have monthly data
+      const cons = consLookup[p.id] || {};
+      const monthlyActualTotal = monthKeys.reduce((s, k) => s + (months[k].Actual || 0), 0);
+      const monthlyForecastTotal = monthKeys.reduce((s, k) => s + (months[k].Forecast || 0), 0);
+      const projActual = parseFloat(p.actual) || 0;
+      const projForecast = parseFloat(p.forecast) || 0;
+
+      // If project totals are larger than monthly sums, the difference is from consolidated
+      const consActualDiff = projActual - monthlyActualTotal;
+      const consForecastDiff = projForecast - monthlyForecastTotal;
+      if (consActualDiff > 0) actForecast += consActualDiff;
+      else if (consForecastDiff > 0 && consActualDiff <= 0) actForecast += consForecastDiff;
+
+      return { ...p, act_forecast: actForecast };
+    });
+
+    res.json(projects);
   } catch (err) { safeError(res, err); }
 });
 

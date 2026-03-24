@@ -106,7 +106,16 @@ export default function ProjectsList({ projects, onEditProject, onProjectsChange
                   <span className="meta-pill budget">Bdg {fmt(p.total_budget)}</span>
                   <span className="meta-pill forecast">Fcst {fmt(p.total_forecast)}</span>
                   <span className="meta-pill actual">Real {fmt(p.total_actual)}</span>
-                  {p.engineer_count > 0 && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Eng. {p.engineer_count}</span>}
+                  {p.engineer_names && (
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display:'flex', alignItems:'center', gap:4 }}>
+                      <span style={{
+                        display:'inline-flex', alignItems:'center', justifyContent:'center',
+                        width:18, height:18, borderRadius:'50%', background:'#166534', color:'#fff',
+                        fontSize:'0.5rem', fontWeight:700, flexShrink:0,
+                      }}>{p.engineer_initials ? p.engineer_initials.split(', ')[0] : '?'}</span>
+                      {p.engineer_names}
+                    </span>
+                  )}
                   {p.message_count  > 0 && <span style={{ fontSize: '0.72rem', color: 'var(--ctg-blue)' }}>Msg. {p.message_count}</span>}
                 </div>
 

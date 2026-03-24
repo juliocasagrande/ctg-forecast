@@ -324,6 +324,11 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
   .wizard-months-header,.wizard-month-row{grid-template-columns:110px 1fr;}
   .wizard-months-header span:last-child,.wizard-month-row .wmr-comment{display:none;}
 
+  /* ── Wizard MonthRow responsive: stack value + comment ── */
+  .wz-month-grid{grid-template-columns:90px 1fr !important;gap:8px !important;padding:8px 12px !important;}
+  .wz-month-comment{grid-column:1 / -1;}
+  .wz-other-comments{padding-left:12px !important;}
+
   /* ── Chat ── */
   .chat-bubbles{max-width:85%;}
   .chat-container{height:calc(100vh - 220px);}

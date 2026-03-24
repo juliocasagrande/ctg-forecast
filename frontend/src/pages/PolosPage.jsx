@@ -37,14 +37,15 @@ function fmtBRL(v) {
 
 function getVal(row, key) {
   const b = parseFloat(row.budget)||0,  f = parseFloat(row.forecast)||0,
-        a = parseFloat(row.actual)||0,   p = parseFloat(row.pool)||0;
+        a = parseFloat(row.actual)||0,   p = parseFloat(row.pool)||0,
+        af = parseFloat(row.act_forecast)||0;
   switch(key) {
     case 'budget':       return b;
     case 'pool':         return p;
     case 'actual':       return a;
     case 'forecast':     return f;
-    case 'act_forecast': return a + f;
-    case 'variacao':     return f - a;
+    case 'act_forecast': return af;
+    case 'variacao':     return b - af;
     default: return 0;
   }
 }
