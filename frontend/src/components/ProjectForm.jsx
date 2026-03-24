@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Modal from './ui/Modal.jsx';
 import api from '../utils/api.js';
 import { useToast } from './ui/Toast.jsx';
+import { useRole } from '../context/AuthContext.jsx';
 
 const PLANTS = [
   'PCH Palmeiras',
@@ -22,11 +23,15 @@ const PLANTS = [
 
 const EMPTY = { code: '', name: '', description: '', si_value: '', pool_value: '', plants: [], engineer_ids: [] };
 
-export default function ProjectForm({ open, onClose, project, onSaved }) {
+export default function ProjectForm({ open, onClose, project, onSaved, onDeleted }) {
   const [form, setForm] = useState(EMPTY);
   const [engineers, setEngineers] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [showDangerZone, setShowDangerZone] = useState(false);
   const { toast } = useToast();
+  const { canManage } = useRole();
 
   useEffect(() => {
     if (!open) return;
@@ -47,6 +52,8 @@ export default function ProjectForm({ open, onClose, project, onSaved }) {
     } else {
       setForm(EMPTY);
     }
+    setDeleteConfirm('');
+    setShowDangerZone(false);
   }, [project, open]);
 
   const set = f => e => setForm(prev => ({ ...prev, [f]: e.target.value }));
@@ -92,6 +99,23 @@ export default function ProjectForm({ open, onClose, project, onSaved }) {
     finally { setSaving(false); }
   };
 
+  const handleDelete = async () => {
+    if (deleteConfirm.trim() !== project.name.trim()) {
+      toast('Nome do projeto não confere', 'error');
+      return;
+    }
+    setDeleting(true);
+    try {
+      await api.delete(`/projects/${project.id}`, { data: { confirmName: deleteConfirm.trim() } });
+      toast(`Projeto "${project.name}" excluído permanentemente`, 'success');
+      onDeleted?.();
+    } catch (err) {
+      toast(err.response?.data?.error || 'Erro ao excluir projeto', 'error');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const sectionHeader = (label) => (
     <div style={{
       background: 'var(--ctg-navy)',
@@ -108,6 +132,9 @@ export default function ProjectForm({ open, onClose, project, onSaved }) {
       {label}
     </div>
   );
+
+  const isEditing = !!project?.id;
+  const nameMatches = isEditing && deleteConfirm.trim() === (project.name || '').trim();
 
   return (
     <Modal
@@ -214,6 +241,108 @@ export default function ProjectForm({ open, onClose, project, onSaved }) {
             ))}
           </div>
         </>
+      )}
+
+      {/* ── Zona de Perigo — excluir projeto ── */}
+      {isEditing && canManage && (
+        <div style={{ marginTop: 20 }}>
+          {!showDangerZone ? (
+            <button
+              onClick={() => setShowDangerZone(true)}
+              style={{
+                background: 'none', border: '1.5px dashed var(--border-strong)',
+                borderRadius: 'var(--radius-sm)', padding: '10px 16px',
+                cursor: 'pointer', width: '100%', textAlign: 'left',
+                color: 'var(--text-muted)', fontSize: '0.78rem',
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#DC2626'; e.currentTarget.style.color = '#DC2626'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-strong)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+            >
+              ⚠️ Excluir este projeto...
+            </button>
+          ) : (
+            <div style={{
+              border: '1.5px solid #DC2626',
+              borderRadius: 'var(--radius-md)',
+              overflow: 'hidden',
+            }}>
+              <div style={{
+                background: '#DC2626',
+                color: '#fff',
+                padding: '8px 14px',
+                fontSize: '0.7rem',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              }}>
+                <span>⚠️ Zona de Perigo</span>
+                <button
+                  onClick={() => { setShowDangerZone(false); setDeleteConfirm(''); }}
+                  style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}
+                >✕</button>
+              </div>
+
+              <div style={{ padding: '14px 16px', background: '#FEF2F2' }}>
+                <p style={{ fontSize: '0.8rem', color: '#991B1B', margin: '0 0 6px', fontWeight: 600 }}>
+                  Esta ação é irreversível.
+                </p>
+                <p style={{ fontSize: '0.76rem', color: '#7F1D1D', margin: '0 0 14px', lineHeight: 1.5 }}>
+                  Todos os dados serão permanentemente excluídos: entradas de forecast, mensagens, notas, atividades e atribuições de engenheiros.
+                </p>
+
+                <label style={{ fontSize: '0.75rem', color: '#991B1B', fontWeight: 600, display: 'block', marginBottom: 6 }}>
+                  Para confirmar, digite o nome do projeto:
+                  <span style={{
+                    display: 'inline-block', marginLeft: 6, padding: '1px 8px',
+                    background: '#FECACA', borderRadius: 4, fontWeight: 700,
+                    fontSize: '0.78rem', fontFamily: 'monospace', userSelect: 'all',
+                  }}>
+                    {project.name}
+                  </span>
+                </label>
+
+                <input
+                  type="text"
+                  value={deleteConfirm}
+                  onChange={e => setDeleteConfirm(e.target.value)}
+                  placeholder={project.name}
+                  autoComplete="off"
+                  spellCheck={false}
+                  style={{
+                    width: '100%', padding: '8px 12px',
+                    border: `1.5px solid ${nameMatches ? '#DC2626' : '#FECACA'}`,
+                    borderRadius: 'var(--radius-sm)',
+                    fontSize: '0.83rem', fontFamily: 'monospace',
+                    background: '#fff', color: '#1F2937',
+                    outline: 'none', transition: 'border-color 0.15s',
+                    boxSizing: 'border-box',
+                  }}
+                  onFocus={e => { e.target.style.borderColor = '#DC2626'; }}
+                  onBlur={e => { if (!nameMatches) e.target.style.borderColor = '#FECACA'; }}
+                />
+
+                <button
+                  onClick={handleDelete}
+                  disabled={!nameMatches || deleting}
+                  style={{
+                    marginTop: 12, width: '100%', padding: '10px',
+                    background: nameMatches ? '#DC2626' : '#E5E7EB',
+                    color: nameMatches ? '#fff' : '#9CA3AF',
+                    border: 'none', borderRadius: 'var(--radius-sm)',
+                    fontSize: '0.82rem', fontWeight: 700,
+                    cursor: nameMatches ? 'pointer' : 'not-allowed',
+                    transition: 'all 0.15s',
+                    opacity: deleting ? 0.7 : 1,
+                  }}
+                >
+                  {deleting ? 'Excluindo...' : `Excluir projeto "${project.code}" permanentemente`}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </Modal>
   );

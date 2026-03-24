@@ -71,7 +71,7 @@ function ReadOnlyTable({ entries, year, siValue, consolidatedActual, siProjectio
   const rowTotal = (cat, type) => Array.from({length:12},(_,i)=>i+1).reduce((s,m)=>s+get(cat,type,m),0);
   const colTotal = (month, type) => CATEGORIES.reduce((s,c)=>s+get(c,type,month),0);
   const grandTotal = (type) => Array.from({length:12},(_,i)=>i+1).reduce((s,m)=>s+colTotal(m,type),0);
-  const f = v => v ? v.toLocaleString('pt-BR',{maximumFractionDigits:0}) : '—';
+  const f = v => v ? v.toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}) : '—';
 
   // Gather all comments for a given cat+month across all types
   const getAllComments = (cat, month) => {
@@ -195,7 +195,7 @@ function ConsolidatedYearTable({ yearConsData, year }) {
     return oldRows.reduce((s, e) => s + (parseFloat(e.value) || 0), 0);
   };
   const total = getTotal();
-  const f = v => v ? v.toLocaleString('pt-BR',{maximumFractionDigits:0}) : '—';
+  const f = v => v ? v.toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}) : '—';
 
   if (!total) {
     return (
@@ -669,22 +669,34 @@ export default function ProjectDetail({ onEdit }) {
 
   // Total across ALL years (for header cards — no year filter)
   // year_consolidated ALWAYS takes precedence when it exists
+  // Rule: Actual consolidated adds to Budget AND Actual totals; Forecast consolidated adds to Forecast total
   const totalAllFor = (type) => {
+    // Determine which consolidated type(s) should be added to this display type
+    const consTypeForDisplay = type === 'Budget' ? 'Actual' : type;
+
     // Find which years have consolidated data for this type
     const consYears = new Set(
       (yearConsData || [])
-        .filter(e => (e.type === type || (e.type === 'Actual' && e.category === 'Total' && type === 'Actual')) && parseFloat(e.value||0) > 0)
+        .filter(e => (e.type === consTypeForDisplay || (e.type === 'Actual' && e.category === 'Total' && consTypeForDisplay === 'Actual')) && parseFloat(e.value||0) > 0)
         .map(e => parseInt(e.year))
     );
 
+    // For Budget: also exclude years that have Actual consolidated (those replace monthly Budget)
+    const excludeYears = type === 'Budget'
+      ? new Set([
+        ...consYears,
+        ...(yearConsData || []).filter(e => e.type === 'Actual' && parseFloat(e.value||0) > 0).map(e => parseInt(e.year)),
+      ])
+      : consYears;
+
     // Sum from monthly entries — exclude years that have consolidated data
     const fromEntries = entries
-      .filter(e => e.type === type && !consYears.has(parseInt(e.year)))
+      .filter(e => e.type === type && !excludeYears.has(parseInt(e.year)))
       .reduce((s,e) => s + parseFloat(e.value||0), 0);
 
     // Sum from consolidated years
     const fromConsolidated = (yearConsData || [])
-      .filter(e => (e.type === type || (e.type === 'Actual' && e.category === 'Total' && type === 'Actual')) && parseFloat(e.value||0) > 0)
+      .filter(e => (e.type === consTypeForDisplay || (e.type === 'Actual' && e.category === 'Total' && consTypeForDisplay === 'Actual')) && parseFloat(e.value||0) > 0)
       .reduce((s,e) => s + parseFloat(e.value||0), 0);
 
     return fromEntries + fromConsolidated;

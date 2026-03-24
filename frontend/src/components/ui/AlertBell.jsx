@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../utils/api.js';
+import { useRole } from '../../context/AuthContext.jsx';
 
-const POLL_INTERVAL = 60_000; // 1 minute
+const POLL_INTERVAL = 60_000;
 
 function timeAgo(daysAgo) {
   if (daysAgo < 1) return 'hoje';
@@ -13,22 +14,20 @@ function timeAgo(daysAgo) {
 export default function AlertBell() {
   const [alerts, setAlerts] = useState(null);
   const [open, setOpen] = useState(false);
+  const [dismissing, setDismissing] = useState(new Set());
   const ref = useRef(null);
   const navigate = useNavigate();
+  const { isGestor, isPlanejador, isAdmin } = useRole();
+  const isManager = isGestor || isPlanejador || isAdmin;
 
   const fetchAlerts = useCallback(async () => {
     try {
       const r = await api.get('/forecast/alerts');
       setAlerts(r.data);
-
-      // Sync PWA app badge (icon notification count)
       if ('setAppBadge' in navigator) {
         const count = r.data?.total ?? 0;
-        if (count > 0) {
-          navigator.setAppBadge(count).catch(() => {});
-        } else {
-          navigator.clearAppBadge().catch(() => {});
-        }
+        if (count > 0) navigator.setAppBadge(count).catch(() => {});
+        else navigator.clearAppBadge().catch(() => {});
       }
     } catch {}
   }, []);
@@ -39,7 +38,6 @@ export default function AlertBell() {
     return () => clearInterval(t);
   }, [fetchAlerts]);
 
-  // Close on outside click
   useEffect(() => {
     const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener('mousedown', h);
@@ -52,6 +50,18 @@ export default function AlertBell() {
     navigate(`/projects/${projectId}`);
     setOpen(false);
   };
+
+  const dismiss = async (alertType, alertKey) => {
+    const dKey = `${alertType}|${alertKey}`;
+    setDismissing(prev => new Set([...prev, dKey]));
+    try {
+      await api.post('/forecast/alerts/dismiss', { alert_type: alertType, alert_key: String(alertKey) });
+      await fetchAlerts();
+    } catch {}
+    setDismissing(prev => { const n = new Set(prev); n.delete(dKey); return n; });
+  };
+
+  const isDismissing = (type, key) => dismissing.has(`${type}|${key}`);
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
@@ -71,25 +81,17 @@ export default function AlertBell() {
           color: total > 0 ? 'var(--ctg-navy)' : 'var(--text-muted)',
         }}
       >
-        {/* Bell SVG */}
         <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
           <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zm0 16a2 2 0 01-2-2h4a2 2 0 01-2 2z"/>
         </svg>
-
-        {/* Badge */}
         {total > 0 && (
           <span style={{
-            position: 'absolute',
-            top: -4, right: -4,
-            background: '#DC2626',
-            color: '#fff',
-            fontSize: '0.58rem',
-            fontWeight: 700,
-            borderRadius: 10,
-            minWidth: 16, height: 16,
+            position: 'absolute', top: -4, right: -4,
+            background: '#DC2626', color: '#fff',
+            fontSize: '0.58rem', fontWeight: 700,
+            borderRadius: 10, minWidth: 16, height: 16,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: '0 4px',
-            border: '1.5px solid var(--bg-card)',
+            padding: '0 4px', border: '1.5px solid var(--bg-card)',
           }}>
             {total > 99 ? '99+' : total}
           </span>
@@ -99,38 +101,28 @@ export default function AlertBell() {
       {/* Dropdown panel */}
       {open && (
         <div className="alert-bell-dropdown" style={{
-          position: 'absolute',
-          top: 'calc(100% + 8px)',
-          right: 0,
-          width: 340,
-          background: 'var(--bg-card)',
+          position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+          width: 370, background: 'var(--bg-card)',
           border: '1px solid var(--border-strong)',
           borderRadius: 'var(--radius-lg)',
-          boxShadow: 'var(--shadow-lg)',
-          zIndex: 300,
-          overflow: 'hidden',
+          boxShadow: 'var(--shadow-lg)', zIndex: 300, overflow: 'hidden',
         }}>
           {/* Header */}
           <div style={{
-            padding: '10px 16px',
-            background: 'var(--ctg-navy)',
+            padding: '10px 16px', background: 'var(--ctg-navy)',
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           }}>
-            <span style={{ color: '#fff', fontWeight: 600, fontSize: '0.85rem' }}>
-              Alertas
-            </span>
+            <span style={{ color: '#fff', fontWeight: 600, fontSize: '0.85rem' }}>Alertas</span>
             {total > 0 && (
               <span style={{
                 background: '#DC2626', color: '#fff',
                 fontSize: '0.65rem', fontWeight: 700,
                 borderRadius: 10, padding: '1px 7px',
-              }}>
-                {total}
-              </span>
+              }}>{total}</span>
             )}
           </div>
 
-          <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+          <div style={{ maxHeight: 450, overflowY: 'auto' }}>
             {total === 0 ? (
               <div style={{ padding: '28px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                 <div style={{ fontSize: '1.4rem', marginBottom: 8, color: '#15803D' }}>✓</div>
@@ -140,12 +132,7 @@ export default function AlertBell() {
               <>
                 {/* Unread messages */}
                 {alerts.unread_messages.count > 0 && (
-                  <Section
-                    icon={<MsgIcon />}
-                    title="Mensagens não lidas"
-                    count={alerts.unread_messages.count}
-                    color="#0070B8"
-                  >
+                  <Section icon={<MsgIcon />} title="Mensagens não lidas" count={alerts.unread_messages.count} color="#0070B8">
                     {Object.entries(alerts.unread_messages.by_project).map(([pid, count]) => (
                       <AlertRow
                         key={pid}
@@ -153,6 +140,8 @@ export default function AlertBell() {
                         label={`${count} mensagem${count > 1 ? 's' : ''} não lida${count > 1 ? 's' : ''}`}
                         sub={`Projeto #${pid}`}
                         accent="#0070B8"
+                        onDismiss={() => dismiss('unread', pid)}
+                        dismissing={isDismissing('unread', pid)}
                       />
                     ))}
                   </Section>
@@ -160,12 +149,7 @@ export default function AlertBell() {
 
                 {/* Empty forecast */}
                 {alerts.empty_forecast.count > 0 && (
-                  <Section
-                    icon={<EditIcon />}
-                    title="Forecast não preenchido"
-                    count={alerts.empty_forecast.count}
-                    color="#B45309"
-                  >
+                  <Section icon={<EditIcon />} title="Forecast não preenchido" count={alerts.empty_forecast.count} color="#B45309">
                     {alerts.empty_forecast.projects.map(p => (
                       <AlertRow
                         key={p.id}
@@ -173,6 +157,8 @@ export default function AlertBell() {
                         label={p.name}
                         sub={`${p.code} — sem valores em ${new Date().getFullYear()}`}
                         accent="#B45309"
+                        onDismiss={() => dismiss('empty_forecast', p.id)}
+                        dismissing={isDismissing('empty_forecast', p.id)}
                       />
                     ))}
                   </Section>
@@ -180,12 +166,7 @@ export default function AlertBell() {
 
                 {/* Stale forecast */}
                 {alerts.stale_forecast.count > 0 && (
-                  <Section
-                    icon={<ClockIcon />}
-                    title="Sem atualização recente"
-                    count={alerts.stale_forecast.count}
-                    color="#6B7280"
-                  >
+                  <Section icon={<ClockIcon />} title="Sem atualização recente" count={alerts.stale_forecast.count} color="#6B7280">
                     {alerts.stale_forecast.projects.map(p => (
                       <AlertRow
                         key={p.id}
@@ -193,12 +174,14 @@ export default function AlertBell() {
                         label={p.name}
                         sub={`${p.code} — última atualização ${timeAgo(p.days_ago)}`}
                         accent="#6B7280"
+                        onDismiss={() => dismiss('stale_forecast', p.id)}
+                        dismissing={isDismissing('stale_forecast', p.id)}
                       />
                     ))}
                   </Section>
                 )}
 
-                {/* Pending actual — past business day deadline */}
+                {/* Pending actual */}
                 {alerts.pending_actual?.count > 0 && (
                   <Section
                     icon={<WarningIcon />}
@@ -206,15 +189,58 @@ export default function AlertBell() {
                     count={alerts.pending_actual.count}
                     color="#DC2626"
                   >
-                    {alerts.pending_actual.projects.map(p => (
-                      <AlertRow
-                        key={p.id}
-                        onClick={() => goTo(p.id)}
-                        label={p.name}
-                        sub={`${p.code} — preencha o realizado de ${alerts.pending_actual.month_label}/${alerts.pending_actual.year}`}
-                        accent="#DC2626"
-                      />
-                    ))}
+                    {/* Manager view: grouped by engineer */}
+                    {isManager && alerts.pending_actual.by_engineer?.length > 0 ? (
+                      alerts.pending_actual.by_engineer.map(eng => (
+                        <div key={eng.engineer_id}>
+                          {/* Engineer header */}
+                          <div style={{
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            padding: '7px 16px 5px 20px', background: '#FEF2F2',
+                            borderBottom: '1px solid #FECACA',
+                          }}>
+                            <div style={{
+                              width: 22, height: 22, borderRadius: '50%', background: '#1E40AF',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: '0.5rem', fontWeight: 700, color: '#fff', flexShrink: 0,
+                            }}>{eng.avatar_initials || '?'}</div>
+                            <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#991B1B', flex: 1 }}>
+                              {eng.engineer_name}
+                            </span>
+                            <span style={{
+                              fontSize: '0.6rem', fontWeight: 700,
+                              background: '#FCA5A5', color: '#7F1D1D',
+                              borderRadius: 8, padding: '0px 5px',
+                            }}>{eng.projects.length}</span>
+                          </div>
+                          {eng.projects.map(p => (
+                            <AlertRow
+                              key={`${eng.engineer_id}-${p.id}`}
+                              onClick={() => goTo(p.id)}
+                              label={p.name}
+                              sub={`${p.code} — preencha o realizado de ${alerts.pending_actual.month_label}/${alerts.pending_actual.year}`}
+                              accent="#DC2626"
+                              onDismiss={() => dismiss('pending_actual', `${p.id}|${eng.engineer_id}`)}
+                              dismissing={isDismissing('pending_actual', `${p.id}|${eng.engineer_id}`)}
+                              indent
+                            />
+                          ))}
+                        </div>
+                      ))
+                    ) : (
+                      /* Engineer view: flat list */
+                      alerts.pending_actual.projects.map(p => (
+                        <AlertRow
+                          key={p.id}
+                          onClick={() => goTo(p.id)}
+                          label={p.name}
+                          sub={`${p.code} — preencha o realizado de ${alerts.pending_actual.month_label}/${alerts.pending_actual.year}`}
+                          accent="#DC2626"
+                          onDismiss={() => dismiss('pending_actual', p.id)}
+                          dismissing={isDismissing('pending_actual', p.id)}
+                        />
+                      ))
+                    )}
                   </Section>
                 )}
               </>
@@ -223,8 +249,7 @@ export default function AlertBell() {
 
           {/* Footer */}
           <div style={{
-            padding: '8px 16px',
-            borderTop: '1px solid var(--border)',
+            padding: '8px 16px', borderTop: '1px solid var(--border)',
             display: 'flex', justifyContent: 'flex-end',
           }}>
             <button
@@ -234,9 +259,7 @@ export default function AlertBell() {
                 fontSize: '0.72rem', color: 'var(--ctg-blue)', fontWeight: 600,
                 fontFamily: 'var(--font-body)',
               }}
-            >
-              Atualizar
-            </button>
+            >Atualizar</button>
           </div>
         </div>
       )}
@@ -251,52 +274,72 @@ function Section({ icon, title, count, color, children }) {
     <div style={{ borderBottom: '1px solid var(--border)' }}>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
-        padding: '8px 16px 6px',
-        background: '#F8FAFC',
+        padding: '8px 16px 6px', background: '#F8FAFC',
         borderBottom: '1px solid var(--border)',
       }}>
         <span style={{ color, flexShrink: 0 }}>{icon}</span>
-        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', flex: 1 }}>
-          {title}
-        </span>
+        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', flex: 1 }}>{title}</span>
         <span style={{
           fontSize: '0.65rem', fontWeight: 700,
           background: color + '20', color,
           borderRadius: 10, padding: '1px 6px',
-        }}>
-          {count}
-        </span>
+        }}>{count}</span>
       </div>
       {children}
     </div>
   );
 }
 
-function AlertRow({ onClick, label, sub, accent }) {
+function AlertRow({ onClick, label, sub, accent, onDismiss, dismissing, indent }) {
   const [hov, setHov] = useState(false);
   return (
-    <button
-      onClick={onClick}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
+    <div
       style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
-        width: '100%', padding: '9px 16px 9px 20px',
+        display: 'flex', alignItems: 'center', gap: 0,
         background: hov ? '#F0F4FA' : 'transparent',
-        border: 'none', cursor: 'pointer',
         borderLeft: `3px solid ${hov ? accent : 'transparent'}`,
         transition: 'all 0.12s',
-        fontFamily: 'var(--font-body)',
-        textAlign: 'left',
       }}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
     >
-      <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3 }}>
-        {label}
-      </span>
-      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 2 }}>
-        {sub}
-      </span>
-    </button>
+      <button
+        onClick={onClick}
+        style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+          flex: 1, padding: `9px 8px 9px ${indent ? '32px' : '20px'}`,
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          fontFamily: 'var(--font-body)', textAlign: 'left',
+        }}
+      >
+        <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3 }}>
+          {label}
+        </span>
+        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 2 }}>
+          {sub}
+        </span>
+      </button>
+      {/* Dismiss button */}
+      {onDismiss && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDismiss(); }}
+          disabled={dismissing}
+          title="Marcar como lido"
+          style={{
+            width: 28, height: 28, borderRadius: '50%',
+            border: '1.5px solid var(--border-strong)',
+            background: dismissing ? '#E5E7EB' : 'transparent',
+            cursor: dismissing ? 'wait' : 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0, marginRight: 10,
+            color: 'var(--text-muted)', fontSize: '0.7rem',
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={e => { if (!dismissing) { e.currentTarget.style.background = '#DCFCE7'; e.currentTarget.style.borderColor = '#16A34A'; e.currentTarget.style.color = '#16A34A'; }}}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--border-strong)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+        >✓</button>
+      )}
+    </div>
   );
 }
 

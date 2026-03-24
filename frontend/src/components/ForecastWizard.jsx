@@ -37,11 +37,11 @@ function parseInput(str) {
   return Math.max(0, val);
 }
 function fmtNum(v) {
-  return v > 0 ? v.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) : '—';
+  return v > 0 ? v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
 }
 
 // ── Month input row ───────────────────────────────────────────────────────────
-function MonthRow({ month, year, value, comment, onChange, refValue, refLabel, theme }) {
+function MonthRow({ month, year, value, comment, onChange, refValue, refLabel, theme, otherComments }) {
   const [localVal, setLocalVal]   = useState(fmtInput(value));
   const [localCmt, setLocalCmt]   = useState(comment);
   const didMount                  = useRef(false);
@@ -61,60 +61,96 @@ function MonthRow({ month, year, value, comment, onChange, refValue, refLabel, t
   const commitVal = () => { const p = parseInput(localVal); setLocalVal(fmtInput(p)); onChange(month, p, localCmt); };
   const commitCmt = () => onChange(month, parseInput(localVal), localCmt);
 
+  // Filter other comments that actually have content
+  const visibleOtherComments = (otherComments || []).filter(c => c.comment && c.comment.trim());
+
   return (
     <div style={{
-      display:'grid', gridTemplateColumns:'140px 1fr 1fr', gap:12,
-      padding:'10px 20px', borderBottom:`1px solid ${theme.border}`,
+      display:'flex', flexDirection:'column',
+      borderBottom:`1px solid ${theme.border}`,
       background: isCurrent ? theme.row : 'transparent',
     }}>
-      <div style={{display:'flex',alignItems:'center',gap:6}}>
-        <span style={{fontSize:'0.86rem',fontWeight:600,color:'var(--text-primary)'}}>{MONTHS_FULL_PT[month-1]}</span>
-        {isCurrent && (
-          <span style={{fontSize:'0.58rem',fontWeight:700,background:theme.color,color:'#fff',padding:'1px 5px',borderRadius:8}}>Atual</span>
-        )}
-      </div>
-      <div style={{display:'flex',flexDirection:'column',gap:3}}>
+      <div style={{
+        display:'grid', gridTemplateColumns:'140px 1fr 1fr', gap:12,
+        padding:'10px 20px',
+      }}>
         <div style={{display:'flex',alignItems:'center',gap:6}}>
-          <span style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:600,flexShrink:0}}>R$</span>
-          <input
-            style={{
-              flex:1,border:`1.5px solid ${isOver?'#FCA5A5':isUnder?'#BBF7D0':'var(--border-strong)'}`,
-              borderRadius:'var(--radius-sm)',padding:'7px 10px',
-              fontFamily:'var(--font-body)',fontSize:'0.9rem',
-              textAlign:'right',outline:'none',fontVariantNumeric:'tabular-nums',
-              background:isOver?'#FEF2F2':'transparent',transition:'border-color 0.15s',
-            }}
-            type="text" inputMode="decimal" placeholder="0,00"
-            value={localVal}
-            onChange={e => setLocalVal(e.target.value)}
-            onFocus={e => e.target.select()}
-            onBlur={commitVal}
-            onKeyDown={e => { if (e.key==='Enter') e.target.blur(); }}
-          />
-          {diff != null && Math.abs(diff) > 0.01 && (
-            <span style={{fontSize:'0.68rem',fontWeight:700,flexShrink:0,color:isOver?'#DC2626':'#166534'}}>
-              {isOver?'▲':'▼'} {formatBRL(Math.abs(diff))}
-            </span>
+          <span style={{fontSize:'0.86rem',fontWeight:600,color:'var(--text-primary)'}}>{MONTHS_FULL_PT[month-1]}</span>
+          {isCurrent && (
+            <span style={{fontSize:'0.58rem',fontWeight:700,background:theme.color,color:'#fff',padding:'1px 5px',borderRadius:8}}>Atual</span>
           )}
         </div>
-        {refValue != null && (
-          <div style={{fontSize:'0.62rem',color:'var(--text-muted)',textAlign:'right',paddingRight:4}}>
-            {refLabel}: {refValue===0?'—':formatBRL(refValue)}
+        <div style={{display:'flex',flexDirection:'column',gap:3}}>
+          <div style={{display:'flex',alignItems:'center',gap:6}}>
+            <span style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:600,flexShrink:0}}>R$</span>
+            <input
+              style={{
+                flex:1,border:`1.5px solid ${isOver?'#FCA5A5':isUnder?'#BBF7D0':'var(--border-strong)'}`,
+                borderRadius:'var(--radius-sm)',padding:'7px 10px',
+                fontFamily:'var(--font-body)',fontSize:'0.9rem',
+                textAlign:'right',outline:'none',fontVariantNumeric:'tabular-nums',
+                background:isOver?'#FEF2F2':'transparent',transition:'border-color 0.15s',
+              }}
+              type="text" inputMode="decimal" placeholder="0,00"
+              value={localVal}
+              onChange={e => setLocalVal(e.target.value)}
+              onFocus={e => e.target.select()}
+              onBlur={commitVal}
+              onKeyDown={e => { if (e.key==='Enter') e.target.blur(); }}
+            />
+            {diff != null && Math.abs(diff) > 0.01 && (
+              <span style={{fontSize:'0.68rem',fontWeight:700,flexShrink:0,color:isOver?'#DC2626':'#166534'}}>
+                {isOver?'▲':'▼'} {formatBRL(Math.abs(diff))}
+              </span>
+            )}
           </div>
-        )}
+          {refValue != null && (
+            <div style={{fontSize:'0.62rem',color:'var(--text-muted)',textAlign:'right',paddingRight:4}}>
+              {refLabel}: {refValue===0?'—':formatBRL(refValue)}
+            </div>
+          )}
+        </div>
+        <input
+          style={{
+            width:'100%',border:`1.5px solid ${theme.border}`,borderRadius:'var(--radius-sm)',
+            padding:'7px 10px',fontFamily:'var(--font-body)',fontSize:'0.82rem',
+            outline:'none',background:'transparent',color:'var(--text-secondary)',
+          }}
+          type="text" placeholder="Observação (opcional)..."
+          value={localCmt}
+          onChange={e => setLocalCmt(e.target.value)}
+          onBlur={commitCmt}
+          onKeyDown={e => { if (e.key==='Enter') e.target.blur(); }}
+        />
       </div>
-      <input
-        style={{
-          width:'100%',border:`1.5px solid ${theme.border}`,borderRadius:'var(--radius-sm)',
-          padding:'7px 10px',fontFamily:'var(--font-body)',fontSize:'0.82rem',
-          outline:'none',background:'transparent',color:'var(--text-secondary)',
-        }}
-        type="text" placeholder="Observação (opcional)..."
-        value={localCmt}
-        onChange={e => setLocalCmt(e.target.value)}
-        onBlur={commitCmt}
-        onKeyDown={e => { if (e.key==='Enter') e.target.blur(); }}
-      />
+      {/* Other users' comments for this same month/category (read-only) */}
+      {visibleOtherComments.length > 0 && (
+        <div style={{ padding:'0 20px 8px', paddingLeft:172, display:'flex', flexDirection:'column', gap:3 }}>
+          {visibleOtherComments.map((c, i) => (
+            <div key={i} style={{
+              display:'flex', alignItems:'baseline', gap:6,
+              fontSize:'0.72rem', color:'var(--text-muted)', lineHeight:1.4,
+            }}>
+              <span style={{
+                fontSize:'0.6rem', fontWeight:700, textTransform:'uppercase',
+                letterSpacing:'0.04em', color: c.typeColor || '#6B7280',
+                background: (c.typeColor || '#6B7280') + '18',
+                padding:'1px 5px', borderRadius:4, flexShrink:0, whiteSpace:'nowrap',
+              }}>
+                {c.typeLabel}
+              </span>
+              <span style={{ fontStyle:'italic', color:'var(--text-secondary)', wordBreak:'break-word' }}>
+                "{c.comment}"
+              </span>
+              {c.updatedBy && (
+                <span style={{ fontSize:'0.6rem', color:'var(--text-muted)', flexShrink:0, whiteSpace:'nowrap' }}>
+                  — {c.updatedBy}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -259,6 +295,28 @@ export default function ForecastWizard({
     return e ? parseFloat(e.value) : null;
   }, [entries, year]);
 
+  // Get comments from OTHER types for the same (category, year, month) — read-only cross-visibility
+  const getOtherComments = useCallback((currentType, cat, month) => {
+    return entries
+      .filter(e =>
+        e.category === cat &&
+        e.type !== currentType &&
+        parseInt(e.year) === parseInt(year) &&
+        parseInt(e.month) === month &&
+        e.comment && e.comment.trim()
+      )
+      .map(e => {
+        const tt = TYPE_THEME[e.type];
+        return {
+          type: e.type,
+          typeLabel: tt?.label || e.type,
+          typeColor: tt?.color || '#6B7280',
+          comment: e.comment,
+          updatedBy: e.updated_by_name || '',
+        };
+      });
+  }, [entries, year]);
+
   const handleChange = (type, cat, month, value, comment) => {
     setLocalData(prev => ({ ...prev, [`${type}|${cat}|${month}`]: { value, comment } }));
     setSaved(false);
@@ -292,22 +350,24 @@ export default function ForecastWizard({
 
   const hasData = (type) => CATEGORIES.some(cat => Array.from({length:12},(_,i)=>i+1).some(m => getValue(type,cat,m)>0));
 
-  // ── Consolidated helpers — single Actual value per year (no category breakdown) ──
-  const consGetVal = () => consData['Actual|Total'] ?? 0;
+  // ── Consolidated helpers — Actual + Forecast values per consolidated year ──
+  const consGetVal = (type = 'Actual') => consData[`${type}|Total`] ?? 0;
 
-  const handleConsChange = (val) => {
-    setConsData(prev => ({ ...prev, ['Actual|Total']: val }));
+  const handleConsChange = (type, val) => {
+    setConsData(prev => ({ ...prev, [`${type}|Total`]: val }));
     setSaved(false);
   };
 
   const handleConsSave = async () => {
     setSaving(true);
     try {
-      await api.post(`/forecast/project/${projectId}/year-consolidated`, {
-        year: parseInt(year), category: 'Total', type: 'Actual', value: consGetVal(),
-      });
+      const entries = [
+        { year: parseInt(year), category: 'Total', type: 'Actual', value: consGetVal('Actual') },
+        { year: parseInt(year), category: 'Total', type: 'Forecast', value: consGetVal('Forecast') },
+      ];
+      await api.post(`/forecast/project/${projectId}/year-consolidated/bulk`, { entries });
       setSaved(true);
-      toast(`Realizado consolidado de ${year} salvo!`, 'success');
+      toast(`Valores consolidados de ${year} salvos!`, 'success');
       onSaved?.();
     } catch { toast('Erro ao salvar.', 'error'); }
     finally { setSaving(false); }
@@ -400,14 +460,18 @@ export default function ForecastWizard({
       {isConsolidatedYear ? (
         <div className="wizard-type-row" style={{
           display:'flex', alignItems:'center', justifyContent:'space-between',
-          background:`linear-gradient(135deg, ${TYPE_THEME['Actual'].color}EE, ${TYPE_THEME['Actual'].color}BB)`,
+          background:`linear-gradient(135deg, var(--ctg-navy), #0F3460)`,
           padding:'10px 20px',
         }}>
-          <span style={{color:'#fff',fontWeight:700,fontSize:'0.9rem'}}>Realizado Consolidado</span>
-          <div style={{display:'flex',alignItems:'center',gap:14}}>
+          <span style={{color:'#fff',fontWeight:700,fontSize:'0.9rem'}}>📦 {year} — Consolidado</span>
+          <div style={{display:'flex',alignItems:'center',gap:18}}>
             <div style={{textAlign:'center'}}>
-              <div style={{fontSize:'0.56rem',fontWeight:700,color:'rgba(255,255,255,0.55)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Total</div>
-              <div style={{fontFamily:'var(--font-display)',fontSize:'1rem',color:'#fff',fontWeight:600}}>{formatBRL(consGetVal())}</div>
+              <div style={{fontSize:'0.56rem',fontWeight:700,color:'rgba(255,255,255,0.55)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Realizado</div>
+              <div style={{fontFamily:'var(--font-display)',fontSize:'1rem',color:'#fff',fontWeight:600}}>{formatBRL(consGetVal('Actual'))}</div>
+            </div>
+            <div style={{textAlign:'center'}}>
+              <div style={{fontSize:'0.56rem',fontWeight:700,color:'rgba(255,255,255,0.55)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Forecast</div>
+              <div style={{fontFamily:'var(--font-display)',fontSize:'1rem',color:'#fff',fontWeight:600}}>{formatBRL(consGetVal('Forecast'))}</div>
             </div>
             <button onClick={activeSave} disabled={saving} style={{
               padding:'8px 22px', border:'none', cursor:saving?'wait':'pointer',
@@ -449,12 +513,12 @@ export default function ForecastWizard({
             {CATEGORIES.map(cat => (
               <div key={cat} style={{textAlign:'center'}}>
                 <div className="wizard-cat-label" style={{fontSize:'0.56rem',fontWeight:700,color:'rgba(255,255,255,0.55)',textTransform:'uppercase',letterSpacing:'0.08em'}}>{cat}</div>
-                <div className="wizard-cat-value" style={{fontFamily:'var(--font-display)',fontSize:'0.9rem',color:'#fff'}}>{formatBRL(isConsolidatedYear ? consGetVal() : getCatTotal(activeType,cat))}</div>
+                <div className="wizard-cat-value" style={{fontFamily:'var(--font-display)',fontSize:'0.9rem',color:'#fff'}}>{formatBRL(isConsolidatedYear ? consGetVal(activeType) : getCatTotal(activeType,cat))}</div>
               </div>
             ))}
             <div style={{borderLeft:'1px solid rgba(255,255,255,0.25)',paddingLeft:16,textAlign:'center'}}>
               <div style={{fontSize:'0.56rem',fontWeight:700,color:'rgba(255,255,255,0.55)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Total</div>
-              <div style={{fontFamily:'var(--font-display)',fontSize:'1rem',color:'#fff',fontWeight:600}}>{formatBRL(isConsolidatedYear ? consGetVal() : getTypeTotal(activeType))}</div>
+              <div style={{fontFamily:'var(--font-display)',fontSize:'1rem',color:'#fff',fontWeight:600}}>{formatBRL(isConsolidatedYear ? consGetVal(activeType) : getTypeTotal(activeType))}</div>
             </div>
           </div>
           <button onClick={activeSave} disabled={saving} style={{
@@ -477,9 +541,10 @@ export default function ForecastWizard({
     </div>
   );
 
-  // ── CONSOLIDATED YEAR: simplified single-value-per-category view ──────────
+  // ── CONSOLIDATED YEAR: Actual + Forecast inputs ────────────────────────────
   if (isConsolidatedYear) {
-    const th = TYPE_THEME['Actual'];
+    const thActual   = TYPE_THEME['Actual'];
+    const thForecast = TYPE_THEME['Forecast'];
     return (
       <WrapperWithTypeBar>
         <div style={{ padding: '24px 28px', background: 'rgba(255,255,255,0.65)' }}>
@@ -493,36 +558,63 @@ export default function ForecastWizard({
             }}>📦</div>
             <div>
               <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem', color: 'var(--ctg-navy)', marginBottom: 2 }}>
-                {year} — Realizado Consolidado
+                {year} — Valores Consolidados
               </h2>
               <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                Ano encerrado — insira o valor total realizado do ano (valor único, sem detalhamento por categoria).
+                Ano encerrado — insira os valores totais consolidados do ano (sem detalhamento mensal por categoria).
               </p>
             </div>
           </div>
 
-          {/* Single Actual input */}
-          <div style={{ borderRadius: 'var(--radius-md)', border: `1.5px solid ${th.border}`, overflow: 'hidden' }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '12px 18px', background: `linear-gradient(135deg, ${th.color}EE, ${th.color}BB)`,
-              color: '#fff',
-            }}>
-              <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>Realizado Total</span>
-              <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.2rem' }}>
-                {formatBRL(consGetVal())}
-              </span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Realizado Consolidado */}
+            <div style={{ borderRadius: 'var(--radius-md)', border: `1.5px solid ${thActual.border}`, overflow: 'hidden' }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '12px 18px', background: `linear-gradient(135deg, ${thActual.color}EE, ${thActual.color}BB)`,
+                color: '#fff',
+              }}>
+                <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>Realizado Total</span>
+                <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.2rem' }}>
+                  {formatBRL(consGetVal('Actual'))}
+                </span>
+              </div>
+              <div style={{ padding: '16px 18px', background: thActual.light }}>
+                <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6, display: 'block' }}>
+                  Valor total realizado em {year} (R$)
+                </label>
+                <ConsInputRow
+                  cat="Realizado"
+                  value={consGetVal('Actual')}
+                  theme={thActual}
+                  onChange={(val) => handleConsChange('Actual', val)}
+                />
+              </div>
             </div>
-            <div style={{ padding: '16px 18px', background: th.light }}>
-              <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6, display: 'block' }}>
-                Valor total realizado em {year} (R$)
-              </label>
-              <ConsInputRow
-                cat="Total"
-                value={consGetVal()}
-                theme={th}
-                onChange={(val) => handleConsChange(val)}
-              />
+
+            {/* Forecast Consolidado */}
+            <div style={{ borderRadius: 'var(--radius-md)', border: `1.5px solid ${thForecast.border}`, overflow: 'hidden' }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '12px 18px', background: `linear-gradient(135deg, ${thForecast.color}EE, ${thForecast.color}BB)`,
+                color: '#fff',
+              }}>
+                <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>Forecast Total</span>
+                <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.2rem' }}>
+                  {formatBRL(consGetVal('Forecast'))}
+                </span>
+              </div>
+              <div style={{ padding: '16px 18px', background: thForecast.light }}>
+                <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6, display: 'block' }}>
+                  Valor total do forecast em {year} (R$)
+                </label>
+                <ConsInputRow
+                  cat="Forecast"
+                  value={consGetVal('Forecast')}
+                  theme={thForecast}
+                  onChange={(val) => handleConsChange('Forecast', val)}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -704,6 +796,7 @@ export default function ForecastWizard({
               refLabel={`Ref. ${TYPE_THEME[REF_TYPE[activeType]]?.label||''}`}
               theme={theme}
               onChange={(m,v,c)=>handleChange(activeType,cat,m,v,c)}
+              otherComments={getOtherComments(activeType,cat,month)}
             />
           ))}
         </div>

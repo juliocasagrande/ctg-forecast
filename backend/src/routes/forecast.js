@@ -182,9 +182,11 @@ router.get('/dashboard', async (req, res) => {
 
     // Combine forecast_entries + year_consolidated via UNION ALL
     // year_consolidated ALWAYS takes precedence when it exists
+    // Rule: Actual consolidated adds to Budget AND Actual; Forecast consolidated adds to Forecast
     const r = await pool.query(`
       SELECT p.id, p.code, p.name, p.si_value, p.pool_value, p.plants,
-        COALESCE(SUM(CASE WHEN combined.type='Budget'   THEN combined.value ELSE 0 END),0) AS budget,
+        COALESCE(SUM(CASE WHEN combined.type='Budget'   THEN combined.value ELSE 0 END),0)
+          + COALESCE(SUM(CASE WHEN combined.source='consolidated' AND combined.type='Actual' THEN combined.value ELSE 0 END),0) AS budget,
         COALESCE(SUM(CASE WHEN combined.type='Forecast' THEN combined.value ELSE 0 END),0) AS forecast,
         COALESCE(SUM(CASE WHEN combined.type='Actual'   THEN combined.value ELSE 0 END),0) AS actual,
         COALESCE(SUM(CASE WHEN combined.type='Meta'     THEN combined.value ELSE 0 END),0) AS meta,
@@ -192,7 +194,7 @@ router.get('/dashboard', async (req, res) => {
         MAX(combined.updated_at) AS last_forecast_update
       FROM projects p ${joinClause}
       LEFT JOIN (
-        SELECT fe.project_id, fe.type, fe.value, fe.updated_at
+        SELECT fe.project_id, fe.type, fe.value, fe.updated_at, 'entries' AS source
         FROM forecast_entries fe
         WHERE fe.year BETWEEN $1 AND $2
           AND NOT EXISTS (
@@ -203,7 +205,7 @@ router.get('/dashboard', async (req, res) => {
               AND yc2.value > 0
           )
         UNION ALL
-        SELECT yc.project_id, yc.type, yc.value, yc.consolidated_at AS updated_at
+        SELECT yc.project_id, yc.type, yc.value, yc.consolidated_at AS updated_at, 'consolidated' AS source
         FROM year_consolidated yc
         WHERE yc.year BETWEEN $1 AND $2 AND yc.value > 0
       ) combined ON combined.project_id = p.id
@@ -343,6 +345,7 @@ router.get('/alerts', async (req, res) => {
     const now = new Date();
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth() + 1; // 1-12
+    const isManager = ['gestor','planejador','admin'].includes(role);
 
     // Load configurable thresholds
     const cfgRes = await pool.query(
@@ -360,23 +363,28 @@ router.get('/alerts', async (req, res) => {
       let count = 0;
       for (let d = 1; d <= 31; d++) {
         const date = new Date(year, month - 1, d);
-        if (date.getMonth() !== month - 1) break; // went past end of month
+        if (date.getMonth() !== month - 1) break;
         const dow = date.getDay();
-        if (dow !== 0 && dow !== 6) count++; // not weekend
+        if (dow !== 0 && dow !== 6) count++;
         if (count === n) return date;
       }
-      return null; // month doesn't have N business days
+      return null;
     }
 
-    // Check if today is past the Nth business day of the current month
     const deadlineDate = getNthBusinessDay(currentYear, currentMonth, deadlineBizDay);
     const isPastDeadline = deadlineDate && now >= deadlineDate;
 
-    // Previous month to check
     const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1;
     const prevYear  = currentMonth === 1 ? currentYear - 1 : currentYear;
 
-    // Which projects does this user have access to?
+    // Load user's dismissed alerts
+    const dismissedRes = await pool.query(
+      'SELECT alert_type, alert_key FROM alert_dismissals WHERE user_id=$1',
+      [userId]
+    );
+    const dismissed = new Set(dismissedRes.rows.map(r => `${r.alert_type}|${r.alert_key}`));
+    const isDismissed = (type, key) => dismissed.has(`${type}|${key}`);
+
     const isEng = role === 'engenheiro';
     const projJoin = isEng
       ? `INNER JOIN project_assignments pa ON pa.project_id = p.id AND pa.user_id = $2`
@@ -399,7 +407,6 @@ router.get('/alerts', async (req, res) => {
     `, [userId]);
 
     // 2. Projects with zero Forecast entries for current year
-    // Suppressed if user did a check-in this month
     const emptyForecastRes = await pool.query(`
       SELECT p.id, p.code, p.name
       FROM projects p ${projJoin}
@@ -419,7 +426,6 @@ router.get('/alerts', async (req, res) => {
     `, projParams);
 
     // 3. Projects with no Forecast update in last N days
-    // Suppressed if user did a check-in this month
     const staleParams = isEng ? [currentYear, staleDate.toISOString(), userId] : [currentYear, staleDate.toISOString()];
     const staleJoin = isEng
       ? `INNER JOIN project_assignments pa ON pa.project_id = p.id AND pa.user_id = $3`
@@ -443,61 +449,126 @@ router.get('/alerts', async (req, res) => {
     `, staleParams);
 
     // 4. Projects with missing Actual for previous month (only if past deadline)
-    let pendingActualRes = { rows: [] };
+    let pendingActualRows = [];
     if (isPastDeadline) {
-      const paJoin = isEng
-        ? `INNER JOIN project_assignments pa ON pa.project_id = p.id AND pa.user_id = $3`
-        : '';
-      const paParams = isEng ? [prevYear, prevMonth, userId] : [prevYear, prevMonth];
-      // Exclude projects where:
-      // - Actual is filled for previous month, OR
-      // - User did a check-in this month (check-in counts as acknowledgment even with null data)
-      pendingActualRes = await pool.query(`
-        SELECT p.id, p.code, p.name
-        FROM projects p ${paJoin}
-        WHERE NOT EXISTS (
-          SELECT 1 FROM forecast_entries fe
-          WHERE fe.project_id = p.id
-            AND fe.type = 'Actual'
-            AND fe.year = $1
-            AND fe.month = $2
-            AND fe.value > 0
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM project_checkins pc
-          WHERE pc.project_id = p.id
-            AND pc.checked_at >= date_trunc('month', CURRENT_DATE)
-        )
-        ORDER BY p.code
-      `, paParams);
+      if (isManager) {
+        // For managers: get pending actual grouped by engineer
+        const paRes = await pool.query(`
+          SELECT p.id AS project_id, p.code, p.name,
+                 u.id AS engineer_id, u.name AS engineer_name, u.avatar_initials
+          FROM projects p
+          INNER JOIN project_assignments pa2 ON pa2.project_id = p.id
+          INNER JOIN users u ON u.id = pa2.user_id AND u.role = 'engenheiro'
+          WHERE NOT EXISTS (
+            SELECT 1 FROM forecast_entries fe
+            WHERE fe.project_id = p.id
+              AND fe.type = 'Actual'
+              AND fe.year = $1
+              AND fe.month = $2
+              AND fe.value > 0
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM project_checkins pc
+            WHERE pc.project_id = p.id
+              AND pc.checked_at >= date_trunc('month', CURRENT_DATE)
+          )
+          ORDER BY u.name, p.code
+        `, [prevYear, prevMonth]);
+        pendingActualRows = paRes.rows;
+      } else {
+        // For engineers: same as before
+        const paJoin = `INNER JOIN project_assignments pa ON pa.project_id = p.id AND pa.user_id = $3`;
+        const paRes = await pool.query(`
+          SELECT p.id, p.code, p.name
+          FROM projects p ${paJoin}
+          WHERE NOT EXISTS (
+            SELECT 1 FROM forecast_entries fe
+            WHERE fe.project_id = p.id
+              AND fe.type = 'Actual'
+              AND fe.year = $1
+              AND fe.month = $2
+              AND fe.value > 0
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM project_checkins pc
+            WHERE pc.project_id = p.id
+              AND pc.checked_at >= date_trunc('month', CURRENT_DATE)
+          )
+          ORDER BY p.code
+        `, [prevYear, prevMonth, userId]);
+        pendingActualRows = paRes.rows.map(r => ({ ...r, project_id: r.id }));
+      }
     }
 
+    // Apply dismiss filters
     const unreadMap = {};
-    unreadRes.rows.forEach(r => { unreadMap[r.project_id] = parseInt(r.unread_count); });
+    unreadRes.rows.forEach(r => {
+      if (!isDismissed('unread', String(r.project_id)))
+        unreadMap[r.project_id] = parseInt(r.unread_count);
+    });
     const totalUnread = Object.values(unreadMap).reduce((s, v) => s + v, 0);
+
+    const emptyForecast = emptyForecastRes.rows.filter(p => !isDismissed('empty_forecast', String(p.id)));
+    const staleForecast = staleRes.rows.filter(p => !isDismissed('stale_forecast', String(p.id)));
+
+    // Build pending actual response
+    let pendingActualResponse;
+    if (isManager && isPastDeadline) {
+      // Group by engineer for managers, apply dismiss
+      const byEngineer = {};
+      for (const row of pendingActualRows) {
+        const key = `${row.project_id}|${row.engineer_id}`;
+        if (isDismissed('pending_actual', key)) continue;
+        if (!byEngineer[row.engineer_id]) {
+          byEngineer[row.engineer_id] = {
+            engineer_id: row.engineer_id,
+            engineer_name: row.engineer_name,
+            avatar_initials: row.avatar_initials,
+            projects: [],
+          };
+        }
+        byEngineer[row.engineer_id].projects.push({
+          id: row.project_id,
+          code: row.code,
+          name: row.name,
+        });
+      }
+      const groups = Object.values(byEngineer);
+      const totalPending = groups.reduce((s, g) => s + g.projects.length, 0);
+      pendingActualResponse = {
+        count: totalPending,
+        by_engineer: groups,
+        projects: groups.flatMap(g => g.projects), // flat list for backward compat
+      };
+    } else {
+      const filtered = pendingActualRows.filter(p => !isDismissed('pending_actual', String(p.project_id || p.id)));
+      pendingActualResponse = {
+        count: filtered.length,
+        projects: filtered.map(r => ({ id: r.project_id || r.id, code: r.code, name: r.name })),
+      };
+    }
 
     const MONTHS_PT = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
     res.json({
-      total: totalUnread + emptyForecastRes.rows.length + staleRes.rows.length + pendingActualRes.rows.length,
+      total: totalUnread + emptyForecast.length + staleForecast.length + pendingActualResponse.count,
       unread_messages: {
         count: totalUnread,
         by_project: unreadMap,
       },
       empty_forecast: {
-        count: emptyForecastRes.rows.length,
-        projects: emptyForecastRes.rows,
+        count: emptyForecast.length,
+        projects: emptyForecast,
       },
       stale_forecast: {
-        count: staleRes.rows.length,
-        projects: staleRes.rows.map(r => ({
+        count: staleForecast.length,
+        projects: staleForecast.map(r => ({
           ...r,
           days_ago: Math.floor((Date.now() - new Date(r.last_update)) / 86400000),
         })),
       },
       pending_actual: {
-        count: pendingActualRes.rows.length,
-        projects: pendingActualRes.rows,
+        ...pendingActualResponse,
         month_label: MONTHS_PT[prevMonth],
         month: prevMonth,
         year: prevYear,
@@ -505,6 +576,20 @@ router.get('/alerts', async (req, res) => {
         is_past_deadline: isPastDeadline,
       },
     });
+  } catch (err) { safeError(res, err); }
+});
+
+// ── Dismiss an alert ─────────────────────────────────────────────────────────
+router.post('/alerts/dismiss', async (req, res) => {
+  try {
+    const { alert_type, alert_key } = req.body;
+    if (!alert_type || !alert_key) return res.status(400).json({ error: 'alert_type e alert_key obrigatórios' });
+    await pool.query(`
+      INSERT INTO alert_dismissals (user_id, alert_type, alert_key)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (user_id, alert_type, alert_key) DO NOTHING
+    `, [req.user.id, alert_type, String(alert_key)]);
+    res.json({ success: true });
   } catch (err) { safeError(res, err); }
 });
 

@@ -15,8 +15,8 @@ const fmt = formatBRLShort;
 function fmtAxis(v) {
   if (v === 0) return '0';
   const abs = Math.abs(v);
-  if (abs >= 1_000_000) return `${(v / 1_000_000).toFixed(1).replace('.', ',')}M`;
-  if (abs >= 1_000)     return `${(v / 1_000).toFixed(0)}k`;
+  if (abs >= 1_000_000) return `${(v / 1_000_000).toFixed(2).replace('.', ',')}M`;
+  if (abs >= 1_000)     return `${(v / 1_000).toFixed(2).replace('.', ',')}k`;
   return `${v}`;
 }
 

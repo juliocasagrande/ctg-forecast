@@ -534,6 +534,12 @@ export default function App() {
     if (!editingProject) navigate(`/projects/${saved.id}`);
     setEditingProject(null);
   };
+  const handleProjectDeleted = () => {
+    setProjectFormOpen(false);
+    setEditingProject(null);
+    fetchProjects();
+    navigate('/projects');
+  };
 
   if (loading) return <div className="loading-spinner" style={{ minHeight: '100vh' }}><div className="spinner" /></div>;
   if (!user) return (
@@ -673,6 +679,7 @@ export default function App() {
         onClose={() => { setProjectFormOpen(false); setEditingProject(null); }}
         project={editingProject}
         onSaved={handleProjectSaved}
+        onDeleted={handleProjectDeleted}
       />
 
       {/* Planejador export modal */}

@@ -110,14 +110,15 @@ function getYears(entries) {
 }
 
 // ── Resumo sheet ────────────────────────────────────────────────────────────
-function buildResumo(wb, project, entries, years, d, activeTypes, activeCats) {
+function buildResumo(wb, project, entries, allYears, monthlyYears, d, activeTypes, activeCats) {
   const ws = wb.addWorksheet('Resumo');
   ws.properties.defaultColWidth = 13;
 
   // Use filtered types/categories or fall back to defaults
   const typesToShow = activeTypes || ['Budget','Forecast','Actual'];
   const catsToSum   = activeCats  || CATEGORIES;
-  const minYear     = years[0]; // years is sorted ascending
+  // Only monthly years get month columns; minYear is based on those
+  const minYear     = monthlyYears.length ? monthlyYears[0] : allYears[0];
 
   // Row 1: project code + name — Budget header
   ws.getCell(1, 1).value = `${project.code} - ${project.name} — Budget`;
@@ -127,16 +128,16 @@ function buildResumo(wb, project, entries, years, d, activeTypes, activeCats) {
   ws.getCell(2, 1).value = `${project.code} - ${project.name} — Realizado`;
   ws.getCell(2, 1).font  = { size: 10, color: { argb: NAVY }, name: 'Calibri' };
 
-  // Row 3: Year headers
-  years.forEach(year => {
+  // Row 3: Year headers (only monthly years)
+  monthlyYears.forEach(year => {
     const c = ws.getCell(3, yearMonthToCol(year, 1, minYear));
     c.value = year;
     styleHeader(c, NAVY, 'FFFFFF', true, 11);
     ws.mergeCells(3, yearMonthToCol(year, 1, minYear), 3, yearMonthToCol(year, 12, minYear));
   });
 
-  // Row 4: Month headers
-  years.forEach(year => {
+  // Row 4: Month headers (only monthly years)
+  monthlyYears.forEach(year => {
     MONTHS_PT.forEach((m, mi) => {
       const c = ws.getCell(4, yearMonthToCol(year, mi + 1, minYear));
       c.value = m;
@@ -147,7 +148,7 @@ function buildResumo(wb, project, entries, years, d, activeTypes, activeCats) {
   ws.getCell(4, 1).value = '';
   ws.getCell(4, 2).value = '';
 
-  // Rows 6+: one row per active type (dynamic, respects user selection)
+  // Rows 6+: one row per active type — monthly columns only for monthlyYears
   const typeBg  = { Budget: BUDGET_BG, Forecast: FORECAST_BG, Actual: ACTUAL_BG,
                     Meta: 'F5F3FF', Pool: 'F0F9FF' };
   const typeLabel= { Budget: 'Budget', Forecast: 'Forecast', Actual: 'Realizado',
@@ -161,7 +162,7 @@ function buildResumo(wb, project, entries, years, d, activeTypes, activeCats) {
     styleHeader(ws.getCell(rowN, 2), bg, NAVY, true, 9);
     ws.getCell(rowN, 2).alignment.horizontal = 'left';
 
-    years.forEach(year => {
+    monthlyYears.forEach(year => {
       MONTHS_PT.forEach((_, mi) => {
         const month = mi + 1;
         let total = 0;
@@ -173,69 +174,81 @@ function buildResumo(wb, project, entries, years, d, activeTypes, activeCats) {
     });
   });
 
-  // Row after types + gap: annotation + annual summary block
+  // ── Annual summary block ──────────────────────────────────────────────────
+  // Shows ALL years (including consolidated) as annual totals
   const summaryStartRow = 6 + typesToShow.length + 2;
-  ws.getCell(summaryStartRow, 2).value = `Referente ao Forecast Janeiro à Dezembro/${years[0]}`;
+  ws.getCell(summaryStartRow, 2).value = `Referente ao Forecast Janeiro à Dezembro/${monthlyYears[0] || allYears[0]}`;
   ws.getCell(summaryStartRow, 2).font  = { size: 9, italic: true, color: { argb: '666666' }, name: 'Calibri' };
 
   // Annual columns starting at col L (12)
   const annualStartCol = 12;
-  ws.getCell(summaryStartRow, annualStartCol).value = years[0];
-  years.slice(1).forEach((y, i) => { ws.getCell(summaryStartRow, annualStartCol + 1 + i).value = y; });
-  ws.getCell(summaryStartRow, annualStartCol + years.length).value = 'SI';
-  ws.getCell(summaryStartRow, annualStartCol + years.length + 1).value = 'Realizado Total';
-  ws.getCell(summaryStartRow, annualStartCol + years.length + 2).value = 'POOL';
+  allYears.forEach((y, i) => {
+    const hc = ws.getCell(summaryStartRow, annualStartCol + i);
+    hc.value = y;
+    styleHeader(hc, LIGHT, NAVY, true, 9);
+  });
+  const afterYears = annualStartCol + allYears.length;
+  ws.getCell(summaryStartRow, afterYears).value = 'SI';
+  styleHeader(ws.getCell(summaryStartRow, afterYears), LIGHT, NAVY, true, 9);
+  ws.getCell(summaryStartRow, afterYears + 1).value = 'Realizado Total';
+  styleHeader(ws.getCell(summaryStartRow, afterYears + 1), LIGHT, NAVY, true, 9);
+  ws.getCell(summaryStartRow, afterYears + 2).value = 'POOL';
+  styleHeader(ws.getCell(summaryStartRow, afterYears + 2), LIGHT, NAVY, true, 9);
 
   typesToShow.forEach((type, ti) => {
     const rowN = summaryStartRow + 1 + ti;
-    ws.getCell(rowN, 11).value = 'R$';
+    const bg   = typeBg[type] || FORECAST_BG;
     ws.getCell(rowN, annualStartCol - 1).value = typeLabel[type] || type;
-    years.forEach((year, yi) => {
+    styleHeader(ws.getCell(rowN, annualStartCol - 1), bg, NAVY, true, 9);
+    ws.getCell(rowN, annualStartCol - 1).alignment.horizontal = 'left';
+
+    allYears.forEach((year, yi) => {
       let total = 0;
       catsToSum.forEach(cat => {
         for (let m = 1; m <= 12; m++) total += getVal(d, cat, type, year, m);
       });
       ws.getCell(rowN, annualStartCol + yi).value = total;
-      styleValue(ws.getCell(rowN, annualStartCol + yi), typeBg[type] || FORECAST_BG);
+      styleValue(ws.getCell(rowN, annualStartCol + yi), bg);
     });
     if (type === 'Forecast') {
-      ws.getCell(rowN, annualStartCol + years.length).value = parseFloat(project.si_value) || 0;
-      styleValue(ws.getCell(rowN, annualStartCol + years.length));
-      ws.getCell(rowN, annualStartCol + years.length + 2).value = parseFloat(project.pool_value) || 0;
-      styleValue(ws.getCell(rowN, annualStartCol + years.length + 2));
+      ws.getCell(rowN, afterYears).value = parseFloat(project.si_value) || 0;
+      styleValue(ws.getCell(rowN, afterYears));
+      ws.getCell(rowN, afterYears + 2).value = parseFloat(project.pool_value) || 0;
+      styleValue(ws.getCell(rowN, afterYears + 2));
     }
   });
 
   // Column widths
   ws.getColumn(1).width = 5;
   ws.getColumn(2).width = 45;
-  for (let c = 3; c <= 2 + years.length * 12; c++) ws.getColumn(c).width = 12;
+  const totalMonthCols = monthlyYears.length * 12;
+  for (let c = 3; c <= 2 + totalMonthCols; c++) ws.getColumn(c).width = 12;
   ws.getRow(1).height = 20;
   ws.getRow(4).height = 28;
 }
 
 // ── Category sheet (Viagens / Contratos / POs) ────────────────────────────
-function buildCategorySheet(wb, sheetName, catLabel, project, entries, years, d, activeTypes) {
+function buildCategorySheet(wb, sheetName, catLabel, project, entries, allYears, monthlyYears, d, activeTypes) {
   const typesToShow = activeTypes || ['Budget','Forecast','Actual'];
   const ws = wb.addWorksheet(sheetName);
   ws.properties.defaultColWidth = 13;
-  const minYear = years[0]; // years is sorted ascending
+  const minYear = monthlyYears.length ? monthlyYears[0] : allYears[0];
 
   const typeBg   = { Budget: BUDGET_BG, Forecast: FORECAST_BG, Actual: ACTUAL_BG,
                      Meta: 'F5F3FF', Pool: 'F0F9FF' };
   const typeLabel= { Budget:'Budget', Forecast:'Forecast', Actual:'Realizado', Meta:'Meta', Pool:'Pool' };
   const isViagens = sheetName === 'Viagens';
 
-  // Row 1: Year headers
-  years.forEach(year => {
+  // Row 1: Year headers (only monthly years)
+  monthlyYears.forEach(year => {
     const c = ws.getCell(1, yearMonthToCol(year, 1, minYear));
     c.value = year;
     styleHeader(c, NAVY, 'FFFFFF', true, 11);
     ws.mergeCells(1, yearMonthToCol(year, 1, minYear), 1, yearMonthToCol(year, 12, minYear));
   });
 
-  // Row 2: Month headers
-  years.forEach(year => {
+  // Row 2: Month headers (only monthly years)
+  monthlyYears.forEach(year => {
     MONTHS_PT.forEach((m, mi) => {
       const c = ws.getCell(2, yearMonthToCol(year, mi + 1, minYear));
       c.value = m;
@@ -243,7 +256,7 @@ function buildCategorySheet(wb, sheetName, catLabel, project, entries, years, d,
     });
   });
 
-  // Rows 4+: one row per active type
+  // Rows 4+: one row per active type (only monthly years get month columns)
   typesToShow.forEach((type, ti) => {
     const rowN = 4 + ti;
     const bg   = typeBg[type]   || FORECAST_BG;
@@ -254,7 +267,7 @@ function buildCategorySheet(wb, sheetName, catLabel, project, entries, years, d,
     styleHeader(ws.getCell(rowN, 2), bg, NAVY, true, 9);
     ws.getCell(rowN, 2).alignment.horizontal = 'left';
 
-    years.forEach(year => {
+    monthlyYears.forEach(year => {
       MONTHS_PT.forEach((_, mi) => {
         const month = mi + 1;
         const cat   = catLabel.trim();
@@ -266,9 +279,9 @@ function buildCategorySheet(wb, sheetName, catLabel, project, entries, years, d,
     });
   });
 
-  // Monthly detail rows (Forecast only for monthly breakdown)
+  // Monthly detail rows — only for monthly years (skip consolidated)
   const detailStartRow = 4 + typesToShow.length + 1;
-  years.forEach((year, yearIdx) => {
+  monthlyYears.forEach((year, yearIdx) => {
     if (!isViagens) {
       const yearHeaderRow = detailStartRow + yearIdx * 26;
       ws.getCell(yearHeaderRow, 1).value = year;
@@ -311,7 +324,8 @@ function buildCategorySheet(wb, sheetName, catLabel, project, entries, years, d,
   ws.getColumn(2).width = 12;
   ws.getColumn(6).width = 14;
   ws.getColumn(8).width = 50;
-  for (let c = 3; c <= 2 + years.length * 12; c++) ws.getColumn(c).width = 12;
+  const totalMonthCols = monthlyYears.length * 12;
+  for (let c = 3; c <= 2 + totalMonthCols; c++) ws.getColumn(c).width = 12;
 }
 
 // ── Avisos sheet ────────────────────────────────────────────────────────────
@@ -382,15 +396,22 @@ router.get('/project/:projectId', requireProjectAccess, async (req, res) => {
 
     // Merge consolidated data: for years that have consolidated values, inject them as synthetic entries
     // Consolidated takes precedence over monthly entries for the same project+year+type
+    // Track which years are fully consolidated (no monthly breakdown in Excel)
+    const consolidatedYears = new Set();
     if (consData.length) {
       const consYearTypes = new Set(consData.filter(c => parseFloat(c.value) > 0).map(c => `${c.year}|${c.type}`));
+      // Identify years where ALL active types are consolidated
+      const consYearsAll = [...new Set(consData.map(c => parseInt(c.year)))];
+      for (const y of consYearsAll) {
+        const allTypesConsolidated = activeTypes.every(t => consYearTypes.has(`${y}|${t}`));
+        if (allTypesConsolidated) consolidatedYears.add(y);
+      }
       // Remove monthly entries for years+types that have consolidated data
       entries = entries.filter(e => !consYearTypes.has(`${e.year}|${e.type}`));
       // Add consolidated as month=1 entries (total for the year)
       for (const c of consData) {
         if (parseFloat(c.value) <= 0) continue;
         if (c.category === 'Total') {
-          // Simplified format: single Actual value — spread evenly or put in month 1
           entries.push({ project_id: c.project_id, category: 'Contratos', type: c.type, year: c.year, month: 1, value: c.value, comment: 'Consolidado' });
         } else {
           entries.push({ project_id: c.project_id, category: c.category, type: c.type, year: c.year, month: 1, value: c.value, comment: 'Consolidado' });
@@ -400,6 +421,8 @@ router.get('/project/:projectId', requireProjectAccess, async (req, res) => {
 
     const years   = [...new Set(entries.map(e => parseInt(e.year)))].sort();
     if (!years.length) years.push(new Date().getFullYear());
+    // Separate: monthly years get columns, consolidated years only appear in annual summary
+    const monthlyYears = years.filter(y => !consolidatedYears.has(y));
 
     const d = buildLookup(entries);
 
@@ -408,8 +431,8 @@ router.get('/project/:projectId', requireProjectAccess, async (req, res) => {
     wb.created  = new Date();
     wb.modified = new Date();
 
-    buildResumo(wb, project, entries, years, d, activeTypes, activeCats);
-    activeCats.forEach(cat => buildCategorySheet(wb, cat, cat, project, entries, years, d, activeTypes));
+    buildResumo(wb, project, entries, years, monthlyYears, d, activeTypes, activeCats);
+    activeCats.forEach(cat => buildCategorySheet(wb, cat, cat, project, entries, years, monthlyYears, d, activeTypes));
     buildAvisos(wb, notes);
 
     const safeName = `${project.code} - ${project.name}`.replace(/[/\\?%*:|"<>]/g, '-');

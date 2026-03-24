@@ -254,6 +254,19 @@ export async function initDB() {
       CREATE INDEX IF NOT EXISTS idx_delegations_dates ON access_delegations(start_date, end_date);
     `);
 
+    // Alert dismissals — tracks acknowledged alerts so they don't reappear
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS alert_dismissals (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        alert_type VARCHAR(30) NOT NULL,
+        alert_key VARCHAR(120) NOT NULL,
+        dismissed_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, alert_type, alert_key)
+      );
+      CREATE INDEX IF NOT EXISTS idx_alert_dismissals_user ON alert_dismissals(user_id);
+    `);
+
     console.log('✅ Migrations applied (with security tables)');
   } finally {
     client.release();

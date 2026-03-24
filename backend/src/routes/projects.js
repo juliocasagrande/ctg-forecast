@@ -26,9 +26,9 @@ router.get('/', async (req, res) => {
 
     const query = `
       SELECT p.*,
-        COALESCE(fe_agg.total_budget, 0)   AS total_budget,
-        COALESCE(fe_agg.total_forecast, 0) AS total_forecast,
-        COALESCE(fe_agg.total_actual, 0)   AS total_actual,
+        COALESCE(fe_agg.total_budget, 0) + COALESCE(yc_agg.cons_actual, 0)   AS total_budget,
+        COALESCE(fe_agg.total_forecast, 0) + COALESCE(yc_agg.cons_forecast, 0) AS total_forecast,
+        COALESCE(fe_agg.total_actual, 0) + COALESCE(yc_agg.cons_actual, 0)   AS total_actual,
         COALESCE(pa_agg.engineer_count, 0) AS engineer_count,
         COALESCE(msg_agg.message_count, 0) AS message_count
       FROM projects p
@@ -40,6 +40,12 @@ router.get('/', async (req, res) => {
           SUM(CASE WHEN type='Actual'   THEN value ELSE 0 END) AS total_actual
         FROM forecast_entries GROUP BY project_id
       ) fe_agg ON fe_agg.project_id = p.id
+      LEFT JOIN (
+        SELECT project_id,
+          SUM(CASE WHEN type='Actual'   THEN value ELSE 0 END) AS cons_actual,
+          SUM(CASE WHEN type='Forecast' THEN value ELSE 0 END) AS cons_forecast
+        FROM year_consolidated WHERE value > 0 GROUP BY project_id
+      ) yc_agg ON yc_agg.project_id = p.id
       LEFT JOIN (
         SELECT project_id, COUNT(DISTINCT user_id) AS engineer_count
         FROM project_assignments GROUP BY project_id
@@ -124,11 +130,22 @@ router.put('/:id', requireRole('admin', 'gestor', 'planejador'), async (req, res
   } catch (err) { safeError(res, err); }
 });
 
-// DELETE /api/projects/:id — admin only
-router.delete('/:id', requireRole('admin'), async (req, res) => {
+// DELETE /api/projects/:id — gestor/planejador/admin, requires project name confirmation
+router.delete('/:id', requireRole('admin', 'gestor', 'planejador'), async (req, res) => {
   try {
+    const { confirmName } = req.body || {};
+    // Fetch project to validate name
+    const proj = await pool.query('SELECT id, name FROM projects WHERE id=$1', [req.params.id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Projeto não encontrado' });
+
+    const project = proj.rows[0];
+    if (!confirmName || confirmName.trim() !== project.name.trim()) {
+      return res.status(400).json({ error: 'Nome do projeto não confere. Digite o nome exato para confirmar a exclusão.' });
+    }
+
+    // CASCADE will delete all related data (entries, assignments, notes, messages, etc.)
     await pool.query('DELETE FROM projects WHERE id=$1', [req.params.id]);
-    res.json({ success: true });
+    res.json({ success: true, deleted: project.name });
   } catch (err) { safeError(res, err); }
 });
 

@@ -9,7 +9,7 @@ export function formatBRL(value) {
 export function formatBRLShort(value) {
   const v = parseFloat(value)||0;
   if (Math.abs(v) >= 1_000_000) return `R$ ${(v/1_000_000).toFixed(2).replace('.',',')}M`;
-  if (Math.abs(v) >= 1_000)     return `R$ ${(v/1_000).toFixed(1).replace('.',',')}k`;
+  if (Math.abs(v) >= 1_000)     return `R$ ${(v/1_000).toFixed(2).replace('.',',')}k`;
   return formatBRL(v);
 }
 export function getYearsFromEntries(entries) {

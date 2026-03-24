@@ -7,12 +7,12 @@ const MIN_YEAR = 2023, MAX_YEAR = new Date().getFullYear() + 3;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function fmtBRL(v) {
-  if (!v || v === 0) return 'R$ 0';
+  if (!v || v === 0) return 'R$ 0,00';
   const abs = Math.abs(parseFloat(v));
   const sig = v < 0 ? '-' : '';
-  if (abs >= 1_000_000) return `${sig}R$ ${(abs/1_000_000).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})}M`;
-  if (abs >= 1_000)     return `${sig}R$ ${(abs/1_000).toLocaleString('pt-BR',{maximumFractionDigits:0})}k`;
-  return `${sig}R$ ${abs.toLocaleString('pt-BR',{maximumFractionDigits:0})}`;
+  if (abs >= 1_000_000) return `${sig}R$ ${(abs/1_000_000).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}M`;
+  if (abs >= 1_000)     return `${sig}R$ ${(abs/1_000).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}k`;
+  return `${sig}R$ ${abs.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 }
 
 const SECTION_OPTIONS = [
@@ -86,7 +86,7 @@ function buildHTML(data, config, C) {
             options:{
               responsive:true,
               plugins:{legend:{labels:{font:{size:10},boxWidth:12}},tooltip:{callbacks:{label:function(c){return c.dataset.label+': R$ '+c.raw.toLocaleString('pt-BR',{minimumFractionDigits:2})}}}},
-              scales:{y:{ticks:{callback:function(v){return v>=1000000?'R$'+(v/1000000).toFixed(1)+'M':v>=1000?'R$'+(v/1000).toFixed(0)+'k':'R$'+v},font:{size:9}},grid:{color:'#F1F5F9'}},x:{ticks:{font:{size:9},maxRotation:45},grid:{display:false}}}
+              scales:{y:{ticks:{callback:function(v){return v>=1000000?'R$'+(v/1000000).toFixed(2)+'M':v>=1000?'R$'+(v/1000).toFixed(2)+'k':'R$'+v},font:{size:9}},grid:{color:'#F1F5F9'}},x:{ticks:{font:{size:9},maxRotation:45},grid:{display:false}}}
             }
           });
         })();
@@ -119,7 +119,7 @@ function buildHTML(data, config, C) {
             options:{
               responsive:true,
               plugins:{legend:{labels:{font:{size:10},boxWidth:12}},tooltip:{callbacks:{label:function(c){return c.dataset.label+': R$ '+c.raw.toLocaleString('pt-BR',{minimumFractionDigits:2})}}}},
-              scales:{y:{ticks:{callback:function(v){return v>=1000000?'R$'+(v/1000000).toFixed(1)+'M':v>=1000?'R$'+(v/1000).toFixed(0)+'k':'R$'+v},font:{size:9}},grid:{color:'#F1F5F9'}},x:{ticks:{font:{size:9}},grid:{display:false}}}
+              scales:{y:{ticks:{callback:function(v){return v>=1000000?'R$'+(v/1000000).toFixed(2)+'M':v>=1000?'R$'+(v/1000).toFixed(2)+'k':'R$'+v},font:{size:9}},grid:{color:'#F1F5F9'}},x:{ticks:{font:{size:9}},grid:{display:false}}}
             }
           });
         })();
