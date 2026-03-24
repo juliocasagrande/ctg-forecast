@@ -15,6 +15,7 @@ import exportRouter from './routes/export.js';
 import settingsRouter from './routes/settings.js';
 import reportRouter from './routes/report.js';
 import feedbackRouter from './routes/feedback.js';
+import delegationsRouter from './routes/delegations.js';
 
 dotenv.config();
 
@@ -67,6 +68,7 @@ app.use('/api/export', exportRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/report', reportRouter);
 app.use('/api/feedback', feedbackRouter);
+app.use('/api/delegations', delegationsRouter);
 
 app.get('/api/health', (_, res) => res.json({ status: 'ok', version: '2.1.0-security' }));
 

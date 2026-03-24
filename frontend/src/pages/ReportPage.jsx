@@ -45,15 +45,24 @@ function buildHTML(data, config, C) {
   function scurveChart(plant) {
     const pjs = getPlantProjects(plant);
     if (!pjs.length) return '';
-    const months = MONTH_LABELS;
-    // Aggregate monthly data across all projects in plant
-    const budget = new Array(12).fill(0), forecast = new Array(12).fill(0), actual = new Array(12).fill(0);
-    pjs.forEach(p => {
-      const ch = p.charts?.[yearStart] || {};
-      (ch.budget||[]).forEach((v,i)=>budget[i]+=v);
-      (ch.forecast||[]).forEach((v,i)=>forecast[i]+=v);
-      (ch.actual||[]).forEach((v,i)=>actual[i]+=v);
-    });
+    // Build labels and data across ALL years in the range
+    const allLabels = [];
+    const allBudget = [], allForecast = [], allActual = [];
+    for (let y = yearStart; y <= yearEnd; y++) {
+      MONTH_LABELS.forEach((m, mi) => {
+        allLabels.push(`${m}/${y}`);
+        let b = 0, f = 0, a = 0;
+        pjs.forEach(p => {
+          const ch = p.charts?.[y] || {};
+          b += (ch.budget?.[mi] || 0);
+          f += (ch.forecast?.[mi] || 0);
+          a += (ch.actual?.[mi] || 0);
+        });
+        allBudget.push(b);
+        allForecast.push(f);
+        allActual.push(a);
+      });
+    }
     // Accumulate
     const acc = (arr) => arr.reduce((a,v,i)=>[...a, (a[i-1]||0)+v],[]);
     const id = `chart_${plant.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'')}`;
@@ -67,17 +76,17 @@ function buildHTML(data, config, C) {
           new Chart(ctx, {
             type:'line',
             data:{
-              labels:${JSON.stringify(months.map(m=>`${m}/${yearStart}`))},
+              labels:${JSON.stringify(allLabels)},
               datasets:[
-                {label:'Budget (acum.)',    data:${JSON.stringify(acc(budget))},   borderColor:'${C.budget}',   backgroundColor:'${C.budget}22',  borderWidth:2,fill:false,pointRadius:2,tension:0.4},
-                {label:'Forecast (acum.)',  data:${JSON.stringify(acc(forecast))}, borderColor:'${C.forecast}', backgroundColor:'${C.forecast}22',borderWidth:2,fill:false,pointRadius:2,tension:0.4},
-                {label:'Realizado (acum.)', data:${JSON.stringify(acc(actual))},   borderColor:'${C.actual}',   backgroundColor:'${C.actual}22',  borderWidth:2,fill:true, pointRadius:2,tension:0.4,borderDash:[5,3]},
+                {label:'Budget (acum.)',    data:${JSON.stringify(acc(allBudget))},   borderColor:'${C.budget}',   backgroundColor:'${C.budget}22',  borderWidth:2,fill:false,pointRadius:2,tension:0.4},
+                {label:'Forecast (acum.)',  data:${JSON.stringify(acc(allForecast))}, borderColor:'${C.forecast}', backgroundColor:'${C.forecast}22',borderWidth:2,fill:false,pointRadius:2,tension:0.4},
+                {label:'Realizado (acum.)', data:${JSON.stringify(acc(allActual))},   borderColor:'${C.actual}',   backgroundColor:'${C.actual}22',  borderWidth:2,fill:true, pointRadius:2,tension:0.4,borderDash:[5,3]},
               ]
             },
             options:{
               responsive:true,
               plugins:{legend:{labels:{font:{size:10},boxWidth:12}},tooltip:{callbacks:{label:function(c){return c.dataset.label+': R$ '+c.raw.toLocaleString('pt-BR',{minimumFractionDigits:2})}}}},
-              scales:{y:{ticks:{callback:function(v){return v>=1000000?'R$'+(v/1000000).toFixed(1)+'M':v>=1000?'R$'+(v/1000).toFixed(0)+'k':'R$'+v},font:{size:9}},grid:{color:'#F1F5F9'}},x:{ticks:{font:{size:9}},grid:{display:false}}}
+              scales:{y:{ticks:{callback:function(v){return v>=1000000?'R$'+(v/1000000).toFixed(1)+'M':v>=1000?'R$'+(v/1000).toFixed(0)+'k':'R$'+v},font:{size:9}},grid:{color:'#F1F5F9'}},x:{ticks:{font:{size:9},maxRotation:45},grid:{display:false}}}
             }
           });
         })();

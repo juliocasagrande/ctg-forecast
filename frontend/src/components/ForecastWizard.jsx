@@ -174,12 +174,12 @@ function ConsInputRow({ cat, value, theme, onChange }) {
 }
 
 // ── SI Warning ────────────────────────────────────────────────────────────────
-function SIWarning({ si, totalForecast, totalActual, consolidatedActual }) {
-  const over = totalForecast + totalActual + parseFloat(consolidatedActual||0) - si;
+function SIWarning({ si, projection }) {
+  const over = parseFloat(projection||0) - si;
   if (!si || over <= 0) return null;
   return (
     <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 20px',background:'#FEF2F2',borderBottom:'1.5px solid #FCA5A5',fontSize:'0.78rem',color:'#991B1B',fontWeight:600}}>
-      ⚠ Realizado + Forecast excede a SI ({formatBRL(si)}) em {formatBRL(over)}
+      ⚠ Proje\u00e7\u00e3o (Realizado + Forecast restante) excede a SI ({formatBRL(si)}) em {formatBRL(over)}
     </div>
   );
 }
@@ -191,6 +191,7 @@ export default function ForecastWizard({
   availableTypes,
   siValue = 0,
   consolidatedActual = 0,
+  siProjection = 0,
   yearConfig,
 }) {
   const C = useTypeColors();
@@ -291,25 +292,22 @@ export default function ForecastWizard({
 
   const hasData = (type) => CATEGORIES.some(cat => Array.from({length:12},(_,i)=>i+1).some(m => getValue(type,cat,m)>0));
 
-  // ── Consolidated helpers (available for both WrapperWithTypeBar and consolidated view) ──
-  const consGetVal = (type, cat) => consData[`${type}|${cat}`] ?? 0;
-  const consTotal  = (type) => CATEGORIES.reduce((s, c) => s + consGetVal(type, c), 0);
+  // ── Consolidated helpers — single Actual value per year (no category breakdown) ──
+  const consGetVal = () => consData['Actual|Total'] ?? 0;
 
-  const handleConsChange = (type, cat, val) => {
-    setConsData(prev => ({ ...prev, [`${type}|${cat}`]: val }));
+  const handleConsChange = (val) => {
+    setConsData(prev => ({ ...prev, ['Actual|Total']: val }));
     setSaved(false);
   };
 
   const handleConsSave = async () => {
     setSaving(true);
     try {
-      const bulk = [];
-      types.forEach(type => CATEGORIES.forEach(cat => {
-        bulk.push({ year: parseInt(year), category: cat, type, value: consGetVal(type, cat) });
-      }));
-      await api.post(`/forecast/project/${projectId}/year-consolidated/bulk`, { entries: bulk });
+      await api.post(`/forecast/project/${projectId}/year-consolidated`, {
+        year: parseInt(year), category: 'Total', type: 'Actual', value: consGetVal(),
+      });
       setSaved(true);
-      toast(`Valores consolidados de ${year} salvos!`, 'success');
+      toast(`Realizado consolidado de ${year} salvo!`, 'success');
       onSaved?.();
     } catch { toast('Erro ao salvar.', 'error'); }
     finally { setSaving(false); }
@@ -398,6 +396,31 @@ export default function ForecastWizard({
       </div>
 
       {/* Row 2: Type tabs + totals + save */}
+      {/* For consolidated years: single "Realizado Consolidado" header, no type tabs */}
+      {isConsolidatedYear ? (
+        <div className="wizard-type-row" style={{
+          display:'flex', alignItems:'center', justifyContent:'space-between',
+          background:`linear-gradient(135deg, ${TYPE_THEME['Actual'].color}EE, ${TYPE_THEME['Actual'].color}BB)`,
+          padding:'10px 20px',
+        }}>
+          <span style={{color:'#fff',fontWeight:700,fontSize:'0.9rem'}}>Realizado Consolidado</span>
+          <div style={{display:'flex',alignItems:'center',gap:14}}>
+            <div style={{textAlign:'center'}}>
+              <div style={{fontSize:'0.56rem',fontWeight:700,color:'rgba(255,255,255,0.55)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Total</div>
+              <div style={{fontFamily:'var(--font-display)',fontSize:'1rem',color:'#fff',fontWeight:600}}>{formatBRL(consGetVal())}</div>
+            </div>
+            <button onClick={activeSave} disabled={saving} style={{
+              padding:'8px 22px', border:'none', cursor:saving?'wait':'pointer',
+              background:saved?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.12)',
+              color:'#fff', fontWeight:700, fontSize:'0.82rem', fontFamily:'var(--font-body)',
+              borderRadius:'var(--radius-sm)', whiteSpace:'nowrap', transition:'background 0.15s',
+            }}
+            onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.28)'}
+            onMouseLeave={e=>e.currentTarget.style.background=saved?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.12)'}
+            >{saving?'Salvando...':saved?'✓ Salvo':'💾 Salvar'}</button>
+          </div>
+        </div>
+      ) : (
       <div className="wizard-type-row" style={{
         display:'flex', alignItems:'stretch',
         background:`linear-gradient(135deg, ${theme.color}EE, ${theme.color}BB)`,
@@ -426,12 +449,12 @@ export default function ForecastWizard({
             {CATEGORIES.map(cat => (
               <div key={cat} style={{textAlign:'center'}}>
                 <div className="wizard-cat-label" style={{fontSize:'0.56rem',fontWeight:700,color:'rgba(255,255,255,0.55)',textTransform:'uppercase',letterSpacing:'0.08em'}}>{cat}</div>
-                <div className="wizard-cat-value" style={{fontFamily:'var(--font-display)',fontSize:'0.9rem',color:'#fff'}}>{formatBRL(isConsolidatedYear ? consGetVal(activeType,cat) : getCatTotal(activeType,cat))}</div>
+                <div className="wizard-cat-value" style={{fontFamily:'var(--font-display)',fontSize:'0.9rem',color:'#fff'}}>{formatBRL(isConsolidatedYear ? consGetVal() : getCatTotal(activeType,cat))}</div>
               </div>
             ))}
             <div style={{borderLeft:'1px solid rgba(255,255,255,0.25)',paddingLeft:16,textAlign:'center'}}>
               <div style={{fontSize:'0.56rem',fontWeight:700,color:'rgba(255,255,255,0.55)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Total</div>
-              <div style={{fontFamily:'var(--font-display)',fontSize:'1rem',color:'#fff',fontWeight:600}}>{formatBRL(isConsolidatedYear ? consTotal(activeType) : getTypeTotal(activeType))}</div>
+              <div style={{fontFamily:'var(--font-display)',fontSize:'1rem',color:'#fff',fontWeight:600}}>{formatBRL(isConsolidatedYear ? consGetVal() : getTypeTotal(activeType))}</div>
             </div>
           </div>
           <button onClick={activeSave} disabled={saving} style={{
@@ -446,8 +469,9 @@ export default function ForecastWizard({
           >{saving?'Salvando...':saved?'✓ Salvo':'💾 Salvar'}</button>
         </div>
       </div>
+      )}
 
-      <SIWarning si={si} totalForecast={totalForecast} totalActual={totalActual} consolidatedActual={consolidatedActual}/>
+      <SIWarning si={si} projection={siProjection}/>
 
       {children}
     </div>
@@ -455,6 +479,7 @@ export default function ForecastWizard({
 
   // ── CONSOLIDATED YEAR: simplified single-value-per-category view ──────────
   if (isConsolidatedYear) {
+    const th = TYPE_THEME['Actual'];
     return (
       <WrapperWithTypeBar>
         <div style={{ padding: '24px 28px', background: 'rgba(255,255,255,0.65)' }}>
@@ -468,44 +493,38 @@ export default function ForecastWizard({
             }}>📦</div>
             <div>
               <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem', color: 'var(--ctg-navy)', marginBottom: 2 }}>
-                {year} — Valores Consolidados
+                {year} — Realizado Consolidado
               </h2>
               <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                Ano encerrado — insira um valor total por categoria (sem detalhamento mensal).
+                Ano encerrado — insira o valor total realizado do ano (valor único, sem detalhamento por categoria).
               </p>
             </div>
           </div>
 
-          {/* Only show the active type */}
-          {(() => {
-            const t = activeType;
-            const th = TYPE_THEME[t];
-            return (
-              <div style={{ marginBottom: 20, borderRadius: 'var(--radius-md)', border: `1.5px solid ${th.border}`, overflow: 'hidden' }}>
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '10px 16px', background: `linear-gradient(135deg, ${th.color}EE, ${th.color}BB)`,
-                  color: '#fff',
-                }}>
-                  <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{th.label}</span>
-                  <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.1rem' }}>
-                    {formatBRL(consTotal(t))}
-                  </span>
-                </div>
-                <div style={{ background: th.light }}>
-                  {CATEGORIES.map(cat => (
-                    <ConsInputRow
-                      key={`${t}|${cat}`}
-                      cat={cat}
-                      value={consGetVal(t, cat)}
-                      theme={th}
-                      onChange={(val) => handleConsChange(t, cat, val)}
-                    />
-                  ))}
-                </div>
-              </div>
-            );
-          })()}
+          {/* Single Actual input */}
+          <div style={{ borderRadius: 'var(--radius-md)', border: `1.5px solid ${th.border}`, overflow: 'hidden' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '12px 18px', background: `linear-gradient(135deg, ${th.color}EE, ${th.color}BB)`,
+              color: '#fff',
+            }}>
+              <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>Realizado Total</span>
+              <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.2rem' }}>
+                {formatBRL(consGetVal())}
+              </span>
+            </div>
+            <div style={{ padding: '16px 18px', background: th.light }}>
+              <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6, display: 'block' }}>
+                Valor total realizado em {year} (R$)
+              </label>
+              <ConsInputRow
+                cat="Total"
+                value={consGetVal()}
+                theme={th}
+                onChange={(val) => handleConsChange(val)}
+              />
+            </div>
+          </div>
         </div>
       </WrapperWithTypeBar>
     );

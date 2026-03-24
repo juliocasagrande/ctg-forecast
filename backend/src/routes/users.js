@@ -19,8 +19,18 @@ function safeError(res, err) {
   if (process.env.NODE_ENV === 'production') {
     return res.status(500).json({ error: 'Erro interno do servidor' });
   }
-  safeError(res, err);
+  res.status(500).json({ error: err.message });
 }
+
+// GET /api/users/for-delegation — any authenticated user can see basic user list
+router.get('/for-delegation', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT id, name, email, role, avatar_initials FROM users WHERE active=true ORDER BY name`
+    );
+    res.json(r.rows);
+  } catch (err) { safeError(res, err); }
+});
 
 // GET /api/users/pending — admin only
 router.get('/pending', requireRole('admin'), async (req, res) => {

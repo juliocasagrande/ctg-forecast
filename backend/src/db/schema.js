@@ -172,7 +172,8 @@ export async function initDB() {
         ('export_include_pool',  'true'),
         ('fiscal_year_start',    '1'),
         ('active_year_start',    '2025'),
-        ('active_year_end',      '2027')
+        ('active_year_end',      '2027'),
+        ('actual_deadline_business_day', '6')
       ON CONFLICT (key) DO NOTHING;
     `);
 
@@ -182,7 +183,7 @@ export async function initDB() {
         id SERIAL PRIMARY KEY,
         project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
         year INTEGER NOT NULL,
-        category VARCHAR(20) NOT NULL CHECK (category IN ('Viagens','Contratos','POs')),
+        category VARCHAR(20) NOT NULL CHECK (category IN ('Viagens','Contratos','POs','Total')),
         type VARCHAR(10) NOT NULL CHECK (type IN ('Budget','Forecast','Actual','Meta','Pool')),
         value NUMERIC(15,2) DEFAULT 0,
         comment TEXT,
@@ -192,6 +193,13 @@ export async function initDB() {
       );
       CREATE INDEX IF NOT EXISTS idx_year_consolidated_project ON year_consolidated(project_id);
       CREATE INDEX IF NOT EXISTS idx_year_consolidated_year ON year_consolidated(project_id, year);
+    `);
+
+    // Migration: allow 'Total' category in year_consolidated
+    await client.query(`
+      ALTER TABLE year_consolidated DROP CONSTRAINT IF EXISTS year_consolidated_category_check;
+      ALTER TABLE year_consolidated ADD CONSTRAINT year_consolidated_category_check
+        CHECK (category IN ('Viagens','Contratos','POs','Total'));
     `);
 
     // Feedback / suggestions table
@@ -226,6 +234,24 @@ export async function initDB() {
       CREATE INDEX IF NOT EXISTS idx_audit_log_event ON audit_log(event);
       CREATE INDEX IF NOT EXISTS idx_audit_log_email ON audit_log(email);
       CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
+    `);
+
+    // Access delegation (férias/ausência)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS access_delegations (
+        id SERIAL PRIMARY KEY,
+        delegator_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        delegate_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        reason VARCHAR(200),
+        active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        CONSTRAINT no_self_delegation CHECK (delegator_id != delegate_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_delegations_delegator ON access_delegations(delegator_id);
+      CREATE INDEX IF NOT EXISTS idx_delegations_delegate ON access_delegations(delegate_id);
+      CREATE INDEX IF NOT EXISTS idx_delegations_dates ON access_delegations(start_date, end_date);
     `);
 
     console.log('✅ Migrations applied (with security tables)');

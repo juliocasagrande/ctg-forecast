@@ -346,7 +346,7 @@ router.get('/project/:projectId', requireProjectAccess, async (req, res) => {
     // Role-based type whitelist
     const ALLOWED_TYPES = {
       engenheiro: ['Forecast','Actual'],
-      gestor:     ['Budget','Forecast','Actual'],
+      gestor:     ['Budget','Forecast','Actual','Meta','Pool'],
       planejador: ['Budget','Forecast','Actual','Meta','Pool'],
       admin:      ['Budget','Forecast','Actual','Meta','Pool'],
     };
@@ -354,19 +354,40 @@ router.get('/project/:projectId', requireProjectAccess, async (req, res) => {
     const activeTypes  = selTypes ? selTypes.filter(t => allowedTypes.includes(t)) : allowedTypes;
     const activeCats   = selCategories || ['Viagens','Contratos','POs'];
 
-    const [projRes, entriesRes, notesRes] = await Promise.all([
+    const [projRes, entriesRes, notesRes, consRes] = await Promise.all([
       pool.query('SELECT * FROM projects WHERE id=$1', [projectId]),
       pool.query('SELECT * FROM forecast_entries WHERE project_id=$1 ORDER BY year, month', [projectId]),
       pool.query(`SELECT pn.*, u.name AS user_name
         FROM project_notes pn LEFT JOIN users u ON u.id=pn.user_id
         WHERE pn.project_id=$1 ORDER BY pn.note_date DESC`, [projectId]),
+      pool.query('SELECT * FROM year_consolidated WHERE project_id=$1 ORDER BY year', [projectId]),
     ]);
 
     if (!projRes.rows.length) return res.status(404).json({ error: 'Projeto não encontrado' });
 
     const project = projRes.rows[0];
-    const entries = entriesRes.rows;
+    let entries = entriesRes.rows;
     const notes   = notesRes.rows;
+    const consData = consRes.rows;
+
+    // Merge consolidated data: for years that have consolidated values, inject them as synthetic entries
+    // Consolidated takes precedence over monthly entries for the same project+year+type
+    if (consData.length) {
+      const consYearTypes = new Set(consData.filter(c => parseFloat(c.value) > 0).map(c => `${c.year}|${c.type}`));
+      // Remove monthly entries for years+types that have consolidated data
+      entries = entries.filter(e => !consYearTypes.has(`${e.year}|${e.type}`));
+      // Add consolidated as month=1 entries (total for the year)
+      for (const c of consData) {
+        if (parseFloat(c.value) <= 0) continue;
+        if (c.category === 'Total') {
+          // Simplified format: single Actual value — spread evenly or put in month 1
+          entries.push({ project_id: c.project_id, category: 'Contratos', type: c.type, year: c.year, month: 1, value: c.value, comment: 'Consolidado' });
+        } else {
+          entries.push({ project_id: c.project_id, category: c.category, type: c.type, year: c.year, month: 1, value: c.value, comment: 'Consolidado' });
+        }
+      }
+    }
+
     const years   = [...new Set(entries.map(e => parseInt(e.year)))].sort();
     if (!years.length) years.push(new Date().getFullYear());
 
@@ -401,7 +422,7 @@ router.get('/planejador', async (req, res) => {
   // Role-based type whitelist
   const ALLOWED = {
     engenheiro: ['Forecast','Actual'],
-    gestor:     ['Budget','Forecast','Actual'],
+    gestor:     ['Budget','Forecast','Actual','Meta','Pool'],
     planejador: ['Budget','Forecast','Actual','Meta','Pool'],
     admin:      ['Budget','Forecast','Actual','Meta','Pool'],
   };
@@ -417,10 +438,18 @@ router.get('/planejador', async (req, res) => {
   const TYPE_LIGHT  = { Budget:'F0FDF4', Forecast:'E0F2FE', Actual:'EFF6FF', Meta:'F5F3FF', Pool:'F0F9FF' };
 
   const MONTHS_ABBR = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-  const START_YEAR = 2026, END_YEAR = 2031;
   const NAVY = '001F5B', SUB_BG = '0070B8', LIGHT = 'E8EEF8', WHITE = 'FFFFFF';
 
   try {
+    // Load year range from settings
+    const settingsRes = await pool.query(
+      "SELECT key, value FROM system_settings WHERE key IN ('active_year_start','active_year_end')"
+    );
+    const settingsMap = {};
+    settingsRes.rows.forEach(r => { settingsMap[r.key] = r.value; });
+    const START_YEAR = parseInt(settingsMap.active_year_start || '2025');
+    const END_YEAR   = parseInt(settingsMap.active_year_end   || '2027');
+
     // 1. Projects (engineers see only assigned)
     const isEng = role === 'engenheiro';
     const engJoin = isEng
@@ -447,7 +476,7 @@ router.get('/planejador', async (req, res) => {
     `, isEng ? [userId] : []);
     const projects = projRes.rows;
 
-    // 2. Entries for selected types
+    // 2. Entries for selected types (monthly)
     const ph = activeTypes.map((_,i) => `$${i+1}`).join(',');
     const entries = activeTypes.length > 0
       ? (await pool.query(
@@ -458,10 +487,40 @@ router.get('/planejador', async (req, res) => {
           activeTypes)).rows
       : [];
 
+    // 2b. Consolidated data
+    const consRes = activeTypes.length > 0
+      ? (await pool.query(
+          `SELECT project_id, type, category, year, value
+           FROM year_consolidated WHERE type IN (${ph}) AND value > 0`,
+          activeTypes)).rows
+      : [];
+
     // lookup[pid][type][cat][`Y-M`] = value
     const lookup = {};
+    // First, populate with consolidated data (put in month 1)
+    for (const c of consRes) {
+      const pid = c.project_id;
+      if (!lookup[pid]) lookup[pid] = {};
+      if (!lookup[pid][c.type]) lookup[pid][c.type] = {};
+      if (c.category === 'Total') {
+        // Simplified consolidated: put in Contratos for display
+        if (!lookup[pid][c.type]['Contratos']) lookup[pid][c.type]['Contratos'] = {};
+        lookup[pid][c.type]['Contratos'][`${c.year}-1`] = parseFloat(c.value) || 0;
+        // Mark this year+type as having consolidated data
+        if (!lookup[pid]._consYears) lookup[pid]._consYears = new Set();
+        lookup[pid]._consYears.add(`${c.year}|${c.type}`);
+      } else {
+        if (!lookup[pid][c.type][c.category]) lookup[pid][c.type][c.category] = {};
+        lookup[pid][c.type][c.category][`${c.year}-1`] = parseFloat(c.value) || 0;
+        if (!lookup[pid]._consYears) lookup[pid]._consYears = new Set();
+        lookup[pid]._consYears.add(`${c.year}|${c.type}`);
+      }
+    }
+    // Then, populate with monthly entries (skip years that have consolidated data)
     for (const e of entries) {
       if (!lookup[e.project_id]) lookup[e.project_id] = {};
+      const consYears = lookup[e.project_id]._consYears;
+      if (consYears && consYears.has(`${e.year}|${e.type}`)) continue; // consolidated takes precedence
       if (!lookup[e.project_id][e.type]) lookup[e.project_id][e.type] = {};
       if (!lookup[e.project_id][e.type][e.category]) lookup[e.project_id][e.type][e.category] = {};
       lookup[e.project_id][e.type][e.category][`${e.year}-${e.month}`] = parseFloat(e.total) || 0;

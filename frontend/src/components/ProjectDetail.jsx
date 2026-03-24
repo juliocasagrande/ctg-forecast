@@ -22,7 +22,6 @@ const FORECAST_TABS = {
   planejador: [
     { id: 'Budget',              label: 'Budget'             },
     { id: 'Actual',              label: 'Realizado'          },
-    { id: 'ActualConsolidated',  label: 'Realizado Anterior' },
     { id: 'Pool',                label: 'Pool'               },
     { id: 'Meta',                label: 'Meta'               },
   ],
@@ -34,7 +33,6 @@ const FORECAST_TABS = {
     { id: 'Budget',              label: 'Budget'             },
     { id: 'Forecast',            label: 'Forecast'           },
     { id: 'Actual',              label: 'Realizado'          },
-    { id: 'ActualConsolidated',  label: 'Realizado Anterior' },
     { id: 'Pool',                label: 'Pool'               },
     { id: 'Meta',                label: 'Meta'               },
   ],
@@ -49,20 +47,20 @@ function Avatar({ name, initials, role, size=32 }) {
 }
 
 // ── SI Warning ───────────────────────────────────────────────────────────────
-function SIWarning({ forecastTotal, actualTotal, consolidatedActual, siValue }) {
-  const si = parseFloat(siValue)||0, fc = parseFloat(forecastTotal)||0;
-  const ac = parseFloat(actualTotal)||0, cons = parseFloat(consolidatedActual)||0;
-  const over = fc + ac + cons - si;
+function SIWarning({ projection, siValue }) {
+  const si = parseFloat(siValue)||0;
+  const proj = parseFloat(projection)||0;
+  const over = proj - si;
   if (!si || over <= 0) return null;
   return (
     <div style={{display:'flex',alignItems:'center',gap:8,background:'#FEF2F2',border:'1.5px solid #FCA5A5',borderRadius:'var(--radius-sm)',padding:'6px 12px',fontSize:'0.78rem',color:'#991B1B',fontWeight:600,marginBottom:10}}>
-      ⚠ Realizado + Forecast excede a SI em {formatBRL(over)}
+      ⚠ Proje\u00e7\u00e3o (Realizado + Forecast restante) excede a SI em {formatBRL(over)}
     </div>
   );
 }
 
 // ── Read-only table (gestor) ──────────────────────────────────────────────────
-function ReadOnlyTable({ entries, year, siValue, consolidatedActual }) {
+function ReadOnlyTable({ entries, year, siValue, consolidatedActual, siProjection }) {
   const C = useTypeColors();
   const [tooltip, setTooltip] = useState(null); // { x, y, comments: [{user, type, text}] }
   const getEntry = (cat, type, month) =>
@@ -99,8 +97,7 @@ function ReadOnlyTable({ entries, year, siValue, consolidatedActual }) {
 
   return (
     <>
-      <SIWarning forecastTotal={grandTotal('Forecast')} actualTotal={grandTotal('Actual')}
-        consolidatedActual={consolidatedActual} siValue={siValue} />
+      <SIWarning projection={siProjection} siValue={siValue} />
       <div className="table-wrapper" style={{position:'relative'}}>
         <table className="forecast-table">
           <thead>
@@ -189,74 +186,59 @@ function ReadOnlyTable({ entries, year, siValue, consolidatedActual }) {
 // ── Consolidated Year Table — summary view for past years ────────────────────
 function ConsolidatedYearTable({ yearConsData, year }) {
   const C = useTypeColors();
-  const TYPES = ['Budget','Forecast','Actual','Meta','Pool'];
-  const TYPE_LABELS = { Budget:'Budget', Forecast:'Forecast', Actual:'Realizado', Meta:'Meta', Pool:'Pool' };
-  const getVal = (type, cat) => {
-    const row = yearConsData.find(e => parseInt(e.year) === year && e.type === type && e.category === cat);
-    return parseFloat(row?.value) || 0;
+  // New simplified format: single value with category='Total', type='Actual'
+  const getTotal = () => {
+    const row = yearConsData.find(e => parseInt(e.year) === year && e.type === 'Actual' && e.category === 'Total');
+    if (row) return parseFloat(row.value) || 0;
+    // Fallback: sum old per-category format for backwards compatibility
+    const oldRows = yearConsData.filter(e => parseInt(e.year) === year && e.type === 'Actual');
+    return oldRows.reduce((s, e) => s + (parseFloat(e.value) || 0), 0);
   };
-  const catTotal = (type) => CATEGORIES.reduce((s,c) => s + getVal(type, c), 0);
+  const total = getTotal();
   const f = v => v ? v.toLocaleString('pt-BR',{maximumFractionDigits:0}) : '—';
-  const hasAny = yearConsData.some(e => parseInt(e.year) === year && parseFloat(e.value) > 0);
 
-  if (!hasAny) {
+  if (!total) {
     return (
       <div style={{textAlign:'center',padding:'40px 20px',color:'var(--text-muted)',fontSize:'0.9rem'}}>
         <p style={{marginBottom:8,fontSize:'1.1rem'}}>📦</p>
         <p>Nenhum valor consolidado registrado para {year}.</p>
-        <p style={{fontSize:'0.8rem',marginTop:4}}>Acesse a aba <strong>Forecast</strong> → <strong>{year} consolidado</strong> para inserir os valores.</p>
+        <p style={{fontSize:'0.8rem',marginTop:4}}>Acesse a aba <strong>Forecast</strong> → <strong>{year} consolidado</strong> para inserir o valor.</p>
       </div>
     );
   }
 
   return (
-    <div className="table-wrapper">
-      <table className="forecast-table">
-        <thead>
-          <tr>
-            <th className="col-label">Tipo</th>
-            {CATEGORIES.map(c => <th key={c}>{c}</th>)}
-            <th>Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {TYPES.map(type => {
-            const colors = {
-              Budget: C.budget, Forecast: C.forecast, Actual: C.actual, Meta: C.meta, Pool: C.pool,
-            };
-            const color = colors[type];
-            return (
-              <tr key={type} style={{background: color + '15'}}>
-                <td className="td-label" style={{fontWeight:700, color, borderLeft:`4px solid ${color}`}}>
-                  {TYPE_LABELS[type]}
-                </td>
-                {CATEGORIES.map(cat => (
-                  <td key={cat} style={{fontWeight:600, color, textAlign:'right', fontVariantNumeric:'tabular-nums'}}>
-                    {f(getVal(type, cat))}
-                  </td>
-                ))}
-                <td style={{fontWeight:800, color, textAlign:'right', fontVariantNumeric:'tabular-nums', fontSize:'0.88rem'}}>
-                  {f(catTotal(type))}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div style={{
+      borderRadius:'var(--radius-md)',border:`2px solid ${C.actual}`,overflow:'hidden',maxWidth:400,
+    }}>
+      <div style={{
+        padding:'14px 20px',background:`linear-gradient(135deg, ${C.actual}EE, ${C.actual}BB)`,
+        color:'#fff',display:'flex',alignItems:'center',justifyContent:'space-between',
+      }}>
+        <span style={{fontWeight:700,fontSize:'0.95rem'}}>Realizado Consolidado — {year}</span>
+      </div>
+      <div style={{padding:'20px',background:C.actual+'12',textAlign:'center'}}>
+        <div style={{fontSize:'0.72rem',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:4}}>Valor Total Realizado</div>
+        <div style={{fontFamily:'var(--font-display)',fontSize:'1.8rem',color:C.actual,fontWeight:700}}>
+          R$ {f(total)}
+        </div>
+      </div>
     </div>
   );
 }
 
-// ── Consolidated Year Charts — bar comparison for past years ─────────────────
+// ── Consolidated Year Charts — simplified for single Actual value ─────────────
 function ConsolidatedYearCharts({ yearConsData, year }) {
   const C = useTypeColors();
-  const getVal = (type, cat) => {
-    const row = yearConsData.find(e => parseInt(e.year) === year && e.type === type && e.category === cat);
-    return parseFloat(row?.value) || 0;
+  const getTotal = () => {
+    const row = yearConsData.find(e => parseInt(e.year) === year && e.type === 'Actual' && e.category === 'Total');
+    if (row) return parseFloat(row.value) || 0;
+    const oldRows = yearConsData.filter(e => parseInt(e.year) === year && e.type === 'Actual');
+    return oldRows.reduce((s, e) => s + (parseFloat(e.value) || 0), 0);
   };
-  const hasAny = yearConsData.some(e => parseInt(e.year) === year && parseFloat(e.value) > 0);
+  const total = getTotal();
 
-  if (!hasAny) {
+  if (!total) {
     return (
       <div style={{textAlign:'center',padding:'40px 20px',color:'var(--text-muted)',fontSize:'0.9rem'}}>
         Nenhum dado consolidado para {year}.
@@ -264,68 +246,18 @@ function ConsolidatedYearCharts({ yearConsData, year }) {
     );
   }
 
-  const barData = CATEGORIES.map(cat => ({
-    name: cat,
-    Budget:    getVal('Budget', cat),
-    Forecast:  getVal('Forecast', cat),
-    Realizado: getVal('Actual', cat),
-    Meta:      getVal('Meta', cat),
-    Pool:      getVal('Pool', cat),
-  }));
-
-  const totalData = [{
-    name: 'Total',
-    Budget:    CATEGORIES.reduce((s,c) => s + getVal('Budget',c), 0),
-    Forecast:  CATEGORIES.reduce((s,c) => s + getVal('Forecast',c), 0),
-    Realizado: CATEGORIES.reduce((s,c) => s + getVal('Actual',c), 0),
-    Meta:      CATEGORIES.reduce((s,c) => s + getVal('Meta',c), 0),
-    Pool:      CATEGORIES.reduce((s,c) => s + getVal('Pool',c), 0),
-  }];
-
   return (
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
-      <div className="card">
-        <div className="card-header"><span className="card-title">Por Categoria — {year}</span></div>
-        <div className="card-body">
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={barData} margin={{top:8,right:8,left:0,bottom:4}}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/>
-              <XAxis dataKey="name" tick={{fontSize:12}}/>
-              <YAxis tickFormatter={fmt} tick={{fontSize:11}} width={72}/>
-              <Tooltip formatter={v=>formatBRL(v)}/>
-              <Legend/>
-              <Bar dataKey="Budget"    fill={C.budget}   radius={[3,3,0,0]}/>
-              <Bar dataKey="Forecast"  fill={C.forecast} radius={[3,3,0,0]}/>
-              <Bar dataKey="Realizado" fill={C.actual}   radius={[3,3,0,0]}/>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-      <div className="card">
-        <div className="card-header"><span className="card-title">Total Consolidado — {year}</span></div>
-        <div className="card-body">
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={totalData} margin={{top:8,right:8,left:0,bottom:4}}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/>
-              <XAxis dataKey="name" tick={{fontSize:12}}/>
-              <YAxis tickFormatter={fmt} tick={{fontSize:11}} width={72}/>
-              <Tooltip formatter={v=>formatBRL(v)}/>
-              <Legend/>
-              <Bar dataKey="Budget"    fill={C.budget}   radius={[3,3,0,0]}/>
-              <Bar dataKey="Forecast"  fill={C.forecast} radius={[3,3,0,0]}/>
-              <Bar dataKey="Realizado" fill={C.actual}   radius={[3,3,0,0]}/>
-              <Bar dataKey="Meta"      fill={C.meta}     radius={[3,3,0,0]}/>
-              <Bar dataKey="Pool"      fill={C.pool}     radius={[3,3,0,0]}/>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+    <div style={{textAlign:'center',padding:'24px',background:'var(--bg-card)',borderRadius:'var(--radius-md)',border:'1px solid var(--border)'}}>
+      <div style={{fontSize:'0.72rem',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:6}}>Realizado Consolidado — {year}</div>
+      <div style={{fontFamily:'var(--font-display)',fontSize:'2rem',color:C.actual,fontWeight:700}}>
+        {formatBRL(total)}
       </div>
     </div>
   );
 }
 
 // ── Consolidated Actual Panel ─────────────────────────────────────────────────
-function ConsolidatedActualPanel({ projectId, siValue, forecastTotal, actualTotal }) {
+function ConsolidatedActualPanel({ projectId, siValue, forecastTotal, actualTotal, siProjection }) {
   const [data, setData]     = useState({ value:0, comment:'' });
   const [editing, setEditing] = useState(false);
   const [val, setVal]       = useState('');
@@ -352,11 +284,11 @@ function ConsolidatedActualPanel({ projectId, siValue, forecastTotal, actualTota
   };
 
   const total = (parseFloat(data.value)||0) + (parseFloat(forecastTotal)||0) + (parseFloat(actualTotal)||0);
-  const overSI = si && total > si;
+  const overSI = si && (siProjection || total) > si;
 
   return (
     <div style={{marginTop:8}}>
-      {overSI && <SIWarning forecastTotal={forecastTotal} actualTotal={actualTotal} consolidatedActual={data.value} siValue={si}/>}
+      {overSI && <SIWarning projection={siProjection || total} siValue={si}/>}
       {editing ? (
         <div style={{display:'grid',gridTemplateColumns:'200px 1fr',gap:12}}>
           <div className="form-group" style={{marginBottom:0}}>
@@ -629,6 +561,7 @@ export default function ProjectDetail({ onEdit }) {
   useEffect(() => {
     if (forecastType) return;
     if (isPlanejador) setForecastType('Budget');
+    else if (isGestor) setForecastType('Budget');
     else if (isEngenheiro) setForecastType('Forecast');
   }, [isPlanejador, isEngenheiro]);
 
@@ -677,17 +610,57 @@ export default function ProjectDetail({ onEdit }) {
     }
   };
 
-  // Totals for SI warning (includes consolidated years)
-  const totalForecast = entries.filter(e=>e.type==='Forecast').reduce((s,e)=>s+parseFloat(e.value||0),0)
-    + (yearConsData || []).filter(e=>e.type==='Forecast'
-      && !new Set(entries.filter(x=>x.type==='Forecast'&&parseFloat(x.value||0)>0).map(x=>parseInt(x.year))).has(parseInt(e.year)))
-      .reduce((s,e)=>s+parseFloat(e.value||0),0);
-  const totalActual = entries.filter(e=>e.type==='Actual').reduce((s,e)=>s+parseFloat(e.value||0),0)
-    + (yearConsData || []).filter(e=>e.type==='Actual'
-      && !new Set(entries.filter(x=>x.type==='Actual'&&parseFloat(x.value||0)>0).map(x=>parseInt(x.year))).has(parseInt(e.year)))
-      .reduce((s,e)=>s+parseFloat(e.value||0),0);
+  // ── SI Warning: Actual até último mês preenchido + Forecast subsequente + consolidado ──
+  const computeSITotal = () => {
+    // Find years that have consolidated data (those always take precedence)
+    const consYearsActual = new Set(
+      (yearConsData || [])
+        .filter(e => (e.type === 'Actual' || (e.type === 'Actual' && e.category === 'Total')) && parseFloat(e.value||0) > 0)
+        .map(e => parseInt(e.year))
+    );
+
+    // 1. Consolidated years — sum all Actual consolidated
+    const consActual = (yearConsData || [])
+      .filter(e => (e.type === 'Actual') && parseFloat(e.value||0) > 0)
+      .reduce((s,e) => s + parseFloat(e.value||0), 0);
+
+    // 2. For each active year WITHOUT consolidated, compute: Actual up to last month + Forecast after
+    const activeYears = [...new Set(entries.map(e => parseInt(e.year)))].filter(y => !consYearsActual.has(y)).sort();
+    let yearTotal = 0;
+
+    for (const yr of activeYears) {
+      const yearEntries = entries.filter(e => parseInt(e.year) === yr);
+      const actualMonths = yearEntries
+        .filter(e => e.type === 'Actual' && parseFloat(e.value || 0) > 0)
+        .map(e => parseInt(e.month));
+      const lastActualMonth = actualMonths.length > 0 ? Math.max(...actualMonths) : 0;
+
+      const actualSum = yearEntries
+        .filter(e => e.type === 'Actual' && parseInt(e.month) <= lastActualMonth)
+        .reduce((s, e) => s + parseFloat(e.value || 0), 0);
+
+      const forecastSum = yearEntries
+        .filter(e => e.type === 'Forecast' && parseInt(e.month) > lastActualMonth)
+        .reduce((s, e) => s + parseFloat(e.value || 0), 0);
+
+      yearTotal += actualSum + forecastSum;
+    }
+
+    return consActual + yearTotal;
+  };
+
+  const siProjection = computeSITotal();
   const siValue       = parseFloat(project?.si_value)||0;
-  const overSI        = siValue && (totalForecast + totalActual + parseFloat(consolidated.value||0)) > siValue;
+  const overSI        = siValue && siProjection > siValue;
+
+  // totalForecast/totalActual for display (consolidated takes precedence)
+  const consYearsForForecast = new Set((yearConsData||[]).filter(e=>e.type==='Forecast'&&parseFloat(e.value||0)>0).map(e=>parseInt(e.year)));
+  const consYearsForActual = new Set((yearConsData||[]).filter(e=>e.type==='Actual'&&parseFloat(e.value||0)>0).map(e=>parseInt(e.year)));
+
+  const totalForecast = entries.filter(e=>e.type==='Forecast'&&!consYearsForForecast.has(parseInt(e.year))).reduce((s,e)=>s+parseFloat(e.value||0),0)
+    + (yearConsData || []).filter(e=>e.type==='Forecast'&&parseFloat(e.value||0)>0).reduce((s,e)=>s+parseFloat(e.value||0),0);
+  const totalActual = entries.filter(e=>e.type==='Actual'&&!consYearsForActual.has(parseInt(e.year))).reduce((s,e)=>s+parseFloat(e.value||0),0)
+    + (yearConsData || []).filter(e=>e.type==='Actual'&&parseFloat(e.value||0)>0).reduce((s,e)=>s+parseFloat(e.value||0),0);
 
   const totalFor = (type) => {
     if (isConsolidatedYear) return getConsTotal(type === 'Actual' ? 'Actual' : type);
@@ -695,16 +668,25 @@ export default function ProjectDetail({ onEdit }) {
   };
 
   // Total across ALL years (for header cards — no year filter)
-  // Includes both forecast_entries AND year_consolidated data
+  // year_consolidated ALWAYS takes precedence when it exists
   const totalAllFor = (type) => {
-    // Sum from monthly entries (forecast_entries)
-    const fromEntries = entries.filter(e=>e.type===type).reduce((s,e)=>s+parseFloat(e.value||0),0);
-    // Sum from consolidated years (year_consolidated)
-    // Only add consolidated years that DON'T overlap with entry years
-    const entryYears = new Set(entries.filter(e=>e.type===type && parseFloat(e.value||0)>0).map(e=>parseInt(e.year)));
-    const fromConsolidated = (yearConsData || [])
-      .filter(e => e.type === type && !entryYears.has(parseInt(e.year)))
+    // Find which years have consolidated data for this type
+    const consYears = new Set(
+      (yearConsData || [])
+        .filter(e => (e.type === type || (e.type === 'Actual' && e.category === 'Total' && type === 'Actual')) && parseFloat(e.value||0) > 0)
+        .map(e => parseInt(e.year))
+    );
+
+    // Sum from monthly entries — exclude years that have consolidated data
+    const fromEntries = entries
+      .filter(e => e.type === type && !consYears.has(parseInt(e.year)))
       .reduce((s,e) => s + parseFloat(e.value||0), 0);
+
+    // Sum from consolidated years
+    const fromConsolidated = (yearConsData || [])
+      .filter(e => (e.type === type || (e.type === 'Actual' && e.category === 'Total' && type === 'Actual')) && parseFloat(e.value||0) > 0)
+      .reduce((s,e) => s + parseFloat(e.value||0), 0);
+
     return fromEntries + fromConsolidated;
   };
 
@@ -716,7 +698,13 @@ export default function ProjectDetail({ onEdit }) {
     const row = yearConsData.find(e => parseInt(e.year) === selectedYear && e.type === type && e.category === cat);
     return parseFloat(row?.value) || 0;
   };
-  const getConsTotal = (type) => CATEGORIES.reduce((s, c) => s + getConsVal(type, c), 0);
+  const getConsTotal = (type) => {
+    // New format: single value with category='Total'
+    const totalRow = yearConsData.find(e => parseInt(e.year) === selectedYear && e.type === type && e.category === 'Total');
+    if (totalRow) return parseFloat(totalRow.value) || 0;
+    // Fallback: sum old per-category format
+    return CATEGORIES.reduce((s, c) => s + getConsVal(type, c), 0);
+  };
 
   const chartData = useMemo(() => MONTHS_PT.map((m,i) => {
     const get = type => entries.filter(e=>parseInt(e.year)===selectedYear&&parseInt(e.month)===i+1&&e.type===type).reduce((s,e)=>s+parseFloat(e.value||0),0);
@@ -824,7 +812,7 @@ export default function ProjectDetail({ onEdit }) {
               {project.name}
             </h2>
             {project.description && <p style={{fontSize:'0.82rem',color:'var(--text-muted)',marginBottom:6}}>{project.description}</p>}
-            {overSI && <SIWarning forecastTotal={totalForecast} actualTotal={totalActual} consolidatedActual={consolidated.value} siValue={siValue}/>}
+            {overSI && <SIWarning projection={siProjection} siValue={siValue}/>}
             {/* Engineers */}
             <div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap',alignItems:'center'}}>
               {engineers.map(e=>(
@@ -909,26 +897,13 @@ export default function ProjectDetail({ onEdit }) {
               </div>
               {isConsolidatedYear
                 ? <ConsolidatedYearTable yearConsData={yearConsData} year={selectedYear}/>
-                : <ReadOnlyTable entries={entries} year={selectedYear} siValue={project.si_value} consolidatedActual={consolidated.value}/>
+                : <ReadOnlyTable entries={entries} year={selectedYear} siValue={project.si_value} consolidatedActual={consolidated.value} siProjection={siProjection}/>
               }
             </>
           )}
 
-          {/* Planejador/Engenheiro: wizard with year tabs built-in */}
-          {roleForecastTabs.length > 0 && forecastType === 'ActualConsolidated' ? (
-            <div className="card">
-              <div className="card-header"><span className="card-title">Realizado Consolidado — Anos Anteriores</span></div>
-              <div className="card-body">
-                <p style={{fontSize:'0.82rem',color:'var(--text-secondary)',marginBottom:12}}>
-                  Registre aqui o valor total realizado em anos anteriores ao período atual.
-                </p>
-                <ConsolidatedActualPanel
-                  projectId={id} siValue={project.si_value}
-                  forecastTotal={totalForecast} actualTotal={totalActual}
-                />
-              </div>
-            </div>
-          ) : roleForecastTabs.length > 0 && (
+          {/* Planejador/Engenheiro/Gestor: wizard with year tabs built-in */}
+          {roleForecastTabs.length > 0 && (
             <ForecastWizard
               key="wizard"
               projectId={id}
@@ -937,9 +912,10 @@ export default function ProjectDetail({ onEdit }) {
               onYearChange={setSelectedYear}
               onSaved={fetchProject}
               editType={forecastType}
-              availableTypes={roleForecastTabs.filter(t => t.id !== 'ActualConsolidated').map(t => t.id)}
+              availableTypes={roleForecastTabs.map(t => t.id)}
               siValue={project.si_value}
               consolidatedActual={consolidated.value}
+              siProjection={siProjection}
               yearConfig={yearConfig}
             />
           )}
@@ -958,7 +934,7 @@ export default function ProjectDetail({ onEdit }) {
           </div>
           {isConsolidatedYear
             ? <ConsolidatedYearTable yearConsData={yearConsData} year={selectedYear}/>
-            : <ReadOnlyTable entries={entries} year={selectedYear} siValue={project.si_value} consolidatedActual={consolidated.value}/>
+            : <ReadOnlyTable entries={entries} year={selectedYear} siValue={project.si_value} consolidatedActual={consolidated.value} siProjection={siProjection}/>
           }
         </>
       )}

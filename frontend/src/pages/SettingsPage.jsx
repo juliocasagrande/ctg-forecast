@@ -171,6 +171,7 @@ const DEFAULTS = {
   alert_stale_days:      '30',
   alert_empty_forecast:  'true',
   alert_unread_messages: 'true',
+  actual_deadline_business_day: '6',
   color_budget:          '#15803D',
   color_forecast:        '#0EA5E9',
   color_actual:          '#1E40AF',
@@ -367,6 +368,19 @@ export default function SettingsPage() {
                 value={settings.alert_stale_days}
                 onChange={v => set('alert_stale_days', v)}
                 min={1} max={365} unit="dias"
+              />
+            </SectionCard>
+
+            <SectionCard
+              title="Prazo para Realizado"
+              description="Define até qual dia útil do mês o engenheiro deve ter atualizado o Realizado do mês anterior."
+            >
+              <NumberInput
+                label="Dia útil limite"
+                description="Após esse dia útil do mês, projetos sem Realizado do mês anterior dispararão alerta ao engenheiro."
+                value={settings.actual_deadline_business_day}
+                onChange={v => set('actual_deadline_business_day', v)}
+                min={1} max={20} unit="º dia útil"
               />
             </SectionCard>
 

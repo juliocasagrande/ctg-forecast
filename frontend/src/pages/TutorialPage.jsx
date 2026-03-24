@@ -107,6 +107,35 @@ O relatório HTML completo está disponível no menu **Relatório HTML**.`,
 
 Após instalar, o app funciona em tela cheia com ícone na home. Notificações aparecem no badge do ícone.`,
   },
+  {
+    id: 'delegation',
+    icon: '🔄',
+    title: 'Delegação de Acesso (Férias)',
+    content: `Quando precisar se ausentar (férias, licença, viagem), você pode delegar seus projetos e privilégios para outro usuário do sistema.
+
+**Como delegar:**
+
+1. Acesse **Meu Perfil** (menu lateral → seu nome)
+2. Role até a seção **Delegação de Acesso**
+3. Clique em **+ Nova Delegação**
+4. Selecione o usuário que receberá o acesso
+5. Defina as datas de início e fim do período
+6. (Opcional) Informe o motivo (ex.: Férias)
+7. Clique em **Criar Delegação**
+
+**O que o delegado pode fazer:**
+
+- Acessar todos os seus projetos
+- Editar Forecast, Realizado e demais campos
+- Todas as ações ficam registradas **no nome do delegado**, não no seu
+
+**Importante:**
+
+- A delegação é ativada automaticamente na data de início e desativada na data de fim
+- Você pode **revogar** a delegação a qualquer momento antes do fim
+- É possível criar múltiplas delegações (para pessoas diferentes ou períodos diferentes)
+- Coordenadores, planejadores e engenheiros podem delegar seus acessos`,
+  },
 ];
 
 function MarkdownLight({ text }) {

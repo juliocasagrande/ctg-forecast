@@ -2,7 +2,6 @@ import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'ctg-forecast-secret-change-in-prod';
 const IS_PROD = process.env.NODE_ENV === 'production';
-const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes of inactivity
 
 // Cookie configuration
 const COOKIE_OPTIONS = {
@@ -50,16 +49,6 @@ export function requireAuth(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-
-    // Session inactivity check
-    if (decoded.lastActivity) {
-      const elapsed = Date.now() - decoded.lastActivity;
-      if (elapsed > SESSION_TIMEOUT_MS) {
-        clearAuthCookie(res);
-        return res.status(401).json({ error: 'Sessão expirada por inatividade. Faça login novamente.' });
-      }
-    }
-
     req.user = decoded;
     next();
   } catch {
@@ -77,16 +66,29 @@ export function requireRole(...roles) {
   };
 }
 
-// Engenheiro só acessa projetos designados a ele
+// Engenheiro só acessa projetos designados a ele — ou via delegação ativa
 export async function requireProjectAccess(req, res, next) {
   const { role, id: userId } = req.user;
   if (role === 'admin' || role === 'gestor' || role === 'planejador') return next();
   const { pool } = await import('../db/schema.js');
   const projectId = req.params.projectId || req.params.id;
+
+  // 1. Direct assignment
   const r = await pool.query(
     'SELECT 1 FROM project_assignments WHERE project_id=$1 AND user_id=$2',
     [projectId, userId]
   );
-  if (!r.rows.length) return res.status(403).json({ error: 'Sem acesso a este projeto' });
-  next();
+  if (r.rows.length) return next();
+
+  // 2. Access via active delegation (someone delegated their projects to me)
+  const d = await pool.query(`
+    SELECT 1 FROM access_delegations ad
+    JOIN project_assignments pa ON pa.user_id = ad.delegator_id AND pa.project_id = $1
+    WHERE ad.delegate_id = $2
+      AND ad.active = true
+      AND CURRENT_DATE BETWEEN ad.start_date AND ad.end_date
+  `, [projectId, userId]);
+  if (d.rows.length) return next();
+
+  return res.status(403).json({ error: 'Sem acesso a este projeto' });
 }

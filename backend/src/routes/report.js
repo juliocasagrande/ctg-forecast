@@ -72,13 +72,29 @@ router.get('/data', async (req, res) => {
       FROM projects p ${engJoin}
       LEFT JOIN (
         SELECT project_id,
-          SUM(CASE WHEN type='Budget'   AND year BETWEEN $1 AND $2 THEN value ELSE 0 END) AS budget,
-          SUM(CASE WHEN type='Forecast' AND year BETWEEN $1 AND $2 THEN value ELSE 0 END) AS forecast,
-          SUM(CASE WHEN type='Actual'   AND year BETWEEN $1 AND $2 THEN value ELSE 0 END) AS actual,
-          SUM(CASE WHEN type='Pool'     AND year BETWEEN $1 AND $2 THEN value ELSE 0 END) AS pool,
-          SUM(CASE WHEN type='Meta'     AND year BETWEEN $1 AND $2 THEN value ELSE 0 END) AS meta,
+          SUM(CASE WHEN type='Budget'   THEN value ELSE 0 END) AS budget,
+          SUM(CASE WHEN type='Forecast' THEN value ELSE 0 END) AS forecast,
+          SUM(CASE WHEN type='Actual'   THEN value ELSE 0 END) AS actual,
+          SUM(CASE WHEN type='Pool'     THEN value ELSE 0 END) AS pool,
+          SUM(CASE WHEN type='Meta'     THEN value ELSE 0 END) AS meta,
           MAX(updated_at) AS last_update
-        FROM forecast_entries GROUP BY project_id
+        FROM (
+          SELECT fe.project_id, fe.type, fe.value, fe.updated_at
+          FROM forecast_entries fe
+          WHERE fe.year BETWEEN $1 AND $2
+            AND NOT EXISTS (
+              SELECT 1 FROM year_consolidated yc2
+              WHERE yc2.project_id = fe.project_id
+                AND yc2.year = fe.year
+                AND (yc2.type = fe.type OR (yc2.type = 'Actual' AND yc2.category = 'Total' AND fe.type = 'Actual'))
+                AND yc2.value > 0
+            )
+          UNION ALL
+          SELECT yc.project_id, yc.type, yc.value, yc.consolidated_at AS updated_at
+          FROM year_consolidated yc
+          WHERE yc.year BETWEEN $1 AND $2 AND yc.value > 0
+        ) combined
+        GROUP BY project_id
       ) fe_agg ON fe_agg.project_id = p.id
       LEFT JOIN (
         SELECT pa.project_id, STRING_AGG(DISTINCT u.name, ', ' ORDER BY u.name) AS engineers

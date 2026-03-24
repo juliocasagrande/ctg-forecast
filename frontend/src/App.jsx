@@ -15,6 +15,7 @@ import PolosPage from './pages/PolosPage.jsx';
 import ReportPage from './pages/ReportPage.jsx';
 import TutorialPage from './pages/TutorialPage.jsx';
 import FeedbackPage from './pages/FeedbackPage.jsx';
+import SCurvePage from './pages/SCurvePage.jsx';
 import FeedbackInbox from './pages/FeedbackInbox.jsx';
 import AdminPanel from './components/admin/AdminPanel.jsx';
 import AlertBell from './components/ui/AlertBell.jsx';
@@ -491,6 +492,7 @@ function getPageMeta(pathname) {
   if (pathname === '/profile') return { title: 'Meu Perfil', sub: null };
   if (pathname === '/settings') return { title: 'Configurações', sub: null };
   if (pathname === '/polos') return { title: 'Visão Geral Consolidada — CTG Brasil', sub: null };
+  if (pathname === '/scurve') return { title: 'Curva S — Análise Acumulada', sub: 'Filtrar por ano, usina e projeto' };
   if (pathname === '/report') return { title: 'Relatório HTML', sub: 'Configurar e exportar' };
   if (pathname === '/tutorial') return { title: 'Tutorial', sub: 'Como utilizar o sistema' };
   if (pathname === '/feedback') return { title: 'Sugestões e Feedback', sub: 'Envie sua contribuição' };
@@ -656,6 +658,7 @@ export default function App() {
             <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
             <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
             <Route path="/polos" element={<RequireAuth><PolosPage period={period} /></RequireAuth>} />
+            <Route path="/scurve" element={<RequireAuth><SCurvePage period={period} /></RequireAuth>} />
             <Route path="/report" element={<RequireAuth><ReportPage /></RequireAuth>} />
             <Route path="/tutorial" element={<RequireAuth><TutorialPage /></RequireAuth>} />
             <Route path="/feedback" element={<RequireAuth><FeedbackPage /></RequireAuth>} />

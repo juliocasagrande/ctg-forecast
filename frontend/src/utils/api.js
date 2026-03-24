@@ -15,12 +15,18 @@ api.interceptors.request.use(config => {
 });
 
 // Redirect to login on 401, clean up localStorage
+// Skip redirect for /auth/me (session check) and when already on /login
 api.interceptors.response.use(
   r => r,
   err => {
     if (err.response?.status === 401) {
-      localStorage.removeItem('ctg_token'); // clean up legacy token
-      window.location.href = '/login';
+      const url = err.config?.url || '';
+      const isAuthCheck = url.includes('/auth/me');
+      const isOnLogin = window.location.pathname === '/login';
+      localStorage.removeItem('ctg_token');
+      if (!isAuthCheck && !isOnLogin) {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(err);
   }

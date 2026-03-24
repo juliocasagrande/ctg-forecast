@@ -181,7 +181,7 @@ router.get('/dashboard', async (req, res) => {
     const params = isEng ? [yrStart, yrEnd, userId] : [yrStart, yrEnd];
 
     // Combine forecast_entries + year_consolidated via UNION ALL
-    // year_consolidated takes precedence for years that have no forecast_entries
+    // year_consolidated ALWAYS takes precedence when it exists
     const r = await pool.query(`
       SELECT p.id, p.code, p.name, p.si_value, p.pool_value, p.plants,
         COALESCE(SUM(CASE WHEN combined.type='Budget'   THEN combined.value ELSE 0 END),0) AS budget,
@@ -192,20 +192,20 @@ router.get('/dashboard', async (req, res) => {
         MAX(combined.updated_at) AS last_forecast_update
       FROM projects p ${joinClause}
       LEFT JOIN (
-        SELECT project_id, type, value, updated_at
-        FROM forecast_entries
-        WHERE year BETWEEN $1 AND $2
+        SELECT fe.project_id, fe.type, fe.value, fe.updated_at
+        FROM forecast_entries fe
+        WHERE fe.year BETWEEN $1 AND $2
+          AND NOT EXISTS (
+            SELECT 1 FROM year_consolidated yc2
+            WHERE yc2.project_id = fe.project_id
+              AND yc2.year = fe.year
+              AND (yc2.type = fe.type OR (yc2.type = 'Actual' AND yc2.category = 'Total' AND fe.type = 'Actual'))
+              AND yc2.value > 0
+          )
         UNION ALL
         SELECT yc.project_id, yc.type, yc.value, yc.consolidated_at AS updated_at
         FROM year_consolidated yc
-        WHERE yc.year BETWEEN $1 AND $2
-          AND NOT EXISTS (
-            SELECT 1 FROM forecast_entries fe2
-            WHERE fe2.project_id = yc.project_id
-              AND fe2.type = yc.type
-              AND fe2.year = yc.year
-              AND fe2.value > 0
-          )
+        WHERE yc.year BETWEEN $1 AND $2 AND yc.value > 0
       ) combined ON combined.project_id = p.id
       GROUP BY p.id ORDER BY p.code
     `, params);
@@ -340,14 +340,41 @@ router.delete('/notes/:noteId', async (req, res) => {
 router.get('/alerts', async (req, res) => {
   try {
     const { role, id: userId } = req.user;
-    const currentYear = new Date().getFullYear();
-    // Load configurable threshold
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1; // 1-12
+
+    // Load configurable thresholds
     const cfgRes = await pool.query(
-      "SELECT value FROM system_settings WHERE key='alert_stale_days'"
+      "SELECT key, value FROM system_settings WHERE key IN ('alert_stale_days','actual_deadline_business_day')"
     );
-    const staleDays = parseInt(cfgRes.rows[0]?.value || '30');
+    const cfg = {};
+    cfgRes.rows.forEach(r => { cfg[r.key] = r.value; });
+    const staleDays = parseInt(cfg.alert_stale_days || '30');
+    const deadlineBizDay = parseInt(cfg.actual_deadline_business_day || '6');
     const staleDate = new Date();
     staleDate.setDate(staleDate.getDate() - staleDays);
+
+    // Helper: get the Nth business day of a given year/month
+    function getNthBusinessDay(year, month, n) {
+      let count = 0;
+      for (let d = 1; d <= 31; d++) {
+        const date = new Date(year, month - 1, d);
+        if (date.getMonth() !== month - 1) break; // went past end of month
+        const dow = date.getDay();
+        if (dow !== 0 && dow !== 6) count++; // not weekend
+        if (count === n) return date;
+      }
+      return null; // month doesn't have N business days
+    }
+
+    // Check if today is past the Nth business day of the current month
+    const deadlineDate = getNthBusinessDay(currentYear, currentMonth, deadlineBizDay);
+    const isPastDeadline = deadlineDate && now >= deadlineDate;
+
+    // Previous month to check
+    const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+    const prevYear  = currentMonth === 1 ? currentYear - 1 : currentYear;
 
     // Which projects does this user have access to?
     const isEng = role === 'engenheiro';
@@ -372,6 +399,7 @@ router.get('/alerts', async (req, res) => {
     `, [userId]);
 
     // 2. Projects with zero Forecast entries for current year
+    // Suppressed if user did a check-in this month
     const emptyForecastRes = await pool.query(`
       SELECT p.id, p.code, p.name
       FROM projects p ${projJoin}
@@ -382,10 +410,16 @@ router.get('/alerts', async (req, res) => {
           AND fe.year = $1
           AND fe.value > 0
       )
+      AND NOT EXISTS (
+        SELECT 1 FROM project_checkins pc
+        WHERE pc.project_id = p.id
+          AND pc.checked_at >= date_trunc('month', CURRENT_DATE)
+      )
       ORDER BY p.code
     `, projParams);
 
     // 3. Projects with no Forecast update in last N days
+    // Suppressed if user did a check-in this month
     const staleParams = isEng ? [currentYear, staleDate.toISOString(), userId] : [currentYear, staleDate.toISOString()];
     const staleJoin = isEng
       ? `INNER JOIN project_assignments pa ON pa.project_id = p.id AND pa.user_id = $3`
@@ -398,18 +432,54 @@ router.get('/alerts', async (req, res) => {
         AND fe.type = 'Forecast'
         AND fe.year = $1
         AND fe.value > 0
+      WHERE NOT EXISTS (
+        SELECT 1 FROM project_checkins pc
+        WHERE pc.project_id = p.id
+          AND pc.checked_at >= date_trunc('month', CURRENT_DATE)
+      )
       GROUP BY p.id
       HAVING MAX(fe.updated_at) < $2
       ORDER BY last_update ASC
     `, staleParams);
 
+    // 4. Projects with missing Actual for previous month (only if past deadline)
+    let pendingActualRes = { rows: [] };
+    if (isPastDeadline) {
+      const paJoin = isEng
+        ? `INNER JOIN project_assignments pa ON pa.project_id = p.id AND pa.user_id = $3`
+        : '';
+      const paParams = isEng ? [prevYear, prevMonth, userId] : [prevYear, prevMonth];
+      // Exclude projects where:
+      // - Actual is filled for previous month, OR
+      // - User did a check-in this month (check-in counts as acknowledgment even with null data)
+      pendingActualRes = await pool.query(`
+        SELECT p.id, p.code, p.name
+        FROM projects p ${paJoin}
+        WHERE NOT EXISTS (
+          SELECT 1 FROM forecast_entries fe
+          WHERE fe.project_id = p.id
+            AND fe.type = 'Actual'
+            AND fe.year = $1
+            AND fe.month = $2
+            AND fe.value > 0
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM project_checkins pc
+          WHERE pc.project_id = p.id
+            AND pc.checked_at >= date_trunc('month', CURRENT_DATE)
+        )
+        ORDER BY p.code
+      `, paParams);
+    }
+
     const unreadMap = {};
     unreadRes.rows.forEach(r => { unreadMap[r.project_id] = parseInt(r.unread_count); });
-
     const totalUnread = Object.values(unreadMap).reduce((s, v) => s + v, 0);
 
+    const MONTHS_PT = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
     res.json({
-      total: totalUnread + emptyForecastRes.rows.length + staleRes.rows.length,
+      total: totalUnread + emptyForecastRes.rows.length + staleRes.rows.length + pendingActualRes.rows.length,
       unread_messages: {
         count: totalUnread,
         by_project: unreadMap,
@@ -424,6 +494,15 @@ router.get('/alerts', async (req, res) => {
           ...r,
           days_ago: Math.floor((Date.now() - new Date(r.last_update)) / 86400000),
         })),
+      },
+      pending_actual: {
+        count: pendingActualRes.rows.length,
+        projects: pendingActualRes.rows,
+        month_label: MONTHS_PT[prevMonth],
+        month: prevMonth,
+        year: prevYear,
+        deadline_business_day: deadlineBizDay,
+        is_past_deadline: isPastDeadline,
       },
     });
   } catch (err) { safeError(res, err); }
@@ -462,16 +541,20 @@ router.get('/polo-summary', async (req, res) => {
           SUM(CASE WHEN type='Actual'   THEN value ELSE 0 END) AS actual,
           SUM(CASE WHEN type='Pool'     THEN value ELSE 0 END) AS pool
         FROM (
-          SELECT project_id, type, value FROM forecast_entries
-          WHERE year BETWEEN $1 AND $2
-          UNION ALL
-          SELECT yc.project_id, yc.type, yc.value FROM year_consolidated yc
-          WHERE yc.year BETWEEN $1 AND $2
+          -- Monthly entries: only for project+type+year combos WITHOUT a consolidated value
+          SELECT fe.project_id, fe.type, fe.value FROM forecast_entries fe
+          WHERE fe.year BETWEEN $1 AND $2
             AND NOT EXISTS (
-              SELECT 1 FROM forecast_entries fe2
-              WHERE fe2.project_id = yc.project_id AND fe2.type = yc.type
-                AND fe2.year = yc.year AND fe2.value > 0
+              SELECT 1 FROM year_consolidated yc2
+              WHERE yc2.project_id = fe.project_id
+                AND yc2.year = fe.year
+                AND (yc2.type = fe.type OR (yc2.type = 'Actual' AND yc2.category = 'Total' AND fe.type = 'Actual'))
+                AND yc2.value > 0
             )
+          UNION ALL
+          -- Consolidated values always included when they exist
+          SELECT yc.project_id, yc.type, yc.value FROM year_consolidated yc
+          WHERE yc.year BETWEEN $1 AND $2 AND yc.value > 0
         ) combined
         GROUP BY project_id
       ) fe_agg ON fe_agg.project_id = p.id

@@ -86,10 +86,8 @@ router.post('/login', loginLimiter, async (req, res) => {
       return res.status(401).json({ error: 'Email ou senha incorretos' });
     }
 
-    // Success — generate token with lastActivity for session timeout
     const token = signToken({
       id: user.id, name: user.name, email: user.email, role: user.role,
-      lastActivity: Date.now(),
     });
 
     // Set httpOnly cookie

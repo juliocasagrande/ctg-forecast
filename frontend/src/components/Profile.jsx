@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
 import { useToast } from './ui/Toast.jsx';
 import PasswordInput, { getPasswordStrength } from './ui/PasswordInput.jsx';
+import DelegationPanel from './DelegationPanel.jsx';
 
 const ROLE_LABELS = { admin:'Administrador', gestor:'Gestor', engenheiro:'Engenheiro' };
 
@@ -77,14 +78,9 @@ export default function Profile() {
       </div>
 
       {/* Change password */}
-      <div className="card">
+      <div className="card" style={{marginBottom:20}}>
         <div className="card-header"><span className="card-title">Alterar Senha</span></div>
         <div className="card-body">
-          <div className="form-group">
-            <label className="form-label">Senha atual</label>
-            <input className="form-input" type="password" value={pwForm.current_password}
-              onChange={e=>setPwForm(f=>({...f,current_password:e.target.value}))} placeholder="••••••••"/>
-          </div>
           <div className="form-group">
             <label className="form-label">Senha atual</label>
             <input className="form-input" type="password" value={pwForm.current_password}
@@ -115,6 +111,14 @@ export default function Profile() {
             disabled={changingPw || !getPasswordStrength(pwForm.new_password).allPassed || pwForm.new_password !== pwForm.confirm}>
             {changingPw ? 'Alterando...' : 'Alterar Senha'}
           </button>
+        </div>
+      </div>
+
+      {/* Access Delegation */}
+      <div className="card" style={{marginBottom:20}}>
+        <div className="card-header"><span className="card-title">Delegação de Acesso</span></div>
+        <div className="card-body">
+          <DelegationPanel />
         </div>
       </div>
     </div>

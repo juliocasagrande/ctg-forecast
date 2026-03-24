@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ComposedChart, Bar, Line, Area,
+  ComposedChart, Bar, Line,
   XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
   BarChart,
@@ -178,8 +178,6 @@ export default function Dashboard({ period, plantFilter = [] }) {
       RealizadoAcum:  prev.RealizadoAcum + d.Realizado,
       MetaAcum:       prev.MetaAcum      + d.Meta,
       PoolAcum:       prev.PoolAcum      + d.Pool,
-      GapMin:         prev.RealizadoAcum + d.Realizado,
-      GapMax:         prev.ForecastAcum  + d.Forecast,
     });
     return acc;
   }, []), [monthlyData]);
@@ -260,15 +258,9 @@ export default function Dashboard({ period, plantFilter = [] }) {
                     Meta: 'Meta (mensal)', Pool: 'Pool (mensal)',
                     BudgetAcum: 'Budget (acum.)', ForecastAcum: 'Forecast (acum.)', RealizadoAcum: 'Realizado (acum.)',
                     MetaAcum: 'Meta (acum.)', PoolAcum: 'Pool (acum.)',
-                    GapMax: 'Dif. Forecast vs Realizado',
                   };
                   return LEGEND_LABELS[value] || value;
                 }} className="dash-legend" />
-
-                {/* Gap area between Forecast and Realizado (accumulated) */}
-                <Area yAxisId="acum" type="monotone" dataKey="GapMax"
-                  stroke="none" fill="#94A3B8" fillOpacity={0.25}
-                  baseValue="GapMin" legendType="square" />
 
                 {/* Monthly bars */}
                 <Bar yAxisId="monthly" dataKey="Budget"    fill={C.budget+'88'} radius={[2,2,0,0]} barSize={6} />

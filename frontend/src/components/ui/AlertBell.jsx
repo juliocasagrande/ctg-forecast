@@ -197,6 +197,26 @@ export default function AlertBell() {
                     ))}
                   </Section>
                 )}
+
+                {/* Pending actual — past business day deadline */}
+                {alerts.pending_actual?.count > 0 && (
+                  <Section
+                    icon={<WarningIcon />}
+                    title={`Realizado de ${alerts.pending_actual.month_label} pendente`}
+                    count={alerts.pending_actual.count}
+                    color="#DC2626"
+                  >
+                    {alerts.pending_actual.projects.map(p => (
+                      <AlertRow
+                        key={p.id}
+                        onClick={() => goTo(p.id)}
+                        label={p.name}
+                        sub={`${p.code} — preencha o realizado de ${alerts.pending_actual.month_label}/${alerts.pending_actual.year}`}
+                        accent="#DC2626"
+                      />
+                    ))}
+                  </Section>
+                )}
               </>
             )}
           </div>
@@ -284,3 +304,4 @@ function AlertRow({ onClick, label, sub, accent }) {
 const MsgIcon  = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5z"/><path d="M15 7v2a4 4 0 01-4 4H9.828l-1.766 1.767c.28.149.599.233.938.233h2l3 3v-3h2a2 2 0 002-2V9a2 2 0 00-2-2h-1z"/></svg>;
 const EditIcon = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/></svg>;
 const ClockIcon= () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd"/></svg>;
+const WarningIcon = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 10-2 0 1 1 0 002 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd"/></svg>;

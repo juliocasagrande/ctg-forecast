@@ -58,6 +58,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
   const location = useLocation();
   const [unreadMap, setUnreadMap]     = useState({});
   const [collapsed, setCollapsed]     = useState({});
+  const [feedbackUnread, setFeedbackUnread] = useState(0);
 
   // Poll unread message counts (single batch request)
   useEffect(() => {
@@ -72,6 +73,20 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
     const t = setInterval(fetchUnread, 60000);
     return () => clearInterval(t);
   }, [projects]);
+
+  // Poll feedback unread count (only for developer)
+  useEffect(() => {
+    if (user?.email !== 'julio.casagrande@ctgbr.com.br') return;
+    const fetchFeedback = async () => {
+      try {
+        const r = await api.get('/feedback/stats');
+        setFeedbackUnread(parseInt(r.data.unread) || 0);
+      } catch {}
+    };
+    fetchFeedback();
+    const t = setInterval(fetchFeedback, 60000);
+    return () => clearInterval(t);
+  }, [user?.email]);
 
   const roleLabel = { admin:'Administrador', gestor:'Gestor', engenheiro:'Engenheiro', planejador:'Planejador' }[user?.role] || '';
   const initials  = user?.name?.split(' ').slice(0, 2).map(w => w[0].toUpperCase()).join('') || '??';
@@ -139,6 +154,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
               )}
             </div>
             {navItem('/polos', IC.polos || IC.dashboard, 'Visão Geral')}
+            {navItem('/scurve', IC.plant || IC.dashboard, 'Curva S')}
             {!isAdmin && navItem('/report', IC.report || IC.dashboard, 'Relatório HTML')}
           </>}
 
@@ -167,9 +183,16 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
           {user?.email === 'julio.casagrande@ctgbr.com.br' && (
             <NavLink to="/feedback/inbox" onClick={onClose}
               className={({ isActive }) => `nav-item sidebar-footer-item ${isActive ? 'active' : ''}`}
-              style={{ padding: '6px 8px', fontSize: '0.72rem', marginBottom: 4 }}>
+              style={{ padding: '6px 8px', fontSize: '0.72rem', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
               <Icon name="inbox" style={{ width: 14, textAlign: 'center' }} />
-              <span>Inbox de Feedback</span>
+              <span style={{ flex: 1 }}>Inbox de Feedback</span>
+              {feedbackUnread > 0 && (
+                <span style={{
+                  background: '#DC2626', color: '#fff', fontSize: '0.58rem', fontWeight: 700,
+                  borderRadius: 10, minWidth: 16, height: 16, padding: '0 5px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>{feedbackUnread}</span>
+              )}
             </NavLink>
           )}
 
