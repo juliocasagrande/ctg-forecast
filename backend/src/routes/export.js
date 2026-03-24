@@ -8,6 +8,7 @@ const router = Router();
 // Safe error helper
 function safeError(res, err) {
   console.error(`[ERROR] ${err.message}`);
+  if (res.headersSent) return; // Stream already started, cannot send JSON error
   if (process.env.NODE_ENV === 'production') {
     return res.status(500).json({ error: 'Erro interno do servidor' });
   }
@@ -20,14 +21,13 @@ const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
 const CATEGORIES = ['Viagens','Contratos','POs'];
 
 // ── Column helpers ──────────────────────────────────────────────────────────
-// Template layout: C=2026 Jan, D=Feb, ..., N=Dec, O=2027 Jan, ..., repeating
-// Each year = 12 cols. 2026 starts at col C (=3).
+// Template layout: C=firstYear Jan, D=Feb, ..., N=Dec, O=nextYear Jan, ...
+// Each year = 12 cols. First data year starts at col C (=3).
 const BASE_COL  = 3;  // col C = column index 3 (1-based)
-const YEAR_BASE = 2026;
 
-function yearMonthToCol(year, month) {
-  // month: 1-12
-  const yearOffset = (year - YEAR_BASE) * 12;
+function yearMonthToCol(year, month, minYear) {
+  // month: 1-12, minYear = first year in data set
+  const yearOffset = (year - minYear) * 12;
   return BASE_COL + yearOffset + (month - 1);
 }
 
@@ -41,15 +41,13 @@ function yearMonthToCol(year, month) {
 //   row 8  = "Previsto para Janeiro/YEAR",  row 9 = value
 //   ...
 
-function getDetailRow(sheetName, year, month) {
+function getDetailRow(sheetName, year, month, minYear) {
   // Returns the row number where the VALUE for that month goes
-  const yearIdx = year - YEAR_BASE; // 0-based
+  const yearIdx = year - minYear; // 0-based
   if (sheetName === 'Viagens') {
-    // Viagens: starts at row 8 for Jan 2026, pairs every 2 rows, year gap = 26 rows (12*2 + 2)
     const yearStartRow = 8 + yearIdx * 26;
-    return yearStartRow + (month - 1) * 2 + 1; // value row (odd offset = label, +1 = value)
+    return yearStartRow + (month - 1) * 2 + 1;
   } else {
-    // Contratos / POs: year header at row 8 + yearIdx*26, label pairs from row 9
     const yearStartRow = 9 + yearIdx * 26;
     return yearStartRow + (month - 1) * 2 + 1;
   }
@@ -112,30 +110,35 @@ function getYears(entries) {
 }
 
 // ── Resumo sheet ────────────────────────────────────────────────────────────
-function buildResumo(wb, project, entries, years, d) {
+function buildResumo(wb, project, entries, years, d, activeTypes, activeCats) {
   const ws = wb.addWorksheet('Resumo');
   ws.properties.defaultColWidth = 13;
 
-  // Row 1: project code + name Budget header
-  ws.getCell(1, 1).value = `${project.code} - ${project.name}Budget `;
+  // Use filtered types/categories or fall back to defaults
+  const typesToShow = activeTypes || ['Budget','Forecast','Actual'];
+  const catsToSum   = activeCats  || CATEGORIES;
+  const minYear     = years[0]; // years is sorted ascending
+
+  // Row 1: project code + name — Budget header
+  ws.getCell(1, 1).value = `${project.code} - ${project.name} — Budget`;
   ws.getCell(1, 1).font  = { bold: true, size: 11, color: { argb: NAVY }, name: 'Calibri' };
 
   // Row 2: Realizado header
-  ws.getCell(2, 1).value = `${project.code} - ${project.name}Realizado `;
+  ws.getCell(2, 1).value = `${project.code} - ${project.name} — Realizado`;
   ws.getCell(2, 1).font  = { size: 10, color: { argb: NAVY }, name: 'Calibri' };
 
   // Row 3: Year headers
   years.forEach(year => {
-    const c = ws.getCell(3, yearMonthToCol(year, 1));
+    const c = ws.getCell(3, yearMonthToCol(year, 1, minYear));
     c.value = year;
     styleHeader(c, NAVY, 'FFFFFF', true, 11);
-    ws.mergeCells(3, yearMonthToCol(year, 1), 3, yearMonthToCol(year, 12));
+    ws.mergeCells(3, yearMonthToCol(year, 1, minYear), 3, yearMonthToCol(year, 12, minYear));
   });
 
   // Row 4: Month headers
   years.forEach(year => {
     MONTHS_PT.forEach((m, mi) => {
-      const c = ws.getCell(4, yearMonthToCol(year, mi + 1));
+      const c = ws.getCell(4, yearMonthToCol(year, mi + 1, minYear));
       c.value = m;
       styleHeader(c, LIGHT, NAVY, false, 9);
     });
@@ -144,50 +147,56 @@ function buildResumo(wb, project, entries, years, d) {
   ws.getCell(4, 1).value = '';
   ws.getCell(4, 2).value = '';
 
-  // Rows 6-8: Budget / Forecast / Actual totals
-  const typeBg  = { Budget: BUDGET_BG, Forecast: FORECAST_BG, Actual: ACTUAL_BG };
-  const typeLabel= { Budget: 'Budget', Forecast: 'Forecast', Actual: 'Actual' };
-  [[6,'Budget'],[7,'Forecast'],[8,'Actual']].forEach(([rowN, type]) => {
+  // Rows 6+: one row per active type (dynamic, respects user selection)
+  const typeBg  = { Budget: BUDGET_BG, Forecast: FORECAST_BG, Actual: ACTUAL_BG,
+                    Meta: 'F5F3FF', Pool: 'F0F9FF' };
+  const typeLabel= { Budget: 'Budget', Forecast: 'Forecast', Actual: 'Realizado',
+                     Meta: 'Meta', Pool: 'Pool' };
+  typesToShow.forEach((type, ti) => {
+    const rowN = 6 + ti;
+    const bg   = typeBg[type] || FORECAST_BG;
     ws.getCell(rowN, 1).value = 'R$';
-    ws.getCell(rowN, 2).value = typeLabel[type];
-    styleHeader(ws.getCell(rowN, 1), typeBg[type], NAVY, false, 9);
-    styleHeader(ws.getCell(rowN, 2), typeBg[type], NAVY, true, 9);
+    ws.getCell(rowN, 2).value = typeLabel[type] || type;
+    styleHeader(ws.getCell(rowN, 1), bg, NAVY, false, 9);
+    styleHeader(ws.getCell(rowN, 2), bg, NAVY, true, 9);
     ws.getCell(rowN, 2).alignment.horizontal = 'left';
 
     years.forEach(year => {
       MONTHS_PT.forEach((_, mi) => {
         const month = mi + 1;
         let total = 0;
-        CATEGORIES.forEach(cat => { total += getVal(d, cat, type, year, month); });
-        const c = ws.getCell(rowN, yearMonthToCol(year, month));
+        catsToSum.forEach(cat => { total += getVal(d, cat, type, year, month); });
+        const c = ws.getCell(rowN, yearMonthToCol(year, month, minYear));
         c.value = total;
-        styleValue(c, typeBg[type]);
+        styleValue(c, bg);
       });
     });
   });
 
-  // Row 10: annotation + annual summary block
-  ws.getCell(10, 2).value = `Referente ao Forecast Janeiro à Dezembro/${years[0]}`;
-  ws.getCell(10, 2).font  = { size: 9, italic: true, color: { argb: '666666' }, name: 'Calibri' };
+  // Row after types + gap: annotation + annual summary block
+  const summaryStartRow = 6 + typesToShow.length + 2;
+  ws.getCell(summaryStartRow, 2).value = `Referente ao Forecast Janeiro à Dezembro/${years[0]}`;
+  ws.getCell(summaryStartRow, 2).font  = { size: 9, italic: true, color: { argb: '666666' }, name: 'Calibri' };
 
   // Annual columns starting at col L (12)
   const annualStartCol = 12;
-  ws.getCell(10, annualStartCol).value = years[0];
-  years.slice(1).forEach((y, i) => { ws.getCell(10, annualStartCol + 1 + i).value = y; });
-  ws.getCell(10, annualStartCol + years.length).value = 'SI';
-  ws.getCell(10, annualStartCol + years.length + 1).value = 'Realizado Total';
-  ws.getCell(10, annualStartCol + years.length + 2).value = 'POOL';
+  ws.getCell(summaryStartRow, annualStartCol).value = years[0];
+  years.slice(1).forEach((y, i) => { ws.getCell(summaryStartRow, annualStartCol + 1 + i).value = y; });
+  ws.getCell(summaryStartRow, annualStartCol + years.length).value = 'SI';
+  ws.getCell(summaryStartRow, annualStartCol + years.length + 1).value = 'Realizado Total';
+  ws.getCell(summaryStartRow, annualStartCol + years.length + 2).value = 'POOL';
 
-  [[11,'Budget'],[12,'Forecast'],[13,'Actual']].forEach(([rowN, type]) => {
+  typesToShow.forEach((type, ti) => {
+    const rowN = summaryStartRow + 1 + ti;
     ws.getCell(rowN, 11).value = 'R$';
-    ws.getCell(rowN, annualStartCol - 1).value = type;
+    ws.getCell(rowN, annualStartCol - 1).value = typeLabel[type] || type;
     years.forEach((year, yi) => {
       let total = 0;
-      CATEGORIES.forEach(cat => {
+      catsToSum.forEach(cat => {
         for (let m = 1; m <= 12; m++) total += getVal(d, cat, type, year, m);
       });
       ws.getCell(rowN, annualStartCol + yi).value = total;
-      styleValue(ws.getCell(rowN, annualStartCol + yi), typeBg[type]);
+      styleValue(ws.getCell(rowN, annualStartCol + yi), typeBg[type] || FORECAST_BG);
     });
     if (type === 'Forecast') {
       ws.getCell(rowN, annualStartCol + years.length).value = parseFloat(project.si_value) || 0;
@@ -210,6 +219,7 @@ function buildCategorySheet(wb, sheetName, catLabel, project, entries, years, d,
   const typesToShow = activeTypes || ['Budget','Forecast','Actual'];
   const ws = wb.addWorksheet(sheetName);
   ws.properties.defaultColWidth = 13;
+  const minYear = years[0]; // years is sorted ascending
 
   const typeBg   = { Budget: BUDGET_BG, Forecast: FORECAST_BG, Actual: ACTUAL_BG,
                      Meta: 'F5F3FF', Pool: 'F0F9FF' };
@@ -218,16 +228,16 @@ function buildCategorySheet(wb, sheetName, catLabel, project, entries, years, d,
 
   // Row 1: Year headers
   years.forEach(year => {
-    const c = ws.getCell(1, yearMonthToCol(year, 1));
+    const c = ws.getCell(1, yearMonthToCol(year, 1, minYear));
     c.value = year;
     styleHeader(c, NAVY, 'FFFFFF', true, 11);
-    ws.mergeCells(1, yearMonthToCol(year, 1), 1, yearMonthToCol(year, 12));
+    ws.mergeCells(1, yearMonthToCol(year, 1, minYear), 1, yearMonthToCol(year, 12, minYear));
   });
 
   // Row 2: Month headers
   years.forEach(year => {
     MONTHS_PT.forEach((m, mi) => {
-      const c = ws.getCell(2, yearMonthToCol(year, mi + 1));
+      const c = ws.getCell(2, yearMonthToCol(year, mi + 1, minYear));
       c.value = m;
       styleHeader(c, LIGHT, NAVY, false, 9);
     });
@@ -249,7 +259,7 @@ function buildCategorySheet(wb, sheetName, catLabel, project, entries, years, d,
         const month = mi + 1;
         const cat   = catLabel.trim();
         const v     = getVal(d, cat, type, year, month);
-        const c     = ws.getCell(rowN, yearMonthToCol(year, month));
+        const c     = ws.getCell(rowN, yearMonthToCol(year, month, minYear));
         c.value     = v;
         styleValue(c, bg);
       });
@@ -433,7 +443,6 @@ router.get('/planejador', async (req, res) => {
   const activeTypes = reqTypes ? reqTypes.filter(t => allowed.includes(t)) : allowed;
 
   const TYPE_LABELS = { Budget:'Budget', Forecast:'Forecast', Actual:'Realizado', Meta:'Meta', Pool:'Pool' };
-  const TYPE_ARgb   = { Budget:'15803D', Forecast:'0369A1', Actual:'1E40AF', Meta:'6D28D9', Pool:'0891B2' };
   const TYPE_ARGH   = { Budget:'15803D', Forecast:'0369A1', Actual:'1E40AF', Meta:'6D28D9', Pool:'0891B2' };
   const TYPE_LIGHT  = { Budget:'F0FDF4', Forecast:'E0F2FE', Actual:'EFF6FF', Meta:'F5F3FF', Pool:'F0F9FF' };
 

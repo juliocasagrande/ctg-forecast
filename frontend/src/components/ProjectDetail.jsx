@@ -757,10 +757,10 @@ export default function ProjectDetail({ onEdit }) {
       const base  = import.meta.env.VITE_API_URL || '/api';
       const params = new URLSearchParams();
       if (types) types.forEach(t => params.append('types', t));
-      const qs = params.toString() ? `?${params.toString()}` : '';
       const isGeral = scope === 'geral';
-      // Route: 'geral' → consolidated report; 'projeto' → project-specific
+      // Categories only apply to project-specific export
       if (categories && !isGeral) categories.forEach(c => params.append('categories', c));
+      const qs = params.toString() ? `?${params.toString()}` : '';
       const url = isGeral
         ? `${base}/export/planejador${qs}`
         : `${base}/export/project/${id}${qs}`;
