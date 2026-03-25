@@ -693,22 +693,49 @@ export default function App() {
           {/* Desktop: full controls */}
           <div className="header-controls-desktop">
             {showControls && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
                 <AlertBell />
-                <PlantFilter
-                  activePlants={activePlants}
-                  selected={plantFilter}
-                  onChange={(v) => { setPlantFilter(v); setProjectFilter([]); }}
-                />
-                {location.pathname === '/' && (
-                  <ProjectFilter
-                    projects={projects}
-                    plantFilter={plantFilter}
-                    selected={projectFilter}
-                    onChange={setProjectFilter}
+
+                {/* ── Área de filtros destacada ── */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 2,
+                  marginLeft: 10,
+                  padding: '3px 10px 3px 8px',
+                  background: 'rgba(0,31,91,0.06)',
+                  border: '1px solid rgba(0,31,91,0.12)',
+                  borderRadius: 'var(--radius-md)',
+                  boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.04)',
+                  position: 'relative',
+                }}>
+                  {/* Ícone de filtro decorativo */}
+                  <svg viewBox="0 0 16 16" fill="none" stroke="var(--ctg-blue)" strokeWidth="1.5"
+                    width="13" height="13" style={{ opacity: 0.45, flexShrink: 0, marginRight: 4 }}>
+                    <path d="M2 4h12M4.5 8h7M7 12h2" strokeLinecap="round"/>
+                  </svg>
+
+                  <PlantFilter
+                    activePlants={activePlants}
+                    selected={plantFilter}
+                    onChange={(v) => { setPlantFilter(v); setProjectFilter([]); }}
                   />
-                )}
-                <PeriodSelector period={period} onChange={setPeriod} />
+
+                  {location.pathname === '/' && (
+                    <>
+                      {/* Divisor entre filtros */}
+                      <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.12)', margin: '0 4px', flexShrink: 0 }} />
+                      <ProjectFilter
+                        projects={projects}
+                        plantFilter={plantFilter}
+                        selected={projectFilter}
+                        onChange={setProjectFilter}
+                      />
+                    </>
+                  )}
+
+                  {/* Divisor antes do período */}
+                  <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.15)', margin: '0 8px', flexShrink: 0 }} />
+                  <PeriodSelector period={period} onChange={setPeriod} />
+                </div>
               </div>
             )}
             {!showControls && !isAdmin && <AlertBell />}

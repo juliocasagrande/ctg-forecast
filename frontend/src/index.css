@@ -545,8 +545,8 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
   border-radius: 2px;
 }
 .period-slider::-webkit-slider-thumb {
-  width: 12px;
-  height: 12px;
+  width: 2px;
+  height: 2px;
   border-radius: 50%;
   background: var(--ctg-navy);
   border: 2px solid #fff;
