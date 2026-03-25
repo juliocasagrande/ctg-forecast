@@ -2,6 +2,7 @@ import Icon from './components/ui/Icon.jsx';
 import React, { useState, useEffect, useRef } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate, NavLink } from 'react-router-dom';
 import { useAuth, useRole } from './context/AuthContext.jsx';
+import { useSettings } from './context/SettingsContext.jsx';
 import Sidebar from './components/layout/Sidebar.jsx';
 import { ToastProvider } from './components/ui/Toast.jsx';
 import Login from './pages/Login.jsx';
@@ -75,9 +76,6 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-const MIN_YEAR = 2023;
-const MAX_YEAR = new Date().getFullYear() + 3;
-
 const ALL_PLANTS = [
   'PCH Palmeiras','PCH Retiro','UHE Canoas 1','UHE Canoas 2',
   'UHE Capivara','UHE Chavantes','UHE Garibaldi','UHE Ilha Solteira',
@@ -87,6 +85,11 @@ const ALL_PLANTS = [
 
 // ── Period Slider ────────────────────────────────────────────────────────────
 function PeriodSelector({ period, onChange }) {
+  const settings = useSettings();
+  const activeStart = parseInt(settings.active_year_start) || 2026;
+  const activeEnd   = parseInt(settings.active_year_end)   || 2031;
+  const MIN_YEAR = activeStart - 1; // consolidated year
+  const MAX_YEAR = activeEnd;
   const years = [];
   for (let y = MIN_YEAR; y <= MAX_YEAR; y++) years.push(y);
   const isSingle = period.start === period.end;

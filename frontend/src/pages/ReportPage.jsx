@@ -1,9 +1,7 @@
 import { useState, useCallback } from 'react';
 import api from '../utils/api.js';
 import { useRole } from '../context/AuthContext.jsx';
-import { useTypeColors } from '../context/SettingsContext.jsx';
-
-const MIN_YEAR = 2023, MAX_YEAR = new Date().getFullYear() + 3;
+import { useTypeColors, useSettings } from '../context/SettingsContext.jsx';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function fmtBRL(v) {
@@ -78,13 +76,14 @@ function buildHTML(data, config, C) {
             data:{
               labels:${JSON.stringify(allLabels)},
               datasets:[
-                {label:'Budget (acum.)',    data:${JSON.stringify(acc(allBudget))},   borderColor:'${C.budget}',   backgroundColor:'${C.budget}22',  borderWidth:2,fill:false,pointRadius:2,tension:0.4},
-                {label:'Forecast (acum.)',  data:${JSON.stringify(acc(allForecast))}, borderColor:'${C.forecast}', backgroundColor:'${C.forecast}22',borderWidth:2,fill:false,pointRadius:2,tension:0.4},
-                {label:'Realizado (acum.)', data:${JSON.stringify(acc(allActual))},   borderColor:'${C.actual}',   backgroundColor:'${C.actual}22',  borderWidth:2,fill:true, pointRadius:2,tension:0.4,borderDash:[5,3]},
+                {label:'Budget (acum.)',    data:${JSON.stringify(acc(allBudget))},   borderColor:'${C.budget}',   backgroundColor:'${C.budget}22',  borderWidth:2,fill:false,pointRadius:2,tension:0.08},
+                {label:'Forecast (acum.)',  data:${JSON.stringify(acc(allForecast))}, borderColor:'${C.forecast}', backgroundColor:'${C.forecast}22',borderWidth:2,fill:false,pointRadius:2,tension:0.08},
+                {label:'Realizado (acum.)', data:${JSON.stringify(acc(allActual))},   borderColor:'${C.actual}',   backgroundColor:'${C.actual}22',  borderWidth:2,fill:true, pointRadius:2,tension:0.08,borderDash:[5,3]},
               ]
             },
             options:{
               responsive:true,
+              
               plugins:{legend:{labels:{font:{size:10},boxWidth:12}},tooltip:{callbacks:{label:function(c){return c.dataset.label+': R$ '+c.raw.toLocaleString('pt-BR',{minimumFractionDigits:2})}}}},
               scales:{y:{ticks:{callback:function(v){return v>=1000000?'R$'+(v/1000000).toFixed(2)+'M':v>=1000?'R$'+(v/1000).toFixed(2)+'k':'R$'+v},font:{size:9}},grid:{color:'#F1F5F9'}},x:{ticks:{font:{size:9},maxRotation:45},grid:{display:false}}}
             }
@@ -118,6 +117,7 @@ function buildHTML(data, config, C) {
             },
             options:{
               responsive:true,
+              
               plugins:{legend:{labels:{font:{size:10},boxWidth:12}},tooltip:{callbacks:{label:function(c){return c.dataset.label+': R$ '+c.raw.toLocaleString('pt-BR',{minimumFractionDigits:2})}}}},
               scales:{y:{ticks:{callback:function(v){return v>=1000000?'R$'+(v/1000000).toFixed(2)+'M':v>=1000?'R$'+(v/1000).toFixed(2)+'k':'R$'+v},font:{size:9}},grid:{color:'#F1F5F9'}},x:{ticks:{font:{size:9}},grid:{display:false}}}
             }
@@ -344,8 +344,8 @@ ${sections.includes('table') ? `
       <tr>
         <th style="width:70px">Código</th>
         <th>Empresa / Usina / Projeto</th>
-        <th>Budget</th><th>Forecast</th><th>Realizado</th>
-        <th>ACT+Fcst</th><th>Variação</th>
+        <th>Budget</th><th style="color:#EF4444">Pool</th><th>Realizado</th><th>Forecast</th>
+        <th>ACT + Fcst</th><th>Variação</th>
       </tr>
     </thead>
     <tbody>${tableBody()}</tbody>
@@ -395,7 +395,12 @@ document.addEventListener('DOMContentLoaded',function(){
 // ── React Page ────────────────────────────────────────────────────────────────
 export default function ReportPage() {
   const C = useTypeColors();
+  const settings = useSettings();
   const { isEngenheiro } = useRole();
+  const activeStart = parseInt(settings.active_year_start) || 2026;
+  const activeEnd   = parseInt(settings.active_year_end)   || 2031;
+  const MIN_YEAR = activeStart - 1;
+  const MAX_YEAR = activeEnd;
   const currentYear = new Date().getFullYear();
 
   const [config, setConfig] = useState({

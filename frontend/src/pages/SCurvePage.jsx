@@ -318,7 +318,7 @@ export default function SCurvePage({ period }) {
                 label={{ value: 'Acumulado', angle: 90, position: 'insideRight', offset: 12, style: { fontSize: 8, fill: '#9CA3AF' } }}
               />
 
-              <Tooltip content={<ChartTooltip period={effectivePeriod} />} isAnimationActive={false}
+              <Tooltip isAnimationActive={false} content={<ChartTooltip period={effectivePeriod} />}
                 wrapperStyle={{ zIndex: 9999, maxWidth: 'min(280px, 80vw)' }} allowEscapeViewBox={{ x: false, y: true }} />
 
               <Legend wrapperStyle={{ fontSize: '0.68rem', color: '#374151', paddingTop: 4 }} formatter={(value) => {
@@ -339,11 +339,11 @@ export default function SCurvePage({ period }) {
               <Bar yAxisId="monthly" dataKey="Pool"      fill={C.pool+'88'}     radius={[2,2,0,0]} barSize={6} />
 
               {/* Accumulated lines */}
-              <Line yAxisId="acum" type="monotone" dataKey="BudgetAcum"    stroke={C.budget}   strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
-              <Line yAxisId="acum" type="monotone" dataKey="ForecastAcum"  stroke={C.forecast} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
-              <Line yAxisId="acum" type="monotone" dataKey="RealizadoAcum" stroke={C.actual}   strokeWidth={2.5} strokeDasharray="5 3" dot={false} activeDot={{ r: 4 }} />
-              <Line yAxisId="acum" type="monotone" dataKey="MetaAcum"      stroke={C.meta}     strokeWidth={2}   strokeDasharray="8 3" dot={false} activeDot={{ r: 3 }} />
-              <Line yAxisId="acum" type="monotone" dataKey="PoolAcum"      stroke={C.pool}     strokeWidth={2}   strokeDasharray="4 2" dot={false} activeDot={{ r: 3 }} />
+              <Line yAxisId="acum" type="linear" dataKey="BudgetAcum"    stroke={C.budget}   strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+              <Line yAxisId="acum" type="linear" dataKey="ForecastAcum"  stroke={C.forecast} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+              <Line yAxisId="acum" type="linear" dataKey="RealizadoAcum" stroke={C.actual}   strokeWidth={2.5} strokeDasharray="5 3" dot={false} activeDot={{ r: 4 }} />
+              <Line yAxisId="acum" type="linear" dataKey="MetaAcum"      stroke={C.meta}     strokeWidth={2}   strokeDasharray="8 3" dot={false} activeDot={{ r: 3 }} />
+              <Line yAxisId="acum" type="linear" dataKey="PoolAcum"      stroke={C.pool}     strokeWidth={2}   strokeDasharray="4 2" dot={false} activeDot={{ r: 3 }} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>

@@ -1,6 +1,10 @@
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'ctg-forecast-secret-change-in-prod';
+const JWT_SECRET = process.env.JWT_SECRET || (IS_PROD ? null : 'ctg-forecast-dev-only-secret');
+if (!JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable is required in production');
+  process.exit(1);
+}
 const IS_PROD = process.env.NODE_ENV === 'production';
 
 // Cookie configuration

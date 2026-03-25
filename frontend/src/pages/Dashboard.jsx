@@ -255,7 +255,7 @@ export default function Dashboard({ period, plantFilter = [] }) {
                   label={{ value: 'Acumulado', angle: 90, position: 'insideRight', offset: 10, style: { fontSize: 8, fill: '#9CA3AF' } }}
                 />
 
-                <Tooltip content={<ChartTooltip period={period} />} isAnimationActive={false} wrapperStyle={{ zIndex: 9999, maxWidth: 'min(260px, 70vw)' }} allowEscapeViewBox={{ x: false, y: true }} />
+                <Tooltip isAnimationActive={false} content={<ChartTooltip period={period} />} wrapperStyle={{ zIndex: 9999, maxWidth: 'min(260px, 70vw)' }} allowEscapeViewBox={{ x: false, y: true }} />
                 <Legend wrapperStyle={{ fontSize: '0.68rem', color: '#374151', paddingTop: 4 }} formatter={(value) => {
                   const LEGEND_LABELS = {
                     Budget: 'Budget (mensal)', Forecast: 'Forecast (mensal)', Realizado: 'Realizado (mensal)',
@@ -274,11 +274,11 @@ export default function Dashboard({ period, plantFilter = [] }) {
                 <Bar yAxisId="monthly" dataKey="Pool"      fill={C.pool+'88'} radius={[2,2,0,0]} barSize={6} />
 
                 {/* Accumulated lines */}
-                <Line yAxisId="acum" type="monotone" dataKey="BudgetAcum"    stroke={C.budget} strokeWidth={2} dot={false} />
-                <Line yAxisId="acum" type="monotone" dataKey="ForecastAcum"  stroke={C.forecast} strokeWidth={2} dot={false} />
-                <Line yAxisId="acum" type="monotone" dataKey="RealizadoAcum" stroke={C.actual} strokeWidth={2} strokeDasharray="5 3" dot={false} activeDot={{ r: 3 }} />
-                <Line yAxisId="acum" type="monotone" dataKey="MetaAcum"      stroke={C.meta} strokeWidth={2} strokeDasharray="8 3" dot={false} activeDot={{ r: 3 }} />
-                <Line yAxisId="acum" type="monotone" dataKey="PoolAcum"      stroke={C.pool} strokeWidth={2} strokeDasharray="4 2" dot={false} activeDot={{ r: 3 }} />
+                <Line yAxisId="acum" type="linear" dataKey="BudgetAcum"    stroke={C.budget} strokeWidth={2} dot={false} />
+                <Line yAxisId="acum" type="linear" dataKey="ForecastAcum"  stroke={C.forecast} strokeWidth={2} dot={false} />
+                <Line yAxisId="acum" type="linear" dataKey="RealizadoAcum" stroke={C.actual} strokeWidth={2} strokeDasharray="5 3" dot={false} activeDot={{ r: 3 }} />
+                <Line yAxisId="acum" type="linear" dataKey="MetaAcum"      stroke={C.meta} strokeWidth={2} strokeDasharray="8 3" dot={false} activeDot={{ r: 3 }} />
+                <Line yAxisId="acum" type="linear" dataKey="PoolAcum"      stroke={C.pool} strokeWidth={2} strokeDasharray="4 2" dot={false} activeDot={{ r: 3 }} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -301,7 +301,7 @@ export default function Dashboard({ period, plantFilter = [] }) {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#374151' }} />
                 <YAxis tickFormatter={fmtAxis} tick={{ fontSize: 10, fill: '#374151' }} width={54} />
-                <Tooltip content={<ProjectTooltip projectMap={projectMap} />} isAnimationActive={false} wrapperStyle={{ zIndex: 9999, maxWidth: 'min(260px, 70vw)' }} allowEscapeViewBox={{ x: false, y: true }} />
+                <Tooltip isAnimationActive={false} content={<ProjectTooltip projectMap={projectMap} />} wrapperStyle={{ zIndex: 9999, maxWidth: 'min(260px, 70vw)' }} allowEscapeViewBox={{ x: false, y: true }} />
                 <Legend wrapperStyle={{ fontSize: '0.68rem', color: '#374151', paddingTop: 4 }} className="dash-legend" />
                 <Bar dataKey="Budget"    fill={C.budget} radius={[2,2,0,0]} />
                 <Bar dataKey="Forecast"  fill={C.forecast} radius={[2,2,0,0]} />

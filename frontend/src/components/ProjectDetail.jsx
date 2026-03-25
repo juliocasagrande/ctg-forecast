@@ -1021,7 +1021,7 @@ export default function ProjectDetail({ onEdit }) {
                     label={{value:'Mensal',angle:-90,position:'insideLeft',offset:10,style:{fontSize:9,fill:'#9CA3AF'}}} />
                   <YAxis yAxisId="acum" orientation="right" tickFormatter={v=>fmt(v)} tick={{fontSize:10,fill:'#6B7280'}} width={68}
                     label={{value:'Acumulado',angle:90,position:'insideRight',offset:10,style:{fontSize:9,fill:'#9CA3AF'}}} />
-                  <Tooltip content={<ChartTooltip year={selectedYear} />} isAnimationActive={false} wrapperStyle={{zIndex:9999}} allowEscapeViewBox={{x:false,y:true}} />
+                  <Tooltip isAnimationActive={false} content={<ChartTooltip year={selectedYear} />} wrapperStyle={{zIndex:9999}} allowEscapeViewBox={{x:false,y:true}} />
                   <Legend wrapperStyle={{fontSize:'0.78rem'}} className="project-chart-legend"/>
 
                   {/* Monthly bars */}
@@ -1062,7 +1062,7 @@ export default function ProjectDetail({ onEdit }) {
                       >
                         {donutData.map((_, idx) => <Cell key={idx} fill={CAT_COLORS[idx % CAT_COLORS.length]} />)}
                       </Pie>
-                      <Tooltip content={<ChartTooltip year={selectedYear} />} isAnimationActive={false} wrapperStyle={{zIndex:9999}} />
+                      <Tooltip isAnimationActive={false} content={<ChartTooltip year={selectedYear} />} wrapperStyle={{zIndex:9999}} />
                     </PieChart>
                   </ResponsiveContainer>
                 )}
@@ -1078,7 +1078,7 @@ export default function ProjectDetail({ onEdit }) {
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false}/>
                     <XAxis type="number" tickFormatter={v=>fmt(v)} tick={{fontSize:10,fill:'#374151'}} />
                     <YAxis type="category" dataKey="name" tick={{fontSize:12,fill:'#374151'}} width={72} />
-                    <Tooltip content={<ChartTooltip year={selectedYear} />} isAnimationActive={false} wrapperStyle={{zIndex:9999}} />
+                    <Tooltip isAnimationActive={false} content={<ChartTooltip year={selectedYear} />} wrapperStyle={{zIndex:9999}} />
                     <Legend wrapperStyle={{fontSize:'0.78rem'}} className="project-chart-legend" />
                     <Bar dataKey="Forecast"  fill={C.forecast} radius={[0,3,3,0]} barSize={14} />
                     <Bar dataKey="Realizado" fill={C.actual} radius={[0,3,3,0]} barSize={14} />
@@ -1106,7 +1106,7 @@ export default function ProjectDetail({ onEdit }) {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/>
                   <XAxis dataKey="name" tick={{fontSize:12,fill:'#374151'}} />
                   <YAxis tickFormatter={v=>fmt(v)} tick={{fontSize:10,fill:'#374151'}} width={68} />
-                  <Tooltip content={<ChartTooltip year={selectedYear} />} isAnimationActive={false} wrapperStyle={{zIndex:9999}} />
+                  <Tooltip isAnimationActive={false} content={<ChartTooltip year={selectedYear} />} wrapperStyle={{zIndex:9999}} />
                   <Legend wrapperStyle={{fontSize:'0.78rem'}} className="project-chart-legend" />
                   <Bar dataKey="Budget"   fill={C.budget} radius={[3,3,0,0]} />
                   <Bar dataKey="Forecast" fill={C.forecast} radius={[3,3,0,0]} />

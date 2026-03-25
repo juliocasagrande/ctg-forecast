@@ -15,12 +15,11 @@ const ALL_PLANTS = [
   'UHE Salto Grande','UHE Taquaruçu',
 ];
 
-function PlantSummaryCard({ plant, projects, onClick, selected }) {
-  const pjs     = projects.filter(p => (p.plants || []).includes(plant));
-  const budget   = pjs.reduce((s, p) => s + parseFloat(p.total_budget   || 0), 0);
-  const forecast = pjs.reduce((s, p) => s + parseFloat(p.total_forecast || 0), 0);
-  const actual   = pjs.reduce((s, p) => s + parseFloat(p.total_actual   || 0), 0);
-  if (pjs.length === 0) return null;
+function SummaryCard({ title, subtitle, projects, onClick, selected }) {
+  const budget   = projects.reduce((s, p) => s + parseFloat(p.total_budget   || 0), 0);
+  const forecast = projects.reduce((s, p) => s + parseFloat(p.total_forecast || 0), 0);
+  const actual   = projects.reduce((s, p) => s + parseFloat(p.total_actual   || 0), 0);
+  if (projects.length === 0) return null;
 
   return (
     <div onClick={onClick} style={{
@@ -29,11 +28,14 @@ function PlantSummaryCard({ plant, projects, onClick, selected }) {
       borderRadius: 'var(--radius-lg)', padding: '14px 16px',
       cursor: 'pointer', transition: 'all 0.18s',
     }}>
-      <div style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, color: selected ? 'var(--ctg-accent)' : 'var(--ctg-blue)' }}>
-        {plant}
+      <div style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4, color: selected ? 'var(--ctg-accent)' : 'var(--ctg-blue)' }}>
+        {title}
       </div>
+      {subtitle && (
+        <div style={{ fontSize: '0.65rem', color: selected ? 'rgba(255,255,255,0.5)' : 'var(--text-muted)', marginBottom: 2 }}>{subtitle}</div>
+      )}
       <div style={{ fontSize: '0.68rem', fontWeight: 600, color: selected ? 'rgba(255,255,255,0.5)' : 'var(--text-muted)', marginBottom: 10 }}>
-        {pjs.length} projeto{pjs.length !== 1 ? 's' : ''}
+        {projects.length} projeto{projects.length !== 1 ? 's' : ''}
       </div>
       {[
         { label: 'Budget',   value: budget,   color: selected ? '#BFDBFE' : 'var(--budget-text)' },
@@ -51,8 +53,9 @@ function PlantSummaryCard({ plant, projects, onClick, selected }) {
 
 // plantFilter = array of plant names from header dropdown (empty = show all)
 export default function ProjectsPage({ projects, period, plantFilter = [], onEditProject, onProjectsChange }) {
-  const [view, setView]               = useState('list');
-  const [selectedPlant, setSelectedPlant] = useState(null);
+  const [view, setView]                     = useState('list');
+  const [selectedPlant, setSelectedPlant]     = useState(null);
+  const [selectedEngineer, setSelectedEngineer] = useState(null);
 
   const periodLabel = period.start === period.end
     ? `${period.start}`
@@ -63,12 +66,11 @@ export default function ProjectsPage({ projects, period, plantFilter = [], onEdi
     ? projects.filter(p => plantFilter.some(f => (p.plants || []).includes(f)))
     : projects;
 
-  // Plants active in the (already header-filtered) project list
+  // ── Plants view data ──
   const activePlants = ALL_PLANTS.filter(pl =>
     headerFiltered.some(p => (p.plants || []).includes(pl))
   );
 
-  // Chart data
   const plantChartData = activePlants.map(pl => {
     const pjs = headerFiltered.filter(p => (p.plants || []).includes(pl));
     return {
@@ -79,29 +81,54 @@ export default function ProjectsPage({ projects, period, plantFilter = [], onEdi
     };
   }).filter(d => d.Budget > 0 || d.Forecast > 0);
 
-  // Final list filter: header filter + card click filter (if in plant view)
-  const listFilter = view === 'plants' && selectedPlant ? selectedPlant : null;
-  const finalProjects = listFilter
-    ? headerFiltered.filter(p => (p.plants || []).includes(listFilter))
-    : headerFiltered;
+  // ── Engineers view data ──
+  const engineerMap = {};
+  headerFiltered.forEach(p => {
+    const names = p.engineer_names ? p.engineer_names.split(', ') : [];
+    const initials = p.engineer_initials ? p.engineer_initials.split(', ') : [];
+    if (names.length === 0) {
+      if (!engineerMap['__none__']) engineerMap['__none__'] = { name: 'Sem engenheiro', initials: '?', projects: [] };
+      engineerMap['__none__'].projects.push(p);
+    } else {
+      names.forEach((name, i) => {
+        if (!engineerMap[name]) engineerMap[name] = { name, initials: initials[i] || name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(), projects: [] };
+        engineerMap[name].projects.push(p);
+      });
+    }
+  });
+  const engineers = Object.values(engineerMap).sort((a, b) => a.name.localeCompare(b.name));
+
+  const engChartData = engineers.filter(e => e.name !== 'Sem engenheiro').map(e => ({
+    name: e.name.split(' ').slice(0,2).join(' '),
+    Budget:    e.projects.reduce((s, p) => s + parseFloat(p.total_budget   || 0), 0),
+    Forecast:  e.projects.reduce((s, p) => s + parseFloat(p.total_forecast || 0), 0),
+    Realizado: e.projects.reduce((s, p) => s + parseFloat(p.total_actual   || 0), 0),
+  })).filter(d => d.Budget > 0 || d.Forecast > 0);
+
+  // ── Final list filter ──
+  let finalProjects = headerFiltered;
+  if (view === 'plants' && selectedPlant) {
+    finalProjects = headerFiltered.filter(p => (p.plants || []).includes(selectedPlant));
+  } else if (view === 'engineers' && selectedEngineer) {
+    const eng = engineerMap[selectedEngineer];
+    finalProjects = eng ? eng.projects : headerFiltered;
+  }
 
   return (
     <div>
-      {/* View toggle ONLY — no "+ Novo Projeto" button here */}
+      {/* View toggle */}
       <div style={{ marginBottom: 20 }}>
         <div className="tabs" style={{ marginBottom: 0, width: 'fit-content' }}>
-          <button
-            className={`tab-btn ${view === 'list' ? 'active' : ''}`}
-            onClick={() => { setView('list'); setSelectedPlant(null); }}
-          >
-            Lista de Projetos
-          </button>
-          <button
-            className={`tab-btn ${view === 'plants' ? 'active' : ''}`}
-            onClick={() => setView('plants')}
-          >
-            Por Usina
-          </button>
+          {[
+            { id: 'list',      label: 'Lista de Projetos' },
+            { id: 'plants',    label: 'Por Usina' },
+            { id: 'engineers', label: 'Por Engenheiro' },
+          ].map(tab => (
+            <button key={tab.id}
+              className={`tab-btn ${view === tab.id ? 'active' : ''}`}
+              onClick={() => { setView(tab.id); setSelectedPlant(null); setSelectedEngineer(null); }}
+            >{tab.label}</button>
+          ))}
         </div>
       </div>
 
@@ -119,7 +146,6 @@ export default function ProjectsPage({ projects, period, plantFilter = [], onEdi
         <div>
           {activePlants.length === 0 ? (
             <div className="empty-state">
-              <div className="icon"></div>
               <h3>Nenhum projeto com usina cadastrada</h3>
               <p>Edite os projetos e selecione as usinas que eles atendem.</p>
             </div>
@@ -130,7 +156,6 @@ export default function ProjectsPage({ projects, period, plantFilter = [], onEdi
                   <div className="card-header" style={{ background: 'var(--ctg-navy)', borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0' }}>
                     <span className="card-title" style={{ color: '#fff' }}>
                       Forecast por Usina — {periodLabel}
-                      {plantFilter.length > 0 && ` · ${plantFilter.length} usina${plantFilter.length > 1 ? 's' : ''} filtrada${plantFilter.length > 1 ? 's' : ''}`}
                     </span>
                   </div>
                   <div className="card-body">
@@ -149,29 +174,73 @@ export default function ProjectsPage({ projects, period, plantFilter = [], onEdi
                   </div>
                 </div>
               )}
-
-              {/* Plant cards */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12, marginBottom: 24 }}>
-                {activePlants.map(pl => (
-                  <PlantSummaryCard
-                    key={pl}
-                    plant={pl}
-                    projects={headerFiltered}
-                    selected={selectedPlant === pl}
-                    onClick={() => setSelectedPlant(selectedPlant === pl ? null : pl)}
-                  />
-                ))}
+                {activePlants.map(pl => {
+                  const pjs = headerFiltered.filter(p => (p.plants || []).includes(pl));
+                  return (
+                    <SummaryCard key={pl} title={pl} projects={pjs}
+                      selected={selectedPlant === pl}
+                      onClick={() => setSelectedPlant(selectedPlant === pl ? null : pl)}
+                    />
+                  );
+                })}
               </div>
-
-              {/* Filtered list */}
               <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>
                 {selectedPlant ? `Projetos — ${selectedPlant}` : 'Todos os Projetos'}
               </div>
-              <ProjectsList
-                projects={finalProjects}
-                onEditProject={onEditProject}
-                onProjectsChange={onProjectsChange}
-              />
+              <ProjectsList projects={finalProjects} onEditProject={onEditProject} onProjectsChange={onProjectsChange} />
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Engineers view */}
+      {view === 'engineers' && (
+        <div>
+          {engineers.length === 0 ? (
+            <div className="empty-state">
+              <h3>Nenhum engenheiro designado</h3>
+              <p>Edite os projetos e designe os engenheiros responsáveis.</p>
+            </div>
+          ) : (
+            <>
+              {engChartData.length > 0 && (
+                <div className="card" style={{ marginBottom: 20 }}>
+                  <div className="card-header" style={{ background: 'var(--ctg-navy)', borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0' }}>
+                    <span className="card-title" style={{ color: '#fff' }}>
+                      Forecast por Engenheiro — {periodLabel}
+                    </span>
+                  </div>
+                  <div className="card-body">
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={engChartData} margin={{ top: 4, right: 8, left: 0, bottom: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                        <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#374151' }} angle={-15} textAnchor="end" interval={0} />
+                        <YAxis tickFormatter={fmt} tick={{ fontSize: 11, fill: '#374151' }} width={72} />
+                        <Tooltip formatter={v => fmt(v)} />
+                        <Legend />
+                        <Bar dataKey="Budget"    fill="#16A34A" radius={[2, 2, 0, 0]} />
+                        <Bar dataKey="Forecast"  fill="#38BDF8" radius={[2, 2, 0, 0]} />
+                        <Bar dataKey="Realizado" fill="#2563EB" radius={[2, 2, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12, marginBottom: 24 }}>
+                {engineers.map(eng => (
+                  <SummaryCard key={eng.name} title={eng.name}
+                    subtitle={eng.name === 'Sem engenheiro' ? undefined : eng.initials}
+                    projects={eng.projects}
+                    selected={selectedEngineer === eng.name}
+                    onClick={() => setSelectedEngineer(selectedEngineer === eng.name ? null : eng.name)}
+                  />
+                ))}
+              </div>
+              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>
+                {selectedEngineer ? `Projetos — ${selectedEngineer}` : 'Todos os Projetos'}
+              </div>
+              <ProjectsList projects={finalProjects} onEditProject={onEditProject} onProjectsChange={onProjectsChange} />
             </>
           )}
         </div>

@@ -26,9 +26,10 @@ router.get('/', async (req, res) => {
 
     const query = `
       SELECT p.*,
-        COALESCE(fe_agg.total_budget, 0) + COALESCE(yc_agg.cons_actual, 0)   AS total_budget,
-        COALESCE(fe_agg.total_forecast, 0) + COALESCE(yc_agg.cons_forecast, 0) AS total_forecast,
-        COALESCE(fe_agg.total_actual, 0) + COALESCE(yc_agg.cons_actual, 0)   AS total_actual,
+        COALESCE(SUM(CASE WHEN combined.type='Budget' THEN combined.value ELSE 0 END),0)
+          + COALESCE(SUM(CASE WHEN combined.source='consolidated' AND combined.type='Actual' THEN combined.value ELSE 0 END),0) AS total_budget,
+        COALESCE(SUM(CASE WHEN combined.type='Forecast' THEN combined.value ELSE 0 END),0) AS total_forecast,
+        COALESCE(SUM(CASE WHEN combined.type='Actual'   THEN combined.value ELSE 0 END),0) AS total_actual,
         COALESCE(pa_agg.engineer_count, 0) AS engineer_count,
         COALESCE(msg_agg.message_count, 0) AS message_count,
         eng_agg.engineer_names,
@@ -36,18 +37,20 @@ router.get('/', async (req, res) => {
       FROM projects p
       ${engJoin}
       LEFT JOIN (
-        SELECT project_id,
-          SUM(CASE WHEN type='Budget'   THEN value ELSE 0 END) AS total_budget,
-          SUM(CASE WHEN type='Forecast' THEN value ELSE 0 END) AS total_forecast,
-          SUM(CASE WHEN type='Actual'   THEN value ELSE 0 END) AS total_actual
-        FROM forecast_entries GROUP BY project_id
-      ) fe_agg ON fe_agg.project_id = p.id
-      LEFT JOIN (
-        SELECT project_id,
-          SUM(CASE WHEN type='Actual'   THEN value ELSE 0 END) AS cons_actual,
-          SUM(CASE WHEN type='Forecast' THEN value ELSE 0 END) AS cons_forecast
-        FROM year_consolidated WHERE value > 0 GROUP BY project_id
-      ) yc_agg ON yc_agg.project_id = p.id
+        SELECT fe.project_id, fe.type, fe.value, 'entries' AS source
+        FROM forecast_entries fe
+        WHERE NOT EXISTS (
+          SELECT 1 FROM year_consolidated yc2
+          WHERE yc2.project_id = fe.project_id
+            AND yc2.year = fe.year
+            AND (yc2.type = fe.type OR (yc2.type = 'Actual' AND yc2.category = 'Total' AND fe.type = 'Actual'))
+            AND yc2.value > 0
+        )
+        UNION ALL
+        SELECT yc.project_id, yc.type, yc.value, 'consolidated' AS source
+        FROM year_consolidated yc
+        WHERE yc.value > 0
+      ) combined ON combined.project_id = p.id
       LEFT JOIN (
         SELECT project_id, COUNT(DISTINCT user_id) AS engineer_count
         FROM project_assignments GROUP BY project_id
@@ -64,6 +67,7 @@ router.get('/', async (req, res) => {
         SELECT project_id, COUNT(*) AS message_count
         FROM messages GROUP BY project_id
       ) msg_agg ON msg_agg.project_id = p.id
+      GROUP BY p.id, pa_agg.engineer_count, msg_agg.message_count, eng_agg.engineer_names, eng_agg.engineer_initials
       ORDER BY p.code`;
 
     const r = await pool.query(query, params);
@@ -119,25 +123,31 @@ router.post('/', requireRole('admin', 'gestor', 'planejador'), async (req, res) 
 
 // PUT /api/projects/:id — gestor/admin
 router.put('/:id', requireRole('admin', 'gestor', 'planejador'), async (req, res) => {
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
     const { code, name, description, si_value, pool_value, plants, engineer_ids } = req.body;
-    const r = await pool.query(
+    const r = await client.query(
       `UPDATE projects SET code=$1,name=$2,description=$3,si_value=$4,pool_value=$5,plants=$6,updated_at=NOW()
        WHERE id=$7 RETURNING *`,
       [code, name, description, si_value||0, pool_value||0, plants||[], req.params.id]
     );
     // Sync engineers if provided
     if (engineer_ids !== undefined) {
-      await pool.query('DELETE FROM project_assignments WHERE project_id=$1', [req.params.id]);
+      await client.query('DELETE FROM project_assignments WHERE project_id=$1', [req.params.id]);
       for (const uid of engineer_ids) {
-        await pool.query(
+        await client.query(
           'INSERT INTO project_assignments (project_id, user_id, assigned_by) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
           [req.params.id, uid, req.user.id]
         );
       }
     }
+    await client.query('COMMIT');
     res.json(r.rows[0]);
-  } catch (err) { safeError(res, err); }
+  } catch (err) {
+    await client.query('ROLLBACK');
+    safeError(res, err);
+  } finally { client.release(); }
 });
 
 // DELETE /api/projects/:id — gestor/planejador/admin, requires project name confirmation
