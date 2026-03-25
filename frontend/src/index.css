@@ -1634,3 +1634,8 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
   /* Hide variacao on mobile */
   .polos-col-variacao { display: none !important; }
 }
+/* ── Developer credit shimmer animation ── */
+@keyframes devShimmer {
+  0%   { background-position: 300% center; }
+  100% { background-position: -300% center; }
+}

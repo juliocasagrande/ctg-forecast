@@ -83,9 +83,9 @@ export default function Login() {
     <div className="login-page">
       <div className="login-left">
         <div className="login-brand">
-          <div className="login-logo">CTG<span>.</span>Forecast</div>
+          <div className="login-logo">CTG<span>.</span>Engenharia</div>
           <p className="login-tagline">
-            Controle de forecast de projetos<br />de engenharia e automação.
+            Plataforma integrada de projetos<br />de engenharia — CTG Brasil.
           </p>
         </div>
         <div className="login-decorlines">
@@ -234,18 +234,28 @@ export default function Login() {
 
         </div>
 
-        {/* Developer credit — discrete but visible */}
+        {/* Developer credit */}
         <div style={{
           position: 'absolute', bottom: 20, left: 0, right: 0,
           textAlign: 'center',
-          fontSize: '0.7rem',
-          color: 'var(--text-muted)',
-          letterSpacing: '0.04em',
-          opacity: 0.6,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
           userSelect: 'none',
         }}>
-          Desenvolvido por{' '}
-          <span style={{ fontWeight: 600, color: 'var(--ctg-blue)', opacity: 1 }}>
+          <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
+            Desenvolvido por
+          </span>
+          <span style={{
+            fontSize: '0.95rem',
+            fontWeight: 700,
+            letterSpacing: '0.02em',
+            background: 'linear-gradient(90deg, #1a56db, #0ea5e9, #1d4ed8, #0ea5e9, #1a56db)',
+            backgroundSize: '300% auto',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+            animation: 'devShimmer 4s linear infinite',
+            display: 'inline-block',
+          }}>
             Júlio Casagrande
           </span>
         </div>

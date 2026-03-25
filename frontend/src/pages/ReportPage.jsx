@@ -404,7 +404,7 @@ export default function ReportPage() {
   const currentYear = new Date().getFullYear();
 
   const [config, setConfig] = useState({
-    title:       'Relatório de Forecast — CTG Brasil',
+    title:       'Relatório de Engenharia — CTG Brasil',
     subtitle:    '',
     yearStart:   currentYear,
     yearEnd:     currentYear,

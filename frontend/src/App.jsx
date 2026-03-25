@@ -608,7 +608,7 @@ function getPageMeta(pathname) {
   if (pathname === '/feedback') return { title: 'Sugestões e Feedback', sub: 'Envie sua contribuição' };
   if (pathname === '/feedback/inbox') return { title: 'Inbox de Feedback', sub: 'Mensagens dos usuários do sistema' };
   if (pathname.startsWith('/projects/')) return { title: 'Projetos', sub: null };
-  return { title: 'CTG Forecast', sub: null };
+  return { title: 'CTG.Engenharia', sub: null };
 }
 
 // ── App ──────────────────────────────────────────────────────────────────────

@@ -1,4 +1,17 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+
+// ── Mobile detection hook ─────────────────────────────────────────────────────
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' && window.innerWidth < breakpoint
+  );
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < breakpoint);
+    window.addEventListener('resize', handler, { passive: true });
+    return () => window.removeEventListener('resize', handler);
+  }, [breakpoint]);
+  return isMobile;
+}
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -392,6 +405,7 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
   const [scurveOpen,         setScurveOpen]         = useState(false);
   const [projectChartOpen,   setProjectChartOpen]   = useState(false);
   const [tableOpen,          setTableOpen]          = useState(false);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -494,7 +508,7 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
       }}>
 
         {/* ── KPI cards ─────────────────────────────────────────────────── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, flexShrink: 0 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 10, flexShrink: 0 }}>
           {[
             { cls: 'budget',   label: `Budget ${periodLabel}`,   val: totalBudget,   sub: `${filtered.length} projeto${filtered.length !== 1 ? 's' : ''}` },
             { cls: 'forecast', label: `Forecast ${periodLabel}`, val: totalForecast, sub: totalBudget   ? `${((totalForecast / totalBudget)   * 100).toFixed(1)}% do budget`   : '—' },
@@ -510,13 +524,13 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
         </div>
 
         {/* ── Charts row ───────────────────────────────────────────────── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 10, flexShrink: 0 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '3fr 2fr', gap: 10, flexShrink: 0 }}>
 
           {/* S-Curve */}
           <div className="card" style={{ overflow: 'visible' }}>
             <CardHeader
               title={`Evolução Mensal + S-Curve — ${periodLabel}`}
-              action={
+              action={!isMobile ? (
                 <button onClick={() => setScurveOpen(true)} title="Expandir gráfico" style={{
                   background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: 6,
                   color: '#fff', cursor: 'pointer', padding: '3px 8px', fontSize: '0.72rem',
@@ -527,7 +541,7 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
                   </svg>
                   Expandir
                 </button>
-              }
+              ) : null}
             />
             <div style={{ padding: '8px 6px 4px' }}>
               <ResponsiveContainer width="100%" height={168}>
@@ -543,8 +557,8 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
                   <Tooltip isAnimationActive={false} content={<ChartTooltip period={period} />}
                     wrapperStyle={{ zIndex: 9999, pointerEvents: 'none' }}
                     allowEscapeViewBox={{ x: true, y: true }} />
-                  <Legend wrapperStyle={{ fontSize: '0.62rem', color: '#374151', paddingTop: 2 }}
-                    formatter={v => LEGEND_LABELS[v] || v} className="dash-legend" />
+                  {!isMobile && <Legend wrapperStyle={{ fontSize: '0.62rem', color: '#374151', paddingTop: 2 }}
+                    formatter={v => LEGEND_LABELS[v] || v} className="dash-legend" />}
                   <Bar yAxisId="monthly" dataKey="Budget"    fill={C.budget+'88'}   radius={[2,2,0,0]} barSize={5} />
                   <Bar yAxisId="monthly" dataKey="Forecast"  fill={C.forecast+'88'} radius={[2,2,0,0]} barSize={5} />
                   <Bar yAxisId="monthly" dataKey="Realizado" fill={C.actual+'88'}   radius={[2,2,0,0]} barSize={5} />
@@ -564,7 +578,7 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
           <div className="card" style={{ overflow: 'visible' }}>
             <CardHeader
               title={`Por Projeto — ${periodLabel}`}
-              action={
+              action={!isMobile ? (
                 <button onClick={() => setProjectChartOpen(true)} title="Expandir gráfico" style={{
                   background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: 6,
                   color: '#fff', cursor: 'pointer', padding: '3px 8px', fontSize: '0.72rem',
@@ -575,7 +589,7 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
                   </svg>
                   Expandir
                 </button>
-              }
+              ) : null}
             />
             <div style={{ padding: '8px 6px 4px' }}>
               <ResponsiveContainer width="100%" height={168}>
@@ -594,7 +608,7 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
                   <Tooltip isAnimationActive={false} content={<ProjectTooltip projectMap={projectMap} />}
                     wrapperStyle={{ zIndex: 9999, pointerEvents: 'none' }}
                     allowEscapeViewBox={{ x: true, y: true }} />
-                  <Legend wrapperStyle={{ fontSize: '0.62rem', color: '#374151', paddingTop: 2 }} className="dash-legend" />
+                  {!isMobile && <Legend wrapperStyle={{ fontSize: '0.62rem', color: '#374151', paddingTop: 2 }} className="dash-legend" />}
                   <Bar dataKey="Budget"    fill={C.budget}   radius={[2,2,0,0]} />
                   <Bar dataKey="Forecast"  fill={C.forecast} radius={[2,2,0,0]} />
                   <Bar dataKey="Realizado" fill={C.actual}   radius={[2,2,0,0]} />
@@ -610,7 +624,7 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
             <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.76rem', fontWeight: 600, letterSpacing: '0.04em' }}>
               Resumo por Projeto — {periodLabel}
             </span>
-            <button onClick={() => setTableOpen(true)} title="Expandir tabela" style={{
+            {!isMobile && <button onClick={() => setTableOpen(true)} title="Expandir tabela" style={{
               background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: 6,
               color: '#fff', cursor: 'pointer', padding: '3px 8px', fontSize: '0.72rem',
               display: 'flex', alignItems: 'center', gap: 4,
@@ -619,7 +633,7 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
                 <path d="M1.5 1h4a.5.5 0 010 1H2.707l3.647 3.646a.5.5 0 01-.708.708L2 2.707V5.5a.5.5 0 01-1 0v-4A.5.5 0 011.5 1zM14.5 1a.5.5 0 01.5.5v4a.5.5 0 01-1 0V2.707l-3.646 3.647a.5.5 0 01-.708-.708L13.293 2H10.5a.5.5 0 010-1h4zM1.5 15a.5.5 0 01-.5-.5v-4a.5.5 0 011 0v2.793l3.646-3.647a.5.5 0 01.708.708L2.707 14H5.5a.5.5 0 010 1h-4zM10 10.854a.5.5 0 01.708-.708L14 13.293V10.5a.5.5 0 011 0v4a.5.5 0 01-.5.5h-4a.5.5 0 010-1h2.793l-3.647-3.646a.5.5 0 01.354-.5z"/>
               </svg>
               Expandir
-            </button>
+            </button>}
           </div>
           <div style={{ overflowY: 'auto', overflowX: 'auto', flex: 1 }}>
             <table className="dash-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>

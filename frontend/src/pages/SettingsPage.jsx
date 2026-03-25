@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../utils/api.js';
 import { useToast } from '../components/ui/Toast.jsx';
+import SapMappingTab from '../components/SapMappingTab.jsx';
 
 function CloseYearPanel({ settings, toast }) {
   const currentYear = new Date().getFullYear();
@@ -164,6 +165,7 @@ const SECTIONS = [
   { id: 'period',  label: '📆 Período',         icon: '📆' },
   { id: 'export',  label: '📊 Exportação',      icon: '📊' },
   { id: 'fiscal',  label: '📅 Ano Fiscal',      icon: '📅' },
+  { id: 'sap',     label: '🗂️ Mapeamento SAP',  icon: '🗂️' },
   { id: 'feedback',label: '💡 Feedbacks',       icon: '💡' },
 ];
 
@@ -526,6 +528,10 @@ export default function SettingsPage() {
         {/* ── FEEDBACKS ── */}
         {activeSection === 'feedback' && (
           <FeedbackList toast={toast} />
+        )}
+
+        {activeSection === 'sap' && (
+          <SapMappingTab />
         )}
       </div>
 

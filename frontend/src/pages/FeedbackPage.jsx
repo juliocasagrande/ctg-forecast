@@ -67,7 +67,7 @@ export default function FeedbackPage() {
         background: 'var(--budget-bg)', border: '1px solid var(--budget-border)',
         marginBottom: 20, fontSize: '0.85rem', color: 'var(--budget-text)', lineHeight: 1.6,
       }}>
-        Sua opinião é importante para melhorar o CTG Forecast. Sugestões, problemas e feedbacks serão encaminhados para a equipe de desenvolvimento.
+        Sua opinião é importante para melhorar o CTG.Engenharia. Sugestões, problemas e feedbacks serão encaminhados para a equipe de desenvolvimento.
       </div>
 
       <div className="card">

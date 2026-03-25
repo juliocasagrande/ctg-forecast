@@ -6,7 +6,7 @@ const SECTIONS = [
     id: 'overview',
     icon: '🏠',
     title: 'Visão Geral',
-    content: `O **CTG Forecast** é o sistema de controle de forecast de projetos de engenharia e automação da CTG Brasil. 
+    content: `O **CTG.Engenharia** é o sistema de controle de forecast de projetos de engenharia e automação da CTG Brasil. 
     
 Ele permite que engenheiros, planejadores e gestores colaborem no preenchimento, acompanhamento e análise de previsões orçamentárias por projeto.`,
   },
@@ -99,7 +99,7 @@ O relatório HTML completo está disponível no menu **Relatório HTML**.`,
     id: 'pwa',
     icon: '📱',
     title: 'Instalação no Celular',
-    content: `O CTG Forecast funciona como aplicativo no celular:
+    content: `O CTG.Engenharia funciona como aplicativo no celular:
 
 **iPhone/Safari:** Toque no botão de compartilhar (□↑) → "Adicionar à Tela de Início"
 
