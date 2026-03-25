@@ -15,6 +15,7 @@ const IC = {
   polos:     <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm0 6a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2zm0 6a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2z"/></svg>,
   logout:    <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 001 1h7v-2H4V5h6V3H3zm11.293 4.293a1 1 0 011.414 1.414L13.414 11H9a1 1 0 110-2h4.414l2.293-2.293z" clipRule="evenodd"/></svg>,
   plant:     <svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13"><path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd"/></svg>,
+  monthly:   <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd"/></svg>,
 };
 
 const ORDERED_PLANTS = [
@@ -110,7 +111,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
 
         {/* Logo */}
         <div className="sidebar-logo">
-          <div className="brand">CTG<span>.</span>Forecast</div>
+          <div className="brand">CTG<span>.</span>Engenharia</div>
           <div className="subtitle">FUNÇÃO — {roleLabel}</div>
         </div>
 
@@ -123,11 +124,14 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
             {navItem('/', IC.dashboard, 'Dashboard')}
           </>}
 
-          {/* Gestor / Engenheiro */}
+          {/* Gestor / Engenheiro / Planejador */}
           {!isAdmin && <>
-            <div className="nav-section-label" style={{color:"rgba(255,255,255,0.85)"}}>Visão Geral</div>
+
+            {/* ── SEÇÃO 1: Forecast ─────────────────────────────── */}
+            <div className="nav-section-label" style={{color:"rgba(255,255,255,0.85)"}}>
+              Forecast
+            </div>
             {navItem('/', IC.dashboard, 'Dashboard')}
-            {/* Projetos row with inline + button for gestor/planejador */}
             <div style={{ display:'flex', alignItems:'center', gap:2 }}>
               <NavLink to="/projects" onClick={onClose}
                 className={({ isActive }) => `nav-item ${isActive && !location.pathname.includes('/projects/') ? 'active' : ''}`}
@@ -153,9 +157,25 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
                 >+</button>
               )}
             </div>
-            {navItem('/polos', IC.polos || IC.dashboard, 'Visão Geral')}
-            {navItem('/scurve', IC.plant || IC.dashboard, 'Curva S')}
-            {!isAdmin && navItem('/report', IC.report || IC.dashboard, 'Relatório HTML')}
+            {navItem('/polos', IC.polos, 'Visão Geral')}
+            {navItem('/report', IC.report, 'Relatório HTML')}
+
+            {/* ── DIVISOR ───────────────────────────────────────── */}
+            {(isGestor || isPlanejador || user?.email === 'julio.casagrande@ctgbr.com.br') && (
+              <div style={{
+                margin: '10px 8px 4px',
+                borderTop: '1px solid rgba(255,255,255,0.10)',
+              }} />
+            )}
+
+            {/* ── SEÇÃO 2: Acompanhamento — acesso restrito ─────── */}
+            {(isGestor || isPlanejador || user?.email === 'julio.casagrande@ctgbr.com.br') && <>
+              <div className="nav-section-label" style={{color:"rgba(255,255,255,0.75)"}}>
+                Acompanhamento
+              </div>
+              {navItem('/monthly-report', IC.monthly, 'Relatório Mensal')}
+            </>}
+
           </>}
 
           {/* Projects listed only on Projects page */}

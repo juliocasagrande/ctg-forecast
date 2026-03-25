@@ -1,5 +1,5 @@
 import Icon from './components/ui/Icon.jsx';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate, NavLink } from 'react-router-dom';
 import { useAuth, useRole } from './context/AuthContext.jsx';
 import { useSettings } from './context/SettingsContext.jsx';
@@ -16,8 +16,8 @@ import PolosPage from './pages/PolosPage.jsx';
 import ReportPage from './pages/ReportPage.jsx';
 import TutorialPage from './pages/TutorialPage.jsx';
 import FeedbackPage from './pages/FeedbackPage.jsx';
-import SCurvePage from './pages/SCurvePage.jsx';
 import FeedbackInbox from './pages/FeedbackInbox.jsx';
+import MonthlyReportPage from './pages/MonthlyReportPage.jsx';
 import AdminPanel from './components/admin/AdminPanel.jsx';
 import AlertBell from './components/ui/AlertBell.jsx';
 import api from './utils/api.js';
@@ -272,6 +272,103 @@ function PlantFilter({ activePlants, selected, onChange }) {
   );
 }
 
+// ── Project Filter Dropdown ──────────────────────────────────────────────────
+function ProjectFilter({ projects, plantFilter, selected, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Filter options by active plant filter
+  const options = useMemo(() => {
+    let base = projects;
+    if (plantFilter.length > 0)
+      base = base.filter(p => plantFilter.some(pl => (p.plants || []).includes(pl)));
+    return base;
+  }, [projects, plantFilter]);
+
+  const toggle = (id) =>
+    onChange(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id]);
+
+  const sublabel = selected.length === 0
+    ? 'Todos'
+    : selected.length === 1
+      ? (options.find(p => p.id === selected[0])?.code ?? '1 projeto')
+      : `${selected.length} projetos`;
+
+  if (options.length === 0) return null;
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button onClick={() => setOpen(o => !o)} style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2,
+        background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+      }}>
+        <span className="period-label" style={{ color: selected.length > 0 ? 'var(--ctg-blue)' : 'var(--ctg-navy)' }}>
+          Projeto
+        </span>
+        <span style={{
+          display: 'flex', alignItems: 'center', gap: 5,
+          fontSize: '0.72rem', fontWeight: selected.length > 0 ? 600 : 400,
+          color: selected.length > 0 ? 'var(--ctg-blue)' : 'var(--text-muted)',
+          fontFamily: 'var(--font-body)', whiteSpace: 'nowrap',
+        }}>
+          {sublabel}
+          {selected.length > 0 && (
+            <span onClick={e => { e.stopPropagation(); onChange([]); }} title="Limpar"
+              style={{ display:'inline-flex',alignItems:'center',justifyContent:'center',width:14,height:14,borderRadius:'50%',background:'var(--ctg-blue)',color:'#fff',fontSize:'0.6rem',fontWeight:700,lineHeight:1,flexShrink:0,cursor:'pointer' }}>
+              ×
+            </span>
+          )}
+          <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', lineHeight: 1 }}>{open ? '▲' : '▼'}</span>
+        </span>
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+          background: 'var(--bg-card)', border: '1px solid var(--border-strong)',
+          borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)',
+          minWidth: 260, zIndex: 200, overflow: 'hidden',
+        }}>
+          <div style={{ padding: '9px 14px', borderBottom: '1px solid var(--border)',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            background: 'var(--ctg-navy)' }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase',
+              letterSpacing: '0.08em', color: 'rgba(255,255,255,0.7)' }}>Filtrar por Projeto</span>
+            {selected.length > 0 && (
+              <button onClick={() => onChange([])} style={{ background:'none',border:'none',cursor:'pointer',
+                fontSize:'0.72rem',color:'var(--ctg-accent)',fontWeight:600,fontFamily:'var(--font-body)' }}>
+                Limpar
+              </button>
+            )}
+          </div>
+          <div style={{ maxHeight: 280, overflowY: 'auto' }}>
+            {options.map(p => (
+              <label key={p.id} style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', cursor: 'pointer',
+                background: selected.includes(p.id) ? 'var(--budget-bg)' : 'transparent',
+                fontSize: '0.8rem', fontWeight: selected.includes(p.id) ? 600 : 400,
+                color: selected.includes(p.id) ? 'var(--ctg-navy)' : 'var(--text-primary)',
+                borderBottom: '1px solid var(--border)',
+              }}>
+                <input type="checkbox" checked={selected.includes(p.id)} onChange={() => toggle(p.id)}
+                  style={{ accentColor: 'var(--ctg-blue)', width: 14, height: 14, flexShrink: 0 }} />
+                <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--ctg-blue)', marginRight: 2 }}>{p.code}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function RequireAuth({ children }) {
   const { user, loading } = useAuth();
@@ -284,6 +381,17 @@ function RequireAuth({ children }) {
 function RequireRole({ roles, children }) {
   const { user } = useAuth();
   if (!roles.includes(user?.role)) return <Navigate to="/" replace />;
+  return children;
+}
+
+function RequireMonthlyReport({ children }) {
+  const { user } = useAuth();
+  const allowed =
+    user?.role === 'admin' ||
+    user?.role === 'gestor' ||
+    user?.role === 'planejador' ||
+    user?.email === 'julio.casagrande@ctgbr.com.br';
+  if (!allowed) return <Navigate to="/" replace />;
   return children;
 }
 
@@ -495,7 +603,6 @@ function getPageMeta(pathname) {
   if (pathname === '/profile') return { title: 'Meu Perfil', sub: null };
   if (pathname === '/settings') return { title: 'Configurações', sub: null };
   if (pathname === '/polos') return { title: 'Visão Geral Consolidada — CTG Brasil', sub: null };
-  if (pathname === '/scurve') return { title: 'Curva S — Análise Acumulada', sub: 'Filtrar por ano, usina e projeto' };
   if (pathname === '/report') return { title: 'Relatório HTML', sub: 'Configurar e exportar' };
   if (pathname === '/tutorial') return { title: 'Tutorial', sub: 'Como utilizar o sistema' };
   if (pathname === '/feedback') return { title: 'Sugestões e Feedback', sub: 'Envie sua contribuição' };
@@ -516,6 +623,7 @@ export default function App() {
   const [filterModalOpen,   setFilterModalOpen]   = useState(false);
   const [planjExportModal, setPlanjExportModal] = useState(false);
   const [plantFilter, setPlantFilter]       = useState([]);
+  const [projectFilter, setProjectFilter]   = useState([]);
   const location  = useLocation();
   const navigate  = useNavigate();
 
@@ -590,8 +698,16 @@ export default function App() {
                 <PlantFilter
                   activePlants={activePlants}
                   selected={plantFilter}
-                  onChange={setPlantFilter}
+                  onChange={(v) => { setPlantFilter(v); setProjectFilter([]); }}
                 />
+                {location.pathname === '/' && (
+                  <ProjectFilter
+                    projects={projects}
+                    plantFilter={plantFilter}
+                    selected={projectFilter}
+                    onChange={setProjectFilter}
+                  />
+                )}
                 <PeriodSelector period={period} onChange={setPeriod} />
               </div>
             )}
@@ -637,7 +753,7 @@ export default function App() {
               <RequireAuth>
                 {isAdmin
                   ? <Navigate to="/admin" replace />
-                  : <Dashboard period={period} plantFilter={plantFilter} />
+                  : <Dashboard period={period} plantFilter={plantFilter} projectFilter={projectFilter} onProjectFilterChange={setProjectFilter} />
                 }
               </RequireAuth>
             } />
@@ -667,11 +783,15 @@ export default function App() {
             <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
             <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
             <Route path="/polos" element={<RequireAuth><PolosPage period={period} /></RequireAuth>} />
-            <Route path="/scurve" element={<RequireAuth><SCurvePage period={period} /></RequireAuth>} />
             <Route path="/report" element={<RequireAuth><ReportPage /></RequireAuth>} />
             <Route path="/tutorial" element={<RequireAuth><TutorialPage /></RequireAuth>} />
             <Route path="/feedback" element={<RequireAuth><FeedbackPage /></RequireAuth>} />
             <Route path="/feedback/inbox" element={<RequireAuth><FeedbackInbox /></RequireAuth>} />
+            <Route path="/monthly-report" element={
+              <RequireAuth>
+                <RequireMonthlyReport><MonthlyReportPage /></RequireMonthlyReport>
+              </RequireAuth>
+            } />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
