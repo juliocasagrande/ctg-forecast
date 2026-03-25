@@ -440,7 +440,7 @@ function BtnImportSAP({ onClick }) {
         color:'#fff', fontWeight:700, fontSize:'0.8rem', fontFamily:'var(--font-body)',
         borderRadius:20, transition:'all 0.18s', display:'flex', alignItems:'center', gap:7,
         whiteSpace:'nowrap', letterSpacing:'0.02em', boxShadow:'0 2px 8px rgba(0,0,0,0.15)',
-        marginLeft:4,
+        marginLeft:4, marginBottom:4, marginTop:4,
       }}
       onMouseEnter={e => {
         e.currentTarget.style.background = 'rgba(255,255,255,0.28)';

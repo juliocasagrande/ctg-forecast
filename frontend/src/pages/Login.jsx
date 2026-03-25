@@ -85,7 +85,7 @@ export default function Login() {
         <div className="login-brand">
           <div className="login-logo">CTG<span>.</span>Engenharia</div>
           <p className="login-tagline">
-            Plataforma integrada de projetos<br />de engenharia — CTG Brasil.
+            Plataforma integrada de soluções<br />e projetos de engenharia — CTG Brasil.
           </p>
         </div>
         <div className="login-decorlines">
@@ -241,11 +241,11 @@ export default function Login() {
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
           userSelect: 'none',
         }}>
-          <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
+          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
             Desenvolvido por
           </span>
           <span style={{
-            fontSize: '0.95rem',
+            fontSize: '0.99rem',
             fontWeight: 700,
             letterSpacing: '0.02em',
             background: 'linear-gradient(90deg, #1a56db, #0ea5e9, #1d4ed8, #0ea5e9, #1a56db)',
