@@ -4,7 +4,24 @@ import { Readable } from 'stream';
 import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// ── DEBUG: loga TODOS os requests que chegam nesta rota ───────────────────────
+router.use((req, res, next) => {
+  console.log(`[monthly-report DEBUG] ${req.method} ${req.path}`);
+  console.log(`[monthly-report DEBUG] Origin: ${req.headers.origin}`);
+  console.log(`[monthly-report DEBUG] Content-Type: ${req.headers['content-type']}`);
+  console.log(`[monthly-report DEBUG] Auth header: ${req.headers.authorization ? 'presente' : 'ausente'}`);
+  console.log(`[monthly-report DEBUG] Cookie: ${req.headers.cookie ? 'presente' : 'ausente'}`);
+  next();
+});
+
 router.use(requireAuth);
+
+// ── DEBUG: loga se passou pelo requireAuth ────────────────────────────────────
+router.use((req, res, next) => {
+  console.log(`[monthly-report DEBUG] Passou pelo auth. User: ${JSON.stringify(req.user)}`);
+  next();
+});
 
 // ── Controle de acesso ────────────────────────────────────────────────────────
 function requireMonthlyReportAccess(req, res, next) {
@@ -38,26 +55,37 @@ router.post(
   requireMonthlyReportAccess,
   upload.single('excel'),
   async (req, res) => {
-    if (!req.file)
+    console.log(`[monthly-report DEBUG] Entrou no handler POST /generate`);
+
+    if (!req.file) {
+      console.log(`[monthly-report DEBUG] Nenhum arquivo recebido`);
       return res.status(400).json({ error: 'Nenhum arquivo Excel enviado.' });
+    }
+
+    console.log(`[monthly-report DEBUG] Arquivo recebido: ${req.file.originalname} (${req.file.size} bytes)`);
 
     const { mes, ano } = req.body;
-    if (!mes || !ano)
+    if (!mes || !ano) {
+      console.log(`[monthly-report DEBUG] Mês ou ano ausente: mes=${mes} ano=${ano}`);
       return res.status(400).json({ error: 'Mês e ano são obrigatórios.' });
+    }
+
+    console.log(`[monthly-report DEBUG] Período: ${mes}/${ano}`);
 
     try {
-      // ExcelJS — import dinâmico: o construtor pode estar em .default
+      console.log(`[monthly-report DEBUG] Importando ExcelJS...`);
       const excelJSModule = await import('exceljs');
       const ExcelJS = excelJSModule.default ?? excelJSModule;
       const wb = new ExcelJS.Workbook();
       const stream = Readable.from(req.file.buffer);
       await wb.xlsx.read(stream);
+      console.log(`[monthly-report DEBUG] Excel lido. Worksheets: ${wb.worksheets.length}`);
 
       const ws = wb.worksheets[0];
       if (!ws) return res.status(400).json({ error: 'Planilha vazia ou sem dados.' });
 
       // ── Lê cabeçalho da linha 1 ─────────────────────────────────────────
-      const header = {};   // colNum → texto normalizado
+      const header = {};
       ws.getRow(1).eachCell({ includeEmpty: true }, (cell, colNum) => {
         header[colNum] = normCol(cell.text ?? '');
       });
@@ -92,12 +120,13 @@ router.post(
         CRONOGRAMA:           'cronograma',
       };
 
-      // chave interna → número da coluna
       const colIdx = {};
       for (const [key, target] of Object.entries(COLMAP)) {
         const found = Object.entries(header).find(([, v]) => v === target);
         if (found) colIdx[key] = parseInt(found[0]);
       }
+
+      console.log(`[monthly-report DEBUG] Colunas mapeadas: ${JSON.stringify(colIdx)}`);
 
       // ── Helpers ──────────────────────────────────────────────────────────
       function cellVal(row, key) {
@@ -107,7 +136,6 @@ router.post(
         if (cell.value instanceof Date) return cell.value;
         const v = cell.value;
         if (v === null || v === undefined) return null;
-        // Fórmulas retornam { result, formula }
         const raw = (typeof v === 'object' && v !== null && 'result' in v) ? v.result : v;
         const s = String(raw ?? '').trim();
         return s === '' ? null : s;
@@ -167,29 +195,17 @@ router.post(
         return trat(v);
       }
 
-      // ── Markdown → HTML (sem dependência externa) ────────────────────────
-      // O conteúdo já pode conter HTML inline (negrito, itálico via tags)
-      // então NÃO escapamos — apenas convertemos sintaxe Markdown pura.
       function mdToHtml(text) {
         if (!text || text === '-') return '-';
         let s = String(text);
-
-        // Normaliza quebras de linha Windows
         s = s.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-
-        // ── Tabelas GFM ──────────────────────────────────────────────────
-        // Detecta blocos de linhas que começam e terminam com |
-        // A última linha pode não ter \n final
         s = s.replace(/((?:[ \t]*\|[^\n]+\|[ \t]*(?:\n|$))+)/g, (block) => {
           const lines = block.split('\n')
             .map(l => l.trim())
             .filter(l => l.startsWith('|') && l.endsWith('|'));
           if (!lines.length) return block;
-
-          // Remove linha separadora (|---|---|)
           const dataLines = lines.filter(l => !/^\|[-:\s|]+\|$/.test(l));
           if (!dataLines.length) return block;
-
           const rows = dataLines.map((line, i) => {
             const cells = line.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
             const tag = i === 0 ? 'th' : 'td';
@@ -197,44 +213,30 @@ router.post(
           });
           return `<table>${rows.join('')}</table>\n`;
         });
-
-        // ── Títulos ──────────────────────────────────────────────────────
         s = s.replace(/^### (.+)$/gm, '<h3>$1</h3>');
         s = s.replace(/^## (.+)$/gm,  '<h2>$1</h2>');
         s = s.replace(/^# (.+)$/gm,   '<h1>$1</h1>');
-
-        // ── Negrito e itálico (sintaxe Markdown, não HTML) ───────────────
         s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
         s = s.replace(/\*(.+?)\*/g,     '<em>$1</em>');
-
-        // ── Listas não-ordenadas ─────────────────────────────────────────
         s = s.replace(/((?:^[ \t]*[-*] .+(?:\n|$))+)/gm, (block) => {
           const items = block.trim().split('\n')
             .map(l => `<li>${l.replace(/^[ \t]*[-*] /, '').trim()}</li>`)
             .join('');
           return `<ul>${items}</ul>\n`;
         });
-
-        // ── Listas ordenadas ─────────────────────────────────────────────
         s = s.replace(/((?:^[ \t]*\d+\. .+(?:\n|$))+)/gm, (block) => {
           const items = block.trim().split('\n')
             .map(l => `<li>${l.replace(/^[ \t]*\d+\. /, '').trim()}</li>`)
             .join('');
           return `<ol>${items}</ol>\n`;
         });
-
-        // ── Parágrafos e quebras de linha ────────────────────────────────
-        // Divide em blocos por linhas em branco
         const blocks = s.split(/\n{2,}/);
         s = blocks.map(b => {
           b = b.trim();
           if (!b) return '';
-          // Não envolve blocos já convertidos em tags block-level
           if (/^<(h[1-6]|ul|ol|table|tr|li|div|p)[\s>]/.test(b)) return b;
-          // Converte \n simples em <br> dentro do parágrafo
           return `<p>${b.replace(/\n/g, '<br>')}</p>`;
         }).filter(Boolean).join('\n');
-
         return s;
       }
 
@@ -257,7 +259,6 @@ router.post(
         return '';
       }
 
-      // Limites de vencimento (Date nativo)
       const today = new Date();
       const lim4m  = new Date(today); lim4m.setDate(lim4m.getDate()  + 120);
       const lim6m  = new Date(today); lim6m.setDate(lim6m.getDate()  + 180);
@@ -271,7 +272,6 @@ router.post(
         return '';
       }
 
-      // ── Lê linhas de dados ────────────────────────────────────────────────
       const rows = [];
       ws.eachRow((row, rowNum) => {
         if (rowNum === 1) return;
@@ -301,15 +301,15 @@ router.post(
         });
       });
 
+      console.log(`[monthly-report DEBUG] Linhas lidas: ${rows.length}`);
+
       if (!rows.length)
         return res.status(400).json({ error: 'Nenhum dado encontrado na planilha.' });
 
-      // ── Vencimentos < 12 meses ────────────────────────────────────────────
       const prox12 = rows
         .filter(r => r.VENC && r.VENC < lim12m)
         .sort((a, b) => a.VENC - b.VENC);
 
-      // ── Agrupamento UHE → Área ────────────────────────────────────────────
       const UHE_ORDER = ['Jurumirim','Salto Grande','Rosana','Canoas 1','Canoas 2',
                          'Garibaldi','Ilha Solteira','Jupiá'];
       const grouped = {};
@@ -330,14 +330,12 @@ router.post(
       const areaOptions = [...new Set(rows.map(r => r.AREA).filter(a => a !== '-'))]
         .sort().map(a => `<option value='${a}'>${a}</option>`).join('\n');
 
-      // ── Tabela 12 meses ───────────────────────────────────────────────────
       const table12 = prox12.map(r => `
         <tr class='${dueClass(r.VENC)}' data-kind='row12' data-uhe='${r.UHE}' data-area='${r.AREA}'>
           <td>${r.PP}</td><td>${r.FORN}</td><td>${r.GEST}</td>
           <td>${fmtDateBR(r.VENC)}</td><td>${badgeAditivo(r.ADITIVO_EM_ANDAMENTO)}</td>
         </tr>`).join('\n');
 
-      // ── Seções UHE / Área ─────────────────────────────────────────────────
       const sections = [];
       for (let ui = 0; ui < uheKeys.length; ui++) {
         const uhe = uheKeys[ui];
@@ -415,6 +413,8 @@ router.post(
         sections.push('</section>');
       }
 
+      console.log(`[monthly-report DEBUG] HTML gerado. Enviando resposta...`);
+
       const html = buildHTML({
         mesAno: `${mes} de ${ano}`,
         uheOptions, areaOptions,
@@ -428,9 +428,9 @@ router.post(
       res.send(html);
 
     } catch (err) {
-      console.error('[monthly-report] Erro:', err);
-      const msg = process.env.NODE_ENV === 'production' ? 'Erro ao processar planilha.' : err.message;
-      res.status(500).json({ error: msg });
+      console.error('[monthly-report] Erro detalhado:', err.message);
+      console.error('[monthly-report] Stack:', err.stack);
+      res.status(500).json({ error: err.message }); // em debug: mostra mensagem real
     }
   }
 );
