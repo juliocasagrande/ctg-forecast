@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../utils/api.js';
 import { useToast } from '../components/ui/Toast.jsx';
 import SapMappingTab from '../components/SapMappingTab.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 
 function CloseYearPanel({ settings, toast }) {
   const currentYear = new Date().getFullYear();
@@ -306,6 +307,13 @@ export default function SettingsPage() {
   const [dirty,    setDirty]    = useState(false);
   const [activeSection, setActiveSection] = useState('alerts');
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  const ALLOWED_SAP_EMAILS = ['julio.casagrande@ctgbr.com.br'];
+  const canAccessSap = user && (
+    ['admin', 'gestor', 'planejador'].includes(user.role) ||
+    ALLOWED_SAP_EMAILS.includes(user.email)
+  );
 
   useEffect(() => {
     api.get('/settings').then(r => {
@@ -342,7 +350,7 @@ export default function SettingsPage() {
     <div className="settings-page">
       {/* Navigation tabs */}
       <div className="settings-nav">
-        {SECTIONS.map(s => (
+        {SECTIONS.filter(s => s.id !== 'sap' || canAccessSap).map(s => (
           <button
             key={s.id}
             className={`settings-nav-btn ${activeSection === s.id ? 'active' : ''}`}
@@ -530,7 +538,7 @@ export default function SettingsPage() {
           <FeedbackList toast={toast} />
         )}
 
-        {activeSection === 'sap' && (
+        {activeSection === 'sap' && canAccessSap && (
           <SapMappingTab />
         )}
       </div>

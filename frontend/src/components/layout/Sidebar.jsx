@@ -237,7 +237,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
           </div>
 
           {/* Nav items — one per line */}
-          {(isPlanejador || isGestor) && (
+          {(isPlanejador || isGestor || user?.email === 'julio.casagrande@ctgbr.com.br') && (
             <NavLink to="/settings" onClick={onClose}
               className={({ isActive }) => `nav-item sidebar-footer-item ${isActive ? 'active' : ''}`}>
               <Icon name="gear" style={{ width: 16, textAlign: 'center' }} />

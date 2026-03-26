@@ -5,14 +5,67 @@ import { useToast } from './ui/Toast.jsx';
 import { MONTHS_FULL_PT, MONTHS_PT, formatBRL } from '../utils/format.js';
 
 // ── SAP Excel Import Modal ────────────────────────────────────────────────────
-function ImportActualModal({ open, onClose, onApply, currentYear, theme, isConsolidated }) {
+// Classificação por palavras-chave contidas na Descr.classe custo
+// keywords: { Dispensado: [...], Viagens: [...] } — vem da API /settings/sap-keywords
+const DEFAULT_SAP_KEYWORDS = {
+  Dispensado: ['salario', 'hora extra', 'inss', 'fgts'],
+  Viagens:    ['viage', 'taxi', 'pedagio', 'estacionamento'],
+};
+
+function normStr(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function classifyDescr(descr, mapping, keywords) {
+  const d = normStr(descr);
+  const kws = keywords || DEFAULT_SAP_KEYWORDS;
+
+  // 1. Dispensados (prioridade máxima)
+  const dispensadoKws = kws.Dispensado || DEFAULT_SAP_KEYWORDS.Dispensado;
+  if (dispensadoKws.some(kw => d.includes(normStr(kw)))) return 'Dispensado';
+
+  // 2. Viagens
+  const viagemKws = kws.Viagens || DEFAULT_SAP_KEYWORDS.Viagens;
+  if (viagemKws.some(kw => d.includes(normStr(kw)))) return 'Viagens';
+
+  // 3. Mapeamento avançado (sobrescreve apenas se não encaixou nas regras acima)
+  if (mapping && mapping.length > 0) {
+    const hit = mapping.find(m => d.includes(normStr(m.descr)));
+    if (hit) {
+      if (hit.category === 'Desconsiderar') return 'Dispensado';
+      if (hit.category === 'Viagens') return 'Viagens';
+      if (hit.category === 'Contratos') return 'Contratos';
+    }
+  }
+
+  // 4. Fallback → Contratos
+  return 'Contratos';
+}
+
+// Calcula a moda de um array de strings
+function calcModa(arr) {
+  if (!arr || !arr.length) return '';
+  const freq = {};
+  arr.forEach(v => { if (v) freq[v] = (freq[v] || 0) + 1; });
+  let best = ''; let bestN = 0;
+  Object.entries(freq).forEach(([k, n]) => { if (n > bestN) { best = k; bestN = n; } });
+  return best;
+}
+
+function ImportActualModal({ open, onClose, onApply, currentYear, theme, isConsolidated, existingData }) {
   const [file,           setFile]           = useState(null);
   const [parsing,        setParsing]        = useState(false);
   const [parseError,     setParseError]     = useState(null);
   const [preview,        setPreview]        = useState(null);
-  const [selectedMonths, setSelectedMonths] = useState([]);
   const [mapping,        setMapping]        = useState(null);
+  const [keywords,       setKeywords]       = useState(null);
   const [dragging,       setDragging]       = useState(false);
+  // Per-item selection: key = `${year}|${month}|${cat}|${itemIdx}`, value = bool
+  const [itemSel,        setItemSel]        = useState({});
+  // Expanded months per category: key = `${year}|${month}|${cat}`
+  const [expanded,       setExpanded]       = useState({});
+  // Confirm overwrite dialog
+  const [confirmData,    setConfirmData]    = useState(null);
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -20,10 +73,16 @@ function ImportActualModal({ open, onClose, onApply, currentYear, theme, isConso
     api.get('/settings/sap-mapping')
       .then(r => setMapping(r.data || []))
       .catch(() => setMapping([]));
+    api.get('/settings/sap-keywords')
+      .then(r => setKeywords(r.data || null))
+      .catch(() => setKeywords(null));
   }, [open]);
 
   useEffect(() => {
-    if (!open) { setFile(null); setParsing(false); setParseError(null); setPreview(null); setSelectedMonths([]); }
+    if (!open) {
+      setFile(null); setParsing(false); setParseError(null); setPreview(null);
+      setItemSel({}); setExpanded({}); setConfirmData(null);
+    }
   }, [open]);
 
   async function loadSheetJS() {
@@ -49,12 +108,10 @@ function ImportActualModal({ open, onClose, onApply, currentYear, theme, isConso
       const XLSX = await loadSheetJS();
       const wb = XLSX.read(buf, { type: 'array', cellDates: false });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      // raw: true → valores numéricos vêm como float, sem formatação de string
       const rows = XLSX.utils.sheet_to_json(ws, { defval: null, raw: true });
 
       if (!rows.length) { setParseError('Planilha vazia.'); setParsing(false); return; }
 
-      // Mapeia cabeçalhos normalizados → nome original da coluna
       const headerMap = {};
       Object.keys(rows[0]).forEach(k => { headerMap[norm(k)] = k; });
 
@@ -62,111 +119,173 @@ function ImportActualModal({ open, onClose, onApply, currentYear, theme, isConso
       const colPeriodo   = headerMap['periodo'];
       const colDescr     = headerMap['descr.classe custo'] || headerMap['descrclasse custo'] || headerMap['descr classe custo'];
       const colValor     = headerMap['valor/moeda acc'] || headerMap['valormoeda acc'] || headerMap['valor moeda acc'];
+      const colDenom     = headerMap['denominacao'] || headerMap['denominação'] || headerMap['denom.'] || null;
 
       if (!colExercicio || !colPeriodo || !colDescr || !colValor) {
         setParseError(`Colunas não encontradas.\nEsperado: "Exercício", "Período", "Descr.classe custo", "Valor/moeda ACC".\nEncontradas: ${Object.keys(headerMap).join(', ')}`);
         setParsing(false); return;
       }
 
-      const effectiveMapping = (mapping && mapping.length > 0) ? mapping : [
-        { descr: 'LICENÇA DE USO E ATUALIZAÇÃO E MANUTENÇÃ', category: 'Contratos' },
-        { descr: 'MATERIAL DE USO E CONSUMO',                category: 'Contratos' },
-        { descr: 'GASTOS COM VIAGENS - ALIMENTAÇÃO',         category: 'Viagens'   },
-        { descr: 'TAXI, PEDAGIO E ESTACIONAMENTO',           category: 'Viagens'   },
-        { descr: 'GASTOS COM VIAGENS - PASSAGENS - NACIONA', category: 'Viagens'   },
-        { descr: 'GASTOS COM VIAGENS - HOSPEDAGENS - NACIO', category: 'Viagens'   },
-        { descr: 'GASTOS COM VIAGENS - ALUGUEL DE VEÍCULOS', category: 'Viagens'   },
-      ];
+      // months: { "yr|mo": { year, month, Contratos: [], Viagens: [], Dispensado: [] } }
+      // Each item: { valor, descr, denom, selected: true }
+      const months = {};
 
-      const descrLookup = {};
-      effectiveMapping.forEach(m => {
-        if (m.category && m.category !== 'Desconsiderar')
-          descrLookup[m.descr.trim().toUpperCase()] = m.category;
-      });
-
-      const agg = {};
-      let skippedRows = 0;
       rows.forEach(row => {
-        const descr = String(row[colDescr] || '').trim().toUpperCase();
-        const cat   = descrLookup[descr];
-        if (!cat) { skippedRows++; return; }
+        const descr = String(row[colDescr] || '').trim();
+        if (!descr) return;
 
-        // raw:true → número float direto do Excel, sem problema de separador
         const rawValor = row[colValor];
         const valor = (typeof rawValor === 'number')
           ? rawValor
           : parseFloat(String(rawValor || '0').replace(/[^\d,.-]/g, '').replace(',', '.')) || 0;
-        // if (!valor || valor <= 0) return;
         if (!valor) return;
 
-        // Exercício e Período também podem vir como number com raw:true
         const yr = String(row[colExercicio] || '').trim();
         const mo = parseInt(String(row[colPeriodo] || '0').trim());
-
-        // Rejeita linhas de totalizador (rodapé SAP sem ano válido)
         if (!yr || yr.length < 4 || !mo || mo < 1 || mo > 12) return;
 
+        const denom = colDenom ? String(row[colDenom] || '').trim() : '';
+        const cat   = classifyDescr(descr, mapping, keywords);
+
         const key = `${yr}|${mo}`;
-        if (!agg[key]) agg[key] = { year: yr, month: mo, Contratos: 0, Viagens: 0 };
-        agg[key][cat] += valor;
+        if (!months[key]) months[key] = { year: yr, month: mo, Contratos: [], Viagens: [], Dispensado: [] };
+        months[key][cat].push({ valor, descr, denom });
       });
 
-      if (!Object.keys(agg).length) {
-        setParseError('Nenhum dado mapeado encontrado. Verifique o arquivo e o mapeamento de classes de custo em Configurações.');
+      if (!Object.keys(months).length) {
+        setParseError('Nenhum dado encontrado no arquivo. Verifique as colunas.');
         setParsing(false); return;
       }
 
-      const targetYear = String(currentYear);
-      const months = {};
-      Object.values(agg).forEach(r => {
-        months[`${r.year}|${r.month}`] = { year: r.year, month: r.month, Contratos: r.Contratos, Viagens: r.Viagens };
+      // Initial item selection: select Contratos + Viagens, deselect Dispensado
+      const initSel = {};
+      Object.entries(months).forEach(([key, m]) => {
+        ['Contratos', 'Viagens'].forEach(cat => {
+          m[cat].forEach((_, i) => { initSel[`${key}|${cat}|${i}`] = true; });
+        });
+        m.Dispensado.forEach((_, i) => { initSel[`${key}|Dispensado|${i}`] = false; });
       });
+      setItemSel(initSel);
 
-      setPreview({ months, skippedRows });
-      // Pré-seleciona meses do ano atual; no consolidado pré-seleciona o ano inteiro do arquivo
-      if (isConsolidated) {
-        setSelectedMonths(Object.keys(months));
-      } else {
-        setSelectedMonths(Object.keys(months).filter(k => months[k].year === targetYear));
-      }
+      const targetYear = String(currentYear);
+      setPreview({ months });
+      setExpanded({});
     } catch (err) {
       setParseError(`Erro ao processar arquivo: ${err.message}`);
     }
     setParsing(false);
   }
 
-  function toggleMonth(key) {
-    setSelectedMonths(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
-  }
-  function toggleAll() {
-    const all = Object.keys(preview?.months || {});
-    setSelectedMonths(selectedMonths.length === all.length ? [] : all);
+  function toggleItem(key) {
+    setItemSel(prev => ({ ...prev, [key]: !prev[key] }));
   }
 
-  function handleApply() {
-    if (!preview || !selectedMonths.length) return;
-    const result = { Contratos: {}, Viagens: {} };
-    selectedMonths.forEach(key => {
-      const m = preview.months[key];
-      if (!m) return;
-      if (m.Contratos) result.Contratos[m.month] = (result.Contratos[m.month] || 0) + m.Contratos;
-      if (m.Viagens)   result.Viagens[m.month]   = (result.Viagens[m.month]   || 0) + m.Viagens;
+  function toggleCatMonth(monthKey, cat, items) {
+    const allOn = items.every((_, i) => itemSel[`${monthKey}|${cat}|${i}`]);
+    setItemSel(prev => {
+      const next = { ...prev };
+      items.forEach((_, i) => { next[`${monthKey}|${cat}|${i}`] = !allOn; });
+      return next;
     });
-    onApply(result);
-    onClose();
+  }
+
+  function toggleExpand(key) {
+    setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  // Compute totals per month/cat from selected items
+  function computeMonthCatTotal(monthKey, cat, items) {
+    return items.reduce((s, _, i) => s + (itemSel[`${monthKey}|${cat}|${i}`] ? items[i].valor : 0), 0);
+  }
+  // Soma bruta sem considerar seleção — usado para Dispensados (sempre desmarcados)
+  function computeRawTotal(items) {
+    return items.reduce((s, it) => s + it.valor, 0);
+  }
+
+  // Build final result for apply
+  function buildResult() {
+    if (!preview) return null;
+    // result: { Contratos: { month: { value, comment } }, Viagens: { month: { value, comment } } }
+    const result = { Contratos: {}, Viagens: {} };
+    Object.entries(preview.months).forEach(([key, m]) => {
+      ['Contratos', 'Viagens'].forEach(cat => {
+        const selectedItems = m[cat].filter((_, i) => itemSel[`${key}|${cat}|${i}`]);
+        if (!selectedItems.length) return;
+        const total = selectedItems.reduce((s, it) => s + it.valor, 0);
+        const comment = calcModa(selectedItems.map(it => it.descr));
+        const mo = m.month;
+        if (!result[cat][mo]) result[cat][mo] = { value: 0, comment: '' };
+        result[cat][mo].value += total;
+        // moda from all selected items accumulated
+        if (!result[cat][mo]._descrs) result[cat][mo]._descrs = [];
+        result[cat][mo]._descrs.push(...selectedItems.map(it => it.descr));
+      });
+    });
+    // Finalize comments
+    ['Contratos', 'Viagens'].forEach(cat => {
+      Object.keys(result[cat]).forEach(mo => {
+        result[cat][mo].comment = calcModa(result[cat][mo]._descrs || []);
+        delete result[cat][mo]._descrs;
+      });
+    });
+    return result;
+  }
+
+  function handleApplyClick() {
+    if (!preview) return;
+    const result = buildResult();
+    if (!result) return;
+
+    // Check if any month already has data (existingData from parent)
+    const conflicts = [];
+    if (existingData) {
+      ['Contratos', 'Viagens'].forEach(cat => {
+        Object.keys(result[cat]).forEach(mo => {
+          const existing = existingData[`Actual|${cat}|${mo}`];
+          if (existing && existing.value > 0) {
+            conflicts.push({ cat, mo: parseInt(mo) });
+          }
+        });
+      });
+    }
+
+    if (conflicts.length > 0) {
+      setConfirmData({ result, conflicts });
+    } else {
+      onApply(result);
+      onClose();
+    }
+  }
+
+  function confirmOverwrite() {
+    if (confirmData) {
+      onApply(confirmData.result);
+      onClose();
+    }
   }
 
   if (!open) return null;
 
-  const allKeys    = Object.keys(preview?.months || {});
-  const allSel     = allKeys.length > 0 && selectedMonths.length === allKeys.length;
-  const totalContr = selectedMonths.reduce((s, k) => s + (preview?.months[k]?.Contratos || 0), 0);
-  const totalViag  = selectedMonths.reduce((s, k) => s + (preview?.months[k]?.Viagens   || 0), 0);
   const MONTHS_FULL = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+  // Summary totals for footer
+  let totalContr = 0; let totalViag = 0;
+  if (preview) {
+    Object.entries(preview.months).forEach(([key, m]) => {
+      totalContr += computeMonthCatTotal(key, 'Contratos', m.Contratos);
+      totalViag  += computeMonthCatTotal(key, 'Viagens',   m.Viagens);
+    });
+  }
+
+  const CAT_STYLE = {
+    Contratos:  { color:'#1d4ed8', bg:'#eff6ff', border:'#bfdbfe', label:'Contratos',  emoji:'📄' },
+    Viagens:    { color:'#059669', bg:'#f0fdf4', border:'#bbf7d0', label:'Viagens',    emoji:'✈️' },
+    Dispensado: { color:'#b45309', bg:'#fffbeb', border:'#fde68a', label:'Dispensados',emoji:'🚫' },
+  };
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:3000, background:'rgba(15,23,42,0.65)', backdropFilter:'blur(4px)', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }} onClick={onClose}>
-      <div style={{ background:'var(--bg-card)', borderRadius:16, width:'100%', maxWidth:820, maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 24px 64px rgba(0,0,0,0.35)', overflow:'hidden' }} onClick={e => e.stopPropagation()}>
+      <div style={{ background:'var(--bg-card)', borderRadius:16, width:'100%', maxWidth:900, maxHeight:'92vh', display:'flex', flexDirection:'column', boxShadow:'0 24px 64px rgba(0,0,0,0.35)', overflow:'hidden' }} onClick={e => e.stopPropagation()}>
 
         {/* Header */}
         <div style={{ background:'var(--ctg-navy)', padding:'14px 22px', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
@@ -174,8 +293,8 @@ function ImportActualModal({ open, onClose, onApply, currentYear, theme, isConso
             <div style={{ color:'#fff', fontWeight:700, fontSize:'0.95rem' }}>📥 Importar Realizado — SAP</div>
             <div style={{ color:'rgba(255,255,255,0.55)', fontSize:'0.72rem', marginTop:2 }}>
               {isConsolidated
-                ? 'Os valores de todos os meses selecionados serão somados e aplicados como Realizado consolidado'
-                : 'Carregue o arquivo de exportação SAP para preencher automaticamente os realizados'}
+                ? 'Valores dos meses selecionados serão somados e aplicados como Realizado consolidado'
+                : 'Valores classificados por palavra-chave em Descr.classe custo'}
             </div>
           </div>
           <button onClick={onClose} style={{ background:'rgba(255,255,255,0.12)', border:'none', borderRadius:8, color:'#fff', cursor:'pointer', padding:'5px 14px', fontSize:'0.82rem', fontWeight:700 }}>✕ Fechar</button>
@@ -209,61 +328,146 @@ function ImportActualModal({ open, onClose, onApply, currentYear, theme, isConso
           {preview && (
             <div>
               <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, padding:'10px 16px', marginBottom:16, fontSize:'0.82rem', color:'#065f46', display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
-                <span>✅ Arquivo processado</span>
-                {preview.skippedRows > 0 && <span style={{ color:'#92400e', background:'#fef3c7', padding:'2px 8px', borderRadius:6, fontSize:'0.75rem' }}>{preview.skippedRows} linhas ignoradas (classe não mapeada)</span>}
-                {isConsolidated && <span style={{ color:'#1d4ed8', background:'#eff6ff', padding:'2px 8px', borderRadius:6, fontSize:'0.75rem', fontWeight:600 }}>Modo consolidado: valores serão somados</span>}
+                <span>✅ Arquivo processado — expanda os meses para ver e selecionar itens</span>
+                {isConsolidated && <span style={{ color:'#1d4ed8', background:'#eff6ff', padding:'2px 8px', borderRadius:6, fontSize:'0.75rem', fontWeight:600 }}>Modo consolidado</span>}
                 <button onClick={() => { setPreview(null); setFile(null); }} style={{ marginLeft:'auto', background:'transparent', border:'1px solid #10b981', borderRadius:6, color:'#065f46', cursor:'pointer', padding:'3px 10px', fontSize:'0.75rem', fontWeight:600 }}>Trocar arquivo</button>
               </div>
 
-              {/* Month table */}
-              <div style={{ borderRadius:10, border:'1px solid #e2e8f0', overflow:'hidden', marginBottom:16 }}>
-                <div style={{ background:'var(--ctg-navy)', padding:'8px 14px', display:'flex', alignItems:'center', gap:12 }}>
-                  <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer' }}>
-                    <input type="checkbox" checked={allSel} onChange={toggleAll} style={{ accentColor:'#fff', width:14, height:14 }} />
-                    <span style={{ color:'#fff', fontWeight:700, fontSize:'0.78rem', textTransform:'uppercase', letterSpacing:'0.06em' }}>Selecionar todos os meses</span>
-                  </label>
-                  <span style={{ marginLeft:'auto', color:'rgba(255,255,255,0.6)', fontSize:'0.72rem' }}>{selectedMonths.length}/{allKeys.length} selecionados</span>
+              {/* Months table */}
+              <div style={{ border:'1.5px solid #e2e8f0', borderRadius:12, overflow:'hidden', marginBottom:16 }}>
+                {/* Table header */}
+                <div style={{ display:'grid', gridTemplateColumns:'140px 1fr 1fr 1fr 36px', background:'#f1f5f9', borderBottom:'2px solid #e2e8f0', padding:'7px 14px', gap:0 }}>
+                  <span style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', color:'#64748b' }}>Mês</span>
+                  <span style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', color:CAT_STYLE.Contratos.color, textAlign:'right', paddingRight:16 }}>📄 Contratos</span>
+                  <span style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', color:CAT_STYLE.Viagens.color, textAlign:'right', paddingRight:16 }}>✈️ Viagens</span>
+                  <span style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', color:CAT_STYLE.Dispensado.color, textAlign:'right', paddingRight:16 }}>🚫 Dispensados</span>
+                  <span></span>
                 </div>
+
+                {/* Table rows */}
                 {Object.values(preview.months)
                   .sort((a, b) => a.year !== b.year ? String(a.year).localeCompare(String(b.year)) : a.month - b.month)
-                  .map(m => {
-                    const key = `${m.year}|${m.month}`;
-                    const isSel = selectedMonths.includes(key);
+                  .map((m, rowIdx) => {
+                    const monthKey = `${m.year}|${m.month}`;
                     const isCurrentYear = String(m.year) === String(currentYear);
+                    const contrTotal = computeMonthCatTotal(monthKey, 'Contratos', m.Contratos);
+                    const viagTotal  = computeMonthCatTotal(monthKey, 'Viagens',   m.Viagens);
+                    const dispTotal  = computeRawTotal(m.Dispensado);
+                    const isExp = expanded[monthKey];
+
                     return (
-                      <label key={key} style={{ display:'grid', gridTemplateColumns:'32px 110px 1fr 1fr 90px', alignItems:'center', gap:12, padding:'10px 14px', background: isSel ? theme.light : 'transparent', borderBottom:'1px solid #e2e8f0', cursor:'pointer', transition:'background 0.12s' }}>
-                        <input type="checkbox" checked={isSel} onChange={() => toggleMonth(key)} style={{ accentColor: theme.color, width:15, height:15 }} />
-                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                          <span style={{ fontWeight:600, fontSize:'0.85rem', color:'var(--text-primary)' }}>{MONTHS_FULL[m.month - 1]}</span>
-                          {!isCurrentYear && <span style={{ fontSize:'0.62rem', background:'#fef3c7', color:'#92400e', padding:'1px 5px', borderRadius:4, fontWeight:700 }}>{m.year}</span>}
+                      <div key={monthKey} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                        {/* Row */}
+                        <div
+                          onClick={() => toggleExpand(monthKey)}
+                          style={{ display:'grid', gridTemplateColumns:'140px 1fr 1fr 1fr 36px', alignItems:'center', gap:0, padding:'9px 14px', background: isExp ? '#f8fafc' : rowIdx%2===0 ? '#fff' : '#fafafa', cursor:'pointer', transition:'background 0.1s' }}
+                          onMouseEnter={e => { if (!isExp) e.currentTarget.style.background='#f0f7ff'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = isExp ? '#f8fafc' : rowIdx%2===0 ? '#fff' : '#fafafa'; }}
+                        >
+                          {/* Month label */}
+                          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                            <span style={{ fontWeight:700, fontSize:'0.88rem', color:'var(--text-primary)' }}>{MONTHS_FULL[m.month-1]}</span>
+                            {!isCurrentYear && <span style={{ fontSize:'0.6rem', background:'#fef3c7', color:'#92400e', padding:'1px 5px', borderRadius:4, fontWeight:700 }}>{m.year}</span>}
+                          </div>
+                          {/* Contratos */}
+                          <div style={{ textAlign:'right', paddingRight:16 }}>
+                            {contrTotal !== 0
+                              ? <><span style={{ fontVariantNumeric:'tabular-nums', fontSize:'0.85rem', fontWeight:600, color:CAT_STYLE.Contratos.color }}>{formatBRL(contrTotal)}</span>
+                                  {m.Contratos.length>0 && <span style={{ fontSize:'0.6rem', background:CAT_STYLE.Contratos.bg, color:CAT_STYLE.Contratos.color, border:`1px solid ${CAT_STYLE.Contratos.border}`, borderRadius:8, padding:'1px 5px', marginLeft:4, fontWeight:700 }}>{m.Contratos.length}</span>}</>
+                              : <span style={{ color:'#cbd5e1', fontSize:'0.82rem' }}>—</span>}
+                          </div>
+                          {/* Viagens */}
+                          <div style={{ textAlign:'right', paddingRight:16 }}>
+                            {viagTotal !== 0
+                              ? <><span style={{ fontVariantNumeric:'tabular-nums', fontSize:'0.85rem', fontWeight:600, color:CAT_STYLE.Viagens.color }}>{formatBRL(viagTotal)}</span>
+                                  {m.Viagens.length>0 && <span style={{ fontSize:'0.6rem', background:CAT_STYLE.Viagens.bg, color:CAT_STYLE.Viagens.color, border:`1px solid ${CAT_STYLE.Viagens.border}`, borderRadius:8, padding:'1px 5px', marginLeft:4, fontWeight:700 }}>{m.Viagens.length}</span>}</>
+                              : <span style={{ color:'#cbd5e1', fontSize:'0.82rem' }}>—</span>}
+                          </div>
+                          {/* Dispensados */}
+                          <div style={{ textAlign:'right', paddingRight:16 }}>
+                            {dispTotal !== 0
+                              ? <><span style={{ fontVariantNumeric:'tabular-nums', fontSize:'0.85rem', fontWeight:600, color:CAT_STYLE.Dispensado.color }}>{formatBRL(dispTotal)}</span>
+                                  {m.Dispensado.length>0 && <span style={{ fontSize:'0.6rem', background:CAT_STYLE.Dispensado.bg, color:CAT_STYLE.Dispensado.color, border:`1px solid ${CAT_STYLE.Dispensado.border}`, borderRadius:8, padding:'1px 5px', marginLeft:4, fontWeight:700 }}>{m.Dispensado.length}</span>}</>
+                              : <span style={{ color:'#cbd5e1', fontSize:'0.82rem' }}>—</span>}
+                          </div>
+                          {/* Expand toggle */}
+                          <div style={{ textAlign:'center', color:'#94a3b8', fontSize:'0.7rem', fontWeight:700, userSelect:'none' }}>
+                            {isExp ? '▲' : '▼'}
+                          </div>
                         </div>
-                        <div>
-                          <div style={{ fontSize:'0.62rem', color:'var(--text-muted)', fontWeight:700, textTransform:'uppercase' }}>Contratos</div>
-                          <div style={{ fontVariantNumeric:'tabular-nums', fontSize:'0.88rem', fontWeight: m.Contratos > 0 ? 600 : 400, color: m.Contratos > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}>{m.Contratos > 0 ? formatBRL(m.Contratos) : '—'}</div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize:'0.62rem', color:'var(--text-muted)', fontWeight:700, textTransform:'uppercase' }}>Viagens</div>
-                          <div style={{ fontVariantNumeric:'tabular-nums', fontSize:'0.88rem', fontWeight: m.Viagens > 0 ? 600 : 400, color: m.Viagens > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}>{m.Viagens > 0 ? formatBRL(m.Viagens) : '—'}</div>
-                        </div>
-                        <div style={{ textAlign:'right' }}>
-                          <div style={{ fontSize:'0.62rem', color:'var(--text-muted)', fontWeight:700, textTransform:'uppercase' }}>Total</div>
-                          <div style={{ fontVariantNumeric:'tabular-nums', fontSize:'0.88rem', fontWeight:700, color: theme.color }}>{formatBRL(m.Contratos + m.Viagens)}</div>
-                        </div>
-                      </label>
+
+                        {/* Expanded items — nested table */}
+                        {isExp && (
+                          <div style={{ background:'#f8fafc', borderTop:'1px solid #e2e8f0' }}>
+                            {['Contratos', 'Viagens', 'Dispensado'].map(cat => {
+                              const items = m[cat];
+                              if (!items.length) return null;
+                              const cs = CAT_STYLE[cat];
+                              const allOn  = items.every((_, i) => itemSel[`${monthKey}|${cat}|${i}`]);
+                              const someOn = items.some((_, i)  => itemSel[`${monthKey}|${cat}|${i}`]);
+                              return (
+                                <div key={cat}>
+                                  {/* Cat sub-header */}
+                                  <div style={{ display:'grid', gridTemplateColumns:'28px 20px 1fr 1fr 130px', alignItems:'center', gap:8, padding:'6px 14px 6px 28px', background:cs.bg, borderBottom:`1px solid ${cs.border}` }}>
+                                    <input type="checkbox" checked={allOn}
+                                      ref={el => { if (el) el.indeterminate = !allOn && someOn; }}
+                                      onChange={() => toggleCatMonth(monthKey, cat, items)}
+                                      style={{ accentColor:cs.color, width:13, height:13, cursor:'pointer' }}
+                                    />
+                                    <span style={{ fontSize:'0.9rem' }}>{cs.emoji}</span>
+                                    <span style={{ fontSize:'0.68rem', fontWeight:700, textTransform:'uppercase', color:cs.color, letterSpacing:'0.05em' }}>{cs.label} <span style={{ opacity:0.6, fontWeight:400 }}>({items.length})</span></span>
+                                    <span style={{ fontSize:'0.65rem', color:'#94a3b8', fontStyle:'italic' }}>Denominação</span>
+                                    <span style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', color:cs.color, textAlign:'right' }}>Valor</span>
+                                  </div>
+                                  {/* Item rows */}
+                                  {items.map((it, i) => {
+                                    const itemKey = `${monthKey}|${cat}|${i}`;
+                                    const sel = !!itemSel[itemKey];
+                                    return (
+                                      <label key={i} style={{ display:'grid', gridTemplateColumns:'28px 20px 1fr 1fr 130px', alignItems:'center', gap:8, padding:'6px 14px 6px 28px', borderBottom:'1px solid #f0f4f8', cursor:'pointer', background: sel ? cs.bg+'99' : 'transparent', transition:'background 0.1s' }}>
+                                        <input type="checkbox" checked={sel}
+                                          onChange={() => toggleItem(itemKey)}
+                                          style={{ accentColor:cs.color, width:13, height:13, cursor:'pointer' }}
+                                        />
+                                        <span></span>
+                                        <span style={{ fontSize:'0.78rem', color:'var(--text-primary)', fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={it.descr}>{it.descr}</span>
+                                        <span style={{ fontSize:'0.75rem', color:'var(--text-muted)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={it.denom}>{it.denom || '—'}</span>
+                                        <span style={{ fontSize:'0.83rem', fontWeight:700, textAlign:'right', fontVariantNumeric:'tabular-nums', color: it.valor < 0 ? '#dc2626' : cs.color }}>{formatBRL(it.valor)}</span>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
               </div>
 
-              {selectedMonths.length > 0 && (
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:16 }}>
-                  {[{ label:'Contratos', value:totalContr, color:'#1d4ed8' }, { label:'Viagens', value:totalViag, color:'#0891b2' }, { label: isConsolidated ? 'Total Consolidado' : 'Total', value:totalContr+totalViag, color:theme.color }].map(c => (
-                    <div key={c.label} style={{ background:'#f8fafc', border:`1.5px solid ${c.color}33`, borderRadius:10, padding:'12px 16px', textAlign:'center' }}>
-                      <div style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', color:c.color, marginBottom:4 }}>{c.label}</div>
-                      <div style={{ fontVariantNumeric:'tabular-nums', fontWeight:700, fontSize:'1.05rem', color:c.color }}>{formatBRL(c.value)}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              {/* Summary cards — Contratos | Viagens | Total | Dispensados */}
+              {(() => {
+                let totalDisp = 0;
+                Object.entries(preview.months).forEach(([key, m]) => {
+                  totalDisp += computeRawTotal(m.Dispensado);
+                });
+                return (
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:10, marginBottom:8 }}>
+                    {[
+                      { label:'📄 Contratos',   value:totalContr,              color:CAT_STYLE.Contratos.color,  bg:CAT_STYLE.Contratos.bg,  border:CAT_STYLE.Contratos.border },
+                      { label:'✈️ Viagens',      value:totalViag,               color:CAT_STYLE.Viagens.color,    bg:CAT_STYLE.Viagens.bg,    border:CAT_STYLE.Viagens.border },
+                      { label: isConsolidated ? '∑ Total Consol.' : '∑ Total', value:totalContr+totalViag,        color:theme.color,            bg:'#f8fafc',               border:theme.color+'44' },
+                      { label:'🚫 Dispensados',  value:totalDisp,               color:CAT_STYLE.Dispensado.color, bg:CAT_STYLE.Dispensado.bg, border:CAT_STYLE.Dispensado.border },
+                    ].map(c => (
+                      <div key={c.label} style={{ background:c.bg, border:`1.5px solid ${c.border}`, borderRadius:10, padding:'11px 14px', textAlign:'center' }}>
+                        <div style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', color:c.color, marginBottom:4, letterSpacing:'0.04em' }}>{c.label}</div>
+                        <div style={{ fontVariantNumeric:'tabular-nums', fontWeight:700, fontSize:'0.98rem', color:c.color }}>{formatBRL(c.value)}</div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>
@@ -271,18 +475,43 @@ function ImportActualModal({ open, onClose, onApply, currentYear, theme, isConso
         {preview && (
           <div style={{ padding:'14px 22px', borderTop:'1px solid #e2e8f0', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0, background:'#f8fafc' }}>
             <div style={{ fontSize:'0.78rem', color:'var(--text-muted)' }}>
-              {selectedMonths.length === 0
-                ? 'Selecione ao menos um mês para importar'
-                : isConsolidated
-                  ? `${selectedMonths.length} mês(es) → soma = ${formatBRL(totalContr + totalViag)} aplicado como Realizado consolidado`
-                  : `${selectedMonths.length} mês(es) — valores inseridos em Contratos e Viagens`}
+              {isConsolidated
+                ? `Soma = ${formatBRL(totalContr + totalViag)} aplicado como Realizado consolidado`
+                : `Valores serão inseridos em Contratos e Viagens nos meses correspondentes`}
             </div>
-            <button onClick={handleApply} disabled={!selectedMonths.length} style={{ padding:'10px 24px', borderRadius:8, border:'none', background: selectedMonths.length ? theme.color : '#94a3b8', color:'#fff', fontWeight:700, fontSize:'0.9rem', cursor: selectedMonths.length ? 'pointer' : 'not-allowed' }}>
-              ✓ Aplicar {selectedMonths.length > 0 ? `(${selectedMonths.length} meses)` : ''}
+            <button
+              onClick={handleApplyClick}
+              style={{ padding:'10px 24px', borderRadius:8, border:'none', background: theme.color, color:'#fff', fontWeight:700, fontSize:'0.9rem', cursor:'pointer' }}
+            >
+              ✓ Aplicar Importação
             </button>
           </div>
         )}
       </div>
+
+      {/* Confirm overwrite dialog */}
+      {confirmData && (
+        <div style={{ position:'fixed', inset:0, zIndex:4000, background:'rgba(15,23,42,0.75)', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }} onClick={e => e.stopPropagation()}>
+          <div style={{ background:'#fff', borderRadius:14, width:'100%', maxWidth:460, padding:28, boxShadow:'0 16px 48px rgba(0,0,0,0.3)' }}>
+            <div style={{ fontSize:'1.4rem', marginBottom:10 }}>⚠️</div>
+            <div style={{ fontWeight:700, fontSize:'1rem', color:'var(--ctg-navy)', marginBottom:8 }}>Sobrescrever dados existentes?</div>
+            <div style={{ fontSize:'0.83rem', color:'#64748b', marginBottom:16, lineHeight:1.5 }}>
+              Os seguintes campos já possuem valores de Realizado e serão <strong>sobrescritos</strong>:
+              <ul style={{ marginTop:8, paddingLeft:18 }}>
+                {confirmData.conflicts.map(({ cat, mo }, i) => (
+                  <li key={i} style={{ marginBottom:3 }}>
+                    <strong>{cat}</strong> — {['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'][mo-1]}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+              <button onClick={() => setConfirmData(null)} style={{ padding:'8px 18px', borderRadius:8, border:'1.5px solid #e2e8f0', background:'#fff', color:'#374151', fontWeight:600, fontSize:'0.85rem', cursor:'pointer' }}>Cancelar</button>
+              <button onClick={confirmOverwrite} style={{ padding:'8px 18px', borderRadius:8, border:'none', background:'#dc2626', color:'#fff', fontWeight:700, fontSize:'0.85rem', cursor:'pointer' }}>Sobrescrever e Aplicar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -534,20 +763,20 @@ export default function ForecastWizard({
   // Aplica dados importados do SAP
   const handleImportApply = (importedData) => {
     if (isConsolidatedYear) {
-      // Modo consolidado: soma tudo e aplica no campo único de Realizado
       let total = 0;
-      Object.values(importedData.Contratos || {}).forEach(v => { total += v; });
-      Object.values(importedData.Viagens   || {}).forEach(v => { total += v; });
+      Object.values(importedData.Contratos || {}).forEach(v => { total += (v?.value ?? v); });
+      Object.values(importedData.Viagens   || {}).forEach(v => { total += (v?.value ?? v); });
       handleConsChange('Actual', total);
       toast(`Realizado consolidado importado: ${formatBRL(total)}. Revise e salve.`, 'success');
     } else {
-      // Modo mensal: injeta por categoria e mês
       setLocalData(prev => {
         const next = { ...prev };
         Object.entries(importedData).forEach(([cat, months]) => {
-          Object.entries(months).forEach(([month, value]) => {
-            const key = `Actual|${cat}|${month}`;
-            next[key] = { value, comment: prev[key]?.comment || '' };
+          Object.entries(months).forEach(([month, entry]) => {
+            const key     = `Actual|${cat}|${month}`;
+            const value   = entry?.value   ?? entry ?? 0;
+            const comment = entry?.comment ?? prev[key]?.comment ?? '';
+            next[key] = { value, comment };
           });
         });
         return next;
@@ -729,7 +958,7 @@ export default function ForecastWizard({
           </div>
         </div>
       </WrapperWithTypeBar>
-      <ImportActualModal open={importOpen} onClose={() => setImportOpen(false)} onApply={handleImportApply} currentYear={year} theme={TYPE_THEME['Actual']||theme} isConsolidated={true} />
+      <ImportActualModal open={importOpen} onClose={() => setImportOpen(false)} onApply={handleImportApply} currentYear={year} theme={TYPE_THEME['Actual']||theme} isConsolidated={true} existingData={localData} />
       </>
     );
   }
@@ -791,7 +1020,7 @@ export default function ForecastWizard({
           >{hasExisting ? `Editar ${theme.label} →` : `Iniciar preenchimento →`}</button>
         </div>
       </WrapperWithTypeBar>
-      <ImportActualModal open={importOpen} onClose={() => setImportOpen(false)} onApply={handleImportApply} currentYear={year} theme={TYPE_THEME['Actual']||theme} isConsolidated={false} />
+      <ImportActualModal open={importOpen} onClose={() => setImportOpen(false)} onApply={handleImportApply} currentYear={year} theme={TYPE_THEME['Actual']||theme} isConsolidated={false} existingData={localData} />
       </>
     );
   }
@@ -848,7 +1077,7 @@ export default function ForecastWizard({
           <button onClick={()=>setStep(s=>s+1)} style={{ padding:'9px 24px', borderRadius:'var(--radius-sm)', border:'none', background:theme.color, cursor:'pointer', color:'#fff', fontWeight:700, fontSize:'0.85rem', fontFamily:'var(--font-body)' }}>{step===3?'Revisar →':`${CATEGORIES[step]} →`}</button>
         </div>
       </WrapperWithTypeBar>
-      <ImportActualModal open={importOpen} onClose={() => setImportOpen(false)} onApply={handleImportApply} currentYear={year} theme={TYPE_THEME['Actual']||theme} isConsolidated={false} />
+      <ImportActualModal open={importOpen} onClose={() => setImportOpen(false)} onApply={handleImportApply} currentYear={year} theme={TYPE_THEME['Actual']||theme} isConsolidated={false} existingData={localData} />
       </>
     );
   }
@@ -925,7 +1154,7 @@ export default function ForecastWizard({
         </div>
       </div>
     </WrapperWithTypeBar>
-    <ImportActualModal open={importOpen} onClose={() => setImportOpen(false)} onApply={handleImportApply} currentYear={year} theme={TYPE_THEME['Actual']||theme} isConsolidated={false} />
+    <ImportActualModal open={importOpen} onClose={() => setImportOpen(false)} onApply={handleImportApply} currentYear={year} theme={TYPE_THEME['Actual']||theme} isConsolidated={false} existingData={localData} />
     </>
   );
 }
