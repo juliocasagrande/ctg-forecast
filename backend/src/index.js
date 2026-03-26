@@ -46,6 +46,14 @@ const corsOptions = {
 
 // Responde preflights OPTIONS antes de qualquer auth ou outro middleware
 app.options('*', cors(corsOptions));
+
+// Temporário remover
+app.use((req, res, next) => {
+  res.removeHeader('Content-Security-Policy');
+  res.removeHeader('X-Content-Type-Options');
+  next();
+});
+
 app.use(cors(corsOptions));
 
 // ─── Security: Helmet headers (CSP, HSTS, X-Frame-Options, etc.) ────────────
