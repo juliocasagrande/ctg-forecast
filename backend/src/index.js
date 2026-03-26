@@ -29,14 +29,12 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 // ─── Security: HTTPS redirect (must be first) ───────────────────────────────
 app.use(requireHTTPS);
 
-// ─── CORS with credentials (for httpOnly cookies) ───────────────────────────
-// Deve vir ANTES do Helmet para que o header Access-Control-Allow-Origin
-// seja adicionado antes que a CSP possa interferir no preflight
+// ─── CORS — deve vir antes do Helmet e de qualquer auth ─────────────────────
 const allowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(',').map(u => u.trim())
   : [];
 
-app.use(cors({
+const corsOptions = {
   origin: IS_PROD
     ? (origin, cb) => {
         if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
@@ -44,7 +42,11 @@ app.use(cors({
       }
     : true,
   credentials: true,
-}));
+};
+
+// Responde preflights OPTIONS antes de qualquer auth ou outro middleware
+app.options('*', cors(corsOptions));
+app.use(cors(corsOptions));
 
 // ─── Security: Helmet headers (CSP, HSTS, X-Frame-Options, etc.) ────────────
 app.use(securityHeaders);
