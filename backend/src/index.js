@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -46,15 +47,10 @@ const corsOptions = {
 
 // Responde preflights OPTIONS antes de qualquer auth ou outro middleware
 app.options('*', cors(corsOptions));
-
-// Temporário remover
-app.use((req, res, next) => {
-  res.removeHeader('Content-Security-Policy');
-  res.removeHeader('X-Content-Type-Options');
-  next();
-});
-
 app.use(cors(corsOptions));
+
+// ─── Compressão gzip (reduz tamanho das respostas grandes como o HTML do relatório)
+app.use(compression());
 
 // ─── Security: Helmet headers (CSP, HSTS, X-Frame-Options, etc.) ────────────
 app.use(securityHeaders);
@@ -66,7 +62,7 @@ app.set('trust proxy', 1);
 app.use(cookieParser());
 
 // ─── Body parser ─────────────────────────────────────────────────────────────
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
 
 // ─── Global API rate limiter ─────────────────────────────────────────────────
 app.use('/api', apiLimiter);
