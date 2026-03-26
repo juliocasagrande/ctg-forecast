@@ -5,23 +5,7 @@ import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// ── DEBUG: loga TODOS os requests que chegam nesta rota ───────────────────────
-router.use((req, res, next) => {
-  console.log(`[monthly-report DEBUG] ${req.method} ${req.path}`);
-  console.log(`[monthly-report DEBUG] Origin: ${req.headers.origin}`);
-  console.log(`[monthly-report DEBUG] Content-Type: ${req.headers['content-type']}`);
-  console.log(`[monthly-report DEBUG] Auth header: ${req.headers.authorization ? 'presente' : 'ausente'}`);
-  console.log(`[monthly-report DEBUG] Cookie: ${req.headers.cookie ? 'presente' : 'ausente'}`);
-  next();
-});
-
 router.use(requireAuth);
-
-// ── DEBUG: loga se passou pelo requireAuth ────────────────────────────────────
-router.use((req, res, next) => {
-  console.log(`[monthly-report DEBUG] Passou pelo auth. User: ${JSON.stringify(req.user)}`);
-  next();
-});
 
 // ── Controle de acesso ────────────────────────────────────────────────────────
 function requireMonthlyReportAccess(req, res, next) {
@@ -55,31 +39,23 @@ router.post(
   requireMonthlyReportAccess,
   upload.single('excel'),
   async (req, res) => {
-    console.log(`[monthly-report DEBUG] Entrou no handler POST /generate`);
-
     if (!req.file) {
-      console.log(`[monthly-report DEBUG] Nenhum arquivo recebido`);
       return res.status(400).json({ error: 'Nenhum arquivo Excel enviado.' });
     }
 
-    console.log(`[monthly-report DEBUG] Arquivo recebido: ${req.file.originalname} (${req.file.size} bytes)`);
 
     const { mes, ano } = req.body;
     if (!mes || !ano) {
-      console.log(`[monthly-report DEBUG] Mês ou ano ausente: mes=${mes} ano=${ano}`);
       return res.status(400).json({ error: 'Mês e ano são obrigatórios.' });
     }
 
-    console.log(`[monthly-report DEBUG] Período: ${mes}/${ano}`);
 
     try {
-      console.log(`[monthly-report DEBUG] Importando ExcelJS...`);
       const excelJSModule = await import('exceljs');
       const ExcelJS = excelJSModule.default ?? excelJSModule;
       const wb = new ExcelJS.Workbook();
       const stream = Readable.from(req.file.buffer);
       await wb.xlsx.read(stream);
-      console.log(`[monthly-report DEBUG] Excel lido. Worksheets: ${wb.worksheets.length}`);
 
       const ws = wb.worksheets[0];
       if (!ws) return res.status(400).json({ error: 'Planilha vazia ou sem dados.' });
@@ -126,7 +102,6 @@ router.post(
         if (found) colIdx[key] = parseInt(found[0]);
       }
 
-      console.log(`[monthly-report DEBUG] Colunas mapeadas: ${JSON.stringify(colIdx)}`);
 
       // ── Helpers ──────────────────────────────────────────────────────────
       function cellVal(row, key) {
@@ -301,7 +276,6 @@ router.post(
         });
       });
 
-      console.log(`[monthly-report DEBUG] Linhas lidas: ${rows.length}`);
 
       if (!rows.length)
         return res.status(400).json({ error: 'Nenhum dado encontrado na planilha.' });
@@ -413,7 +387,6 @@ router.post(
         sections.push('</section>');
       }
 
-      console.log(`[monthly-report DEBUG] HTML gerado. Enviando resposta...`);
 
       const html = buildHTML({
         mesAno: `${mes} de ${ano}`,
@@ -428,9 +401,9 @@ router.post(
       res.send(html);
 
     } catch (err) {
-      console.error('[monthly-report] Erro detalhado:', err.message);
-      console.error('[monthly-report] Stack:', err.stack);
-      res.status(500).json({ error: err.message }); // em debug: mostra mensagem real
+      console.error('[monthly-report] Erro:', err);
+      const msg = process.env.NODE_ENV === 'production' ? 'Erro ao processar planilha.' : err.message;
+      res.status(500).json({ error: msg });
     }
   }
 );

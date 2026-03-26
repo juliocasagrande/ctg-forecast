@@ -31,6 +31,7 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 app.use(requireHTTPS);
 
 // ─── CORS — deve vir antes do Helmet e de qualquer auth ─────────────────────
+// Em produção, aceita apenas origens listadas em FRONTEND_URL (separadas por vírgula)
 const allowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(',').map(u => u.trim())
   : [];
@@ -38,33 +39,34 @@ const allowedOrigins = process.env.FRONTEND_URL
 const corsOptions = {
   origin: IS_PROD
     ? (origin, cb) => {
+        // Permite requests sem origem (apps mobile, Postman, health checks)
         if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
         cb(new Error('Origem não permitida pelo CORS'));
       }
-    : true,
-  credentials: true,
+    : true, // dev: permite qualquer origem
+  credentials: true, // necessário para cookies httpOnly
 };
 
-// Responde preflights OPTIONS antes de qualquer auth ou outro middleware
+// Responde preflights OPTIONS imediatamente, antes de auth ou outros middlewares
 app.options('*', cors(corsOptions));
 app.use(cors(corsOptions));
 
-// ─── Compressão gzip (reduz tamanho das respostas grandes como o HTML do relatório)
+// ─── Compressão gzip — reduz respostas grandes (ex: HTML do relatório mensal)
 app.use(compression());
 
 // ─── Security: Helmet headers (CSP, HSTS, X-Frame-Options, etc.) ────────────
 app.use(securityHeaders);
 
-// ─── Trust Railway's proxy for correct IP detection ──────────────────────────
+// ─── Trust Railway's proxy para detecção correta de IP ───────────────────────
 app.set('trust proxy', 1);
 
-// ─── Cookie parser (reads httpOnly cookies) ──────────────────────────────────
+// ─── Cookie parser ───────────────────────────────────────────────────────────
 app.use(cookieParser());
 
 // ─── Body parser ─────────────────────────────────────────────────────────────
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '10mb' }));
 
-// ─── Global API rate limiter ─────────────────────────────────────────────────
+// ─── Rate limiter global de API ───────────────────────────────────────────────
 app.use('/api', apiLimiter);
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -83,14 +85,14 @@ app.use('/api/monthly-report', monthlyReportRouter);
 
 app.get('/api/health', (_, res) => res.json({ status: 'ok', version: '2.1.0-security' }));
 
-// ─── Serve frontend ──────────────────────────────────────────────────────────
+// ─── Serve frontend (build do React em /public) ───────────────────────────────
 const publicPath = path.join(__dirname, '../../public');
 app.use(express.static(publicPath));
 app.get('*', (req, res) => {
   if (!req.path.startsWith('/api')) res.sendFile(path.join(publicPath, 'index.html'));
 });
 
-// ─── Global error handler (sanitizes errors in production) ───────────────────
+// ─── Global error handler ────────────────────────────────────────────────────
 app.use(globalErrorHandler);
 
 async function start() {

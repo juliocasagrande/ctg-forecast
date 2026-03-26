@@ -60,6 +60,7 @@ function ImportActualModal({ open, onClose, onApply, currentYear, theme, isConso
   const [mapping,        setMapping]        = useState(null);
   const [keywords,       setKeywords]       = useState(null);
   const [dragging,       setDragging]       = useState(false);
+  const [applying,       setApplying]       = useState(false);
   // Per-item selection: key = `${year}|${month}|${cat}|${itemIdx}`, value = bool
   const [itemSel,        setItemSel]        = useState({});
   // Expanded months per category: key = `${year}|${month}|${cat}`
@@ -242,7 +243,7 @@ function ImportActualModal({ open, onClose, onApply, currentYear, theme, isConso
     return result;
   }
 
-  function handleApplyClick() {
+  async function handleApplyClick() {
     if (!preview) return;
     const result = buildResult();
     if (!result) return;
@@ -263,15 +264,25 @@ function ImportActualModal({ open, onClose, onApply, currentYear, theme, isConso
     if (conflicts.length > 0) {
       setConfirmData({ result, conflicts });
     } else {
-      onApply(result);
-      onClose();
+      setApplying(true);
+      try {
+        await onApply(result);
+        onClose();
+      } finally {
+        setApplying(false);
+      }
     }
   }
 
-  function confirmOverwrite() {
-    if (confirmData) {
-      onApply(confirmData.result);
+  async function confirmOverwrite() {
+    if (!confirmData) return;
+    setApplying(true);
+    try {
+      await onApply(confirmData.result);
       onClose();
+    } finally {
+      setApplying(false);
+      setConfirmData(null);
     }
   }
 
@@ -507,9 +518,12 @@ function ImportActualModal({ open, onClose, onApply, currentYear, theme, isConso
             </div>
             <button
               onClick={handleApplyClick}
-              style={{ padding:'10px 24px', borderRadius:8, border:'none', background: theme.color, color:'#fff', fontWeight:700, fontSize:'0.9rem', cursor:'pointer' }}
+              disabled={applying || parsing}
+              style={{ padding:'10px 24px', borderRadius:8, border:'none', background: applying ? '#64748b' : theme.color, color:'#fff', fontWeight:700, fontSize:'0.9rem', cursor: applying ? 'wait' : 'pointer', display:'flex', alignItems:'center', gap:8 }}
             >
-              ✓ Aplicar Importação
+              {applying ? (
+                <><span style={{ width:14, height:14, border:'2px solid rgba(255,255,255,0.4)', borderTopColor:'#fff', borderRadius:'50%', animation:'spin 0.8s linear infinite', display:'inline-block' }} />Salvando...</>
+              ) : '✓ Aplicar e Salvar'}
             </button>
           </div>
         )}
@@ -533,7 +547,9 @@ function ImportActualModal({ open, onClose, onApply, currentYear, theme, isConso
             </div>
             <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
               <button onClick={() => setConfirmData(null)} style={{ padding:'8px 18px', borderRadius:8, border:'1.5px solid #e2e8f0', background:'#fff', color:'#374151', fontWeight:600, fontSize:'0.85rem', cursor:'pointer' }}>Cancelar</button>
-              <button onClick={confirmOverwrite} style={{ padding:'8px 18px', borderRadius:8, border:'none', background:'#dc2626', color:'#fff', fontWeight:700, fontSize:'0.85rem', cursor:'pointer' }}>Sobrescrever e Aplicar</button>
+              <button onClick={confirmOverwrite} disabled={applying} style={{ padding:'8px 18px', borderRadius:8, border:'none', background: applying ? '#64748b' : '#dc2626', color:'#fff', fontWeight:700, fontSize:'0.85rem', cursor: applying ? 'wait' : 'pointer', display:'flex', alignItems:'center', gap:8 }}>
+                {applying ? <><span style={{ width:12, height:12, border:'2px solid rgba(255,255,255,0.4)', borderTopColor:'#fff', borderRadius:'50%', animation:'spin 0.8s linear infinite', display:'inline-block' }} />Salvando...</> : 'Sobrescrever e Salvar'}
+              </button>
             </div>
           </div>
         </div>
@@ -786,51 +802,83 @@ export default function ForecastWizard({
     setSaved(false);
   };
 
-  // Aplica dados importados do SAP
+  // Aplica E SALVA dados importados do SAP diretamente no banco
   // importedData: { Contratos: { "year|month": { value, comment, year, month } }, Viagens: {...} }
-  const handleImportApply = (importedData) => {
-    setLocalData(prev => {
-      const next = { ...prev };
+  const handleImportApply = async (importedData) => {
+    setSaving(true);
+    try {
+      // ── 1. Separar entradas por tipo de ano: consolidado vs mensal ──────────
+      // consolidadoByYear: { year: total } — soma de Contratos+Viagens para anos consolidados
+      const consolidadoByYear = {};
+      // mensaisBulk: array de { category, type, year, month, value, comment }
+      const mensaisBulk = [];
+
       Object.entries(importedData).forEach(([cat, entries]) => {
-        Object.entries(entries).forEach(([entryKey, entry]) => {
+        Object.entries(entries).forEach(([, entry]) => {
           const entryYear  = parseInt(entry.year);
           const entryMonth = parseInt(entry.month);
           const value      = entry?.value   ?? 0;
           const comment    = entry?.comment ?? '';
 
-          // Se o year do dado é um ano consolidado → acumula no consData (não em localData)
           if (consolidatedYears.includes(entryYear)) {
-            // Será tratado abaixo fora do setLocalData
-            return;
+            // Acumula por ano consolidado (soma Contratos + Viagens)
+            consolidadoByYear[entryYear] = (consolidadoByYear[entryYear] ?? 0) + value;
+          } else {
+            // Entrada mensal normal — salva no mês/ano exato
+            mensaisBulk.push({ category: cat, type: 'Actual', year: entryYear, month: entryMonth, value, comment });
           }
-
-          // Salva no mês/ano correto do dado importado
-          const key = `Actual|${cat}|${entryMonth}`;
-          next[key] = { value, comment };
         });
       });
-      return next;
-    });
 
-    // Acumula totais para anos consolidados e atualiza consData
-    let consolidatedTotal = 0;
-    Object.entries(importedData).forEach(([cat, entries]) => {
-      Object.entries(entries).forEach(([entryKey, entry]) => {
-        const entryYear = parseInt(entry.year);
-        if (consolidatedYears.includes(entryYear)) {
-          consolidatedTotal += entry?.value ?? 0;
-        }
-      });
-    });
-    if (consolidatedTotal > 0) {
-      handleConsChange('Actual', (consData['Actual|Total'] || 0) + consolidatedTotal);
-      toast(`Realizado consolidado acumulado: ${formatBRL(consolidatedTotal)}. Revise e salve.`, 'success');
+      // ── 2. Salvar entradas mensais via /bulk ─────────────────────────────────
+      if (mensaisBulk.length > 0) {
+        await api.post(`/forecast/project/${projectId}/bulk`, { entries: mensaisBulk });
+
+        // Atualiza localData apenas com entradas do ano atualmente exibido
+        setLocalData(prev => {
+          const next = { ...prev };
+          mensaisBulk
+            .filter(e => e.year === parseInt(year))
+            .forEach(e => {
+              next[`Actual|${e.category}|${e.month}`] = { value: e.value, comment: e.comment };
+            });
+          return next;
+        });
+      }
+
+      // ── 3. Salvar anos consolidados via /year-consolidated/bulk ─────────────
+      if (Object.keys(consolidadoByYear).length > 0) {
+        const consEntries = Object.entries(consolidadoByYear).map(([yr, total]) => ({
+          year: parseInt(yr), category: 'Total', type: 'Actual', value: total,
+        }));
+        await api.post(`/forecast/project/${projectId}/year-consolidated/bulk`, { entries: consEntries });
+
+        // Atualiza consData se o ano exibido for consolidado
+        Object.entries(consolidadoByYear).forEach(([yr, total]) => {
+          if (parseInt(yr) === parseInt(year)) {
+            setConsData(prev => ({ ...prev, ['Actual|Total']: total }));
+          }
+        });
+      }
+
+      // ── 4. Feedback ao usuário ───────────────────────────────────────────────
+      const totalMeses   = mensaisBulk.length;
+      const totalConsAno = Object.keys(consolidadoByYear).length;
+      const parts = [];
+      if (totalMeses > 0)   parts.push(`${totalMeses} entr. mensais`);
+      if (totalConsAno > 0) parts.push(`${totalConsAno} ano(s) consolidado(s)`);
+      toast(`✅ SAP importado e salvo: ${parts.join(' + ')}`, 'success');
+
+      setSaved(true);
+      onSaved?.();
+      if (types.includes('Actual')) setActiveType('Actual');
+      setStep(4);
+    } catch (err) {
+      console.error('[handleImportApply]', err);
+      toast('Erro ao salvar dados do SAP. Tente novamente.', 'error');
+    } finally {
+      setSaving(false);
     }
-
-    if (types.includes('Actual')) setActiveType('Actual');
-    setStep(4);
-    toast('Dados SAP importados! Revise antes de salvar.', 'success');
-    setSaved(false);
   };
 
   const getCatTotal  = (type, cat) => Array.from({length:12},(_,i)=>i+1).reduce((s,m) => s+getValue(type,cat,m), 0);
