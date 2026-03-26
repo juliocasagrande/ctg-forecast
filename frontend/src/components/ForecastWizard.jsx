@@ -176,6 +176,19 @@ function ImportActualModal({ open, onClose, onApply, currentYear, theme, isConso
     setParsing(false);
   }
 
+  // Toggle de seleção de TODOS os itens de um mês (todas as categorias)
+  function toggleWholeMonth(monthKey, m) {
+    const allItems = ['Contratos', 'Viagens', 'Dispensado'].flatMap((cat) =>
+      m[cat].map((_, i) => `${monthKey}|${cat}|${i}`)
+    );
+    const allOn = allItems.every(k => itemSel[k]);
+    setItemSel(prev => {
+      const next = { ...prev };
+      allItems.forEach(k => { next[k] = !allOn; });
+      return next;
+    });
+  }
+
   function toggleItem(key) {
     setItemSel(prev => ({ ...prev, [key]: !prev[key] }));
   }
@@ -203,29 +216,27 @@ function ImportActualModal({ open, onClose, onApply, currentYear, theme, isConso
   }
 
   // Build final result for apply
+  // Retorna estrutura: { Contratos: { "year|month": { value, comment, year, month } }, Viagens: {...} }
+  // Preserva year do dado importado para salvar no período correto
   function buildResult() {
     if (!preview) return null;
-    // result: { Contratos: { month: { value, comment } }, Viagens: { month: { value, comment } } }
     const result = { Contratos: {}, Viagens: {} };
     Object.entries(preview.months).forEach(([key, m]) => {
       ['Contratos', 'Viagens'].forEach(cat => {
         const selectedItems = m[cat].filter((_, i) => itemSel[`${key}|${cat}|${i}`]);
         if (!selectedItems.length) return;
         const total = selectedItems.reduce((s, it) => s + it.valor, 0);
-        const comment = calcModa(selectedItems.map(it => it.descr));
-        const mo = m.month;
-        if (!result[cat][mo]) result[cat][mo] = { value: 0, comment: '' };
-        result[cat][mo].value += total;
-        // moda from all selected items accumulated
-        if (!result[cat][mo]._descrs) result[cat][mo]._descrs = [];
-        result[cat][mo]._descrs.push(...selectedItems.map(it => it.descr));
+        const entryKey = `${m.year}|${m.month}`;
+        if (!result[cat][entryKey]) result[cat][entryKey] = { value: 0, comment: '', year: m.year, month: m.month, _descrs: [] };
+        result[cat][entryKey].value += total;
+        result[cat][entryKey]._descrs.push(...selectedItems.map(it => it.descr));
       });
     });
-    // Finalize comments
+    // Finaliza comentários pela moda das descrições
     ['Contratos', 'Viagens'].forEach(cat => {
-      Object.keys(result[cat]).forEach(mo => {
-        result[cat][mo].comment = calcModa(result[cat][mo]._descrs || []);
-        delete result[cat][mo]._descrs;
+      Object.keys(result[cat]).forEach(k => {
+        result[cat][k].comment = calcModa(result[cat][k]._descrs || []);
+        delete result[cat][k]._descrs;
       });
     });
     return result;
@@ -236,14 +247,14 @@ function ImportActualModal({ open, onClose, onApply, currentYear, theme, isConso
     const result = buildResult();
     if (!result) return;
 
-    // Check if any month already has data (existingData from parent)
+    // Verifica conflitos usando a chave "year|month" do resultado
     const conflicts = [];
     if (existingData) {
       ['Contratos', 'Viagens'].forEach(cat => {
-        Object.keys(result[cat]).forEach(mo => {
-          const existing = existingData[`Actual|${cat}|${mo}`];
+        Object.entries(result[cat]).forEach(([entryKey, entry]) => {
+          const existing = existingData[`Actual|${cat}|${entry.month}`];
           if (existing && existing.value > 0) {
-            conflicts.push({ cat, mo: parseInt(mo) });
+            conflicts.push({ cat, mo: entry.month, year: entry.year });
           }
         });
       });
@@ -266,7 +277,8 @@ function ImportActualModal({ open, onClose, onApply, currentYear, theme, isConso
 
   if (!open) return null;
 
-  const MONTHS_FULL = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  // Usa MONTHS_FULL_PT importado do utils/format.js — sem hardcode interno
+  const MONTHS_FULL = MONTHS_FULL_PT;
 
   // Summary totals for footer
   let totalContr = 0; let totalViag = 0;
@@ -364,8 +376,22 @@ function ImportActualModal({ open, onClose, onApply, currentYear, theme, isConso
                           onMouseEnter={e => { if (!isExp) e.currentTarget.style.background='#f0f7ff'; }}
                           onMouseLeave={e => { e.currentTarget.style.background = isExp ? '#f8fafc' : rowIdx%2===0 ? '#fff' : '#fafafa'; }}
                         >
-                          {/* Month label */}
+                        {/* Month label com checkbox de mês inteiro */}
                           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                            <input
+                              type="checkbox"
+                              title="Selecionar/deselecionar mês inteiro"
+                              checked={['Contratos','Viagens','Dispensado'].flatMap(cat => m[cat].map((_,i) => itemSel[`${monthKey}|${cat}|${i}`])).every(Boolean)}
+                              ref={el => {
+                                if (el) {
+                                  const all = ['Contratos','Viagens','Dispensado'].flatMap(cat => m[cat].map((_,i) => itemSel[`${monthKey}|${cat}|${i}`]));
+                                  el.indeterminate = all.some(Boolean) && !all.every(Boolean);
+                                }
+                              }}
+                              onChange={(e) => { e.stopPropagation(); toggleWholeMonth(monthKey, m); }}
+                              onClick={e => e.stopPropagation()}
+                              style={{ width:13, height:13, cursor:'pointer', flexShrink:0, accentColor:'#1d4ed8' }}
+                            />
                             <span style={{ fontWeight:700, fontSize:'0.88rem', color:'var(--text-primary)' }}>{MONTHS_FULL[m.month-1]}</span>
                             {!isCurrentYear && <span style={{ fontSize:'0.6rem', background:'#fef3c7', color:'#92400e', padding:'1px 5px', borderRadius:4, fontWeight:700 }}>{m.year}</span>}
                           </div>
@@ -498,9 +524,9 @@ function ImportActualModal({ open, onClose, onApply, currentYear, theme, isConso
             <div style={{ fontSize:'0.83rem', color:'#64748b', marginBottom:16, lineHeight:1.5 }}>
               Os seguintes campos já possuem valores de Realizado e serão <strong>sobrescritos</strong>:
               <ul style={{ marginTop:8, paddingLeft:18 }}>
-                {confirmData.conflicts.map(({ cat, mo }, i) => (
+                {confirmData.conflicts.map(({ cat, mo, year: conflictYear }, i) => (
                   <li key={i} style={{ marginBottom:3 }}>
-                    <strong>{cat}</strong> — {['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'][mo-1]}
+                    <strong>{cat}</strong> — {MONTHS_FULL_PT[mo-1]}{conflictYear ? ` / ${conflictYear}` : ''}
                   </li>
                 ))}
               </ul>
@@ -761,30 +787,49 @@ export default function ForecastWizard({
   };
 
   // Aplica dados importados do SAP
+  // importedData: { Contratos: { "year|month": { value, comment, year, month } }, Viagens: {...} }
   const handleImportApply = (importedData) => {
-    if (isConsolidatedYear) {
-      let total = 0;
-      Object.values(importedData.Contratos || {}).forEach(v => { total += (v?.value ?? v); });
-      Object.values(importedData.Viagens   || {}).forEach(v => { total += (v?.value ?? v); });
-      handleConsChange('Actual', total);
-      toast(`Realizado consolidado importado: ${formatBRL(total)}. Revise e salve.`, 'success');
-    } else {
-      setLocalData(prev => {
-        const next = { ...prev };
-        Object.entries(importedData).forEach(([cat, months]) => {
-          Object.entries(months).forEach(([month, entry]) => {
-            const key     = `Actual|${cat}|${month}`;
-            const value   = entry?.value   ?? entry ?? 0;
-            const comment = entry?.comment ?? prev[key]?.comment ?? '';
-            next[key] = { value, comment };
-          });
+    setLocalData(prev => {
+      const next = { ...prev };
+      Object.entries(importedData).forEach(([cat, entries]) => {
+        Object.entries(entries).forEach(([entryKey, entry]) => {
+          const entryYear  = parseInt(entry.year);
+          const entryMonth = parseInt(entry.month);
+          const value      = entry?.value   ?? 0;
+          const comment    = entry?.comment ?? '';
+
+          // Se o year do dado é um ano consolidado → acumula no consData (não em localData)
+          if (consolidatedYears.includes(entryYear)) {
+            // Será tratado abaixo fora do setLocalData
+            return;
+          }
+
+          // Salva no mês/ano correto do dado importado
+          const key = `Actual|${cat}|${entryMonth}`;
+          next[key] = { value, comment };
         });
-        return next;
       });
-      if (types.includes('Actual')) setActiveType('Actual');
-      setStep(4);
-      toast('Dados importados! Revise antes de salvar.', 'success');
+      return next;
+    });
+
+    // Acumula totais para anos consolidados e atualiza consData
+    let consolidatedTotal = 0;
+    Object.entries(importedData).forEach(([cat, entries]) => {
+      Object.entries(entries).forEach(([entryKey, entry]) => {
+        const entryYear = parseInt(entry.year);
+        if (consolidatedYears.includes(entryYear)) {
+          consolidatedTotal += entry?.value ?? 0;
+        }
+      });
+    });
+    if (consolidatedTotal > 0) {
+      handleConsChange('Actual', (consData['Actual|Total'] || 0) + consolidatedTotal);
+      toast(`Realizado consolidado acumulado: ${formatBRL(consolidatedTotal)}. Revise e salve.`, 'success');
     }
+
+    if (types.includes('Actual')) setActiveType('Actual');
+    setStep(4);
+    toast('Dados SAP importados! Revise antes de salvar.', 'success');
     setSaved(false);
   };
 

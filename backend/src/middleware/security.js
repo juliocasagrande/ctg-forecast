@@ -1,6 +1,16 @@
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 
+// Lê origens permitidas dinamicamente do ambiente
+const FRONTEND_URL = process.env.FRONTEND_URL || '';
+const BACKEND_URL  = process.env.BACKEND_URL  || '';
+
+const allowedOrigins = [
+  "'self'",
+  ...FRONTEND_URL.split(',').map(u => u.trim()).filter(Boolean),
+  ...BACKEND_URL.split(',').map(u => u.trim()).filter(Boolean),
+];
+
 // ─── Helmet: security headers (CSP, HSTS, X-Frame-Options, etc.) ────────────
 export const securityHeaders = helmet({
   contentSecurityPolicy: {
@@ -8,7 +18,7 @@ export const securityHeaders = helmet({
       defaultSrc: ["'self'"],
       scriptSrc:  ["'self'", "'unsafe-inline'",
                    "https://cdn.jsdelivr.net",
-                   "https://cdnjs.cloudflare.com"],
+                   "https://cdnjs.cloudflare.com"],   // Font Awesome no monthly-report
       styleSrc:   ["'self'", "'unsafe-inline'",
                    "https://fonts.googleapis.com",
                    "https://cdnjs.cloudflare.com"],
@@ -16,9 +26,7 @@ export const securityHeaders = helmet({
                    "https://fonts.gstatic.com",
                    "https://cdnjs.cloudflare.com"],
       imgSrc:     ["'self'", "data:", "blob:"],
-      connectSrc: ["'self'",
-                   "https://backend-forecast.up.railway.app",
-                   "https://ctg-forecast-forecast.up.railway.app"],
+      connectSrc: allowedOrigins,
     },
   },
   crossOriginEmbedderPolicy: false,
@@ -67,9 +75,22 @@ export const apiLimiter = rateLimit({
   message: { error: 'Limite de requisições excedido. Aguarde um momento.' },
 });
 
-// ─── Global error handler (sanitiza erros em produção) ───────────────────────
+// ─── Global error handler ────────────────────────────────────────────────────
+// IMPORTANTE: replica o header CORS na resposta de erro para que o browser
+// consiga ler o corpo da resposta mesmo quando há falha (500, 403, etc.).
+// Sem isso, o proxy do Railway retorna o erro sem Access-Control-Allow-Origin
+// e o browser bloqueia com "CORS policy" antes de mostrar o erro real.
 export function globalErrorHandler(err, req, res, _next) {
   console.error(`[ERROR] ${req.method} ${req.path}:`, err);
+
+  // Replica CORS — necessário porque middlewares de erro perdem os headers
+  // que foram setados pelo cors() em caso de exceção durante o processamento
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Vary', 'Origin');
+  }
 
   if (err.status) {
     return res.status(err.status).json({ error: err.message });
