@@ -29,13 +29,9 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 // ─── Security: HTTPS redirect (must be first) ───────────────────────────────
 app.use(requireHTTPS);
 
-// ─── Security: Helmet headers (CSP, HSTS, X-Frame-Options, etc.) ────────────
-app.use(securityHeaders);
-
-// ─── Trust Railway's proxy for correct IP detection ──────────────────────────
-app.set('trust proxy', 1);
-
 // ─── CORS with credentials (for httpOnly cookies) ───────────────────────────
+// Deve vir ANTES do Helmet para que o header Access-Control-Allow-Origin
+// seja adicionado antes que a CSP possa interferir no preflight
 const allowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(',').map(u => u.trim())
   : [];
@@ -43,13 +39,18 @@ const allowedOrigins = process.env.FRONTEND_URL
 app.use(cors({
   origin: IS_PROD
     ? (origin, cb) => {
-        // Allow requests with no origin (mobile apps, Postman, etc.)
         if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
         cb(new Error('Origem não permitida pelo CORS'));
       }
-    : true, // dev: allow all
-  credentials: true, // required for cookies
+    : true,
+  credentials: true,
 }));
+
+// ─── Security: Helmet headers (CSP, HSTS, X-Frame-Options, etc.) ────────────
+app.use(securityHeaders);
+
+// ─── Trust Railway's proxy for correct IP detection ──────────────────────────
+app.set('trust proxy', 1);
 
 // ─── Cookie parser (reads httpOnly cookies) ──────────────────────────────────
 app.use(cookieParser());

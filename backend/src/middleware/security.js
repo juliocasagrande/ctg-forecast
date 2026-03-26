@@ -1,13 +1,6 @@
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 
-// URLs permitidas — lidas do ambiente para não hardcodar domínios
-const FRONTEND_URL  = process.env.FRONTEND_URL  || '';
-const BACKEND_URL   = process.env.BACKEND_URL   || '';
-
-// Monta a lista de origens permitidas no connectSrc (filtra strings vazias)
-const connectSrc = ["'self'", FRONTEND_URL, BACKEND_URL].filter(Boolean);
-
 // ─── Helmet: security headers (CSP, HSTS, X-Frame-Options, etc.) ────────────
 export const securityHeaders = helmet({
   contentSecurityPolicy: {
@@ -15,20 +8,22 @@ export const securityHeaders = helmet({
       defaultSrc: ["'self'"],
       scriptSrc:  ["'self'", "'unsafe-inline'",
                    "https://cdn.jsdelivr.net",
-                   "https://cdnjs.cloudflare.com"],   // Font Awesome usado no monthly-report
+                   "https://cdnjs.cloudflare.com"],
       styleSrc:   ["'self'", "'unsafe-inline'",
                    "https://fonts.googleapis.com",
-                   "https://cdnjs.cloudflare.com"],   // Font Awesome CSS
+                   "https://cdnjs.cloudflare.com"],
       fontSrc:    ["'self'",
                    "https://fonts.gstatic.com",
-                   "https://cdnjs.cloudflare.com"],   // Font Awesome woff2
+                   "https://cdnjs.cloudflare.com"],
       imgSrc:     ["'self'", "data:", "blob:"],
-      connectSrc,                                      // 'self' + frontend + backend
+      connectSrc: ["'self'",
+                   "https://backend-forecast.up.railway.app",
+                   "https://ctg-forecast-forecast.up.railway.app"],
     },
   },
-  crossOriginEmbedderPolicy: false, // permite carregar fontes/scripts externos
+  crossOriginEmbedderPolicy: false,
   hsts: {
-    maxAge: 31536000,       // 1 ano
+    maxAge: 31536000,
     includeSubDomains: true,
     preload: true,
   },
@@ -47,7 +42,6 @@ export function requireHTTPS(req, res, next) {
 
 // ─── Rate limiters ───────────────────────────────────────────────────────────
 
-// Login: máx 10 tentativas por 15 minutos por IP
 export const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -57,7 +51,6 @@ export const loginLimiter = rateLimit({
   keyGenerator: (req) => req.ip,
 });
 
-// Cadastro: máx 5 por hora por IP
 export const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
@@ -66,7 +59,6 @@ export const registerLimiter = rateLimit({
   message: { error: 'Muitas solicitações de cadastro. Tente novamente mais tarde.' },
 });
 
-// API geral: 200 requisições por minuto
 export const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 200,
