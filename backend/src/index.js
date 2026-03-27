@@ -99,7 +99,7 @@ app.get('*', (req, res) => {
   if (!req.path.startsWith('/api')) {
     res.sendFile(path.join(publicPath, 'index.html'));
   }
-});
+}); 
 
 // ─── Global error handler ────────────────────────────────────────────────────
 app.use(globalErrorHandler);
