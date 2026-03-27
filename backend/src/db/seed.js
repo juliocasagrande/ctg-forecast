@@ -59,10 +59,12 @@ export async function seedAdmin() {
     /* ─── Dados do admin ─────────────────────────────────────── */
     const ADMIN_NAME  = process.env.ADMIN_NAME  || 'Administrador';
     const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@ctgbrasil.com').toLowerCase();
-    const ADMIN_PASS  = process.env.ADMIN_PASS;
+    const ADMIN_PASS = process.env.ADMIN_PASS;
 
-    if (!ADMIN_PASS) {
-      throw new Error('ADMIN_PASS não definido nas variáveis de ambiente');
+    if (!ADMIN_PASS && existing.rows.length === 0) {
+      throw new Error(
+        'ADMIN_PASS não definido e usuário admin não existe no banco'
+      );
     }
 
     const initials = ADMIN_NAME
