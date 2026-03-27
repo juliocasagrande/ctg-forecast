@@ -1,4 +1,4 @@
-name: Deploy CTG.Engenharia → Azure
+name: Deploy CTG Engineering → Azure
 
 on:
   push:
@@ -6,9 +6,10 @@ on:
   workflow_dispatch:
 
 env:
-  AZURE_WEBAPP_NAME: ctg-forecast-backend
-  ACR_NAME: ctgforecastacr
-  IMAGE_NAME: ctg-forecast
+  AZURE_WEBAPP_NAME: ctg-engineering
+  ACR_NAME: ${{ secrets.ACR_NAME }}
+  ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
+  IMAGE_NAME: ctg-engineering
 
 jobs:
   build-and-deploy:
@@ -24,21 +25,21 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Login ACR
-        run: az acr login --name ${{ env.ACR_NAME }}
+        run: az acr login --name $ACR_NAME
 
       - name: Build e Push imagem Docker
         run: |
           docker build \
-            --build-arg VITE_API_URL=https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net/api \
             -f backend/Dockerfile \
-            -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }} \
-            -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest \
+            -t $ACR_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }} \
+            -t $ACR_LOGIN_SERVER/$IMAGE_NAME:latest \
             .
-          docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest
+
+          docker push $ACR_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }}
+          docker push $ACR_LOGIN_SERVER/$IMAGE_NAME:latest
 
       - name: Deploy no App Service
         uses: azure/webapps-deploy@v3
         with:
-          app-name: ${{ env.AZURE_WEBAPP_NAME }}
-          images: ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          app-name: $AZURE_WEBAPP_NAME
+          images: $ACR_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }}
