@@ -26,8 +26,8 @@ jobs:
       # Login no ACR (FORMA CORRETA)
       - name: Login ACR via Docker
         run: |
-          echo ${{ secrets.ACR_PASSWORD }} | docker login ${{ secrets.ACR_LOGIN_SERVER }} \
-            -u ${{ secrets.ACR_USERNAME }} \
+          echo "${{ secrets.ACR_PASSWORD }}" | docker login "${{ secrets.ACR_LOGIN_SERVER }}" \
+            --username "${{ secrets.ACR_USERNAME }}" \
             --password-stdin
 
       # Build + Push
