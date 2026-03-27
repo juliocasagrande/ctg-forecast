@@ -18,7 +18,7 @@ export const securityHeaders = helmet({
       defaultSrc: ["'self'"],
       scriptSrc:  ["'self'", "'unsafe-inline'",
                    "https://cdn.jsdelivr.net",
-                   "https://cdnjs.cloudflare.com"],   // Font Awesome no monthly-report
+                   "https://cdnjs.cloudflare.com"],
       styleSrc:   ["'self'", "'unsafe-inline'",
                    "https://fonts.googleapis.com",
                    "https://cdnjs.cloudflare.com"],

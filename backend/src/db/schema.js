@@ -1,5 +1,6 @@
 import pg from 'pg';
 import dotenv from 'dotenv';
+import bcrypt from 'bcrypt';
 dotenv.config();
 
 const { Pool } = pg;
@@ -9,6 +10,39 @@ export const pool = new Pool({
     rejectUnauthorized: process.env.PG_REJECT_UNAUTHORIZED !== 'false', // default: true (secure)
   } : false
 });
+
+async function ensureAdminUser(client) {
+  const email = process.env.ADMIN_EMAIL;
+  const password = process.env.ADMIN_PASS;
+  const name = process.env.ADMIN_NAME || 'Administrador';
+
+  if (!email || !password) {
+    console.warn('⚠️ ADMIN_EMAIL ou ADMIN_PASS não definidos');
+    return;
+  }
+
+  // Verifica se já existe
+  const existing = await client.query(
+    'SELECT id FROM users WHERE email = $1',
+    [email]
+  );
+
+  if (existing.rows.length > 0) {
+    console.log('ℹ️ Admin já existe');
+    return;
+  }
+
+  // Cria hash seguro
+  const hash = await bcrypt.hash(password, 10);
+
+  await client.query(
+    `INSERT INTO users (name, email, password_hash, role, active)
+     VALUES ($1, $2, $3, 'admin', true)`,
+    [name, email, hash]
+  );
+
+  console.log('✅ Usuário admin criado automaticamente');
+}
 
 export async function initDB() {
   const client = await pool.connect();
@@ -268,6 +302,7 @@ export async function initDB() {
     `);
 
     console.log('✅ Migrations applied (with security tables)');
+    await ensureAdminUser(client);
   } finally {
     client.release();
   }
