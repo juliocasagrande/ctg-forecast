@@ -26,10 +26,11 @@ export const securityHeaders = helmet({
                    "https://cdnjs.cloudflare.com"],
       imgSrc:     ["'self'", "data:", "blob:"],
       connectSrc: [
+        "'self'",
         ...allowedOrigins,
         "https://fonts.googleapis.com",
         "https://fonts.gstatic.com"
-      ],
+      ]
     },
   },
   crossOriginEmbedderPolicy: false,

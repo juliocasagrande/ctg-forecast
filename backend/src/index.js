@@ -19,6 +19,7 @@ import reportRouter from './routes/report.js';
 import feedbackRouter from './routes/feedback.js';
 import delegationsRouter from './routes/delegations.js';
 import monthlyReportRouter from './routes/monthly-report.js';
+import { seedAdmin } from './db/seed.js';
 
 dotenv.config();
 
@@ -107,10 +108,14 @@ app.use(globalErrorHandler);
 async function start() {
   try {
     await initDB();
-    app.listen(PORT, () => console.log(`🚀 CTG Forecast v2.1 (security hardened) — porta ${PORT}`));
+
+    await seedAdmin();
+
+    app.listen(PORT, () => console.log(`🚀 App rodando na porta ${PORT}`));
   } catch (err) {
     console.error('Falha ao iniciar:', err);
     process.exit(1);
   }
 }
+
 start();
