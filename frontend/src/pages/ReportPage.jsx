@@ -14,11 +14,8 @@ function fmtBRL(v) {
 }
 
 const SECTION_OPTIONS = [
-  { id:'kpis',       label:'Resumo Executivo',           desc:'KPIs consolidados no topo'          },
-  { id:'table',      label:'Tabela Polo / Usina / Projeto', desc:'Dados financeiros hierárquicos'  },
-  { id:'scurve',     label:'S-Curve por Usina',          desc:'Evolução mensal acumulada'           },
-  { id:'bars',       label:'Gráfico por Projeto',        desc:'Comparativo Budget × Forecast × Realizado' },
-  { id:'notes',      label:'Notas e Avisos',             desc:'Últimas anotações de cada projeto'  },
+  { id:'kpis',   label:'KPIs + S-Curves',              desc:'Hierarquia: Geral → Usina → Projeto' },
+  { id:'table',  label:'Tabela Polo / Usina / Projeto', desc:'Dados financeiros hierárquicos'      },
 ];
 
 const MONTH_LABELS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -28,207 +25,267 @@ function buildHTML(data, config, C) {
   const { projects, polos, kpis, yearStart, yearEnd } = data;
   const { sections, title, subtitle, detailLevel } = config;
   const periodLabel = yearStart===yearEnd ? `${yearStart}` : `${yearStart}–${yearEnd}`;
+  const showProjects = detailLevel === 'full';
 
-  // Lookup helpers
   const getPlantProjects = (plant) => projects.filter(p => (p.plants||[]).includes(plant));
 
-  function kpiCard(label, value, color, bg) {
-    return `<div class="kpi-card" style="border-top:3px solid ${color};background:${bg}">
-      <div class="kpi-label">${label}</div>
-      <div class="kpi-value" style="color:${color}">${fmtBRL(value)}</div>
+  // ── KPI card helpers ──────────────────────────────────────────────────────
+  function kpiCard(label, value, color, bg, size) {
+    const s = size || 'md';
+    const valSize = s==='lg' ? '22px' : s==='sm' ? '13px' : '17px';
+    const lblSize = s==='lg' ? '10px' : s==='sm' ? '8px'  : '9px';
+    const pad     = s==='lg' ? '16px 18px' : s==='sm' ? '8px 10px' : '12px 14px';
+    return `<div class="kpi-card" style="border-top:3px solid ${color};background:${bg};padding:${pad}">
+      <div class="kpi-label" style="font-size:${lblSize}">${label}</div>
+      <div class="kpi-value" style="color:${color};font-size:${valSize}">${fmtBRL(value)}</div>
     </div>`;
   }
 
-  // ── S-Curve chart per plant (inline Chart.js) ──
-  function scurveChart(plant) {
-    const pjs = getPlantProjects(plant);
-    if (!pjs.length) return '';
-    // Build labels and data across ALL years in the range
-    const allLabels = [];
-    const allBudget = [], allForecast = [], allActual = [];
+  function kpiRow(pjs, size) {
+    const sz = size || 'md';
+    const pb = pjs.reduce((s,p)=>s+parseFloat(p.budget||0),0);
+    const pf = pjs.reduce((s,p)=>s+parseFloat(p.forecast||0),0);
+    const pa = pjs.reduce((s,p)=>s+parseFloat(p.actual||0),0);
+    const pp = pjs.reduce((s,p)=>s+parseFloat(p.pool||0),0);
+    return `<div class="kpi-grid">
+      ${kpiCard('Budget',    pb,    C.budget,   '#F0FDF4', sz)}
+      ${kpiCard('Forecast',  pf,    C.forecast, '#F0F9FF', sz)}
+      ${kpiCard('Realizado', pa,    C.actual,   '#EFF6FF', sz)}
+      ${kpiCard('ACT+Fcst',  pa+pf, '#475569',  '#F8FAFC', sz)}
+      ${kpiCard('Pool',      pp,    C.pool,     '#F0F9FF', sz)}
+    </div>`;
+  }
+
+  // ── S-Curve ───────────────────────────────────────────────────────────────
+  function scurve(id, titleTxt, pjs, height) {
+    const h = height || 110;
+    const allLabels = [], allB = [], allF = [], allA = [], allAF = [], allP = [];
     for (let y = yearStart; y <= yearEnd; y++) {
       MONTH_LABELS.forEach((m, mi) => {
-        allLabels.push(`${m}/${y}`);
-        let b = 0, f = 0, a = 0;
-        pjs.forEach(p => {
-          const ch = p.charts?.[y] || {};
-          b += (ch.budget?.[mi] || 0);
-          f += (ch.forecast?.[mi] || 0);
-          a += (ch.actual?.[mi] || 0);
+        allLabels.push(m+'/'+y);
+        let b=0,f=0,a=0,p=0;
+        pjs.forEach(function(pr) {
+          const ch = pr.charts&&pr.charts[y] ? pr.charts[y] : {};
+          b+=(ch.budget&&ch.budget[mi])||0;
+          f+=(ch.forecast&&ch.forecast[mi])||0;
+          a+=(ch.actual&&ch.actual[mi])||0;
+          p+=(ch.pool&&ch.pool[mi])||0;
         });
-        allBudget.push(b);
-        allForecast.push(f);
-        allActual.push(a);
+        allB.push(b); allF.push(f); allA.push(a); allP.push(p);
+        allAF.push(a > 0 ? a : f);
       });
     }
-    // Accumulate
-    const acc = (arr) => arr.reduce((a,v,i)=>[...a, (a[i-1]||0)+v],[]);
-    const id = `chart_${plant.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'')}`;
-    return `
-    <div class="chart-card">
-      <div class="chart-title">S-Curve — ${plant} — ${periodLabel}</div>
-      <canvas id="${id}" height="120"></canvas>
-      <script>
-        (function(){
-          const ctx = document.getElementById('${id}').getContext('2d');
-          new Chart(ctx, {
-            type:'line',
-            data:{
-              labels:${JSON.stringify(allLabels)},
-              datasets:[
-                {label:'Budget (acum.)',    data:${JSON.stringify(acc(allBudget))},   borderColor:'${C.budget}',   backgroundColor:'${C.budget}22',  borderWidth:2,fill:false,pointRadius:2,tension:0.08},
-                {label:'Forecast (acum.)',  data:${JSON.stringify(acc(allForecast))}, borderColor:'${C.forecast}', backgroundColor:'${C.forecast}22',borderWidth:2,fill:false,pointRadius:2,tension:0.08},
-                {label:'Realizado (acum.)', data:${JSON.stringify(acc(allActual))},   borderColor:'${C.actual}',   backgroundColor:'${C.actual}22',  borderWidth:2,fill:true, pointRadius:2,tension:0.08,borderDash:[5,3]},
-              ]
-            },
-            options:{
-              responsive:true,
-              
-              plugins:{legend:{labels:{font:{size:10},boxWidth:12}},tooltip:{callbacks:{label:function(c){return c.dataset.label+': R$ '+c.raw.toLocaleString('pt-BR',{minimumFractionDigits:2})}}}},
-              scales:{y:{ticks:{callback:function(v){return v>=1000000?'R$'+(v/1000000).toFixed(2)+'M':v>=1000?'R$'+(v/1000).toFixed(2)+'k':'R$'+v},font:{size:9}},grid:{color:'#F1F5F9'}},x:{ticks:{font:{size:9},maxRotation:45},grid:{display:false}}}
-            }
-          });
-        })();
-      </script>
-    </div>`;
+    const acc = function(arr){return arr.reduce(function(a,v,i){return a.concat([(a[i-1]||0)+v]);},[]); };
+    const hasData = allB.some(function(v){return v>0;})||allF.some(function(v){return v>0;})||allA.some(function(v){return v>0;});
+    if (!hasData) return '';
+    const safeId = id.replace(/[^a-zA-Z0-9_]/g,'_');
+    const labelsJson = JSON.stringify(allLabels);
+    const bJson  = JSON.stringify(acc(allB));
+    const fJson  = JSON.stringify(acc(allF));
+    const aJson  = JSON.stringify(acc(allA));
+    const afJson = JSON.stringify(acc(allAF));
+    const pJson  = JSON.stringify(acc(allP));
+    const cb = C.budget, cf = C.forecast, ca = C.actual, cp = C.pool||'#0891B2';
+    const hasPool = allP.some(function(v){return v>0;});
+    let ds = '[';
+    ds += '{label:"Budget (acum.)",data:'+bJson+',borderColor:"'+cb+'",backgroundColor:"'+cb+'22",borderWidth:2,fill:false,pointRadius:0,tension:0.08},';
+    ds += '{label:"Forecast (acum.)",data:'+fJson+',borderColor:"'+cf+'",backgroundColor:"'+cf+'22",borderWidth:2,fill:false,pointRadius:0,tension:0.08},';
+    ds += '{label:"Realizado (acum.)",data:'+aJson+',borderColor:"'+ca+'",backgroundColor:"'+ca+'22",borderWidth:2,fill:true,pointRadius:0,tension:0.08,borderDash:[5,3]},';
+    ds += '{label:"ACT+Forecast",data:'+afJson+',borderColor:"#475569",backgroundColor:"#47556922",borderWidth:2,fill:false,pointRadius:0,tension:0.08,borderDash:[3,2]},';
+    if (hasPool) { ds += '{label:"Pool (acum.)",data:'+pJson+',borderColor:"'+cp+'",backgroundColor:"'+cp+'22",borderWidth:1.5,fill:false,pointRadius:0,tension:0.08,borderDash:[6,4]},'; }
+    ds += ']';
+    return '<div class="chart-card">'      +'<div class="chart-title">'+titleTxt+'</div>'      +'<canvas id="'+safeId+'" height="'+h+'"></canvas>'      +'<script>(function(){'      +'var ctx=document.getElementById("'+safeId+'").getContext("2d");'      +'new Chart(ctx,{type:"line",data:{labels:'+labelsJson+',datasets:'+ds+'},'      +'options:{responsive:true,plugins:{legend:{labels:{font:{size:9},boxWidth:10}},tooltip:{callbacks:{label:function(c){return c.dataset.label+": R$ "+c.raw.toLocaleString("pt-BR",{minimumFractionDigits:2});}}}},'      +'scales:{y:{ticks:{callback:function(v){return v>=1000000?"R$"+(v/1000000).toFixed(1)+"M":v>=1000?"R$"+(v/1000).toFixed(0)+"k":"R$"+v;},font:{size:8}},grid:{color:"#F1F5F9"}},x:{ticks:{font:{size:8},maxRotation:45},grid:{display:false}}}}});'      +'})();<\/script>'      +'</div>';
   }
 
-  // ── Bar chart per project ──
-  function barChart(plant) {
-    const pjs = getPlantProjects(plant);
-    if (!pjs.length) return '';
-    const id = `bar_${plant.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'')}`;
-    return `
-    <div class="chart-card">
-      <div class="chart-title">Por Projeto — ${plant}</div>
-      <canvas id="${id}" height="100"></canvas>
-      <script>
-        (function(){
-          const ctx = document.getElementById('${id}').getContext('2d');
-          new Chart(ctx, {
-            type:'bar',
-            data:{
-              labels:${JSON.stringify(pjs.map(p=>p.code))},
-              datasets:[
-                {label:'Budget',    data:${JSON.stringify(pjs.map(p=>parseFloat(p.budget||0)))},   backgroundColor:'${C.budget}BB'},
-                {label:'Forecast',  data:${JSON.stringify(pjs.map(p=>parseFloat(p.forecast||0)))}, backgroundColor:'${C.forecast}BB'},
-                {label:'Realizado', data:${JSON.stringify(pjs.map(p=>parseFloat(p.actual||0)))},   backgroundColor:'${C.actual}BB'},
-              ]
-            },
-            options:{
-              responsive:true,
-              
-              plugins:{legend:{labels:{font:{size:10},boxWidth:12}},tooltip:{callbacks:{label:function(c){return c.dataset.label+': R$ '+c.raw.toLocaleString('pt-BR',{minimumFractionDigits:2})}}}},
-              scales:{y:{ticks:{callback:function(v){return v>=1000000?'R$'+(v/1000000).toFixed(2)+'M':v>=1000?'R$'+(v/1000).toFixed(2)+'k':'R$'+v},font:{size:9}},grid:{color:'#F1F5F9'}},x:{ticks:{font:{size:9}},grid:{display:false}}}
-            }
-          });
-        })();
-      </script>
-    </div>`;
-  }
+  // ── Bar chart per plant ───────────────────────────────────────────────────
 
-  // ── Table rows ──
+  // ── Table rows ────────────────────────────────────────────────────────────
   function tableBody() {
     let html = '';
     let totBudget=0, totPool=0, totActual=0, totForecast=0, totActFcst=0;
-
-    polos.forEach(polo => {
-      const poloProjs = polo.plants.flatMap(pl => getPlantProjects(pl));
+    polos.forEach(function(polo) {
+      const poloProjs = polo.plants.reduce(function(a,pl){return a.concat(getPlantProjects(pl));},[]);
       if (!poloProjs.length) return;
-      const pb  = poloProjs.reduce((s,p)=>s+parseFloat(p.budget||0),0);
-      const pp  = poloProjs.reduce((s,p)=>s+parseFloat(p.pool||0),0);
-      const pa  = poloProjs.reduce((s,p)=>s+parseFloat(p.actual||0),0);
-      const pf  = poloProjs.reduce((s,p)=>s+parseFloat(p.forecast||0),0);
-      const paf = poloProjs.reduce((s,p)=>s+(p.act_forecast||0),0);
-      const pvar = pb - paf;
+      const pb  = poloProjs.reduce(function(s,p){return s+parseFloat(p.budget||0);},0);
+      const pp  = poloProjs.reduce(function(s,p){return s+parseFloat(p.pool||0);},0);
+      const pa  = poloProjs.reduce(function(s,p){return s+parseFloat(p.actual||0);},0);
+      const pf  = poloProjs.reduce(function(s,p){return s+parseFloat(p.forecast||0);},0);
+      const paf = poloProjs.reduce(function(s,p){return s+(p.act_forecast||0);},0);
       totBudget+=pb; totPool+=pp; totActual+=pa; totForecast+=pf; totActFcst+=paf;
-
-      html += `<tr class="row-polo">
-        <td colspan="2"><span class="expand-btn" onclick="toggleGroup('polo_${polo.id}')">▼</span> ${polo.name}</td>
-        <td class="num c-budget">${fmtBRL(pb)}</td>
-        <td class="num" style="color:#EF4444">${fmtBRL(pp)}</td>
-        <td class="num c-actual">${fmtBRL(pa)}</td>
-        <td class="num c-forecast">${fmtBRL(pf)}</td>
-        <td class="num">${fmtBRL(paf)}</td>
-        <td class="num ${pvar<0?'neg':''}">${fmtBRL(pvar)}</td>
-      </tr>`;
-
-      polo.plants.forEach(plant => {
+      html+='<tr class="row-polo"><td colspan="2"><span class="expand-btn" onclick="toggleGroup(\'polo_'+polo.id+'\')">▼</span> '+polo.name+'</td>'
+        +'<td class="num c-budget">'+fmtBRL(pb)+'</td><td class="num" style="color:#EF4444">'+fmtBRL(pp)+'</td>'
+        +'<td class="num c-actual">'+fmtBRL(pa)+'</td><td class="num c-forecast">'+fmtBRL(pf)+'</td>'
+        +'<td class="num">'+fmtBRL(paf)+'</td><td class="num '+(pb-paf<0?'neg':'')+'">'+fmtBRL(pb-paf)+'</td></tr>';
+      polo.plants.forEach(function(plant) {
         const plantProjs = getPlantProjects(plant);
         if (!plantProjs.length) return;
-        const ub  = plantProjs.reduce((s,p)=>s+parseFloat(p.budget||0),0);
-        const up  = plantProjs.reduce((s,p)=>s+parseFloat(p.pool||0),0);
-        const ua  = plantProjs.reduce((s,p)=>s+parseFloat(p.actual||0),0);
-        const uf  = plantProjs.reduce((s,p)=>s+parseFloat(p.forecast||0),0);
-        const uaf = plantProjs.reduce((s,p)=>s+(p.act_forecast||0),0);
-        const uvar = ub - uaf;
-
-        html += `<tr class="row-plant group-polo_${polo.id}">
-          <td></td>
-          <td><span class="expand-btn" onclick="toggleGroup('plant_${plant.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'')}')">▼</span> ${plant}</td>
-          <td class="num c-budget">${fmtBRL(ub)}</td>
-          <td class="num" style="color:#EF4444">${fmtBRL(up)}</td>
-          <td class="num c-actual">${fmtBRL(ua)}</td>
-          <td class="num c-forecast">${fmtBRL(uf)}</td>
-          <td class="num">${fmtBRL(uaf)}</td>
-          <td class="num ${uvar<0?'neg':''}">${fmtBRL(uvar)}</td>
-        </tr>`;
-
-        if (detailLevel === 'full') {
-          plantProjs.forEach(p => {
-            const pKey = `plant_${plant.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'')}`;
-            const projB  = parseFloat(p.budget||0);
-            const projP  = parseFloat(p.pool||0);
-            const projAF = p.act_forecast || 0;
-            const projVar = projB - projAF;
-            html += `<tr class="row-proj group-${pKey}">
-              <td class="proj-code">${p.code}</td>
-              <td>${p.name}</td>
-              <td class="num c-budget">${fmtBRL(p.budget)}</td>
-              <td class="num" style="color:#EF4444">${fmtBRL(projP)}</td>
-              <td class="num c-actual">${fmtBRL(p.actual)}</td>
-              <td class="num c-forecast">${fmtBRL(p.forecast)}</td>
-              <td class="num">${fmtBRL(projAF)}</td>
-              <td class="num ${projVar<0?'neg':''}">${fmtBRL(projVar)}</td>
-            </tr>`;
+        const ub  = plantProjs.reduce(function(s,p){return s+parseFloat(p.budget||0);},0);
+        const up  = plantProjs.reduce(function(s,p){return s+parseFloat(p.pool||0);},0);
+        const ua  = plantProjs.reduce(function(s,p){return s+parseFloat(p.actual||0);},0);
+        const uf  = plantProjs.reduce(function(s,p){return s+parseFloat(p.forecast||0);},0);
+        const uaf = plantProjs.reduce(function(s,p){return s+(p.act_forecast||0);},0);
+        const plantKey='plant_'+plant.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
+        html+='<tr class="row-plant group-polo_'+polo.id+'"><td></td>'
+          +'<td><span class="expand-btn" onclick="toggleGroup(\''+plantKey+'\')">▼</span> '+plant+'</td>'
+          +'<td class="num c-budget">'+fmtBRL(ub)+'</td><td class="num" style="color:#EF4444">'+fmtBRL(up)+'</td>'
+          +'<td class="num c-actual">'+fmtBRL(ua)+'</td><td class="num c-forecast">'+fmtBRL(uf)+'</td>'
+          +'<td class="num">'+fmtBRL(uaf)+'</td><td class="num '+(ub-uaf<0?'neg':'')+'">'+fmtBRL(ub-uaf)+'</td></tr>';
+        if (showProjects) {
+          plantProjs.forEach(function(p) {
+            const projAF=p.act_forecast||0, projB=parseFloat(p.budget||0);
+            html+='<tr class="row-proj group-'+plantKey+'"><td class="proj-code">'+p.code+'</td><td>'+p.name+'</td>'
+              +'<td class="num c-budget">'+fmtBRL(p.budget)+'</td><td class="num" style="color:#EF4444">'+fmtBRL(p.pool)+'</td>'
+              +'<td class="num c-actual">'+fmtBRL(p.actual)+'</td><td class="num c-forecast">'+fmtBRL(p.forecast)+'</td>'
+              +'<td class="num">'+fmtBRL(projAF)+'</td><td class="num '+(projB-projAF<0?'neg':'')+'">'+fmtBRL(projB-projAF)+'</td></tr>';
           });
         }
       });
     });
-
-    const totVar = totBudget - totActFcst;
-    html += `<tr class="row-total">
-      <td colspan="2">Total Geral</td>
-      <td class="num">${fmtBRL(totBudget)}</td>
-      <td class="num">${fmtBRL(totPool)}</td>
-      <td class="num">${fmtBRL(totActual)}</td>
-      <td class="num">${fmtBRL(totForecast)}</td>
-      <td class="num">${fmtBRL(totActFcst)}</td>
-      <td class="num ${totVar<0?'neg':''}">${fmtBRL(totVar)}</td>
-    </tr>`;
+    const totVar=totBudget-totActFcst;
+    html+='<tr class="row-total"><td colspan="2">Total Geral</td>'
+      +'<td class="num">'+fmtBRL(totBudget)+'</td><td class="num">'+fmtBRL(totPool)+'</td>'
+      +'<td class="num">'+fmtBRL(totActual)+'</td><td class="num">'+fmtBRL(totForecast)+'</td>'
+      +'<td class="num">'+fmtBRL(totActFcst)+'</td><td class="num '+(totVar<0?'neg':'')+'">'+fmtBRL(totVar)+'</td></tr>';
     return html;
   }
 
-  // ── Notes section ──
-  function notesSection() {
-    const withNotes = projects.filter(p => p.notes?.length > 0);
-    if (!withNotes.length) return '<p style="color:#94A3B8;font-size:0.85rem">Nenhuma nota registrada.</p>';
-    return withNotes.map(p => `
-      <div class="notes-project">
-        <div class="notes-proj-header">
-          <span class="notes-code">${p.code}</span>
-          <span class="notes-name">${p.name}</span>
-          <span class="notes-plant">${(p.plants||[]).join(', ')}</span>
-        </div>
-        ${p.notes.map(n=>`
-          <div class="note-item">
-            <div class="note-meta">${n.user_name||'—'} · ${n.note_date ? new Date(n.note_date).toLocaleDateString('pt-BR') : ''}</div>
-            <div class="note-content">${n.content}</div>
-          </div>`).join('')}
-      </div>`).join('');
+  // ── Notes ─────────────────────────────────────────────────────────────────
+  // Renderiza notas de um projeto individual (logo abaixo da S-Curve do projeto)
+  function projectNotes(p) {
+    if (!p.notes || !p.notes.length) return '';
+    const items = p.notes.map(function(n){
+      return '<div class="note-item">'
+        +'<div class="note-meta">'+(n.user_name||'—')+' · '+(n.note_date?new Date(n.note_date).toLocaleDateString('pt-BR'):'')+' </div>'
+        +'<div class="note-content">'+n.content+'</div>'
+        +'</div>';
+    }).join('');
+    return '<div class="proj-notes-block">'
+      +'<div class="proj-notes-label">Notas e Avisos</div>'
+      +items
+      +'</div>';
   }
 
-  // ── Assemble full HTML ──
+
+  // ── KPIs + S-Curves hierárquico ───────────────────────────────────────────
+  // Estrutura:
+  //   KPIs Gerais (lg)
+  //   Tabela Geral
+  //   S-Curve Geral
+  //   [por usina]:
+  //     KPIs da Usina (md)
+  //     S-Curve da Usina
+  //     [por projeto, se showProjects]:
+  //       KPIs do Projeto (sm)
+  //       S-Curve do Projeto
+  function hierSection() {
+    let html = '';
+
+    // ── 1. KPIs Gerais ──
+    html += '<div class="section hier-block">'
+      +'<div class="section-title">KPIs Gerais</div>'
+      +'<div class="kpi-grid">'
+      +kpiCard('Budget',    kpis.budget,   C.budget,   '#F0FDF4','lg')
+      +kpiCard('Forecast',  kpis.forecast, C.forecast, '#F0F9FF','lg')
+      +kpiCard('Realizado', kpis.actual,   C.actual,   '#EFF6FF','lg')
+      +kpiCard('ACT+Fcst',  kpis.actual+kpis.forecast,'#475569','#F8FAFC','lg')
+      +kpiCard('Pool',      kpis.pool,     C.pool,     '#F0F9FF','lg')
+      +'</div></div>';
+
+    // ── 2. Tabela Geral ──
+    if (sections.includes('table')) {
+      html += '<div class="section">'
+        +'<div class="section-title">Tabela Geral — Polo / Usina'+(showProjects?' / Projeto':'')+'</div>'
+        +'<table class="data-table"><thead><tr>'
+        +'<th style="width:70px">Código</th><th>Empresa / Usina / Projeto</th>'
+        +'<th>Budget</th><th style="color:#EF4444">Pool</th><th>Realizado</th>'
+        +'<th>Forecast</th><th>ACT+Fcst</th><th>Variação</th>'
+        +'</tr></thead><tbody>'+tableBody()+'</tbody></table></div>';
+    }
+
+    // ── 3. S-Curve Geral ──
+    html += '<div class="section hier-block">'
+      +'<div class="section-title">S-Curve Geral</div>'
+      +'<div class="charts-grid charts-grid-1">'
+      +scurve('scurve_global','S-Curve Consolidada — Todos os Projetos — '+periodLabel,projects,110)
+      +'</div></div>';
+
+    // ── 4. Por usina ──
+    // Estrutura de cada usina:
+    //   [hier-block hier-plant]
+    //     Cabeçalho da usina (nome + polo)
+    //     KPIs da usina
+    //     S-Curve da usina
+    //     [se showProjects] Para cada projeto:
+    //       Separador com nome do projeto
+    //       KPIs do projeto (sm)
+    //       S-Curve do projeto
+    //       Notas do projeto (se houver)
+    //   [/hier-block]
+    polos.forEach(function(polo) {
+      polo.plants.forEach(function(plant) {
+        const pjs = getPlantProjects(plant);
+        if (!pjs.length) return;
+
+        // Abre o bloco da usina
+        html += '<div class="section hier-block hier-plant">';
+
+        // Cabeçalho da usina
+        html += '<div class="hier-plant-header">'
+          +'<span class="hier-plant-name">'+plant+'</span>'
+          +'<span class="hier-polo-badge">'+polo.name+'</span>'
+          +'</div>';
+
+        // KPIs da usina
+        html += '<div class="section-label-sm">KPIs — '+plant+'</div>'
+          +kpiRow(pjs,'md');
+
+        // S-Curve da usina
+        html += '<div class="section-label-sm" style="margin-top:16px">S-Curve — '+plant+'</div>'
+          +'<div class="charts-grid charts-grid-1">'
+          +scurve('scurve_'+plant,'S-Curve — '+plant+' — '+periodLabel,pjs,100)
+          +'</div>';
+
+        // Por projeto (apenas se showProjects)
+        if (showProjects) {
+          pjs.forEach(function(p) {
+            const charts = p.charts || {};
+            const keys = Object.keys(charts);
+            let hasData = false;
+            for (let i=0; i<keys.length; i++){
+              const yr = charts[keys[i]];
+              const all = [].concat(yr.budget||[], yr.forecast||[], yr.actual||[]);
+              if (all.some(function(v){return v>0;})) { hasData=true; break; }
+            }
+            if (!hasData) return;
+
+            // Separador do projeto
+            html += '<div class="proj-separator">'
+              +'<span class="proj-sep-code">'+p.code+'</span>'
+              +'<span class="proj-sep-name">'+p.name+'</span>'
+              +'</div>';
+
+            // KPIs do projeto
+            html += '<div class="section-label-sm" style="font-size:9px;margin-top:8px">KPIs — '+p.code+'</div>'
+              +kpiRow([p],'sm');
+
+            // S-Curve do projeto
+            html += '<div class="section-label-sm" style="font-size:9px;margin-top:14px">S-Curve — '+p.code+' — '+p.name+'</div>'
+              +'<div class="charts-grid charts-grid-1">'
+              +scurve('scurve_proj_'+p.id,p.code+' — '+p.name,[p],90)
+              +'</div>';
+
+            // Notas do projeto logo abaixo da S-Curve
+            html += projectNotes(p);
+          });
+        }
+
+        // Fecha o bloco da usina
+        html += '</div>';
+      });
+    });
+
+    return html;
+  }
   const now = new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'});
 
   return `<!DOCTYPE html>
@@ -241,26 +298,31 @@ function buildHTML(data, config, C) {
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Segoe UI',Arial,sans-serif;background:#F8FAFC;color:#1E293B;font-size:13px}
-/* Header */
-.report-header{background:linear-gradient(135deg,#001F5B 0%,#0070B8 100%);color:#fff;padding:32px 40px 24px;position:relative;overflow:hidden}
-.report-header::after{content:'';position:absolute;bottom:-30px;right:-30px;width:200px;height:200px;border-radius:50%;background:rgba(255,255,255,0.04)}
+.report-header{background:linear-gradient(135deg,#001F5B 0%,#0070B8 100%);color:#fff;padding:32px 40px 24px}
 .report-logo{font-size:22px;font-weight:800;letter-spacing:-0.5px;margin-bottom:4px}
 .report-logo span{color:#00AEEF}
 .report-title{font-size:26px;font-weight:700;margin-bottom:4px;margin-top:12px}
 .report-subtitle{font-size:13px;opacity:0.75;margin-bottom:16px}
-.report-meta{font-size:11px;opacity:0.55;border-top:1px solid rgba(255,255,255,0.15);padding-top:12px;margin-top:12px;display:flex;gap:24px}
-/* Content */
+.report-meta{font-size:11px;opacity:0.55;border-top:1px solid rgba(255,255,255,0.15);padding-top:12px;margin-top:12px;display:flex;gap:24px;flex-wrap:wrap}
 .content{padding:28px 40px;max-width:1100px;margin:0 auto}
-/* KPIs */
-.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:28px}
-.kpi-card{background:#fff;border-radius:10px;padding:16px 18px;box-shadow:0 1px 4px rgba(0,0,0,0.07)}
-.kpi-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748B;margin-bottom:6px}
-.kpi-value{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums}
-/* Section headers */
-.section{margin-bottom:32px}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px}
+.kpi-card{background:#fff;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,0.07)}
+.kpi-label{font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748B;margin-bottom:5px}
+.kpi-value{font-weight:800;font-variant-numeric:tabular-nums}
+.section{margin-bottom:20px}
 .section-title{font-size:15px;font-weight:700;color:#001F5B;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #E2E8F0;display:flex;align-items:center;gap:8px}
 .section-title::before{content:'';display:inline-block;width:4px;height:16px;background:#0070B8;border-radius:2px}
-/* Table */
+.section-label-sm{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#64748B;margin-bottom:8px}
+.hier-block{background:#fff;border-radius:12px;padding:18px 20px;box-shadow:0 1px 6px rgba(0,0,0,0.06);margin-bottom:14px}
+.hier-plant{border-left:4px solid #0070B8}
+.hier-plant-chart{border-left:4px solid #0070B830;padding-left:20px}
+.hier-plant-header{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #E2E8F0}
+
+.hier-plant-name{font-size:15px;font-weight:800;color:#001F5B}
+.hier-polo-badge{margin-left:auto;font-size:10px;background:#EBF3FC;color:#0070B8;padding:3px 10px;border-radius:20px;font-weight:600}
+.proj-separator{display:flex;align-items:center;gap:10px;margin:18px 0 10px;padding:10px 0;border-top:1px solid #E2E8F0}
+.proj-sep-code{font-size:11px;font-weight:700;background:#EFF6FF;color:#1E40AF;padding:2px 8px;border-radius:20px;flex-shrink:0}
+.proj-sep-name{font-size:13px;font-weight:600;color:#1E293B}
 .data-table{width:100%;border-collapse:collapse;font-size:12px;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.07)}
 .data-table th{background:#001F5B;color:#fff;padding:9px 12px;text-align:right;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;font-weight:700}
 .data-table th:first-child,.data-table th:nth-child(2){text-align:left}
@@ -270,7 +332,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#F8FAFC;color:#1E293B;fo
 .data-table .c-forecast{color:${C.forecast};font-weight:600}
 .data-table .c-actual{color:${C.actual};font-weight:600}
 .data-table .neg{color:#DC2626!important;font-weight:600}
-.row-polo{background:#0F2D6B;color:#fff;cursor:pointer}
+.row-polo{background:#0F2D6B;cursor:pointer}
 .row-polo td{color:#fff;font-weight:700;font-size:13px}
 .row-polo .c-budget{color:#86EFAC!important}
 .row-polo .c-forecast{color:#BAE6FD!important}
@@ -283,11 +345,10 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#F8FAFC;color:#1E293B;fo
 .row-total td{color:#065F46;padding:10px 12px;border-top:2px solid #6EE7B7}
 .proj-code{color:#0070B8;font-weight:700;font-size:11px}
 .expand-btn{cursor:pointer;font-size:10px;margin-right:6px;opacity:0.6;user-select:none;display:inline-block;width:12px}
-/* Charts */
-.charts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:18px;margin-bottom:8px}
-.chart-card{background:#fff;border-radius:10px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,0.07)}
-.chart-title{font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:12px}
-/* Notes */
+.charts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:16px;margin-bottom:8px}
+.charts-grid-1{grid-template-columns:1fr!important}
+.chart-card{background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,0.06)}
+.chart-title{font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px}
 .notes-project{background:#fff;border-radius:10px;padding:16px 18px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.07)}
 .notes-proj-header{display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #F1F5F9}
 .notes-code{background:#EFF6FF;color:#1E40AF;font-weight:700;font-size:11px;padding:2px 8px;border-radius:20px}
@@ -296,101 +357,41 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#F8FAFC;color:#1E293B;fo
 .note-item{margin-bottom:10px;padding:10px 12px;background:#F8FAFC;border-radius:6px;border-left:3px solid #CBD5E1}
 .note-meta{font-size:10px;color:#94A3B8;margin-bottom:4px}
 .note-content{font-size:12px;color:#334155;line-height:1.5}
-/* Print */
+.proj-notes-block{margin-top:12px;padding-top:12px;border-top:1px solid #E2E8F0}
+.proj-notes-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#64748B;margin-bottom:8px}
 @media print{
   body{background:#fff}
   .content{padding:16px 20px}
+  .hier-block{break-inside:avoid}
   .chart-card{break-inside:avoid}
-  .section{break-inside:avoid}
-  .report-header{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:linear-gradient(135deg,#001F5B 0%,#0070B8 100%)!important}
-  .row-polo{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .row-plant{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .row-total{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .report-header,.row-polo,.row-plant,.row-total,.hier-plant{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 </style>
 </head>
 <body>
-
 <div class="report-header">
   <div class="report-logo">CTG<span>.</span>Forecast</div>
   <div class="report-title">${title || 'Relatório de Forecast'}</div>
   ${subtitle ? `<div class="report-subtitle">${subtitle}</div>` : ''}
   <div class="report-meta">
-    <span>📅 Período: ${periodLabel}</span>
-    <span>🏭 ${projects.length} projetos</span>
-    <span>📄 Gerado em ${now}</span>
+    <span>Período: ${periodLabel}</span>
+    <span>${projects.length} projetos</span>
+    <span>${showProjects ? 'Polo + Usina + Projeto' : 'Polo + Usina'}</span>
+    <span>Gerado em ${now}</span>
   </div>
 </div>
-
 <div class="content">
-
-${sections.includes('kpis') ? `
-<div class="section">
-  <div class="section-title">Resumo Executivo</div>
-  <div class="kpi-grid">
-    ${kpiCard('Budget',   kpis.budget,   C.budget,   '#F0FDF4')}
-    ${kpiCard('Forecast', kpis.forecast, C.forecast, '#F0F9FF')}
-    ${kpiCard('Realizado',kpis.actual,   C.actual,   '#EFF6FF')}
-    ${kpiCard('ACT + Forecast', kpis.actual+kpis.forecast, '#475569','#F8FAFC')}
-    ${kpiCard('Pool',     kpis.pool,     C.pool,     '#F0F9FF')}
-  </div>
-</div>` : ''}
-
-${sections.includes('table') ? `
-<div class="section">
-  <div class="section-title">Visão por Polo / Usina / Projeto</div>
-  <table class="data-table">
-    <thead>
-      <tr>
-        <th style="width:70px">Código</th>
-        <th>Empresa / Usina / Projeto</th>
-        <th>Budget</th><th style="color:#EF4444">Pool</th><th>Realizado</th><th>Forecast</th>
-        <th>ACT + Fcst</th><th>Variação</th>
-      </tr>
-    </thead>
-    <tbody>${tableBody()}</tbody>
-  </table>
-</div>` : ''}
-
-${sections.includes('scurve') ? `
-<div class="section">
-  <div class="section-title">S-Curve por Usina — Evolução Mensal</div>
-  <div class="charts-grid">
-    ${polos.flatMap(polo => polo.plants.filter(pl => getPlantProjects(pl).length > 0).map(pl => scurveChart(pl))).join('')}
-  </div>
-</div>` : ''}
-
-${sections.includes('bars') ? `
-<div class="section">
-  <div class="section-title">Comparativo por Projeto</div>
-  <div class="charts-grid">
-    ${polos.flatMap(polo => polo.plants.filter(pl => getPlantProjects(pl).length > 0).map(pl => barChart(pl))).join('')}
-  </div>
-</div>` : ''}
-
-${sections.includes('notes') ? `
-<div class="section">
-  <div class="section-title">Notas e Avisos</div>
-  ${notesSection()}
-</div>` : ''}
+${sections.includes('kpis') ? hierSection() : ''}
 
 </div>
-
 <script>
-function toggleGroup(cls) {
-  document.querySelectorAll('.group-'+cls).forEach(function(row){
-    row.style.display = row.style.display==='none' ? '' : 'none';
-  });
-}
-// Default: hide project rows (polo+usina expanded, projects collapsed)
-${detailLevel !== 'full' ? `
-document.addEventListener('DOMContentLoaded',function(){
-  document.querySelectorAll('.row-proj').forEach(function(r){r.style.display='none';});
-});` : ''}
+function toggleGroup(cls){document.querySelectorAll('.group-'+cls).forEach(function(r){r.style.display=r.style.display==='none'?'':'none';});}
+${!showProjects ? "document.addEventListener('DOMContentLoaded',function(){document.querySelectorAll('.row-proj').forEach(function(r){r.style.display='none';});});" : ''}
 <\/script>
 </body>
 </html>`;
 }
+
 
 // ── React Page ────────────────────────────────────────────────────────────────
 export default function ReportPage() {
@@ -494,7 +495,7 @@ export default function ReportPage() {
 
         {/* Period */}
         <div className="card" style={{ padding:'16px 18px' }}>
-          <div className="card-title" style={{ marginBottom:12 }}>📅 Período</div>
+          <div className="card-title" style={{ marginBottom:12 }}>Período</div>
           <div style={{ display:'flex', gap:10, alignItems:'center' }}>
             <label style={{ flex:1 }}>
               <div style={{ fontSize:'0.7rem', fontWeight:700, textTransform:'uppercase',
@@ -550,10 +551,10 @@ export default function ReportPage() {
 
         {/* Detail level */}
         <div className="card" style={{ padding:'16px 18px' }}>
-          <div className="card-title" style={{ marginBottom:12 }}>🔍 Nível de Detalhe (Tabela)</div>
+          <div className="card-title" style={{ marginBottom:12 }}>Nível de Detalhe</div>
           {[
-            { id:'polo-usina', label:'Polo + Usina', desc:'Projetos colapsados por padrão' },
-            { id:'full',       label:'Polo + Usina + Projeto', desc:'Todos os projetos expandidos' },
+            { id:'polo-usina', label:'Polo + Usina', desc:'KPIs gerais + KPIs por usina' },
+            { id:'full',       label:'Polo + Usina + Projeto', desc:'S-Curves e KPIs por projeto' },
           ].map(opt => {
             const sel = config.detailLevel === opt.id;
             return (

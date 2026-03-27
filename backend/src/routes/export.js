@@ -175,19 +175,24 @@ function buildResumo(wb, project, entries, allYears, monthlyYears, d, activeType
   });
 
   // ── Annual summary block ──────────────────────────────────────────────────
-  // Shows ALL years (including consolidated) as annual totals
+  // Shows ALL years from minYear up to 2031 as annual totals (empty if sem dados)
+  const SUMMARY_END_YEAR = 2031;
+  const summaryYears = [];
+  const baseYear = allYears.length ? allYears[0] : new Date().getFullYear();
+  for (let y = baseYear; y <= Math.max(SUMMARY_END_YEAR, ...allYears); y++) summaryYears.push(y);
+
   const summaryStartRow = 6 + typesToShow.length + 2;
   ws.getCell(summaryStartRow, 2).value = `Referente ao Forecast Janeiro à Dezembro/${monthlyYears[0] || allYears[0]}`;
   ws.getCell(summaryStartRow, 2).font  = { size: 9, italic: true, color: { argb: '666666' }, name: 'Calibri' };
 
   // Annual columns starting at col L (12)
   const annualStartCol = 12;
-  allYears.forEach((y, i) => {
+  summaryYears.forEach((y, i) => {
     const hc = ws.getCell(summaryStartRow, annualStartCol + i);
     hc.value = y;
     styleHeader(hc, LIGHT, NAVY, true, 9);
   });
-  const afterYears = annualStartCol + allYears.length;
+  const afterYears = annualStartCol + summaryYears.length;
   ws.getCell(summaryStartRow, afterYears).value = 'SI';
   styleHeader(ws.getCell(summaryStartRow, afterYears), LIGHT, NAVY, true, 9);
   ws.getCell(summaryStartRow, afterYears + 1).value = 'Realizado Total';
@@ -202,12 +207,13 @@ function buildResumo(wb, project, entries, allYears, monthlyYears, d, activeType
     styleHeader(ws.getCell(rowN, annualStartCol - 1), bg, NAVY, true, 9);
     ws.getCell(rowN, annualStartCol - 1).alignment.horizontal = 'left';
 
-    allYears.forEach((year, yi) => {
+    summaryYears.forEach((year, yi) => {
       let total = 0;
       catsToSum.forEach(cat => {
         for (let m = 1; m <= 12; m++) total += getVal(d, cat, type, year, m);
       });
-      ws.getCell(rowN, annualStartCol + yi).value = total;
+      // Mostra zero como null para não poluir colunas vazias
+      ws.getCell(rowN, annualStartCol + yi).value = total > 0 ? total : null;
       styleValue(ws.getCell(rowN, annualStartCol + yi), bg);
     });
     if (type === 'Forecast') {
@@ -369,7 +375,7 @@ router.get('/project/:projectId', requireProjectAccess, async (req, res) => {
 
     // Role-based type whitelist
     const ALLOWED_TYPES = {
-      engenheiro: ['Forecast','Actual'],
+      engenheiro: ['Budget','Forecast','Actual'],   // engenheiros veem Budget no Excel
       gestor:     ['Budget','Forecast','Actual','Meta','Pool'],
       planejador: ['Budget','Forecast','Actual','Meta','Pool'],
       admin:      ['Budget','Forecast','Actual','Meta','Pool'],
@@ -454,7 +460,7 @@ router.get('/planejador', async (req, res) => {
 
   // Role-based type whitelist
   const ALLOWED = {
-    engenheiro: ['Forecast','Actual'],
+    engenheiro: ['Budget','Forecast','Actual'],   // engenheiros veem Budget no Excel geral
     gestor:     ['Budget','Forecast','Actual','Meta','Pool'],
     planejador: ['Budget','Forecast','Actual','Meta','Pool'],
     admin:      ['Budget','Forecast','Actual','Meta','Pool'],
