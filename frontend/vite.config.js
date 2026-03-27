@@ -1,3 +1,4 @@
+// build: 2026-03-27
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
