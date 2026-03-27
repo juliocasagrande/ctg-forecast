@@ -25,37 +25,93 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (_, file, cb) => {
+    // [DEBUG] Log do arquivo recebido pelo multer
+    console.log(`[monthly-report][multer] fileFilter — nome: "${file.originalname}", mimetype: "${file.mimetype}"`);
     const ok =
       file.mimetype.includes('spreadsheet') ||
       file.originalname.toLowerCase().endsWith('.xlsx') ||
       file.originalname.toLowerCase().endsWith('.xls');
+    if (!ok) {
+      console.warn(`[monthly-report][multer] REJEITADO — mimetype/extensão inválida`);
+    }
     ok ? cb(null, true) : cb(new Error('Apenas arquivos Excel são aceitos.'));
   },
 });
+
+// ── Erro do multer: captura antes do handler principal ───────────────────────
+// Sem isso, erros do multer (ex: fileSize excedido) retornam text/plain
+function multerErrorHandler(err, req, res, next) {
+  if (err) {
+    console.error('[monthly-report][multer] Erro no upload:', err.message, err.code || '');
+    return res.status(400).json({ error: `Erro no upload: ${err.message}` });
+  }
+  next();
+}
 
 // ── POST /api/monthly-report/generate ────────────────────────────────────────
 router.post(
   '/generate',
   requireMonthlyReportAccess,
+  // [DEBUG] Middleware intermediário: loga antes do multer processar
+  (req, res, next) => {
+    console.log(`[monthly-report] Requisição recebida — Content-Type: "${req.headers['content-type']?.substring(0, 80)}"`);
+    console.log(`[monthly-report] Content-Length: ${req.headers['content-length']} bytes`);
+    console.log(`[monthly-report] NODE_ENV: ${process.env.NODE_ENV}`);
+    next();
+  },
   upload.single('excel'),
+  multerErrorHandler,
   async (req, res) => {
+    // [DEBUG] Log após multer processar
+    console.log(`[monthly-report] Multer OK — req.file existe: ${!!req.file}`);
+    if (req.file) {
+      console.log(`[monthly-report] Arquivo: "${req.file.originalname}" | size: ${req.file.size} bytes | mimetype: "${req.file.mimetype}"`);
+    } else {
+      console.warn('[monthly-report] AVISO: req.file é undefined após multer.single("excel")');
+    }
+
     if (!req.file) {
       return res.status(400).json({ error: 'Nenhum arquivo Excel enviado.' });
     }
 
-
     const { mes, ano } = req.body;
+    console.log(`[monthly-report] Body: mes="${mes}", ano="${ano}"`);
+
     if (!mes || !ano) {
       return res.status(400).json({ error: 'Mês e ano são obrigatórios.' });
     }
 
-
     try {
-      const excelJSModule = await import('exceljs');
-      const ExcelJS = excelJSModule.default ?? excelJSModule;
+      // [DEBUG] Testa se exceljs pode ser importado
+      console.log('[monthly-report] Tentando import("exceljs")...');
+      let ExcelJS;
+      try {
+        const excelJSModule = await import('exceljs');
+        ExcelJS = excelJSModule.default ?? excelJSModule;
+        console.log('[monthly-report] exceljs importado com sucesso. Versão:', ExcelJS.VERSION ?? '(sem versão)');
+      } catch (importErr) {
+        console.error('[monthly-report] FALHA ao importar exceljs:', importErr.message);
+        console.error('[monthly-report] Stack:', importErr.stack);
+        return res.status(500).json({ error: `Dependência exceljs não encontrada: ${importErr.message}` });
+      }
+
+      console.log('[monthly-report] Criando Workbook e lendo stream...');
       const wb = new ExcelJS.Workbook();
       const stream = Readable.from(req.file.buffer);
-      await wb.xlsx.read(stream);
+
+      try {
+        await wb.xlsx.read(stream);
+        console.log('[monthly-report] Workbook lido com sucesso.');
+        console.log(`[monthly-report] Planilhas encontradas: ${wb.worksheets.length}`);
+        if (wb.worksheets.length > 0) {
+          const ws0 = wb.worksheets[0];
+          console.log(`[monthly-report] Planilha[0]: "${ws0.name}" | rowCount: ${ws0.rowCount} | actualRowCount: ${ws0.actualRowCount}`);
+        }
+      } catch (readErr) {
+        console.error('[monthly-report] FALHA ao ler o workbook:', readErr.message);
+        console.error('[monthly-report] Stack:', readErr.stack);
+        return res.status(500).json({ error: `Erro ao ler a planilha Excel: ${readErr.message}` });
+      }
 
       const ws = wb.worksheets[0];
       if (!ws) return res.status(400).json({ error: 'Planilha vazia ou sem dados.' });
@@ -65,6 +121,10 @@ router.post(
       ws.getRow(1).eachCell({ includeEmpty: true }, (cell, colNum) => {
         header[colNum] = normCol(cell.text ?? '');
       });
+
+      // [DEBUG] Log das colunas encontradas no cabeçalho
+      const headerValues = Object.values(header).filter(Boolean);
+      console.log(`[monthly-report] Colunas encontradas no cabeçalho (${headerValues.length}):`, headerValues.join(' | '));
 
       function normCol(name) {
         if (!name) return '';
@@ -102,6 +162,13 @@ router.post(
         if (found) colIdx[key] = parseInt(found[0]);
       }
 
+      // [DEBUG] Log do mapeamento de colunas
+      const mappedKeys = Object.keys(colIdx);
+      const unmappedKeys = Object.keys(COLMAP).filter(k => !colIdx[k]);
+      console.log(`[monthly-report] Colunas mapeadas (${mappedKeys.length}):`, mappedKeys.join(', '));
+      if (unmappedKeys.length) {
+        console.warn(`[monthly-report] Colunas NÃO encontradas na planilha (${unmappedKeys.length}):`, unmappedKeys.join(', '));
+      }
 
       // ── Helpers ──────────────────────────────────────────────────────────
       function cellVal(row, key) {
@@ -182,7 +249,7 @@ router.post(
           const dataLines = lines.filter(l => !/^\|[-:\s|]+\|$/.test(l));
           if (!dataLines.length) return block;
           const rows = dataLines.map((line, i) => {
-            const cells = line.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+            const cells = line.replace(/^\||\\|$/g, '').split('|').map(c => c.trim());
             const tag = i === 0 ? 'th' : 'td';
             return `<tr>${cells.map(c => `<${tag}>${c}</${tag}>`).join('')}</tr>`;
           });
@@ -276,9 +343,18 @@ router.post(
         });
       });
 
+      // [DEBUG] Log das linhas lidas
+      console.log(`[monthly-report] Linhas de dados lidas: ${rows.length}`);
+      if (rows.length > 0) {
+        console.log('[monthly-report] Primeira linha (amostra):', JSON.stringify({
+          UHE: rows[0].UHE, AREA: rows[0].AREA, PP: rows[0].PP,
+        }));
+      }
 
       if (!rows.length)
         return res.status(400).json({ error: 'Nenhum dado encontrado na planilha.' });
+
+      console.log('[monthly-report] Montando HTML do relatório...');
 
       const prox12 = rows
         .filter(r => r.VENC && r.VENC < lim12m)
@@ -387,6 +463,7 @@ router.post(
         sections.push('</section>');
       }
 
+      console.log(`[monthly-report] HTML montado — seções: ${sections.length}, UHEs: ${uheKeys.length}`);
 
       const html = buildHTML({
         mesAno: `${mes} de ${ano}`,
@@ -395,13 +472,22 @@ router.post(
         sections: sections.join('\n'),
       });
 
+      console.log(`[monthly-report] HTML final: ${html.length} caracteres. Enviando resposta...`);
+
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Content-Disposition',
         `attachment; filename="Relatorio_Acompanhamento_${mes}_${ano}.html"`);
       res.send(html);
 
+      console.log('[monthly-report] Resposta enviada com sucesso ✅');
+
     } catch (err) {
-      console.error('[monthly-report] Erro:', err);
+      // [DEBUG] Log completo do erro inesperado
+      console.error('[monthly-report] ❌ ERRO INESPERADO no handler:');
+      console.error('  message:', err.message);
+      console.error('  name:', err.name);
+      console.error('  code:', err.code);
+      console.error('  stack:', err.stack);
       const msg = process.env.NODE_ENV === 'production' ? 'Erro ao processar planilha.' : err.message;
       res.status(500).json({ error: msg });
     }
