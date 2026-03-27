@@ -7,24 +7,20 @@ RUN npm ci
 COPY frontend/ .
 RUN npm run build
 
-# DEBUG (opcional, mas útil)
-RUN ls -la dist
-
 FROM node:22-alpine AS runtime
 WORKDIR /app
 
 COPY backend/package*.json ./
 RUN npm ci --omit=dev
 
-COPY backend/src ./src
+COPY backend/ ./
 
-# GARANTE criação da pasta
+# Frontend build vai para public
 RUN mkdir -p public
-
 COPY --from=frontend-build /frontend/dist ./public
 
-ENV PORT=8080
 ENV NODE_ENV=production
+ENV PORT=8080
 
 EXPOSE 8080
 

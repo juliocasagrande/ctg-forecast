@@ -302,7 +302,11 @@ export async function initDB() {
     `);
 
     console.log('✅ Migrations applied (with security tables)');
-    await ensureAdminUser(client);
+    try {
+      await ensureAdminUser(client);
+    } catch (err) {
+      console.warn('⚠️ Falha ao garantir usuário admin (startup continua):', err.message);
+    }
   } finally {
     client.release();
   }
