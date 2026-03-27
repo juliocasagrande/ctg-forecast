@@ -90,11 +90,15 @@ app.use('/api/monthly-report', monthlyReportRouter);
 
 app.get('/api/health', (_, res) => res.json({ status: 'ok', version: '2.1.0-security' }));
 
-// ─── Serve frontend (build do React em /public) ───────────────────────────────
-const publicPath = path.join(__dirname, '../../public');
+// ─── Serve frontend ───────────────────────────────
+const publicPath = path.join(__dirname, '../public');
+
 app.use(express.static(publicPath));
+
 app.get('*', (req, res) => {
-  if (!req.path.startsWith('/api')) res.sendFile(path.join(publicPath, 'index.html'));
+  if (!req.path.startsWith('/api')) {
+    res.sendFile(path.join(publicPath, 'index.html'));
+  }
 });
 
 // ─── Global error handler ────────────────────────────────────────────────────
