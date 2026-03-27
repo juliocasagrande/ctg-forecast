@@ -27,11 +27,14 @@ const PORT = process.env.PORT || 3001;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const IS_PROD = process.env.NODE_ENV === 'production';
 
-// ─── Security: HTTPS redirect (must be first) ───────────────────────────────
-app.use(requireHTTPS);
+// ─── Trust Railway's proxy (deve ser o PRIMEIRO app.set) ─────────────────────
+// Necessário para que req.ip, req.protocol e x-forwarded-proto funcionem corretamente
+app.set('trust proxy', 1);
 
-// ─── CORS — deve vir antes do Helmet e de qualquer auth ─────────────────────
-// Em produção, aceita apenas origens listadas em FRONTEND_URL (separadas por vírgula)
+// ─── CORS — deve ser o PRIMEIRO middleware, antes de qualquer outra coisa ────
+// Isso garante que TODOS os responses (inclusive erros 4xx/5xx e redirects)
+// incluam os headers Access-Control-Allow-Origin corretos.
+// Sem isso, o browser bloqueia a resposta antes de o JS poder ler o corpo do erro.
 const allowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(',').map(u => u.trim())
   : [];
@@ -51,17 +54,19 @@ const corsOptions = {
 app.options('*', cors(corsOptions));
 app.use(cors(corsOptions));
 
-// ─── Compressão gzip — reduz respostas grandes (ex: HTML do relatório mensal)
-app.use(compression());
+// ─── Security: HTTPS redirect ────────────────────────────────────────────────
+// Vem DEPOIS do CORS para que o redirect 301 também tenha o header CORS,
+// evitando que o browser bloqueie o redirect antes de seguí-lo.
+app.use(requireHTTPS);
 
 // ─── Security: Helmet headers (CSP, HSTS, X-Frame-Options, etc.) ────────────
 app.use(securityHeaders);
 
-// ─── Trust Railway's proxy para detecção correta de IP ───────────────────────
-app.set('trust proxy', 1);
-
 // ─── Cookie parser ───────────────────────────────────────────────────────────
 app.use(cookieParser());
+
+// ─── Compressão gzip ─────────────────────────────────────────────────────────
+app.use(compression());
 
 // ─── Body parser ─────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));

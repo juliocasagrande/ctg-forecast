@@ -83,14 +83,21 @@ export const apiLimiter = rateLimit({
 export function globalErrorHandler(err, req, res, _next) {
   console.error(`[ERROR] ${req.method} ${req.path}:`, err);
 
-  // Replica CORS — necessário porque middlewares de erro perdem os headers
-  // que foram setados pelo cors() em caso de exceção durante o processamento
+  // Replica CORS — middlewares de erro perdem os headers setados pelo cors().
+  // Valida origem contra a whitelist antes de ecoar (segurança).
   const origin = req.headers.origin;
-  if (origin) {
+  const _allowed = (process.env.FRONTEND_URL || '')
+    .split(',').map(u => u.trim()).filter(Boolean);
+  const _originOk = !origin || _allowed.length === 0 || _allowed.includes(origin);
+  if (origin && _originOk) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Vary', 'Origin');
   }
+
+  // Força Content-Type JSON — sem isso o Railway CDN pode devolver text/plain
+  // e o browser bloqueia a leitura do corpo de erro via CORS.
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
   if (err.status) {
     return res.status(err.status).json({ error: err.message });
