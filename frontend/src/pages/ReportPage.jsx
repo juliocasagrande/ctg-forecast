@@ -88,11 +88,11 @@ function buildHTML(data, config, C) {
     const cb = C.budget, cf = C.forecast, ca = C.actual, cp = C.pool||'#0891B2';
     const hasPool = allP.some(function(v){return v>0;});
     let ds = '[';
-    ds += '{label:"Budget (acum.)",data:'+bJson+',borderColor:"'+cb+'",backgroundColor:"'+cb+'22",borderWidth:2,fill:false,pointRadius:0,tension:0.08},';
-    ds += '{label:"Forecast (acum.)",data:'+fJson+',borderColor:"'+cf+'",backgroundColor:"'+cf+'22",borderWidth:2,fill:false,pointRadius:0,tension:0.08},';
-    ds += '{label:"Realizado (acum.)",data:'+aJson+',borderColor:"'+ca+'",backgroundColor:"'+ca+'22",borderWidth:2,fill:true,pointRadius:0,tension:0.08,borderDash:[5,3]},';
-    ds += '{label:"ACT+Forecast",data:'+afJson+',borderColor:"#475569",backgroundColor:"#47556922",borderWidth:2,fill:false,pointRadius:0,tension:0.08,borderDash:[3,2]},';
-    if (hasPool) { ds += '{label:"Pool (acum.)",data:'+pJson+',borderColor:"'+cp+'",backgroundColor:"'+cp+'22",borderWidth:1.5,fill:false,pointRadius:0,tension:0.08,borderDash:[6,4]},'; }
+    ds += '{label:"Budget (acum.)",data:'+bJson+',borderColor:"'+cb+'",backgroundColor:"'+cb+'22",borderWidth:2,fill:false,pointRadius:0,tension:0.25},';
+    ds += '{label:"Forecast (acum.)",data:'+fJson+',borderColor:"'+cf+'",backgroundColor:"'+cf+'22",borderWidth:2,fill:false,pointRadius:0,tension:0.25},';
+    ds += '{label:"Realizado (acum.)",data:'+aJson+',borderColor:"'+ca+'",backgroundColor:"'+ca+'22",borderWidth:2,fill:true,pointRadius:0,tension:0.25,borderDash:[5,3]},';
+    ds += '{label:"ACT+Forecast",data:'+afJson+',borderColor:"#475569",backgroundColor:"#47556922",borderWidth:2,fill:false,pointRadius:0,tension:0.25,borderDash:[3,2]},';
+    if (hasPool) { ds += '{label:"Pool (acum.)",data:'+pJson+',borderColor:"'+cp+'",backgroundColor:"'+cp+'22",borderWidth:1.5,fill:false,pointRadius:0,tension:0.25,borderDash:[6,4]},'; }
     ds += ']';
     return '<div class="chart-card">'      +'<div class="chart-title">'+titleTxt+'</div>'      +'<canvas id="'+safeId+'" height="'+h+'"></canvas>'      +'<script>(function(){'      +'var ctx=document.getElementById("'+safeId+'").getContext("2d");'      +'new Chart(ctx,{type:"line",data:{labels:'+labelsJson+',datasets:'+ds+'},'      +'options:{responsive:true,plugins:{legend:{labels:{font:{size:9},boxWidth:10}},tooltip:{callbacks:{label:function(c){return c.dataset.label+": R$ "+c.raw.toLocaleString("pt-BR",{minimumFractionDigits:2});}}}},'      +'scales:{y:{ticks:{callback:function(v){return v>=1000000?"R$"+(v/1000000).toFixed(1)+"M":v>=1000?"R$"+(v/1000).toFixed(0)+"k":"R$"+v;},font:{size:8}},grid:{color:"#F1F5F9"}},x:{ticks:{font:{size:8},maxRotation:45},grid:{display:false}}}}});'      +'})();<\/script>'      +'</div>';
   }
@@ -132,7 +132,10 @@ function buildHTML(data, config, C) {
           +'<td class="num">'+fmtBRL(uaf)+'</td><td class="num '+(ub-uaf<0?'neg':'')+'">'+fmtBRL(ub-uaf)+'</td></tr>';
         if (showProjects) {
           plantProjs.forEach(function(p) {
-            const projAF=p.act_forecast||0, projB=parseFloat(p.budget||0);
+            // Pular projetos sem dados no período
+            const projB=parseFloat(p.budget||0), projF=parseFloat(p.forecast||0), projA=parseFloat(p.actual||0);
+            if (projB===0 && projF===0 && projA===0) return;
+            const projAF=p.act_forecast||0;
             html+='<tr class="row-proj group-'+plantKey+'"><td class="proj-code">'+p.code+'</td><td>'+p.name+'</td>'
               +'<td class="num c-budget">'+fmtBRL(p.budget)+'</td><td class="num" style="color:#EF4444">'+fmtBRL(p.pool)+'</td>'
               +'<td class="num c-actual">'+fmtBRL(p.actual)+'</td><td class="num c-forecast">'+fmtBRL(p.forecast)+'</td>'
@@ -226,6 +229,12 @@ function buildHTML(data, config, C) {
         const pjs = getPlantProjects(plant);
         if (!pjs.length) return;
 
+        // Verificar se a usina tem algum dado no período
+        const plantHasData = pjs.some(function(p){
+          return parseFloat(p.budget||0)>0 || parseFloat(p.forecast||0)>0 || parseFloat(p.actual||0)>0;
+        });
+        if (!plantHasData) return;
+
         // Abre o bloco da usina
         html += '<div class="section hier-block hier-plant">';
 
@@ -236,13 +245,11 @@ function buildHTML(data, config, C) {
           +'</div>';
 
         // KPIs da usina
-        html += '<div class="section-label-sm">KPIs — '+plant+'</div>'
-          +kpiRow(pjs,'md');
+        html += kpiRow(pjs,'md');
 
         // S-Curve da usina
-        html += '<div class="section-label-sm" style="margin-top:16px">S-Curve — '+plant+'</div>'
-          +'<div class="charts-grid charts-grid-1">'
-          +scurve('scurve_'+plant,'S-Curve — '+plant+' — '+periodLabel,pjs,100)
+        html += '<div class="charts-grid charts-grid-1" style="margin-top:16px">'
+          +scurve('scurve_'+plant,'S-Curve — '+plant+' — '+periodLabel,pjs,80)
           +'</div>';
 
         // Por projeto (apenas se showProjects)
@@ -269,9 +276,8 @@ function buildHTML(data, config, C) {
               +kpiRow([p],'sm');
 
             // S-Curve do projeto
-            html += '<div class="section-label-sm" style="font-size:9px;margin-top:14px">S-Curve — '+p.code+' — '+p.name+'</div>'
-              +'<div class="charts-grid charts-grid-1">'
-              +scurve('scurve_proj_'+p.id,p.code+' — '+p.name,[p],90)
+            html += '<div class="charts-grid charts-grid-1" style="margin-top:12px">'
+              +scurve('scurve_proj_'+p.id,p.code+' — '+p.name,[p],65)
               +'</div>';
 
             // Notas do projeto logo abaixo da S-Curve
@@ -320,7 +326,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#F8FAFC;color:#1E293B;fo
 
 .hier-plant-name{font-size:15px;font-weight:800;color:#001F5B}
 .hier-polo-badge{margin-left:auto;font-size:10px;background:#EBF3FC;color:#0070B8;padding:3px 10px;border-radius:20px;font-weight:600}
-.proj-separator{display:flex;align-items:center;gap:10px;margin:18px 0 10px;padding:10px 0;border-top:1px solid #E2E8F0}
+.proj-separator{display:flex;align-items:center;gap:10px;margin:18px 0 10px;padding:8px 12px;border-top:1px solid #E2E8F0;background:#F1F5F9;border-radius:6px}
 .proj-sep-code{font-size:11px;font-weight:700;background:#EFF6FF;color:#1E40AF;padding:2px 8px;border-radius:20px;flex-shrink:0}
 .proj-sep-name{font-size:13px;font-weight:600;color:#1E293B}
 .data-table{width:100%;border-collapse:collapse;font-size:12px;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.07)}

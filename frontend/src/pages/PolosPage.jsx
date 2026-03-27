@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../utils/api.js';
 import { useRole } from '../context/AuthContext.jsx';
 import { useTypeColors } from '../context/SettingsContext.jsx';
+import { EngineerBadges } from '../components/ui/EngineerBadge.jsx';
 
 
 // ── Polo structure ────────────────────────────────────────────────────────────
@@ -85,6 +86,7 @@ function PoloRow({ polo, projects, open, onToggle, C }) {
         <span style={{ marginRight:8, fontSize:'0.72rem', opacity:0.7 }}>{open?'▼':'▶'}</span>
         {polo.name}
       </td>
+      <td style={{ background:'transparent', borderLeft:'1px solid rgba(255,255,255,0.05)' }} />
       {COLS.map(col => {
         const v = sumRows(rows, col.key);
         return (
@@ -110,6 +112,7 @@ function PlantRow({ name, projects, open, onToggle, C }) {
         <span style={{ marginRight:7, fontSize:'0.68rem', color:'var(--ctg-blue)' }}>{open?'▼':'▶'}</span>
         {name}
       </td>
+      <td style={{ padding:'8px 10px', background:'#EBF3FC', borderBottom:'1px solid #D4E4F4' }} />
       {COLS.map(col => {
         const v = sumRows(projects, col.key);
         const color = col.key==='variacao'
@@ -148,6 +151,9 @@ function ProjectRow({ project, navigate, isEngenheiro, C }) {
         <span style={{ color:'var(--text-secondary)' }}>{project.name}</span>
         {canNavigate && <span style={{ marginLeft:5, fontSize:'0.65rem', color:'var(--ctg-blue)', opacity:0.5 }}>↗</span>}
       </td>
+      <td style={{ padding:'6px 10px', borderBottom:'1px solid var(--border)', background:'inherit' }}>
+        <EngineerBadges engineers={project.engineers} engineerInitials={project.engineer_initials} size={22} />
+      </td>
       {COLS.map(col => (
         <TCell key={col.key} value={getVal(project, col.key)} colorKey={col.colorKey} C={C} bold={false} />
       ))}
@@ -163,7 +169,8 @@ export default function PolosPage({ period: externalPeriod }) {
   const period = externalPeriod || { start: currentYear, end: currentYear };
   const [loading,   setLoading]   = useState(true);
   // All polos/plants start collapsed (item 2)
-  const [poloOpen,  setPoloOpen]  = useState({});
+  // Inicia com todos os polos abertos e plantas fechadas
+  const [poloOpen,  setPoloOpen]  = useState(() => Object.fromEntries(POLOS.map(p => [p.id, true])));
   const [plantOpen, setPlantOpen] = useState({});
   const navigate = useNavigate();
   const { role, isEngenheiro } = useRole();
@@ -213,6 +220,16 @@ export default function PolosPage({ period: externalPeriod }) {
                     minWidth:260, whiteSpace:'nowrap', borderBottom:'2px solid rgba(255,255,255,0.15)',
                   }}>
                     Empresa / Usina / Projeto
+                  </th>
+                  <th style={{
+                    background:'var(--ctg-navy)', color:'#fff', padding:'10px 10px',
+                    textAlign:'center', fontWeight:700, fontSize:'0.72rem', textTransform:'uppercase',
+                    letterSpacing:'0.06em', whiteSpace:'nowrap',
+                    borderLeft:'1px solid rgba(255,255,255,0.12)',
+                    borderBottom:'2px solid rgba(255,255,255,0.15)',
+                    minWidth:60,
+                  }}>
+                    Eng.
                   </th>
                   {COLS.map(col => (
                     <th key={col.key} style={{
@@ -266,6 +283,7 @@ export default function PolosPage({ period: externalPeriod }) {
                   }}>
                     Total Geral
                   </td>
+                  <td style={{ background:'#D1FAE5', borderTop:'2px solid #6EE7B7' }} />
                   {COLS.map(col => {
                     const v = sumRows(allProjects, col.key);
                     const color = col.key==='variacao'
