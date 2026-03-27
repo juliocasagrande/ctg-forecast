@@ -1,22 +1,46 @@
 // backend/src/db/seed.js
-// Cria o primeiro usuário administrador
-// Uso: node src/db/seed.js
+// Seed seguro de usuário administrador (idempotente)
 
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
+
 dotenv.config();
 
 const { Pool } = pg;
+
+/* ──────────────────────────────────────────────────────────────
+ * GUARDA DE SEGURANÇA
+ * Não roda seed sem DATABASE_URL
+ * ────────────────────────────────────────────────────────────── */
+if (!process.env.DATABASE_URL) {
+  console.error('❌ DATABASE_URL não definida');
+  process.exit(1);
+}
+
+/* ──────────────────────────────────────────────────────────────
+ * POOL DE CONEXÃO (AZURE COMPATÍVEL)
+ * ────────────────────────────────────────────────────────────── */
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: process.env.NODE_ENV === 'production'
+    ? { rejectUnauthorized: false }
+    : false,
+  max: 5,
+  idleTimeoutMillis: 10_000,
+  connectionTimeoutMillis: 10_000
 });
 
-async function seed() {
+/* ──────────────────────────────────────────────────────────────
+ * SEED
+ * ────────────────────────────────────────────────────────────── */
+export async function seedAdmin() {
   const client = await pool.connect();
+
   try {
-    // Garante que as tabelas existem
+    console.log('🌱 Iniciando seed do usuário admin...');
+
+    /* ─── Garantir tabela ───────────────────────────────────── */
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -32,36 +56,83 @@ async function seed() {
       );
     `);
 
+    /* ─── Dados do admin ─────────────────────────────────────── */
     const ADMIN_NAME  = process.env.ADMIN_NAME  || 'Administrador';
-    const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@ctgbrasil.com';
-    const ADMIN_PASS  = process.env.ADMIN_PASS  || 'ctg@2026';
+    const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@ctgbrasil.com').toLowerCase();
+    const ADMIN_PASS  = process.env.ADMIN_PASS;
 
-    const hash = await bcrypt.hash(ADMIN_PASS, 10);
-    const initials = ADMIN_NAME.split(' ').slice(0,2).map(w=>w[0].toUpperCase()).join('');
+    if (!ADMIN_PASS) {
+      throw new Error('ADMIN_PASS não definido nas variáveis de ambiente');
+    }
 
-    const r = await client.query(`
-      INSERT INTO users (name, email, password_hash, role, avatar_initials)
-      VALUES ($1, $2, $3, 'admin', $4)
-      ON CONFLICT (email) DO UPDATE SET
-        password_hash = EXCLUDED.password_hash,
-        name = EXCLUDED.name,
-        role = 'admin',
-        updated_at = NOW()
-      RETURNING id, name, email, role
-    `, [ADMIN_NAME, ADMIN_EMAIL.toLowerCase(), hash, initials]);
+    const initials = ADMIN_NAME
+      .split(' ')
+      .slice(0, 2)
+      .map(w => w[0]?.toUpperCase())
+      .join('');
 
-    console.log('\n✅ Usuário admin criado/atualizado:');
+    /* ─── Verifica se já existe ──────────────────────────────── */
+    const existing = await client.query(
+      `SELECT id FROM users WHERE email = $1`,
+      [ADMIN_EMAIL]
+    );
+
+    let hash;
+
+    if (existing.rows.length === 0) {
+      // ✅ Novo admin
+      hash = await bcrypt.hash(ADMIN_PASS, 12);
+    } else {
+      // ✅ Admin já existe → NÃO troca senha automaticamente em prod
+      if (process.env.FORCE_ADMIN_RESET === 'true') {
+        hash = await bcrypt.hash(ADMIN_PASS, 12);
+      } else {
+        hash = null;
+      }
+    }
+
+    /* ─── Insert / Update ────────────────────────────────────── */
+    const query = hash
+      ? `
+        INSERT INTO users (name, email, password_hash, role, avatar_initials)
+        VALUES ($1, $2, $3, 'admin', $4)
+        ON CONFLICT (email) DO UPDATE SET
+          name = EXCLUDED.name,
+          password_hash = EXCLUDED.password_hash,
+          role = 'admin',
+          updated_at = NOW()
+        RETURNING id, name, email, role;
+      `
+      : `
+        INSERT INTO users (name, email, password_hash, role, avatar_initials)
+        VALUES ($1, $2, password_hash, 'admin', $4)
+        ON CONFLICT (email) DO UPDATE SET
+          name = EXCLUDED.name,
+          role = 'admin',
+          updated_at = NOW()
+        RETURNING id, name, email, role;
+      `;
+
+    const params = hash
+      ? [ADMIN_NAME, ADMIN_EMAIL, hash, initials]
+      : [ADMIN_NAME, ADMIN_EMAIL, initials];
+
+    const r = await client.query(query, params);
+
+    console.log('✅ Usuário admin pronto:');
     console.log(`   Nome:  ${r.rows[0].name}`);
     console.log(`   Email: ${r.rows[0].email}`);
-    console.log(`   Senha: ${ADMIN_PASS}`);
-    console.log('\n⚠️  Troque a senha após o primeiro login!\n');
+    console.log(`   Role:  ${r.rows[0].role}`);
+
+    if (hash && process.env.NODE_ENV !== 'production') {
+      console.log(`   Senha: ${ADMIN_PASS}`);
+      console.log('⚠️  Troque a senha após o primeiro login!');
+    }
+
   } catch (err) {
-    console.error('Erro no seed:', err.message);
-    process.exit(1);
+    console.error('❌ Erro no seedAdmin:', err.message);
+    throw err;
   } finally {
     client.release();
-    await pool.end();
   }
 }
-
-seed();

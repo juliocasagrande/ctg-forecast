@@ -1,7 +1,9 @@
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 
-// ─── Origens permitidas ───────────────────────────────────────────────
+/* ──────────────────────────────────────────────────────────────
+ * ORIGENS PERMITIDAS (CSP + ERROR HANDLER)
+ * ────────────────────────────────────────────────────────────── */
 const FRONTEND_URL = process.env.FRONTEND_URL || '';
 const BACKEND_URL  = process.env.BACKEND_URL  || '';
 
@@ -10,9 +12,12 @@ const allowedOrigins = [
   ...BACKEND_URL.split(',').map(u => u.trim()).filter(Boolean),
 ];
 
-// ─── Helmet (CSP corrigido) ───────────────────────────────────────────
+/* ──────────────────────────────────────────────────────────────
+ * HELMET (CONFIGURAÇÃO COMPATÍVEL COM AZURE)
+ * ────────────────────────────────────────────────────────────── */
 export const securityHeaders = helmet({
   contentSecurityPolicy: {
+    useDefaults: true,
     directives: {
       defaultSrc: ["'self'"],
 
@@ -44,56 +49,68 @@ export const securityHeaders = helmet({
 
       connectSrc: [
         "'self'",
-        ...allowedOrigins,
-        "https://fonts.googleapis.com",
-        "https://fonts.gstatic.com"
+        ...allowedOrigins
       ]
-    },
+    }
   },
 
+  // Azure App Service quebra com COEP ativo
   crossOriginEmbedderPolicy: false,
 
   hsts: {
     maxAge: 31536000,
     includeSubDomains: true,
-    preload: true,
-  },
+    preload: true
+  }
 });
 
-// ─── HTTPS redirect ───────────────────────────────────────────────────
+/* ──────────────────────────────────────────────────────────────
+ * HTTPS REDIRECT (SAFE PARA PROXY REVERSO)
+ * ────────────────────────────────────────────────────────────── */
 export function requireHTTPS(req, res, next) {
-  if (
-    process.env.NODE_ENV === 'production' &&
-    req.headers['x-forwarded-proto'] !== 'https'
-  ) {
-    return res.redirect(301, `https://${req.headers.host}${req.url}`);
+  const isProd = process.env.NODE_ENV === 'production';
+
+  // Azure envia x-forwarded-proto
+  if (isProd && req.headers['x-forwarded-proto'] !== 'https') {
+    return res.redirect(
+      301,
+      `https://${req.headers.host}${req.originalUrl}`
+    );
   }
+
   next();
 }
 
-// ─── Função segura de IP (corrige Azure proxy bug) ─────────────────────
+/* ──────────────────────────────────────────────────────────────
+ * IP SEGURO (CORRIGE BUG AZURE / PROXY)
+ * ────────────────────────────────────────────────────────────── */
 function getClientIp(req) {
   const forwarded = req.headers['x-forwarded-for'];
+
   if (forwarded) {
     return forwarded.split(',')[0].trim();
   }
 
-  if (req.ip) {
-    return req.ip.replace(/^.*:/, ''); // remove ::ffff:
+  if (req.socket?.remoteAddress) {
+    return req.socket.remoteAddress.replace(/^.*:/, '');
   }
 
   return 'unknown';
 }
 
-// ─── Rate limiters (CORRIGIDO) ────────────────────────────────────────
+/* ──────────────────────────────────────────────────────────────
+ * RATE LIMITERS (AZURE-SAFE)
+ * ────────────────────────────────────────────────────────────── */
 
 export const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Muitas tentativas de login. Tente novamente em 15 minutos.' },
-  keyGenerator: (req) => getClientIp(req),
+  keyGenerator: getClientIp,
+  message: {
+    error: 'Muitas tentativas de login. Tente novamente em 15 minutos.'
+  }
 });
 
 export const registerLimiter = rateLimit({
@@ -101,8 +118,10 @@ export const registerLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Muitas solicitações de cadastro. Tente novamente mais tarde.' },
-  keyGenerator: (req) => getClientIp(req),
+  keyGenerator: getClientIp,
+  message: {
+    error: 'Muitas solicitações de cadastro. Tente novamente mais tarde.'
+  }
 });
 
 export const apiLimiter = rateLimit({
@@ -110,32 +129,33 @@ export const apiLimiter = rateLimit({
   max: 200,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Limite de requisições excedido. Aguarde um momento.' },
-  keyGenerator: (req) => getClientIp(req),
+  keyGenerator: getClientIp,
+  message: {
+    error: 'Limite de requisições excedido. Aguarde um momento.'
+  }
 });
 
-// ─── Global error handler ─────────────────────────────────────────────
+/* ──────────────────────────────────────────────────────────────
+ * GLOBAL ERROR HANDLER (NUNCA QUEBRA CORS)
+ * ────────────────────────────────────────────────────────────── */
 export function globalErrorHandler(err, req, res, _next) {
-  console.error(`[ERROR] ${req.method} ${req.path}:`, err);
+  console.error(`[ERROR] ${req.method} ${req.originalUrl}`, err);
 
   const origin = req.headers.origin;
-  const allowed = (process.env.FRONTEND_URL || '')
+  const allowed = FRONTEND_URL
     .split(',')
     .map(u => u.trim())
     .filter(Boolean);
 
-  const originOk =
-    !origin ||
-    allowed.length === 0 ||
-    allowed.includes(origin);
+  if (!res.headersSent) {
+    if (!origin || allowed.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin || '*');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Vary', 'Origin');
+    }
 
-  if (origin && originOk) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Vary', 'Origin');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
   }
-
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
   if (err.status) {
     return res.status(err.status).json({ error: err.message });
@@ -145,5 +165,8 @@ export function globalErrorHandler(err, req, res, _next) {
     return res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 
-  res.status(500).json({ error: err.message, stack: err.stack });
+  res.status(500).json({
+    error: err.message,
+    stack: err.stack
+  });
 }

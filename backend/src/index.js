@@ -5,8 +5,17 @@ import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+
 import { initDB } from './db/schema.js';
-import { securityHeaders, requireHTTPS, apiLimiter, globalErrorHandler } from './middleware/security.js';
+import { seedAdmin } from './db/seed.js';
+
+import {
+  securityHeaders,
+  requireHTTPS,
+  apiLimiter,
+  globalErrorHandler
+} from './middleware/security.js';
+
 import authRouter from './routes/auth.js';
 import usersRouter from './routes/users.js';
 import projectsRouter from './routes/projects.js';
@@ -19,7 +28,6 @@ import reportRouter from './routes/report.js';
 import feedbackRouter from './routes/feedback.js';
 import delegationsRouter from './routes/delegations.js';
 import monthlyReportRouter from './routes/monthly-report.js';
-import { seedAdmin } from './db/seed.js';
 
 dotenv.config();
 
@@ -28,54 +36,65 @@ const PORT = process.env.PORT || 3001;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const IS_PROD = process.env.NODE_ENV === 'production';
 
-// ─── Trust Railway's proxy (deve ser o PRIMEIRO app.set) ─────────────────────
-// Necessário para que req.ip, req.protocol e x-forwarded-proto funcionem corretamente
+/* ──────────────────────────────────────────────────────────────
+ * TRUST PROXY (OBRIGATÓRIO EM AZURE / RAILWAY)
+ * ────────────────────────────────────────────────────────────── */
 app.set('trust proxy', 1);
 
-// ─── CORS — deve ser o PRIMEIRO middleware, antes de qualquer outra coisa ────
-// Isso garante que TODOS os responses (inclusive erros 4xx/5xx e redirects)
-// incluam os headers Access-Control-Allow-Origin corretos.
-// Sem isso, o browser bloqueia a resposta antes de o JS poder ler o corpo do erro.
+/* ──────────────────────────────────────────────────────────────
+ * CORS (PRIMEIRO MIDDLEWARE)
+ * ────────────────────────────────────────────────────────────── */
 const allowedOrigins = process.env.FRONTEND_URL
-  ? process.env.FRONTEND_URL.split(',').map(u => u.trim())
+  ? process.env.FRONTEND_URL.split(',').map(o => o.trim())
   : [];
 
 const corsOptions = {
   origin: IS_PROD
     ? (origin, cb) => {
-        // Permite requests sem origem (apps mobile, Postman, health checks)
-        if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
-        cb(new Error('Origem não permitida pelo CORS'));
+        // ✅ Permite chamadas sem Origin (curl, health check, server-to-server)
+        if (!origin) return cb(null, true);
+        if (allowedOrigins.includes(origin)) return cb(null, true);
+        return cb(new Error('Origem não permitida pelo CORS'));
       }
-    : true, // dev: permite qualquer origem
-  credentials: true, // necessário para cookies httpOnly
+    : true,
+  credentials: true
 };
 
-// Responde preflights OPTIONS imediatamente, antes de auth ou outros middlewares
+// Preflight SEM rate-limit
 app.options('*', cors(corsOptions));
 app.use(cors(corsOptions));
 
-// ─── Security: HTTPS redirect ────────────────────────────────────────────────
-// Vem DEPOIS do CORS para que o redirect 301 também tenha o header CORS,
-// evitando que o browser bloqueie o redirect antes de seguí-lo.
+/* ──────────────────────────────────────────────────────────────
+ * SEGURANÇA
+ * ────────────────────────────────────────────────────────────── */
 app.use(requireHTTPS);
-
-// ─── Security: Helmet headers (CSP, HSTS, X-Frame-Options, etc.) ────────────
 app.use(securityHeaders);
 
-// ─── Cookie parser ───────────────────────────────────────────────────────────
+/* ──────────────────────────────────────────────────────────────
+ * MIDDLEWARES BÁSICOS
+ * ────────────────────────────────────────────────────────────── */
 app.use(cookieParser());
-
-// ─── Compressão gzip ─────────────────────────────────────────────────────────
 app.use(compression());
-
-// ─── Body parser ─────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));
 
-// ─── Rate limiter global de API ───────────────────────────────────────────────
+/* ──────────────────────────────────────────────────────────────
+ * HEALTH CHECK (NUNCA PASSA POR RATE LIMIT)
+ * ────────────────────────────────────────────────────────────── */
+app.get('/api/health', (_, res) => {
+  res.json({
+    status: 'ok',
+    version: '2.1.1-azure-ready'
+  });
+});
+
+/* ──────────────────────────────────────────────────────────────
+ * RATE LIMIT (APENAS APIs REAIS)
+ * ────────────────────────────────────────────────────────────── */
 app.use('/api', apiLimiter);
 
-// ─── Routes ──────────────────────────────────────────────────────────────────
+/* ──────────────────────────────────────────────────────────────
+ * ROTAS
+ * ────────────────────────────────────────────────────────────── */
 app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/projects', projectsRouter);
@@ -89,31 +108,36 @@ app.use('/api/feedback', feedbackRouter);
 app.use('/api/delegations', delegationsRouter);
 app.use('/api/monthly-report', monthlyReportRouter);
 
-app.get('/api/health', (_, res) => res.json({ status: 'ok', version: '2.1.0-security' }));
-
-// ─── Serve frontend ───────────────────────────────
+/* ──────────────────────────────────────────────────────────────
+ * FRONTEND (SPA)
+ * ────────────────────────────────────────────────────────────── */
 const publicPath = path.join(__dirname, '../public');
-
 app.use(express.static(publicPath));
 
 app.get('*', (req, res) => {
   if (!req.path.startsWith('/api')) {
     res.sendFile(path.join(publicPath, 'index.html'));
   }
-}); 
+});
 
-// ─── Global error handler ────────────────────────────────────────────────────
+/* ──────────────────────────────────────────────────────────────
+ * ERROR HANDLER (ÚLTIMO)
+ * ────────────────────────────────────────────────────────────── */
 app.use(globalErrorHandler);
 
+/* ──────────────────────────────────────────────────────────────
+ * START
+ * ────────────────────────────────────────────────────────────── */
 async function start() {
   try {
     await initDB();
-
     await seedAdmin();
 
-    app.listen(PORT, () => console.log(`🚀 App rodando na porta ${PORT}`));
+    app.listen(PORT, () => {
+      console.log(`🚀 App rodando na porta ${PORT}`);
+    });
   } catch (err) {
-    console.error('Falha ao iniciar:', err);
+    console.error('❌ Falha ao iniciar:', err);
     process.exit(1);
   }
 }
