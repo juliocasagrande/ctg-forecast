@@ -1,7 +1,7 @@
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 
-// Lê origens permitidas dinamicamente do ambiente
+// ─── Origens permitidas ───────────────────────────────────────────────
 const FRONTEND_URL = process.env.FRONTEND_URL || '';
 const BACKEND_URL  = process.env.BACKEND_URL  || '';
 
@@ -10,21 +10,38 @@ const allowedOrigins = [
   ...BACKEND_URL.split(',').map(u => u.trim()).filter(Boolean),
 ];
 
-// ─── Helmet: security headers (CSP, HSTS, X-Frame-Options, etc.) ────────────
+// ─── Helmet (CSP corrigido) ───────────────────────────────────────────
 export const securityHeaders = helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc:  ["'self'", "'unsafe-inline'",
-                   "https://cdn.jsdelivr.net",
-                   "https://cdnjs.cloudflare.com"],
-      styleSrc:   ["'self'", "'unsafe-inline'",
-                   "https://fonts.googleapis.com",
-                   "https://cdnjs.cloudflare.com"],
-      fontSrc:    ["'self'",
-                   "https://fonts.gstatic.com",
-                   "https://cdnjs.cloudflare.com"],
-      imgSrc:     ["'self'", "data:", "blob:"],
+
+      scriptSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        "https://cdn.jsdelivr.net",
+        "https://cdnjs.cloudflare.com"
+      ],
+
+      styleSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        "https://fonts.googleapis.com",
+        "https://cdnjs.cloudflare.com"
+      ],
+
+      fontSrc: [
+        "'self'",
+        "https://fonts.gstatic.com",
+        "https://cdnjs.cloudflare.com"
+      ],
+
+      imgSrc: [
+        "'self'",
+        "data:",
+        "blob:"
+      ],
+
       connectSrc: [
         "'self'",
         ...allowedOrigins,
@@ -33,7 +50,9 @@ export const securityHeaders = helmet({
       ]
     },
   },
+
   crossOriginEmbedderPolicy: false,
+
   hsts: {
     maxAge: 31536000,
     includeSubDomains: true,
@@ -41,7 +60,7 @@ export const securityHeaders = helmet({
   },
 });
 
-// ─── HTTPS redirect (Railway seta x-forwarded-proto) ─────────────────────────
+// ─── HTTPS redirect ───────────────────────────────────────────────────
 export function requireHTTPS(req, res, next) {
   if (
     process.env.NODE_ENV === 'production' &&
@@ -52,7 +71,21 @@ export function requireHTTPS(req, res, next) {
   next();
 }
 
-// ─── Rate limiters ───────────────────────────────────────────────────────────
+// ─── Função segura de IP (corrige Azure proxy bug) ─────────────────────
+function getClientIp(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) {
+    return forwarded.split(',')[0].trim();
+  }
+
+  if (req.ip) {
+    return req.ip.replace(/^.*:/, ''); // remove ::ffff:
+  }
+
+  return 'unknown';
+}
+
+// ─── Rate limiters (CORRIGIDO) ────────────────────────────────────────
 
 export const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -60,7 +93,7 @@ export const loginLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Muitas tentativas de login. Tente novamente em 15 minutos.' },
-  keyGenerator: (req) => req.ip,
+  keyGenerator: (req) => getClientIp(req),
 });
 
 export const registerLimiter = rateLimit({
@@ -69,6 +102,7 @@ export const registerLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Muitas solicitações de cadastro. Tente novamente mais tarde.' },
+  keyGenerator: (req) => getClientIp(req),
 });
 
 export const apiLimiter = rateLimit({
@@ -77,30 +111,30 @@ export const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Limite de requisições excedido. Aguarde um momento.' },
+  keyGenerator: (req) => getClientIp(req),
 });
 
-// ─── Global error handler ────────────────────────────────────────────────────
-// IMPORTANTE: replica o header CORS na resposta de erro para que o browser
-// consiga ler o corpo da resposta mesmo quando há falha (500, 403, etc.).
-// Sem isso, o proxy do Railway retorna o erro sem Access-Control-Allow-Origin
-// e o browser bloqueia com "CORS policy" antes de mostrar o erro real.
+// ─── Global error handler ─────────────────────────────────────────────
 export function globalErrorHandler(err, req, res, _next) {
   console.error(`[ERROR] ${req.method} ${req.path}:`, err);
 
-  // Replica CORS — middlewares de erro perdem os headers setados pelo cors().
-  // Valida origem contra a whitelist antes de ecoar (segurança).
   const origin = req.headers.origin;
-  const _allowed = (process.env.FRONTEND_URL || '')
-    .split(',').map(u => u.trim()).filter(Boolean);
-  const _originOk = !origin || _allowed.length === 0 || _allowed.includes(origin);
-  if (origin && _originOk) {
+  const allowed = (process.env.FRONTEND_URL || '')
+    .split(',')
+    .map(u => u.trim())
+    .filter(Boolean);
+
+  const originOk =
+    !origin ||
+    allowed.length === 0 ||
+    allowed.includes(origin);
+
+  if (origin && originOk) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Vary', 'Origin');
   }
 
-  // Força Content-Type JSON — sem isso o Railway CDN pode devolver text/plain
-  // e o browser bloqueia a leitura do corpo de erro via CORS.
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
   if (err.status) {
@@ -108,7 +142,7 @@ export function globalErrorHandler(err, req, res, _next) {
   }
 
   if (process.env.NODE_ENV === 'production') {
-    return res.status(500).json({ error: 'Erro interno do servidor. Tente novamente.' });
+    return res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 
   res.status(500).json({ error: err.message, stack: err.stack });
