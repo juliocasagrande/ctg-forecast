@@ -6,7 +6,6 @@ const FRONTEND_URL = process.env.FRONTEND_URL || '';
 const BACKEND_URL  = process.env.BACKEND_URL  || '';
 
 const allowedOrigins = [
-  "'self'",
   ...FRONTEND_URL.split(',').map(u => u.trim()).filter(Boolean),
   ...BACKEND_URL.split(',').map(u => u.trim()).filter(Boolean),
 ];
@@ -28,7 +27,8 @@ export const securityHeaders = helmet({
       imgSrc:     ["'self'", "data:", "blob:"],
       connectSrc: [
         ...allowedOrigins,
-        "https://fonts.googleapis.com"
+        "https://fonts.googleapis.com",
+        "https://fonts.gstatic.com"
       ],
     },
   },
