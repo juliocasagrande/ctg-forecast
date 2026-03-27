@@ -96,11 +96,6 @@ app.get('*', (req, res) => {
 app.use(globalErrorHandler);
 
 async function start() {
-  // [DEBUG] Log de variáveis de ambiente relevantes ao iniciar
-  console.log("[startup] NODE_ENV:", process.env.NODE_ENV);
-  console.log("[startup] PORT:", process.env.PORT);
-  console.log("[startup] FRONTEND_URL:", process.env.FRONTEND_URL);
-  console.log("[startup] DATABASE_URL definida:", !!process.env.DATABASE_URL);
   try {
     await initDB();
     app.listen(PORT, () => console.log(`🚀 CTG Forecast v2.1 (security hardened) — porta ${PORT}`));

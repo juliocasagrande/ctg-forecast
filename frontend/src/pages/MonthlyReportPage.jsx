@@ -69,12 +69,16 @@ export default function MonthlyReportPage() {
 
       setSuccess(true);
     } catch (err) {
-      const msg = err.response?.data
-        ? await err.response.data.text?.()
-        : null;
-      let parsed = null;
-      try { parsed = JSON.parse(msg); } catch (_) {}
-      setError(parsed?.error || 'Erro ao gerar relatório. Verifique o arquivo e tente novamente.');
+      let errorMsg = 'Erro ao gerar relatório. Verifique o arquivo e tente novamente.';
+      try {
+        // Com responseType:'blob', err.response.data é um Blob — precisa de .text() com await
+        const raw = err.response?.data instanceof Blob
+          ? await err.response.data.text()
+          : err.response?.data;
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (parsed?.error) errorMsg = parsed.error;
+      } catch (_) { /* mantém a mensagem genérica */ }
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
