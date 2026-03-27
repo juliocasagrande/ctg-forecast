@@ -48,6 +48,16 @@ export async function initDB() {
   const client = await pool.connect();
   try {
     await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'engenheiro';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true;
+    `);
+
+    await client.query(`
+      ALTER TABLE forecast_entries ADD COLUMN IF NOT EXISTS type VARCHAR(10);
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         name VARCHAR(120) NOT NULL,
@@ -180,7 +190,17 @@ export async function initDB() {
 
     // Expand forecast_entries type to include Meta and Pool
     await client.query(`
-      ALTER TABLE forecast_entries DROP CONSTRAINT IF EXISTS forecast_entries_type_check;
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='forecast_entries' AND column_name='type'
+        ) THEN
+          ALTER TABLE forecast_entries DROP CONSTRAINT IF EXISTS forecast_entries_type_check;
+          ALTER TABLE forecast_entries ADD CONSTRAINT forecast_entries_type_check
+            CHECK (type IN ('Budget','Forecast','Actual','Meta','Pool'));
+        END IF;
+      END$$;
       ALTER TABLE forecast_entries ADD CONSTRAINT forecast_entries_type_check
         CHECK (type IN ('Budget','Forecast','Actual','Meta','Pool'));
     `);
