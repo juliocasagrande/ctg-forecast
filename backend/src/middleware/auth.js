@@ -1,11 +1,13 @@
 import jwt from 'jsonwebtoken';
 
+// IS_PROD deve ser declarado ANTES de ser usado
+const IS_PROD = process.env.NODE_ENV === 'production';
+
 const JWT_SECRET = process.env.JWT_SECRET || (IS_PROD ? null : 'ctg-forecast-dev-only-secret');
 if (!JWT_SECRET) {
   console.error('FATAL: JWT_SECRET environment variable is required in production');
   process.exit(1);
 }
-const IS_PROD = process.env.NODE_ENV === 'production';
 
 // Cookie configuration
 const COOKIE_OPTIONS = {

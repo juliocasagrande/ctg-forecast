@@ -49,6 +49,8 @@ export const securityHeaders = helmet({
 
       connectSrc: [
         "'self'",
+        "https://fonts.googleapis.com",
+        "https://fonts.gstatic.com",
         ...allowedOrigins
       ]
     }
