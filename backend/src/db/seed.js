@@ -97,35 +97,32 @@ export async function seedAdmin() {
     /* ─── Insert / Update ────────────────────────────────────── */
     // Quando hash é null (admin já existe e não é reset forçado),
     // usamos subquery para manter a senha atual do banco.
-    const query = hash
-      ? `
-        INSERT INTO users (name, email, password_hash, role, avatar_initials)
-        VALUES ($1, $2, $3, 'admin', $4)
-        ON CONFLICT (email) DO UPDATE SET
-          name = EXCLUDED.name,
-          password_hash = EXCLUDED.password_hash,
-          role = 'admin',
-          updated_at = NOW()
-        RETURNING id, name, email, role;
-      `
-      : `
-        INSERT INTO users (name, email, password_hash, role, avatar_initials)
-        VALUES (
-          $1, $2,
-          (SELECT password_hash::varchar FROM users WHERE email = $2),
-          'admin', $3
-        )
-        ON CONFLICT (email) DO UPDATE SET
-          name = EXCLUDED.name,
-          role = 'admin',
-          updated_at = NOW()
-        RETURNING id, name, email, role;
-      `;
+    const query = `
+      INSERT INTO users (name, email, password_hash, role, avatar_initials)
+      VALUES ($1, $2, $3, 'admin', $4)
+      ON CONFLICT (email) DO UPDATE SET
+        name = EXCLUDED.name,
+        password_hash = EXCLUDED.password_hash,
+        role = 'admin',
+        updated_at = NOW()
+      RETURNING id, name, email, role;
+    `;
 
-    const params = hash
-      ? [ADMIN_NAME, ADMIN_EMAIL, hash, initials]
-      : [ADMIN_NAME, ADMIN_EMAIL, initials];
+    let passwordToUse = hash;
 
+    if (!hash) {
+      // Busca password_hash existente caso não haja hash novo
+      const res = await client.query(
+        `SELECT password_hash FROM users WHERE email = $1`,
+        [ADMIN_EMAIL]
+      );
+      if (res.rows.length === 0) {
+        throw new Error('Usuário admin não existe e hash não definido');
+      }
+      passwordToUse = res.rows[0].password_hash;
+    }
+
+    const params = [ADMIN_NAME, ADMIN_EMAIL, passwordToUse, initials];
     const r = await client.query(query, params);
 
     console.log('✅ Usuário admin pronto:');
