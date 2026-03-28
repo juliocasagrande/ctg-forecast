@@ -112,7 +112,7 @@ export async function seedAdmin() {
         INSERT INTO users (name, email, password_hash, role, avatar_initials)
         VALUES (
           $1, $2,
-          (SELECT password_hash FROM users WHERE email = $2),
+          (SELECT password_hash::varchar FROM users WHERE email = $2),
           'admin', $3
         )
         ON CONFLICT (email) DO UPDATE SET
