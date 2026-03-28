@@ -61,12 +61,6 @@ export async function seedAdmin() {
     const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@ctgbrasil.com').toLowerCase();
     const ADMIN_PASS = process.env.ADMIN_PASS;
 
-    if (!ADMIN_PASS && existing.rows.length === 0) {
-      throw new Error(
-        'ADMIN_PASS não definido e usuário admin não existe no banco'
-      );
-    }
-
     const initials = ADMIN_NAME
       .split(' ')
       .slice(0, 2)
@@ -79,10 +73,17 @@ export async function seedAdmin() {
       [ADMIN_EMAIL]
     );
 
+    // Agora que temos `existing`, podemos validar ADMIN_PASS
+    if (!ADMIN_PASS && existing.rows.length === 0) {
+      throw new Error(
+        'ADMIN_PASS não definido e usuário admin não existe no banco'
+      );
+    }
+
     let hash;
 
     if (existing.rows.length === 0) {
-      // ✅ Novo admin
+      // ✅ Novo admin — sempre precisa de hash
       hash = await bcrypt.hash(ADMIN_PASS, 12);
     } else {
       // ✅ Admin já existe → NÃO troca senha automaticamente em prod
@@ -94,6 +95,8 @@ export async function seedAdmin() {
     }
 
     /* ─── Insert / Update ────────────────────────────────────── */
+    // Quando hash é null (admin já existe e não é reset forçado),
+    // usamos subquery para manter a senha atual do banco.
     const query = hash
       ? `
         INSERT INTO users (name, email, password_hash, role, avatar_initials)
@@ -107,7 +110,11 @@ export async function seedAdmin() {
       `
       : `
         INSERT INTO users (name, email, password_hash, role, avatar_initials)
-        VALUES ($1, $2, password_hash, 'admin', $4)
+        VALUES (
+          $1, $2,
+          (SELECT password_hash FROM users WHERE email = $2),
+          'admin', $3
+        )
         ON CONFLICT (email) DO UPDATE SET
           name = EXCLUDED.name,
           role = 'admin',
