@@ -15,7 +15,7 @@ cd backend; node src/db/seed.js; cd ..
 # Terminal 1
 cd backend; npm run dev
 
-# Terminal 2
+# Terminal 2 
 cd frontend; npm run dev
 
 admin@ctgbrasil.com
