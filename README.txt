@@ -12,7 +12,7 @@ cd frontend; npm install; cd ..
 cd backend; node src/db/seed.js; cd ..
 
 # Para rodar precisam de dois terminais
-# Terminal 1 
+# Terminal 1
 cd backend; npm run dev
 
 # Terminal 2
