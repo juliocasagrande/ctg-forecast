@@ -52,6 +52,18 @@ export const securityHeaders = helmet({
         "https://fonts.googleapis.com",
         "https://fonts.gstatic.com",
         ...allowedOrigins
+      ],
+
+      // Permite abrir blob: URLs em iframes (relatório HTML)
+      frameSrc: [
+        "'self'",
+        "blob:"
+      ],
+
+      // Permite blob: em workers (geração do relatório)
+      workerSrc: [
+        "'self'",
+        "blob:"
       ]
     }
   },

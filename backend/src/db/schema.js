@@ -137,6 +137,15 @@ export async function initDB() {
         CHECK (type IN ('Budget','Forecast','Actual','Meta','Pool'));
     `);
 
+    /* ✅ CORREÇÃO 1: UNIQUE constraint para upsert funcionar corretamente */
+    await client.query(`
+      ALTER TABLE forecast_entries
+        DROP CONSTRAINT IF EXISTS uq_forecast_entry;
+      ALTER TABLE forecast_entries
+        ADD CONSTRAINT uq_forecast_entry
+        UNIQUE (project_id, category, type, year, month);
+    `);
+
     /* ───────── OUTRAS TABELAS ───────── */
     await client.query(`
       CREATE TABLE IF NOT EXISTS actual_consolidated (
@@ -217,6 +226,13 @@ export async function initDB() {
         value NUMERIC(15,2),
         UNIQUE(project_id, year, category, type)
       );
+    `);
+
+    /* ✅ CORREÇÃO 2: Colunas que faltavam na year_consolidated */
+    await client.query(`
+      ALTER TABLE year_consolidated ADD COLUMN IF NOT EXISTS comment TEXT;
+      ALTER TABLE year_consolidated ADD COLUMN IF NOT EXISTS consolidated_by INTEGER REFERENCES users(id);
+      ALTER TABLE year_consolidated ADD COLUMN IF NOT EXISTS consolidated_at TIMESTAMPTZ DEFAULT NOW();
     `);
 
     /* ───────── FEEDBACK / AUDIT ───────── */

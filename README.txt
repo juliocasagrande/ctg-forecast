@@ -19,4 +19,4 @@ cd backend; npm run dev
 cd frontend; npm run dev
 
 admin@ctgbrasil.com
-ctg@2026
+ctg2026
