@@ -68,6 +68,9 @@ export const securityHeaders = helmet({
  * HTTPS REDIRECT (SAFE PARA PROXY REVERSO)
  * ────────────────────────────────────────────────────────────── */
 export function requireHTTPS(req, res, next) {
+  // Health check nunca deve ser redirecionado (evita loop em probe do Azure)
+  if (req.path === '/api/health') return next();
+
   const isProd = process.env.NODE_ENV === 'production';
 
   // Azure envia x-forwarded-proto
