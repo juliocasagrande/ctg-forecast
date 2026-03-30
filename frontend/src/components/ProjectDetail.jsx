@@ -29,6 +29,14 @@ const FORECAST_TABS = {
     { id: 'Forecast', label: 'Forecast'  },
     { id: 'Actual',   label: 'Realizado' },
   ],
+  coordenador: [
+    { id: 'Budget',              label: 'Budget'             },
+    { id: 'Forecast',            label: 'Forecast'           },
+    { id: 'Actual',              label: 'Realizado'          },
+    { id: 'Pool',                label: 'Pool'               },
+    { id: 'Meta',                label: 'Meta'               },
+  ],
+  gerente: [], // read-only, no wizard tabs
   gestor: [
     { id: 'Budget',              label: 'Budget'             },
     { id: 'Forecast',            label: 'Forecast'           },
@@ -518,7 +526,8 @@ export default function ProjectDetail({ onEdit }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { isEngenheiro, isPlanejador, isGestor, isAdmin, canManage } = useRole();
+  const { isEngenheiro, isPlanejador, isGestor, isAdmin, canManage, isCoordenador } = useRole();
+  const isGerente = user?.role === 'gerente';
 
   // Year config from settings
   const activeStart = parseInt(settings.active_year_start) || 2026;
@@ -805,9 +814,13 @@ export default function ProjectDetail({ onEdit }) {
     ? FORECAST_TABS.planejador
     : isGestor
       ? FORECAST_TABS.gestor
-      : isEngenheiro
-        ? FORECAST_TABS.engenheiro
-        : FORECAST_TABS.gestor;
+      : isCoordenador
+        ? FORECAST_TABS.coordenador
+        : isGerente
+          ? FORECAST_TABS.gerente
+          : isEngenheiro
+            ? FORECAST_TABS.engenheiro
+            : FORECAST_TABS.gestor;
 
   return (
     <div>

@@ -540,6 +540,74 @@ function PlanejadorExportModal({ open, onClose }) {
 
 
 // ── Mobile filter modal (bottom-sheet) ──────────────────────────────────────
+// ── Area dropdown filter (vacations + polos) ──────────────────────────────────
+const AREA_OPTIONS_LIST = [
+  { value: '', label: 'Todas' },
+  { value: 'eletrica', label: 'Elétrica' },
+  { value: 'mecanica', label: 'Mecânica' },
+  { value: 'confiabilidade', label: 'Confiabilidade' },
+  { value: 'modernizacao', label: 'Modernização' },
+];
+
+function AreaFilter({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const selected = AREA_OPTIONS_LIST.find(o => o.value === value) || AREA_OPTIONS_LIST[0];
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button onClick={() => setOpen(o => !o)} style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2,
+        background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+      }}>
+        <span className="period-label" style={{ color: value ? 'var(--ctg-blue)' : 'var(--ctg-navy)' }}>Área</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.72rem',
+          fontWeight: value ? 600 : 400, color: value ? 'var(--ctg-blue)' : 'var(--text-muted)',
+          fontFamily: 'var(--font-body)', whiteSpace: 'nowrap' }}>
+          {selected.label}
+          {value && (
+            <span onClick={e => { e.stopPropagation(); onChange(''); }}
+              style={{ display:'inline-flex',alignItems:'center',justifyContent:'center',
+                width:14,height:14,borderRadius:'50%',background:'var(--ctg-blue)',color:'#fff',
+                fontSize:'0.6rem',fontWeight:700,lineHeight:1,flexShrink:0 }}>×</span>
+          )}
+          <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', lineHeight: 1 }}>{open ? '▲' : '▼'}</span>
+        </span>
+      </button>
+      {open && (
+        <div style={{ position:'absolute', top:'calc(100% + 8px)', right:0,
+          background:'var(--bg-card)', border:'1px solid var(--border-strong)',
+          borderRadius:'var(--radius-md)', boxShadow:'var(--shadow-lg)',
+          minWidth:160, zIndex:200, overflow:'hidden' }}>
+          <div style={{ padding:'9px 14px', borderBottom:'1px solid var(--border)',
+            background:'var(--ctg-navy)', color:'#fff',
+            fontSize:'0.72rem', fontWeight:700, letterSpacing:'0.05em' }}>ÁREA</div>
+          {AREA_OPTIONS_LIST.map(opt => (
+            <button key={opt.value} onClick={() => { onChange(opt.value); setOpen(false); }}
+              style={{ width:'100%', textAlign:'left', padding:'8px 14px',
+                background: value === opt.value ? 'rgba(0,102,179,0.08)' : 'transparent',
+                border:'none', cursor:'pointer', fontSize:'0.82rem',
+                fontWeight: value === opt.value ? 700 : 400,
+                color: value === opt.value ? 'var(--ctg-blue)' : 'var(--text-primary)',
+                display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              {opt.label}
+              {value === opt.value && <span style={{ color:'var(--ctg-blue)', fontSize:'0.75rem' }}>✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function MobileFilterModal({ open, onClose, period, onPeriod, activePlants, plantFilter, onPlantFilter, isPlanejador, onOpenExport }) {
   if (!open) return null;
   return (
@@ -739,26 +807,11 @@ export default function App() {
                     </>
                   )}
 
-                  {/* ── Filtros de área (vacations + polos) ── */}
+                  {/* ── Filtro de área dropdown (vacations + polos) ── */}
                   {['/vacations', '/polos'].includes(location.pathname) && (
                     <>
                       <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.12)', margin: '0 4px', flexShrink: 0 }} />
-                      {[
-                        { value: '', label: 'Todas' },
-                        { value: 'eletrica', label: 'Elétrica' },
-                        { value: 'mecanica', label: 'Mecânica' },
-                        { value: 'confiabilidade', label: 'Conf.' },
-                        { value: 'modernizacao', label: 'Modern.' },
-                      ].map(opt => (
-                        <button key={opt.value} onClick={() => setAreaFilter(opt.value)} style={{
-                          padding: '3px 9px', borderRadius: 20, cursor: 'pointer',
-                          border: '1px solid rgba(0,31,91,0.18)',
-                          fontSize: '0.72rem', fontWeight: 600,
-                          background: areaFilter === opt.value ? 'var(--ctg-navy)' : 'transparent',
-                          color: areaFilter === opt.value ? '#fff' : 'var(--ctg-blue)',
-                          whiteSpace: 'nowrap',
-                        }}>{opt.label}</button>
-                      ))}
+                      <AreaFilter value={areaFilter} onChange={setAreaFilter} />
                     </>
                   )}
 

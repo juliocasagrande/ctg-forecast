@@ -12,6 +12,15 @@ function safeError(res, err) {
   }
   res.status(500).json({ error: err.message });
 }
+
+function validateProjectId(req, res) {
+  const id = parseInt(req.params.projectId || req.params.id);
+  if (!id || id < 1 || !Number.isInteger(id)) {
+    res.status(400).json({ error: 'ID de projeto inválido' });
+    return null;
+  }
+  return id;
+}
 router.use(requireAuth);
 
 // GET entries for a project
@@ -248,9 +257,14 @@ router.get('/project/:projectId/notes', requireProjectAccess, async (req, res) =
 router.post('/project/:projectId/notes', requireProjectAccess, async (req, res) => {
   try {
     const { note_date, content } = req.body;
+    if (!content?.trim()) return res.status(400).json({ error: 'Conteúdo obrigatório' });
+    // Validate date format
+    if (note_date && !/^\d{4}-\d{2}-\d{2}$/.test(note_date))
+      return res.status(400).json({ error: 'Data inválida' });
+    const safeContent = String(content).replace(/\x00/g, '').slice(0, 5000);
     const r = await pool.query(
       'INSERT INTO project_notes (project_id, user_id, note_date, content) VALUES ($1,$2,$3,$4) RETURNING *',
-      [req.params.projectId, req.user.id, note_date, content]
+      [req.params.projectId, req.user.id, note_date || null, safeContent]
     );
     res.status(201).json(r.rows[0]);
   } catch (err) { safeError(res, err); }
@@ -614,11 +628,15 @@ router.post('/alerts/dismiss', async (req, res) => {
 // ── Polo Consolidado — aggregated by polo → plant → project ──────────────────
 router.get('/polo-summary', async (req, res) => {
   try {
-    const { year, yearStart, yearEnd, areaFilter } = req.query;
+    const { year, yearStart, yearEnd, areaFilter: rawAreaFilter } = req.query;
     const currentYear = new Date().getFullYear();
     const yrStart = parseInt(yearStart || year || currentYear);
     const yrEnd   = parseInt(yearEnd   || year || currentYear);
     const { role, id: userId, area: userArea } = req.user;
+
+    // Validate areaFilter against whitelist
+    const VALID_AREAS = ['eletrica', 'mecanica', 'confiabilidade', 'modernizacao', ''];
+    const areaFilter = VALID_AREAS.includes(rawAreaFilter || '') ? rawAreaFilter : null;
 
     // polo-summary: engenheiro vê só seus projetos
     // coordenador vê projetos da sua área (ou areaFilter se fornecido)
@@ -773,7 +791,9 @@ router.post('/project/:projectId/year-consolidated', requireProjectAccess, async
   const ENGENHEIRO_CONS_TYPES = ['Forecast', 'Actual'];
   if (role === 'engenheiro' && !ENGENHEIRO_CONS_TYPES.includes(type))
     return res.status(403).json({ error: 'Engenheiros só podem editar Forecast e Realizado consolidado' });
-  if (!['gestor', 'planejador', 'admin', 'engenheiro'].includes(role))
+  if (role === 'gerente')
+    return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
+  if (!['gestor', 'planejador', 'admin', 'engenheiro', 'coordenador'].includes(role))
     return res.status(403).json({ error: 'Sem permissão para editar valores consolidados' });
   try {
     const r = await pool.query(`
@@ -793,7 +813,9 @@ router.post('/project/:projectId/year-consolidated/bulk', requireProjectAccess, 
   const { role, id: userId } = req.user;
   // Engenheiros can only save Forecast and Actual consolidated
   const ENGENHEIRO_CONS_TYPES = ['Forecast', 'Actual'];
-  if (!['gestor', 'planejador', 'admin', 'engenheiro'].includes(role))
+  if (role === 'gerente')
+    return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
+  if (!['gestor', 'planejador', 'admin', 'engenheiro', 'coordenador'].includes(role))
     return res.status(403).json({ error: 'Sem permissão para editar valores consolidados' });
   const client = await pool.connect();
   try {

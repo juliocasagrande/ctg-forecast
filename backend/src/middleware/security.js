@@ -143,12 +143,25 @@ export const registerLimiter = rateLimit({
 
 export const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 200,
+  max: 150,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: getClientIp,
+  skip: (req) => req.method === 'OPTIONS',
+  message: {
+    error: 'Limite de requisições excedido. Aguarde um momento.'
+  }
+});
+
+// Stricter limiter for heavy operations (report generation, export)
+export const heavyOpLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 10,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: getClientIp,
   message: {
-    error: 'Limite de requisições excedido. Aguarde um momento.'
+    error: 'Muitas operações pesadas. Aguarde alguns minutos.'
   }
 });
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useRole } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
@@ -27,6 +27,39 @@ const PERIOD_COLORS = [
   { bg: '#D1FAE5', border: '#10B981', text: '#065F46' },
   { bg: '#FEF3C7', border: '#F59E0B', text: '#92400E' },
 ];
+/* ─── Styled tooltip for vacation bars ─────────────────────────────────────── */
+function VacTooltip({ style, label, children }) {
+  const [vis, setVis] = useState(false);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+
+  const show = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    setPos({ x: r.left + r.width / 2, y: r.top - 8 });
+    setVis(true);
+  };
+
+  return (
+    <div style={{ position:'absolute', ...style }}
+      onMouseEnter={show} onMouseLeave={() => setVis(false)}>
+      {children}
+      {vis && (
+        <div style={{
+          position: 'fixed', left: pos.x, top: pos.y,
+          transform: 'translate(-50%, -100%)',
+          background: 'var(--bg-card)', border: '1px solid var(--border)',
+          borderRadius: 8, padding: '8px 12px',
+          boxShadow: 'var(--shadow-lg)', zIndex: 9999,
+          fontSize: '0.78rem', color: 'var(--text-primary)',
+          pointerEvents: 'none', whiteSpace: 'nowrap',
+        }}>
+          {label}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 
 const ALL_AREAS_FOR_MODAL = [
   { value: 'coordenacao',    label: 'Coordenação' },
@@ -159,20 +192,18 @@ function VacationTimeline({ periodsByUser, allMembers, year }) {
                         const right = dateToPercent(p.end_date,   year);
                         const width = Math.max(right - left, 0.8);
                         const c = PERIOD_COLORS[(p.period_number - 1) % 3];
+                        const tooltipLabel = `${p.period_number}º período: ${fmt(p.start_date)} – ${fmt(p.end_date)} (${p.days}d)`;
                         return (
-                          <div key={p.id}
-                            title={`${p.period_number}º período: ${fmt(p.start_date)} – ${fmt(p.end_date)} (${p.days}d)`}
-                            style={{
-                              position: 'absolute', left: `${left}%`, width: `${width}%`,
-                              height: 20, borderRadius: 4,
-                              background: c.bg, border: `1.5px solid ${c.border}`,
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontSize: '0.6rem', fontWeight: 700, color: c.text,
-                              overflow: 'hidden', zIndex: 2, cursor: 'default',
-                              boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-                            }}>
+                          <VacTooltip key={p.id} label={tooltipLabel} style={{
+                            left: `${left}%`, width: `${width}%`, height: 20,
+                            borderRadius: 4, background: c.bg, border: `1.5px solid ${c.border}`,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '0.6rem', fontWeight: 700, color: c.text,
+                            overflow: 'visible', zIndex: 2, cursor: 'default',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                          }}>
                             {width > 4 ? `${p.days}d` : ''}
-                          </div>
+                          </VacTooltip>
                         );
                       })}
                     </div>
@@ -188,7 +219,7 @@ function VacationTimeline({ periodsByUser, allMembers, year }) {
 }
 
 /* ─── MODAL ─── */
-function PeriodModal({ period, userId, area, year, members, canEditOthers, onSave, onClose }) {
+function PeriodModal({ period, userId, area, year, members, canEditOthers, onSave, onClose, allPeriods = [], currentUserRole = 'engenheiro', currentUserArea = '' }) {
   const [form, setForm] = useState({
     user_id:        period?.user_id        ?? userId,
     area:           period?.area           ?? area,
@@ -201,7 +232,43 @@ function PeriodModal({ period, userId, area, year, members, canEditOthers, onSav
   });
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState('');
+  const [overlapWarn, setOverlapWarn] = useState('');
   const days = calcDays(form.start_date, form.end_date);
+
+  // Live overlap check whenever dates change
+  useEffect(() => {
+    setOverlapWarn('');
+    if (!form.start_date || !form.end_date || days <= 0) return;
+    const isManager = ['gerente','gestor','coordenador','planejador'].includes(currentUserRole);
+    const targetUserId = form.user_id;
+    const targetMember = members.find(m => m.id === targetUserId);
+    const targetRole = targetMember?.role || 'engenheiro';
+    const targetArea = targetMember?.area || currentUserArea;
+
+    // Find overlapping people in same group
+    const overlapping = allPeriods.filter(p => {
+      if (p.user_id === targetUserId) return false;
+      if (period?.id && p.id === period.id) return false;
+      const pStart = String(p.start_date).slice(0,10);
+      const pEnd   = String(p.end_date).slice(0,10);
+      if (pStart > form.end_date || pEnd < form.start_date) return false;
+      const pMember = members.find(m => m.id === p.user_id);
+      const pRole = pMember?.role || 'engenheiro';
+      const pArea = pMember?.area || '';
+      if (['gerente','gestor','coordenador','planejador'].includes(targetRole)) {
+        return ['gerente','gestor','coordenador','planejador'].includes(pRole);
+      }
+      return pRole === 'engenheiro' && pArea === targetArea;
+    });
+
+    if (overlapping.length > 0) {
+      const names = overlapping.map(p => {
+        const m = members.find(m => m.id === p.user_id);
+        return m?.name || 'Colega';
+      }).filter((v,i,a)=>a.indexOf(v)===i).join(', ');
+      setOverlapWarn(`⚠️ Conflito: ${names} também ${overlapping.length===1?'tem':'têm'} férias neste período.`);
+    }
+  }, [form.start_date, form.end_date, form.user_id]);
 
   async function handleSubmit() {
     if (!form.start_date || !form.end_date) return setError('Preencha as datas');
@@ -289,6 +356,7 @@ function PeriodModal({ period, userId, area, year, members, canEditOthers, onSav
               rows={2} style={{ ...inp, resize: 'vertical' }} placeholder="Ex: férias parceladas, viagem..." />
           </div>
 
+          {overlapWarn && <div style={{ background: '#FEF3C7', color: '#92400E', borderRadius: 7, padding: '8px 12px', fontSize: '0.78rem', fontWeight: 600 }}>{overlapWarn}</div>}
           {error && <div style={{ background: '#FEE2E2', color: '#991B1B', borderRadius: 7, padding: '8px 12px', fontSize: '0.78rem' }}>{error}</div>}
 
           <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
@@ -449,7 +517,7 @@ export default function VacationsPage({ areaFilter: areaFilterProp = '', year: y
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto' }}>
 
           {/* ── Timeline geral ── */}
-          <div className="card" style={{ flexShrink: 0 }}>
+          <div className="card" style={{ flexShrink: 0, marginTop: 8 }}>
             <div style={{ padding: '6px 14px 4px', background: 'var(--ctg-navy)', borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ color: '#fff', fontSize: '0.76rem', fontWeight: 600, letterSpacing: '0.04em' }}>
                 Timeline Geral — {year}
@@ -605,6 +673,9 @@ export default function VacationsPage({ areaFilter: areaFilterProp = '', year: y
           canEditOthers={canEditOthers}
           onSave={handleSave}
           onClose={() => setModal(null)}
+          allPeriods={periods}
+          currentUserRole={role}
+          currentUserArea={user?.area || 'eletrica'}
         />
       )}
     </div>

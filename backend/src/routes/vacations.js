@@ -79,15 +79,20 @@ router.get('/members', async (req, res) => {
     `;
     params = [userArea];
   } else {
-    // Engenheiro: apenas ele mesmo
+    // Engenheiro: todos da sua mesma área + coordenadores
+    const engArea = req.user.area || 'eletrica';
     query = `
       SELECT u.id, u.name, u.avatar_initials, u.role,
              COALESCE(u.area, 'eletrica') AS area
       FROM users u
-      WHERE u.active = true AND u.id = $1
+      WHERE u.active = true
+        AND (
+          (u.role = 'engenheiro' AND COALESCE(u.area, 'eletrica') = $1)
+          OR (u.role = 'coordenador' AND COALESCE(u.area, 'eletrica') = $1)
+        )
       ORDER BY u.name
     `;
-    params = [userId];
+    params = [engArea];
   }
 
   const { rows } = await pool.query(query, params);
@@ -117,12 +122,18 @@ router.post('/', async (req, res) => {
     }
   }
 
+  // Validate date formats
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(start_date) || !dateRegex.test(end_date))
+    return res.status(400).json({ error: 'Formato de data inválido (use YYYY-MM-DD)' });
+
   // Calcula dias corridos
-  const start = new Date(start_date);
-  const end   = new Date(end_date);
+  const start = new Date(start_date + 'T12:00:00');
+  const end   = new Date(end_date + 'T12:00:00');
   const days  = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
 
   if (days <= 0) return res.status(400).json({ error: 'Data de fim deve ser após o início' });
+  if (days > 365) return res.status(400).json({ error: 'Período não pode exceder 365 dias' });
 
   // Verifica conflito de período (mesmo usuário, mesmo número de período, mesmo ano)
   const conflict = await pool.query(
@@ -178,7 +189,7 @@ router.post('/', async (req, res) => {
       (user_id, area, period_number, start_date, end_date, days, adp_registered, year, notes, created_by)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     RETURNING *
-  `, [user_id, area, period_number, start_date, end_date, days, adp_registered ?? false, year, notes || null, requesterId]);
+  `, [user_id, area, period_number, start_date, end_date, days, adp_registered ?? false, year, notes ? String(notes).slice(0, 1000) : null, requesterId]);
 
   const newPeriod = rows[0];
 

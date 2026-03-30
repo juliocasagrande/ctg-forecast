@@ -13,6 +13,7 @@ import {
   securityHeaders,
   requireHTTPS,
   apiLimiter,
+  heavyOpLimiter,
   globalErrorHandler
 } from './middleware/security.js';
 
@@ -101,14 +102,14 @@ app.use('/api/users', usersRouter);
 app.use('/api/projects', projectsRouter);
 app.use('/api/projects/:projectId/messages', messagesRouter);
 app.use('/api/forecast', forecastRouter);
-app.use('/api/export', exportRouter);
+app.use('/api/export', heavyOpLimiter, exportRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/settings', sapMappingRouter);
 app.use('/api/report', reportRouter);
 app.use('/api/feedback', feedbackRouter);
 app.use('/api/delegations', delegationsRouter);
 app.use('/api/vacations', vacationsRouter);
-app.use('/api/monthly-report', monthlyReportRouter);
+app.use('/api/monthly-report', heavyOpLimiter, monthlyReportRouter);
 
 /* ──────────────────────────────────────────────────────────────
  * FRONTEND (SPA)

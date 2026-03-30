@@ -450,9 +450,8 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
     [allSummaries, filteredIds]
   );
 
-  // KPIs
+  // KPIs (totalForecast computed after monthlyData below)
   const totalBudget   = filtered.reduce((s, p) => s + parseFloat(p.budget    || 0), 0);
-  const totalForecast = filtered.reduce((s, p) => s + parseFloat(p.forecast   || 0), 0);
   const totalActual   = filtered.reduce((s, p) => s + parseFloat(p.actual     || 0), 0);
   const totalSI       = filtered.reduce((s, p) => s + parseFloat(p.si_value   || 0), 0);
 
@@ -477,29 +476,57 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
   const currentYear  = now.getFullYear();
   const currentMonth = now.getMonth() + 1; // 1-12
 
-  // Monthly data — Realizado zeroed for months beyond current month
+  // Find the last month/year that has any Actual data across all filtered projects
+  const lastActualPoint = useMemo(() => {
+    let lastY = 0, lastM = 0;
+    filteredSummaries.forEach(s => {
+      if (s.type !== 'Actual') return;
+      const y = parseInt(s.year), m = parseInt(s.month);
+      const v = parseFloat(s.total || 0);
+      if (v <= 0) return;
+      if (y > lastY || (y === lastY && m > lastM)) { lastY = y; lastM = m; }
+    });
+    return { year: lastY, month: lastM };
+  }, [filteredSummaries]);
+
+  // Monthly data — Realizado truncated at current month;
+  // Forecast = Actual for months <= lastActual, Forecast for later months
   const monthlyData = useMemo(() => {
+    const { year: lastActY, month: lastActM } = lastActualPoint;
     const result = [];
     for (let y = period.start; y <= period.end; y++) {
       MONTHS_PT.forEach((m, i) => {
         const month = i + 1;
         const key   = period.start === period.end ? m : `${m}/${y}`;
         const entry = { month: key };
-        ['Budget', 'Forecast', 'Realizado', 'Meta', 'Pool'].forEach(type => {
-          const apiType = type === 'Realizado' ? 'Actual' : type;
-          let val = filteredSummaries
-            .filter(s => parseInt(s.year) === y && parseInt(s.month) === month && s.type === apiType)
+
+        const actualVal = filteredSummaries
+          .filter(s => parseInt(s.year) === y && parseInt(s.month) === month && s.type === 'Actual')
+          .reduce((sum, s) => sum + parseFloat(s.total || 0), 0);
+        const forecastVal = filteredSummaries
+          .filter(s => parseInt(s.year) === y && parseInt(s.month) === month && s.type === 'Forecast')
+          .reduce((sum, s) => sum + parseFloat(s.total || 0), 0);
+
+        // Realizado: zero after current calendar month
+        const isAfterNow = y > currentYear || (y === currentYear && month > currentMonth);
+        entry['Realizado'] = isAfterNow ? 0 : actualVal;
+
+        // Forecast line: use Actual for months up to lastActual, Forecast thereafter
+        const isBeforeOrAtLastActual = lastActY > 0 &&
+          (y < lastActY || (y === lastActY && month <= lastActM));
+        entry['Forecast'] = isBeforeOrAtLastActual ? actualVal : forecastVal;
+
+        ['Budget', 'Meta', 'Pool'].forEach(type => {
+          entry[type] = filteredSummaries
+            .filter(s => parseInt(s.year) === y && parseInt(s.month) === month && s.type === type)
             .reduce((sum, s) => sum + parseFloat(s.total || 0), 0);
-          if (type === 'Realizado' && (y > currentYear || (y === currentYear && month > currentMonth))) {
-            val = 0;
-          }
-          entry[type] = val;
         });
+
         result.push(entry);
       });
     }
     return result;
-  }, [filteredSummaries, period, currentYear, currentMonth]);
+  }, [filteredSummaries, period, currentYear, currentMonth, lastActualPoint]);
 
   const combinedData = useMemo(() => monthlyData.reduce((acc, d, i) => {
     const prev = acc[i - 1] || { BudgetAcum: 0, ForecastAcum: 0, RealizadoAcum: 0, MetaAcum: 0, PoolAcum: 0 };
@@ -513,6 +540,9 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
     });
     return acc;
   }, []), [monthlyData]);
+
+  // totalForecast: blended (Actual up to last actual month + Forecast after)
+  const totalForecast = monthlyData.reduce((s, d) => s + (d.Forecast || 0), 0);
 
   const LEGEND_LABELS = {
     Budget: 'Budget (mensal)', Forecast: 'Forecast (mensal)', Realizado: 'Realizado (mensal)',

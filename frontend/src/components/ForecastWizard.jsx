@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../utils/api.js';
 import { useTypeColors } from '../context/SettingsContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from './ui/Toast.jsx';
 import { MONTHS_FULL_PT, MONTHS_PT, formatBRL } from '../utils/format.js';
 
@@ -591,13 +592,13 @@ function fmtNum(v) {
 }
 
 // ── Month input row ───────────────────────────────────────────────────────────
-function MonthRow({ month, year, value, comment, onChange, refValue, refLabel, theme, otherComments, actualValue, activeType }) {
+function MonthRow({ month, year, value, comment, onChange, refValue, refLabel, theme, otherComments, lockedByActual, activeType }) {
   const [localVal, setLocalVal] = useState(fmtInput(value));
   const [localCmt, setLocalCmt] = useState(comment);
   const didMount = useRef(false);
 
-  // Lock Forecast/Budget fields for months that already have Actual data
-  const isLocked = activeType === 'Forecast' && actualValue != null && actualValue > 0;
+  // Lock Forecast fields for months <= last actual month
+  const isLocked = activeType === 'Forecast' && lockedByActual;
 
   useEffect(() => {
     if (!didMount.current) { didMount.current = true; return; }
@@ -625,7 +626,7 @@ function MonthRow({ month, year, value, comment, onChange, refValue, refLabel, t
         {isLocked ? (
           <div style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 10px', background:'#F1F5F9', borderRadius:'var(--radius-sm)', border:'1.5px solid #CBD5E1', gridColumn:'span 2' }}>
             <span style={{ fontSize:'0.72rem', color:'#64748B', fontStyle:'italic' }}>
-              🔒 Mês com Realizado: {formatBRL(actualValue)} — Forecast bloqueado
+              🔒 Mês já realizado — Forecast bloqueado
             </span>
           </div>
         ) : (
@@ -674,7 +675,7 @@ function MonthRow({ month, year, value, comment, onChange, refValue, refLabel, t
   );
 }
 
-function ConsInputRow({ cat, value, theme, onChange }) {
+function ConsInputRow({ cat, value, theme, onChange, disabled = false }) {
   const [localVal, setLocalVal] = useState(value ? fmtInput(value) : '');
   const didMount = useRef(false);
 
@@ -693,11 +694,12 @@ function ConsInputRow({ cat, value, theme, onChange }) {
       <div style={{ display:'flex', alignItems:'center', gap:6 }}>
         <span style={{ fontSize:'0.75rem', color:'var(--text-muted)', fontWeight:600, flexShrink:0 }}>R$</span>
         <input type="text" inputMode="decimal" placeholder="0,00" value={localVal}
-          onChange={e => setLocalVal(e.target.value)}
-          onFocus={e => e.target.select()}
-          onBlur={commit}
-          onKeyDown={e => { if (e.key==='Enter') e.target.blur(); }}
-          style={{ flex:1, border:`1.5px solid ${theme.border}`, borderRadius:'var(--radius-sm)', padding:'8px 12px', fontFamily:'var(--font-body)', fontSize:'0.9rem', textAlign:'right', outline:'none', background:'rgba(255,255,255,0.8)', color:theme.text, fontWeight:600, fontVariantNumeric:'tabular-nums' }}
+          onChange={e => !disabled && setLocalVal(e.target.value)}
+          onFocus={e => !disabled && e.target.select()}
+          onBlur={() => !disabled && commit()}
+          onKeyDown={e => { if (e.key==='Enter' && !disabled) e.target.blur(); }}
+          readOnly={disabled}
+          style={{ flex:1, border:`1.5px solid ${theme.border}`, borderRadius:'var(--radius-sm)', padding:'8px 12px', fontFamily:'var(--font-body)', fontSize:'0.9rem', textAlign:'right', outline:'none', background: disabled ? '#F1F5F9' : 'rgba(255,255,255,0.8)', color: disabled ? '#94A3B8' : theme.text, fontWeight:600, fontVariantNumeric:'tabular-nums', cursor: disabled ? 'not-allowed' : 'text' }}
         />
       </div>
     </div>
@@ -755,6 +757,9 @@ export default function ForecastWizard({
 }) {
   const C = useTypeColors();
   const TYPE_THEME = getTypeTheme(C);
+  const { user } = useAuth();
+  const role = user?.role;
+  const isGerente = role === 'gerente';
   const types = availableTypes?.length ? availableTypes : [editType];
 
   const activeStart = yearConfig?.activeStart || 2026;
@@ -777,6 +782,15 @@ export default function ForecastWizard({
   const theme = TYPE_THEME[activeType] || TYPE_THEME.Forecast;
 
   useEffect(() => { setLocalData(buildAll(entries, year)); setStep(0); setSaved(false); }, [entries, year]);
+
+  // Last month with Actual data in current year — all months <= this are locked for Forecast
+  let lastActualMonth = 0;
+  for (const e of entries) {
+    if (e.type !== 'Actual' || parseInt(e.year) !== parseInt(year)) continue;
+    if (parseFloat(e.value) > 0 && parseInt(e.month) > lastActualMonth) lastActualMonth = parseInt(e.month);
+  }
+
+
 
   useEffect(() => {
     if (!isConsolidatedYear) return;
@@ -929,12 +943,7 @@ export default function ForecastWizard({
 
   const activeSave = isConsolidatedYear ? handleConsSave : handleSave;
 
-  useEffect(() => {
-    if (!saving) return;
-    const h = (e) => { e.preventDefault(); e.returnValue = ''; };
-    window.addEventListener('beforeunload', h);
-    return () => window.removeEventListener('beforeunload', h);
-  }, [saving]);
+  // Note: beforeunload handler removed — caused PWA to minimize unexpectedly
 
   const WrapperWithTypeBar = ({ children }) => (
     <div style={{ width:'100%', background:theme.light, border:`1.5px solid ${theme.border}`, borderRadius:'var(--radius-lg)', overflow:'hidden', transition:'background 0.2s, border-color 0.2s', position:'relative' }}>
@@ -977,10 +986,13 @@ export default function ForecastWizard({
               <div style={{ fontSize:'0.56rem', fontWeight:700, color:'rgba(255,255,255,0.55)', textTransform:'uppercase', letterSpacing:'0.08em' }}>Realizado</div>
               <div style={{ fontFamily:'var(--font-display)', fontSize:'1rem', color:'#fff', fontWeight:600 }}>{formatBRL(consGetVal('Actual'))}</div>
             </div>
-            <button onClick={activeSave} disabled={saving} style={{ padding:'8px 22px', border:'none', cursor:saving?'wait':'pointer', background:saved?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.12)', color:'#fff', fontWeight:700, fontSize:'0.82rem', fontFamily:'var(--font-body)', borderRadius:'var(--radius-sm)', whiteSpace:'nowrap', transition:'background 0.15s' }}
-              onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.28)'}
-              onMouseLeave={e=>e.currentTarget.style.background=saved?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.12)'}
-            >{saving?'Salvando...':saved?'✓ Salvo':'💾 Salvar'}</button>
+            {isGerente
+              ? <span style={{fontSize:'0.72rem',color:'rgba(255,255,255,0.5)',fontStyle:'italic',padding:'8px 12px'}}>Somente leitura</span>
+              : <button onClick={activeSave} disabled={saving} style={{ padding:'8px 22px', border:'none', cursor:saving?'wait':'pointer', background:saved?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.12)', color:'#fff', fontWeight:700, fontSize:'0.82rem', fontFamily:'var(--font-body)', borderRadius:'var(--radius-sm)', whiteSpace:'nowrap', transition:'background 0.15s' }}
+                onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.28)'}
+                onMouseLeave={e=>e.currentTarget.style.background=saved?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.12)'}
+              >{saving?'Salvando...':saved?'✓ Salvo':'💾 Salvar'}</button>
+            }
           </div>
         </div>
       ) : (
@@ -1043,7 +1055,7 @@ export default function ForecastWizard({
               </div>
               <div style={{ padding:'16px 18px', background:thA.light }}>
                 <label style={{ fontSize:'0.78rem', fontWeight:600, color:'var(--text-secondary)', marginBottom:6, display:'block' }}>Valor total realizado em {year} (R$)</label>
-                <ConsInputRow cat="Realizado" value={consGetVal('Actual')} theme={thA} onChange={val => handleConsChange('Actual', val)} />
+                <ConsInputRow cat="Realizado" value={consGetVal('Actual')} theme={thA} onChange={isGerente ? ()=>{} : (val => handleConsChange('Actual', val))} disabled={isGerente} />
               </div>
             </div>
           </div>
@@ -1160,7 +1172,7 @@ export default function ForecastWizard({
               refValue={getRef(activeType,cat,month)} refLabel={`Ref. ${TYPE_THEME[REF_TYPE[activeType]]?.label||''}`}
               theme={theme} onChange={(m,v,c)=>handleChange(activeType,cat,m,v,c)}
               otherComments={getOtherComments(activeType,cat,month)}
-              actualValue={getValue('Actual',cat,month)}
+              lockedByActual={lastActualMonth > 0 && month <= lastActualMonth}
               activeType={activeType}
             />
           ))}

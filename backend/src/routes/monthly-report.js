@@ -301,17 +301,25 @@ router.post(
       });
 
 
-      if (!rows.length)
+      // Filter out rows with no financial data at all
+      const rowsWithData = rows.filter(r => {
+        const vals = [r.VAL, r.REAL, r.SALDO, r.SI, r.REALSI, r.SALDO_SI];
+        return vals.some(v => v && v !== '-' && v !== '0' && v !== 'R$ 0,00' && v !== 'R$ -');
+      });
+      // Use filtered rows but fall back to all rows if none have financial data
+      const dataRows = rowsWithData.length > 0 ? rowsWithData : rows;
+
+      if (!dataRows.length)
         return res.status(400).json({ error: 'Nenhum dado encontrado na planilha.' });
 
-      const prox12 = rows
+      const prox12 = dataRows
         .filter(r => r.VENC && r.VENC < lim12m)
         .sort((a, b) => a.VENC - b.VENC);
 
       const UHE_ORDER = ['Jurumirim','Salto Grande','Rosana','Canoas 1','Canoas 2',
                          'Garibaldi','Ilha Solteira','Jupiá'];
       const grouped = {};
-      for (const r of rows) {
+      for (const r of dataRows) {
         grouped[r.UHE] = grouped[r.UHE] || {};
         grouped[r.UHE][r.AREA] = grouped[r.UHE][r.AREA] || [];
         grouped[r.UHE][r.AREA].push(r);
@@ -323,9 +331,11 @@ router.post(
         return ia !== ib ? ia - ib : a.localeCompare(b);
       });
 
-      const uheOptions = [...new Set(rows.map(r => r.UHE).filter(u => u !== '-'))]
+      const uheOptions = [...new Set(dataRows.map(r => r.UHE).filter(u => u !== '-'))]
         .sort().map(u => `<option value='${u}'>${u}</option>`).join('\n');
-      const areaOptions = [...new Set(rows.map(r => r.AREA).filter(a => a !== '-'))]
+      const areaOptions = [...new Set(dataRows.map(r => r.AREA).filter(a => a !== '-'))]
+        .sort().map(a => `<option value='${a}'>${a}</option>`).join('\n');
+      const areaOptions2 = [...new Set(dataRows.map(r => r.AREA).filter(a => a !== '-'))]
         .sort().map(a => `<option value='${a}'>${a}</option>`).join('\n');
 
       const table12 = prox12.map(r => `
@@ -338,7 +348,8 @@ router.post(
       for (let ui = 0; ui < uheKeys.length; ui++) {
         const uhe = uheKeys[ui];
         sections.push(`<section data-kind='uheBlock' data-uhe='${uhe}'>`);
-        sections.push(`<h2 class='section-title'>${ui + 1} — ${uhe}</h2>`);
+        sections.push(`<h2 class='section-title uhe-toggle' data-uhe-key='${uhe}' onclick="toggleUHE('${uhe.replace(/'/g,"\'")}',this)" style='cursor:pointer;user-select:none;'><span class='uhe-arrow' style='margin-right:6px;display:inline-block;transition:transform 0.2s'>▶</span>${ui + 1} — ${uhe}</h2>`);
+        sections.push(`<div class='uhe-content' data-uhe-content='${uhe}' style='display:none'>`);
         const areaKeys = Object.keys(grouped[uhe]);
         for (let ai = 0; ai < areaKeys.length; ai++) {
           const area  = areaKeys[ai];
@@ -408,6 +419,7 @@ router.post(
           }
           sections.push('</div></section>');
         }
+        sections.push('</div>'); // end uhe-content
         sections.push('</section>');
       }
 
@@ -559,6 +571,15 @@ tr.due-2 td:first-child{border-left:6px solid #ef4444;}tr.due-6 td:first-child{b
   function stats(){const all=Array.from(document.querySelectorAll("[data-kind='card']")),vis=all.filter(e=>e.style.display!=="none");sT&&(sT.innerHTML="Exibindo <strong>"+vis.length+"</strong> de <strong>"+all.length+"</strong>");sU&&(sU.innerHTML=vis.length?toHtml(counts(vis,"data-uhe")):"-");sA&&(sA.innerHTML=vis.length?toHtml(counts(vis,"data-area")):"-");}
   function filter(){const u=(fU?.value||"").trim(),a=(fA?.value||"").trim();document.querySelectorAll("[data-kind='card']").forEach(el=>{el.style.display=(!u||el.getAttribute("data-uhe")===u)&&(!a||el.getAttribute("data-area")===a)?"":"none";});document.querySelectorAll("[data-kind='row12']").forEach(tr=>{tr.style.display=(!u||tr.getAttribute("data-uhe")===u)&&(!a||tr.getAttribute("data-area")===a)?"":"none";});document.querySelectorAll("[data-kind='areaBlock']").forEach(s=>{s.style.display=s.querySelector("[data-kind='card']:not([style*='display: none'])")?"":"none";});document.querySelectorAll("[data-kind='uheBlock']").forEach(s=>{s.style.display=s.querySelector("[data-kind='areaBlock']:not([style*='display: none'])")?"":"none";});stats();}
   tog?.addEventListener("click",()=>sb?.classList.toggle("collapsed"));
+  // UHE expand/collapse
+  window.toggleUHE = function(uhe, el) {
+    const content = document.querySelector('[data-uhe-content="'+uhe+'"]');
+    if (!content) return;
+    const arrow = el.querySelector('.uhe-arrow');
+    const open = content.style.display === 'block';
+    content.style.display = open ? 'none' : 'block';
+    if (arrow) arrow.style.transform = open ? '' : 'rotate(90deg)';
+  };
   fU?.addEventListener("change",filter);fA?.addEventListener("change",filter);
   clr?.addEventListener("click",()=>{fU.value="";fA.value="";filter();});
   sb?.classList.add("collapsed");filter();
