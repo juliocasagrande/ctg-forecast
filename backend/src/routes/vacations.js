@@ -51,35 +51,41 @@ router.get('/members', async (req, res) => {
 
   let query, params;
 
-  if (role === 'admin' || role === 'gestor' || role === 'planejador') {
+  if (role === 'admin' || role === 'gestor' || role === 'planejador' || role === 'gerente') {
+    // Admin/Gestor/Planejador/Gerente: vê todos os colaboradores
     query = `
-      SELECT DISTINCT ON (u.id)
-             u.id, u.name, u.avatar_initials,
-             COALESCE(vp.area, 'eletrica') AS area
+      SELECT u.id, u.name, u.avatar_initials, u.role,
+             COALESCE(u.area, 'eletrica') AS area
       FROM users u
-      LEFT JOIN vacation_periods vp ON vp.user_id = u.id
       WHERE u.active = true
-        AND u.role IN ('engenheiro','gestor','planejador')
-        ${area ? 'AND COALESCE(vp.area, \'eletrica\') = $1' : ''}
-      ORDER BY u.id, vp.created_at DESC NULLS LAST
+        AND u.role IN ('engenheiro','coordenador','gerente','gestor','planejador')
+        ${area ? "AND COALESCE(u.area, 'eletrica') = $1" : ''}
+      ORDER BY u.name
     `;
     params = area ? [area] : [];
-  } else {
+  } else if (role === 'coordenador') {
+    // Coordenador: engenheiros da sua área + todos coordenadores e gerentes
+    const userArea = req.user.area || 'eletrica';
     query = `
-      SELECT DISTINCT ON (u.id)
-             u.id, u.name, u.avatar_initials,
-             COALESCE(vp.area, 'eletrica') AS area
+      SELECT u.id, u.name, u.avatar_initials, u.role,
+             COALESCE(u.area, 'eletrica') AS area
       FROM users u
-      LEFT JOIN vacation_periods vp ON vp.user_id = u.id
       WHERE u.active = true
-        AND u.role IN ('engenheiro','gestor','planejador')
         AND (
-          u.id = $1
-          OR COALESCE(vp.area, 'eletrica') IN (
-            SELECT DISTINCT COALESCE(area, 'eletrica') FROM vacation_periods WHERE user_id = $1
-          )
+          (u.role = 'engenheiro' AND COALESCE(u.area, 'eletrica') = $1)
+          OR u.role IN ('coordenador', 'gerente')
         )
-      ORDER BY u.id, vp.created_at DESC NULLS LAST
+      ORDER BY u.name
+    `;
+    params = [userArea];
+  } else {
+    // Engenheiro: apenas ele mesmo
+    query = `
+      SELECT u.id, u.name, u.avatar_initials, u.role,
+             COALESCE(u.area, 'eletrica') AS area
+      FROM users u
+      WHERE u.active = true AND u.id = $1
+      ORDER BY u.name
     `;
     params = [userId];
   }

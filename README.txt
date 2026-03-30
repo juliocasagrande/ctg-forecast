@@ -19,4 +19,8 @@ cd backend; npm run dev
 cd frontend; npm run dev
 
 admin@ctgbrasil.com
+# senha local
+ctg@2026
+
+# senha azure
 ctg2026

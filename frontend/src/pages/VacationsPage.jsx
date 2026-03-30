@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useRole } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
 
 /* ─────────────────────────────────────────────
@@ -293,8 +294,9 @@ function PeriodModal({ period, userId, area, year, members, canEditOthers, onSav
 /* ─── PÁGINA ─── */
 export default function VacationsPage() {
   const { user } = useAuth();
+  const { isEngenheiro } = useRole();
   const role = user?.role;
-  const canEditOthers = role === 'admin' || role === 'gestor' || role === 'coordenador';
+  const canEditOthers = role === 'admin' || role === 'gestor' || role === 'coordenador' || role === 'gerente';
 
   const [year,       setYear]       = useState(new Date().getFullYear());
   const [area,       setArea]       = useState('eletrica');
@@ -361,27 +363,29 @@ export default function VacationsPage() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 10, overflow: 'hidden' }}>
 
       {/* ── Linha de controles ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
-        {AREAS.map(a => (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'nowrap', overflowX: 'auto' }}>
+        {(isEngenheiro ? [] : AREAS).map(a => (
           <button key={a.value} onClick={() => setArea(a.value)} style={areaBtn(a.value)}>{a.label}</button>
         ))}
 
         <div style={{ width: 1, height: 22, background: 'var(--border)', margin: '0 4px' }} />
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '3px 6px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '3px 6px', flexShrink: 0 }}>
           <button onClick={() => setYear(y => y - 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '1rem', padding: '0 2px' }}>‹</button>
           <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--ctg-navy)', minWidth: 38, textAlign: 'center' }}>{year}</span>
           <button onClick={() => setYear(y => y + 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '1rem', padding: '0 2px' }}>›</button>
         </div>
 
-        <button onClick={() => setModal({ period: null })} style={{
-          marginLeft: 'auto', padding: '6px 14px', borderRadius: 8, border: 'none',
-          background: 'var(--ctg-blue)', color: '#fff', fontWeight: 700, fontSize: '0.8rem',
-          cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
-        }}>
-          <svg viewBox="0 0 16 16" fill="currentColor" width="13" height="13"><path fillRule="evenodd" d="M8 2a1 1 0 011 1v4h4a1 1 0 110 2H9v4a1 1 0 11-2 0V9H3a1 1 0 110-2h4V3a1 1 0 011-1z"/></svg>
-          Novo período
-        </button>
+        {(canEditOthers || isEngenheiro) && (
+          <button onClick={() => setModal({ period: null })} style={{
+            marginLeft: 'auto', padding: '6px 14px', borderRadius: 8, border: 'none',
+            background: 'var(--ctg-blue)', color: '#fff', fontWeight: 700, fontSize: '0.8rem',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap', flexShrink: 0,
+          }}>
+            <svg viewBox="0 0 16 16" fill="currentColor" width="13" height="13"><path fillRule="evenodd" d="M8 2a1 1 0 011 1v4h4a1 1 0 110 2H9v4a1 1 0 11-2 0V9H3a1 1 0 110-2h4V3a1 1 0 011-1z"/></svg>
+            Novo período
+          </button>
+        )}
       </div>
 
       {/* ── KPI Cards ── */}

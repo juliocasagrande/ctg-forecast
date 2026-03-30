@@ -15,6 +15,8 @@ function requireMonthlyReportAccess(req, res, next) {
     role === 'admin' ||
     role === 'gestor' ||
     role === 'planejador' ||
+    role === 'coordenador' ||
+    role === 'gerente' ||
     email === 'julio.casagrande@ctgbr.com.br';
   if (!allowed)
     return res.status(403).json({ error: 'Acesso não autorizado ao relatório de acompanhamento.' });

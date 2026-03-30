@@ -177,12 +177,16 @@ router.get('/dashboard', async (req, res) => {
     const currentYear = new Date().getFullYear();
     const yrStart = parseInt(yearStart || year || currentYear);
     const yrEnd   = parseInt(yearEnd   || year || currentYear);
-    const { role, id: userId } = req.user;
-    const isEng = role === 'engenheiro'; // gerente vê tudo
+    const { role, id: userId, area: userArea } = req.user;
+    const isEng  = role === 'engenheiro';
+    const isCoord = role === 'coordenador';
     const joinClause = isEng
       ? `INNER JOIN project_assignments pa ON pa.project_id=p.id AND pa.user_id=$3`
-      : '';
-    const params = isEng ? [yrStart, yrEnd, userId] : [yrStart, yrEnd];
+      : isCoord
+        ? `INNER JOIN project_assignments pa ON pa.project_id=p.id
+           INNER JOIN users pu ON pu.id=pa.user_id AND pu.role='engenheiro' AND pu.area=$3`
+        : '';
+    const params = (isEng || isCoord) ? [yrStart, yrEnd, isEng ? userId : (userArea || '')] : [yrStart, yrEnd];
 
     // Combine forecast_entries + year_consolidated via UNION ALL
     // year_consolidated ALWAYS takes precedence when it exists
@@ -614,13 +618,23 @@ router.get('/polo-summary', async (req, res) => {
     const currentYear = new Date().getFullYear();
     const yrStart = parseInt(yearStart || year || currentYear);
     const yrEnd   = parseInt(yearEnd   || year || currentYear);
-    const { role, id: userId } = req.user;
+    const { role, id: userId, area: userArea } = req.user;
 
-    const isEng = role === 'engenheiro'; // gerente vê tudo
+    // polo-summary: engenheiro vê só seus projetos, coordenador vê projetos da sua área
+    // gerente/gestor/admin/planejador: vê tudo (sem filtro de join)
+    const isEng   = role === 'engenheiro';
+    const isCoord = role === 'coordenador';
+
+    // $3 = filter value (userId for eng, userArea for coord); $4 = userId for pa_mine
     const joinClause = isEng
       ? `INNER JOIN project_assignments pa ON pa.project_id=p.id AND pa.user_id=$3`
-      : '';
-    const params = [yrStart, yrEnd, userId];
+      : isCoord
+        ? `INNER JOIN project_assignments pa ON pa.project_id=p.id
+           INNER JOIN users pu ON pu.id=pa.user_id AND pu.role='engenheiro' AND pu.area=$3`
+        : '';
+    const filterVal = isEng ? userId : (isCoord ? (userArea || '') : null);
+    const params = filterVal !== null ? [yrStart, yrEnd, filterVal, userId] : [yrStart, yrEnd, userId];
+    const mineParam = filterVal !== null ? '$4' : '$3';
 
     // Main aggregation — budget/forecast/actual/pool totals
     const r = await pool.query(`
@@ -655,7 +669,7 @@ router.get('/polo-summary', async (req, res) => {
         JOIN users u ON u.id = pa2.user_id AND u.role = 'engenheiro'
         GROUP BY pa2.project_id
       ) eng_agg ON eng_agg.project_id = p.id
-      LEFT JOIN project_assignments pa_mine ON pa_mine.project_id = p.id AND pa_mine.user_id = $3
+      LEFT JOIN project_assignments pa_mine ON pa_mine.project_id = p.id AND pa_mine.user_id = ${mineParam}
       GROUP BY p.id, p.code, p.name, p.plants, eng_agg.engineers, pa_mine.user_id
       ORDER BY p.code
     `, params);

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { formatBRLShort } from '../utils/format.js';
 import ProjectsList from '../components/ProjectsList.jsx';
+import { useRole } from '../context/AuthContext.jsx';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend
@@ -53,6 +54,7 @@ function SummaryCard({ title, subtitle, projects, onClick, selected }) {
 
 // plantFilter = array of plant names from header dropdown (empty = show all)
 export default function ProjectsPage({ projects, period, plantFilter = [], onEditProject, onProjectsChange }) {
+  const { isEngenheiro } = useRole();
   const [view, setView]                     = useState('list');
   const [selectedPlant, setSelectedPlant]     = useState(null);
   const [selectedEngineer, setSelectedEngineer] = useState(null);
@@ -122,7 +124,7 @@ export default function ProjectsPage({ projects, period, plantFilter = [], onEdi
           {[
             { id: 'list',      label: 'Lista de Projetos' },
             { id: 'plants',    label: 'Por Usina' },
-            { id: 'engineers', label: 'Por Engenheiro' },
+            ...(!isEngenheiro ? [{ id: 'engineers', label: 'Por Engenheiro' }] : []),
           ].map(tab => (
             <button key={tab.id}
               className={`tab-btn ${view === tab.id ? 'active' : ''}`}
