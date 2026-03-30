@@ -523,11 +523,11 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
           ))}
         </div>
 
-        {/* ── Charts row ───────────────────────────────────────────────── */}
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '3fr 2fr', gap: 10, flexShrink: 0 }}>
+        {/* ── Charts row — flex:1 para ocupar espaço restante entre KPIs e tabela ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '3fr 2fr', gap: 10, flex: 1, minHeight: 0 }}>
 
           {/* S-Curve */}
-          <div className="card" style={{ overflow: 'visible' }}>
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
             <CardHeader
               title={`Evolução Mensal + S-Curve — ${periodLabel}`}
               action={!isMobile ? (
@@ -543,8 +543,8 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
                 </button>
               ) : null}
             />
-            <div style={{ padding: '8px 6px 4px' }}>
-              <ResponsiveContainer width="100%" height={168}>
+            <div style={{ padding: '8px 6px 4px', flex: 1, minHeight: 0 }}>
+              <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={combinedData} margin={{ top: 2, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="month" tick={{ fontSize: 9, fill: '#374151' }} interval={tickInterval} />
@@ -575,7 +575,7 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
           </div>
 
           {/* Por Projeto */}
-          <div className="card" style={{ overflow: 'visible' }}>
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
             <CardHeader
               title={`Por Projeto — ${periodLabel}`}
               action={!isMobile ? (
@@ -591,8 +591,8 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
                 </button>
               ) : null}
             />
-            <div style={{ padding: '8px 6px 4px' }}>
-              <ResponsiveContainer width="100%" height={168}>
+            <div style={{ padding: '8px 6px 4px', flex: 1, minHeight: 0 }}>
+              <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={filtered.map(p => ({
                     name:      p.code,
@@ -619,23 +619,20 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
         </div>
 
         {/* ── Summary table ─────────────────────────────────────────────── */}
-        <div className="card" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ padding: '6px 12px', background: '#1E3A6E', borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div className="card" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ padding: '6px 12px', background: '#1E3A6E', borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
             <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.76rem', fontWeight: 600, letterSpacing: '0.04em' }}>
               Resumo por Projeto — {periodLabel}
+              {filtered.length > 0 && (
+                <span style={{ marginLeft: 8, background: 'rgba(255,255,255,0.15)', borderRadius: 10, padding: '1px 7px', fontSize: '0.68rem', fontWeight: 500 }}>
+                  {filtered.length} projeto{filtered.length !== 1 ? 's' : ''}
+                </span>
+              )}
             </span>
-            {!isMobile && <button onClick={() => setTableOpen(true)} title="Expandir tabela" style={{
-              background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: 6,
-              color: '#fff', cursor: 'pointer', padding: '3px 8px', fontSize: '0.72rem',
-              display: 'flex', alignItems: 'center', gap: 4,
-            }}>
-              <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12">
-                <path d="M1.5 1h4a.5.5 0 010 1H2.707l3.647 3.646a.5.5 0 01-.708.708L2 2.707V5.5a.5.5 0 01-1 0v-4A.5.5 0 011.5 1zM14.5 1a.5.5 0 01.5.5v4a.5.5 0 01-1 0V2.707l-3.646 3.647a.5.5 0 01-.708-.708L13.293 2H10.5a.5.5 0 010-1h4zM1.5 15a.5.5 0 01-.5-.5v-4a.5.5 0 011 0v2.793l3.646-3.647a.5.5 0 01.708.708L2.707 14H5.5a.5.5 0 010 1h-4zM10 10.854a.5.5 0 01.708-.708L14 13.293V10.5a.5.5 0 011 0v4a.5.5 0 01-.5.5h-4a.5.5 0 010-1h2.793l-3.647-3.646a.5.5 0 01.354-.5z"/>
-              </svg>
-              Expandir
-            </button>}
           </div>
-          <div style={{ overflowY: 'auto', overflowX: 'auto', flex: 1 }}>
+          {/* Tabela com altura fixa — scroll desabilitado intencionalmente */}
+          <div style={{ position: 'relative' }}>
+          <div style={{ overflowY: 'hidden', overflowX: 'auto', maxHeight: 245 }}>
             <table className="dash-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
               <thead>
                 <tr>
@@ -699,6 +696,37 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
               </tbody>
             </table>
           </div>
+          {/* Fade-out overlay — indica que há mais linhas abaixo */}
+          {filtered.length > 5 && (
+            <div style={{
+              position: 'absolute', bottom: 0, left: 0, right: 0, height: 64,
+              background: 'linear-gradient(to bottom, transparent, var(--bg-card))',
+              pointerEvents: 'none',
+            }} />
+          )}
+          </div>
+          {/* Rodapé com contagem e botão Ver todos */}
+          {filtered.length > 5 && !isMobile && (
+            <div style={{
+              padding: '8px 14px', borderTop: '1px solid var(--border)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              background: 'var(--bg-card)', flexShrink: 0,
+            }}>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                Exibindo 5 de <strong style={{ color: 'var(--text-primary)' }}>{filtered.length}</strong> projetos
+              </span>
+              <button onClick={() => setTableOpen(true)} style={{
+                background: 'var(--ctg-blue)', border: 'none', borderRadius: 6,
+                color: '#fff', cursor: 'pointer', padding: '4px 12px',
+                fontSize: '0.72rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5,
+              }}>
+                <svg viewBox="0 0 16 16" fill="currentColor" width="11" height="11">
+                  <path d="M1.5 1h4a.5.5 0 010 1H2.707l3.647 3.646a.5.5 0 01-.708.708L2 2.707V5.5a.5.5 0 01-1 0v-4A.5.5 0 011.5 1zM14.5 1a.5.5 0 01.5.5v4a.5.5 0 01-1 0V2.707l-3.646 3.647a.5.5 0 01-.708-.708L13.293 2H10.5a.5.5 0 010-1h4zM1.5 15a.5.5 0 01-.5-.5v-4a.5.5 0 011 0v2.793l3.646-3.647a.5.5 0 01.708.708L2.707 14H5.5a.5.5 0 010 1h-4zM10 10.854a.5.5 0 01.708-.708L14 13.293V10.5a.5.5 0 011 0v4a.5.5 0 01-.5.5h-4a.5.5 0 010-1h2.793l-3.647-3.646a.5.5 0 01.354-.5z"/>
+                </svg>
+                Ver todos os projetos
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
