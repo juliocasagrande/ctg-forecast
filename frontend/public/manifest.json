@@ -1,7 +1,7 @@
 {
-  "name": "CTG Forecast",
-  "short_name": "Forecast",
-  "description": "CTG Brasil — Controle de Forecast de Projetos",
+  "name": "CTG.Engenharia",
+  "short_name": "Engenharia",
+  "description": "CTG Brasil — Plataforma de Gestão de Projetos de Engenharia",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#001F5B",

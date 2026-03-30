@@ -127,7 +127,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
           {/* Gestor / Engenheiro / Planejador */}
           {!isAdmin && <>
 
-            {/* ── SEÇÃO 1: Forecast ─────────────────────────────── */}
+            {/* ── SEÇÃO 1: Planejamento ─────────────────────────── */}
             <div className="nav-section-label" style={{color:"rgba(255,255,255,0.85)"}}>
               Forecast
             </div>

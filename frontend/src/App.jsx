@@ -468,7 +468,7 @@ function PlanejadorExportModal({ open, onClose }) {
       const blob = await res.blob();
       const link = document.createElement('a');
       link.href  = URL.createObjectURL(blob);
-      link.download = `CTG_Forecast_Planejador_${new Date().getFullYear()}.xlsx`;
+      link.download = `CTG_Engenharia_Planejador_${new Date().getFullYear()}.xlsx`;
       link.click();
       URL.revokeObjectURL(link.href);
       onClose();
