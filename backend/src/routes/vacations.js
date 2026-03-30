@@ -109,6 +109,14 @@ router.post('/', async (req, res) => {
     return res.status(403).json({ error: 'Sem permissão para criar férias de outro usuário' });
   }
 
+  // Coordenador não pode criar/editar férias de gerentes/diretores
+  if (role === 'coordenador') {
+    const targetUser = await pool.query('SELECT role FROM users WHERE id=$1', [user_id]);
+    if (targetUser.rows.length && ['gerente', 'gestor', 'admin'].includes(targetUser.rows[0].role)) {
+      return res.status(403).json({ error: 'Coordenadores não podem alterar férias de gerentes ou diretores' });
+    }
+  }
+
   // Calcula dias corridos
   const start = new Date(start_date);
   const end   = new Date(end_date);
@@ -126,6 +134,45 @@ router.post('/', async (req, res) => {
     return res.status(409).json({ error: `Período ${period_number} já cadastrado para este ano` });
   }
 
+  // Verifica sobreposição com colegas da mesma área/grupo e notifica
+  // Determina grupo do usuário solicitante
+  const userInfo = await pool.query('SELECT role, area FROM users WHERE id=$1', [user_id]);
+  const uRole = userInfo.rows[0]?.role || 'engenheiro';
+  const uArea = userInfo.rows[0]?.area || 'eletrica';
+
+  let overlapQuery;
+  let overlapParams;
+  if (['gerente', 'gestor', 'coordenador'].includes(uRole)) {
+    // Gerentes/coordenadores: verificar sobreposição com outros gerentes/coordenadores
+    overlapQuery = `
+      SELECT vp.user_id, u.name AS user_name
+      FROM vacation_periods vp
+      JOIN users u ON u.id = vp.user_id
+      WHERE vp.user_id != $1
+        AND u.role IN ('gerente', 'gestor', 'coordenador')
+        AND vp.year = $2
+        AND vp.start_date <= $3
+        AND vp.end_date >= $4
+    `;
+    overlapParams = [user_id, year, end_date, start_date];
+  } else {
+    // Engenheiros: verificar sobreposição com colegas da mesma área
+    overlapQuery = `
+      SELECT vp.user_id, u.name AS user_name
+      FROM vacation_periods vp
+      JOIN users u ON u.id = vp.user_id
+      WHERE vp.user_id != $1
+        AND u.role = 'engenheiro'
+        AND COALESCE(u.area, 'eletrica') = $2
+        AND vp.year = $3
+        AND vp.start_date <= $4
+        AND vp.end_date >= $5
+    `;
+    overlapParams = [user_id, uArea, year, end_date, start_date];
+  }
+  const overlapRes = await pool.query(overlapQuery, overlapParams);
+  const overlappingColleagues = overlapRes.rows;
+
   const { rows } = await pool.query(`
     INSERT INTO vacation_periods
       (user_id, area, period_number, start_date, end_date, days, adp_registered, year, notes, created_by)
@@ -133,7 +180,30 @@ router.post('/', async (req, res) => {
     RETURNING *
   `, [user_id, area, period_number, start_date, end_date, days, adp_registered ?? false, year, notes || null, requesterId]);
 
-  res.status(201).json(rows[0]);
+  const newPeriod = rows[0];
+
+  // Se houver sobreposição, criar notificação para os colegas afetados
+  if (overlappingColleagues.length > 0) {
+    const requesterInfo = await pool.query('SELECT name FROM users WHERE id=$1', [user_id]);
+    const requesterName = requesterInfo.rows[0]?.name || 'Colega';
+    for (const colleague of overlappingColleagues) {
+      try {
+        await pool.query(`
+          INSERT INTO messages (project_id, user_id, content, created_at)
+          SELECT NULL, $1, $2, NOW()
+          WHERE EXISTS (SELECT 1 FROM users WHERE id=$1)
+        `, [colleague.user_id, `⚠️ Conflito de férias: ${requesterName} marcou férias no mesmo período que você (${start_date} a ${end_date}).`]);
+      } catch (_) {}
+    }
+  }
+
+  res.status(201).json({
+    ...newPeriod,
+    overlap_warning: overlappingColleagues.length > 0
+      ? `Atenção: ${overlappingColleagues.map(c => c.user_name).join(', ')} também ${overlappingColleagues.length === 1 ? 'tem' : 'têm'} férias neste período.`
+      : null,
+    overlapping_colleagues: overlappingColleagues,
+  });
 });
 
 /* ────────────────────────────────────────────────

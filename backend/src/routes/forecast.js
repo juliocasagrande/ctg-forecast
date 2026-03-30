@@ -614,25 +614,33 @@ router.post('/alerts/dismiss', async (req, res) => {
 // ── Polo Consolidado — aggregated by polo → plant → project ──────────────────
 router.get('/polo-summary', async (req, res) => {
   try {
-    const { year, yearStart, yearEnd } = req.query;
+    const { year, yearStart, yearEnd, areaFilter } = req.query;
     const currentYear = new Date().getFullYear();
     const yrStart = parseInt(yearStart || year || currentYear);
     const yrEnd   = parseInt(yearEnd   || year || currentYear);
     const { role, id: userId, area: userArea } = req.user;
 
-    // polo-summary: engenheiro vê só seus projetos, coordenador vê projetos da sua área
-    // gerente/gestor/admin/planejador: vê tudo (sem filtro de join)
+    // polo-summary: engenheiro vê só seus projetos
+    // coordenador vê projetos da sua área (ou areaFilter se fornecido)
+    // gerente/gestor/admin/planejador: vê tudo, mas pode filtrar por areaFilter
     const isEng   = role === 'engenheiro';
     const isCoord = role === 'coordenador';
 
-    // $3 = filter value (userId for eng, userArea for coord); $4 = userId for pa_mine
-    const joinClause = isEng
-      ? `INNER JOIN project_assignments pa ON pa.project_id=p.id AND pa.user_id=$3`
-      : isCoord
-        ? `INNER JOIN project_assignments pa ON pa.project_id=p.id
-           INNER JOIN users pu ON pu.id=pa.user_id AND pu.role='engenheiro' AND pu.area=$3`
-        : '';
-    const filterVal = isEng ? userId : (isCoord ? (userArea || '') : null);
+    // Determine effective area: coordenador uses own area unless areaFilter overrides; others use areaFilter
+    const effectiveArea = isCoord ? (areaFilter || userArea || '') : (areaFilter || null);
+
+    // Build join clause
+    let joinClause = '';
+    let filterVal = null;
+    if (isEng) {
+      joinClause = `INNER JOIN project_assignments pa ON pa.project_id=p.id AND pa.user_id=$3`;
+      filterVal = userId;
+    } else if (effectiveArea) {
+      joinClause = `INNER JOIN project_assignments pa ON pa.project_id=p.id
+           INNER JOIN users pu ON pu.id=pa.user_id AND pu.role='engenheiro' AND pu.area=$3`;
+      filterVal = effectiveArea;
+    }
+
     const params = filterVal !== null ? [yrStart, yrEnd, filterVal, userId] : [yrStart, yrEnd, userId];
     const mineParam = filterVal !== null ? '$4' : '$3';
 

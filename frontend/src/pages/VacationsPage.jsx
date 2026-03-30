@@ -38,34 +38,40 @@ const ALL_AREAS_FOR_MODAL = [
 
 function fmt(date) {
   if (!date) return '';
-  return new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  const d = String(date).slice(0, 10); // always take just YYYY-MM-DD
+  return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
 
 function daysUntil(dateStr) {
   if (!dateStr) return null;
-  return Math.ceil((new Date(dateStr + 'T12:00:00') - new Date()) / 86400000);
+  const d = String(dateStr).slice(0, 10);
+  return Math.ceil((new Date(d + 'T12:00:00') - new Date()) / 86400000);
 }
 
 function calcDays(start, end) {
   if (!start || !end) return 0;
-  return Math.round((new Date(end) - new Date(start)) / 86400000) + 1;
+  return Math.round((new Date(String(end).slice(0,10)) - new Date(String(start).slice(0,10))) / 86400000) + 1;
 }
 
 function dateToPercent(dateStr, year) {
-  const d = new Date(dateStr + 'T12:00:00');
+  const d = new Date(String(dateStr).slice(0, 10) + 'T12:00:00');
   const start = new Date(year, 0, 1);
   const end   = new Date(year, 11, 31);
   return Math.max(0, Math.min(100, ((d - start) / (end - start)) * 100));
 }
 
 function Avatar({ name, initials, size = 26 }) {
-  const letters = initials || name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '??';
+  // Use stored initials directly; fall back to first letters of first two words
+  const letters = (initials && initials.trim())
+    ? initials.trim().slice(0, 3)
+    : (name?.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '??');
   return (
     <span style={{
       width: size, height: size, borderRadius: '50%', flexShrink: 0,
       background: 'var(--ctg-navy)', color: '#fff',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: size * 0.32 + 'rem', fontWeight: 700,
+      fontSize: Math.round(size * 0.36) + 'px', fontWeight: 700,
+      lineHeight: 1, letterSpacing: '-0.02em',
     }}>{letters}</span>
   );
 }
@@ -79,8 +85,14 @@ function VacationTimeline({ periodsByUser, allMembers, year }) {
   const grouped = {};
   for (const g of TIMELINE_GROUPS) grouped[g.key] = [];
   for (const m of allMembers) {
-    const key = m.area || 'eletrica';
-    if (grouped[key]) grouped[key].push(m);
+    // Managers/coordinators go to 'coordenacao' group regardless of area field
+    let key;
+    if (['gerente','gestor','coordenador','planejador'].includes(m.role)) {
+      key = 'coordenacao';
+    } else {
+      key = m.area || 'eletrica';
+    }
+    if (grouped[key] !== undefined) grouped[key].push(m);
     else grouped['eletrica'].push(m);
   }
 
@@ -292,14 +304,17 @@ function PeriodModal({ period, userId, area, year, members, canEditOthers, onSav
 }
 
 /* ─── PÁGINA ─── */
-export default function VacationsPage() {
+export default function VacationsPage({ areaFilter: areaFilterProp = '', year: yearProp, onYearChange }) {
   const { user } = useAuth();
   const { isEngenheiro } = useRole();
   const role = user?.role;
   const canEditOthers = role === 'admin' || role === 'gestor' || role === 'coordenador' || role === 'gerente';
 
-  const [year,       setYear]       = useState(new Date().getFullYear());
-  const [area,       setArea]       = useState('eletrica');
+  // year and area driven by App.jsx header props
+  const year    = yearProp ?? new Date().getFullYear();
+  const setYear = onYearChange ?? (() => {});
+  const area    = (areaFilterProp && areaFilterProp !== '') ? areaFilterProp : 'eletrica';
+  const setArea = () => {}; // area is controlled by App header
   const [periods,    setPeriods]    = useState([]);
   const [members,    setMembers]    = useState([]);
   const [allMembers, setAllMembers] = useState([]);
@@ -324,9 +339,18 @@ export default function VacationsPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  const [overlapWarning, setOverlapWarning] = useState('');
+
   async function handleSave(method, id, form) {
-    if (method === 'post') await api.post('/vacations', { ...form, year });
-    else await api.put(`/vacations/${id}`, { ...form, year });
+    if (method === 'post') {
+      const res = await api.post('/vacations', { ...form, year });
+      if (res.data?.overlap_warning) {
+        setOverlapWarning(res.data.overlap_warning);
+        setTimeout(() => setOverlapWarning(''), 8000);
+      }
+    } else {
+      await api.put(`/vacations/${id}`, { ...form, year });
+    }
     load();
   }
 
@@ -342,7 +366,9 @@ export default function VacationsPage() {
     periodsByUser[p.user_id].push(p);
   }
 
-  const areaMembers  = members.filter(m => m.area === area);
+  // Separate managers/coordinators from engineers in allMembers
+  const mgmtMembers  = allMembers.filter(m => ['gerente','gestor','coordenador','planejador'].includes(m.role));
+  const areaMembers  = members.filter(m => m.area === area && !['gerente','gestor','coordenador','planejador'].includes(m.role));
   const areaPeriods  = periods.filter(p => areaMembers.some(m => m.id === p.user_id));
   const withVacation = new Set(areaPeriods.map(p => p.user_id)).size;
   const adpOk        = areaPeriods.filter(p => p.adp_registered).length;
@@ -352,44 +378,57 @@ export default function VacationsPage() {
     .map(m => ({ member: m, periods: (periodsByUser[m.id] || []).sort((a,b) => a.period_number - b.period_number) }))
     .sort((a, b) => a.member.name.localeCompare(b.member.name));
 
-  const areaBtn = val => ({
-    padding: '5px 12px', borderRadius: 20, cursor: 'pointer',
-    border: '1px solid var(--border)', fontSize: '0.75rem', fontWeight: 600,
-    background: area === val ? 'var(--ctg-navy)' : 'var(--bg-card)',
-    color: area === val ? '#fff' : 'var(--text-secondary)',
-  });
+  const mgmtRows = mgmtMembers
+    .map(m => ({ member: m, periods: (periodsByUser[m.id] || []).sort((a,b) => a.period_number - b.period_number) }))
+    .sort((a, b) => a.member.name.localeCompare(b.member.name));
+
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+
+
+
+  // Shared PeriodCell renderer
+  function PeriodCellRenderer({ p, num, member, canEdit, deleting: del, onDelete, onEdit }) {
+    if (!p) return (
+      <td style={{ padding: '7px 12px' }}>
+        {canEdit
+          ? <button onClick={() => onEdit({ period_number: num, user_id: member.id, area }, member.id)}
+              style={{ background: 'none', border: '1px dashed var(--border)', borderRadius: 6, padding: '3px 10px', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '0.72rem' }}>
+              + Adicionar
+            </button>
+          : <span style={{ color: 'var(--text-secondary)' }}>—</span>}
+      </td>
+    );
+    const c = PERIOD_COLORS[num-1];
+    return (
+      <td style={{ padding: '7px 12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}`, borderRadius: 5, padding: '2px 7px', fontSize: '0.72rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            {fmt(p.start_date)} – {fmt(p.end_date)}
+          </span>
+          <span style={{ fontSize: '0.68rem', color: 'var(--text-secondary)' }}>{p.days}d</span>
+          {p.adp_registered && <span style={{ fontSize: '0.6rem', background: '#D1FAE5', color: '#065F46', borderRadius: 4, padding: '1px 5px', fontWeight: 700 }}>ADP</span>}
+          {canEdit && <>
+            <button onClick={() => onEdit(p, member.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ctg-blue)', padding: '0 2px', fontSize: '0.7rem' }}>✎</button>
+            <button onClick={() => onDelete(p.id)} disabled={del === p.id} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '0 2px', fontSize: '0.7rem' }}>✕</button>
+          </>}
+        </div>
+      </td>
+    );
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 10, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
-      {/* ── Linha de controles ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'nowrap', overflowX: 'auto' }}>
-        {(isEngenheiro ? [] : AREAS).map(a => (
-          <button key={a.value} onClick={() => setArea(a.value)} style={areaBtn(a.value)}>{a.label}</button>
-        ))}
-
-        <div style={{ width: 1, height: 22, background: 'var(--border)', margin: '0 4px' }} />
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '3px 6px', flexShrink: 0 }}>
-          <button onClick={() => setYear(y => y - 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '1rem', padding: '0 2px' }}>‹</button>
-          <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--ctg-navy)', minWidth: 38, textAlign: 'center' }}>{year}</span>
-          <button onClick={() => setYear(y => y + 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '1rem', padding: '0 2px' }}>›</button>
+      {/* ── Overlap warning banner ── */}
+      {overlapWarning && (
+        <div style={{ background: '#FEF3C7', border: '1px solid #F59E0B', borderRadius: 8, margin: '8px 0 0', padding: '10px 16px', fontSize: '0.82rem', color: '#92400E', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          ⚠️ {overlapWarning}
+          <button onClick={() => setOverlapWarning('')} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#92400E', fontWeight: 700 }}>✕</button>
         </div>
-
-        {(canEditOthers || isEngenheiro) && (
-          <button onClick={() => setModal({ period: null })} style={{
-            marginLeft: 'auto', padding: '6px 14px', borderRadius: 8, border: 'none',
-            background: 'var(--ctg-blue)', color: '#fff', fontWeight: 700, fontSize: '0.8rem',
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap', flexShrink: 0,
-          }}>
-            <svg viewBox="0 0 16 16" fill="currentColor" width="13" height="13"><path fillRule="evenodd" d="M8 2a1 1 0 011 1v4h4a1 1 0 110 2H9v4a1 1 0 11-2 0V9H3a1 1 0 110-2h4V3a1 1 0 011-1z"/></svg>
-            Novo período
-          </button>
-        )}
-      </div>
+      )}
 
       {/* ── KPI Cards ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, flexShrink: 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 8, flexShrink: 0 }}>
         {[
           { label: 'Colaboradores',      val: areaMembers.length, sub: AREAS.find(a => a.value === area)?.label },
           { label: 'Com férias marcadas', val: withVacation, sub: `${areaMembers.length - withVacation} sem registro` },
@@ -433,6 +472,63 @@ export default function VacationsPage() {
             </div>
           </div>
 
+          {/* ── Coordenação / Gerência ── */}
+          {mgmtRows.length > 0 && (
+            <div className="card" style={{ flexShrink: 0 }}>
+              <div style={{ padding: '6px 14px 4px', background: 'var(--ctg-navy)', borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0' }}>
+                <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.76rem', fontWeight: 600, letterSpacing: '0.04em' }}>
+                  Coordenação &amp; Gerência
+                </span>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                <thead>
+                  <tr>
+                    {['Colaborador','Cargo','1º Período','2º Período','3º Período','Total',''].map(h => (
+                      <th key={h} style={{ background: '#1E3A6E', color: '#fff', padding: '7px 12px', textAlign: 'left', fontWeight: 700, fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.04em', position: 'sticky', top: 0, whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {mgmtRows.map(({ member, periods: mp }, i) => {
+                    const p1 = mp.find(p => p.period_number === 1);
+                    const p2 = mp.find(p => p.period_number === 2);
+                    const p3 = mp.find(p => p.period_number === 3);
+                    const total = mp.reduce((s, p) => s + (p.days||0), 0);
+                    const canEdit = canEditOthers && !(role === 'coordenador' && ['gerente','gestor'].includes(member.role));
+                    const roleLabel = { gerente:'Gerente', gestor:'Gestor', coordenador:'Coord.', planejador:'Planejador' }[member.role] || member.role;
+                    return (
+                      <tr key={member.id} style={{ background: i%2 ? '#F8FAFC' : 'var(--bg-card)', borderBottom: '1px solid #E2E8F0' }}>
+                        <td style={{ padding: '7px 12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                            <Avatar name={member.name} initials={member.avatar_initials} size={28} />
+                            <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{member.name}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '7px 12px' }}>
+                          <span style={{ fontSize: '0.7rem', background: '#EFF6FF', color: '#1D4ED8', borderRadius: 4, padding: '2px 6px', fontWeight: 600 }}>{roleLabel}</span>
+                        </td>
+                        <PeriodCellRenderer p={p1} num={1} member={member} canEdit={canEdit} deleting={deleting} onDelete={handleDelete} onEdit={(period, uid) => setModal({ period, userId: uid })} />
+                        <PeriodCellRenderer p={p2} num={2} member={member} canEdit={canEdit} deleting={deleting} onDelete={handleDelete} onEdit={(period, uid) => setModal({ period, userId: uid })} />
+                        <PeriodCellRenderer p={p3} num={3} member={member} canEdit={canEdit} deleting={deleting} onDelete={handleDelete} onEdit={(period, uid) => setModal({ period, userId: uid })} />
+                        <td style={{ padding: '7px 12px', fontVariantNumeric: 'tabular-nums' }}>
+                          {total > 0 ? <span style={{ color: 'var(--ctg-blue)', fontWeight: 500 }}>{total}d</span> : <span style={{ color: 'var(--text-secondary)' }}>—</span>}
+                        </td>
+                        <td style={{ padding: '7px 12px' }}>
+                          {canEdit && mp.length < 3 && (
+                            <button onClick={() => setModal({ period: { period_number: mp.length+1, user_id: member.id, area: member.area || 'coordenacao' }, userId: member.id })}
+                              style={{ background: 'rgba(0,112,184,0.08)', border: '1px solid rgba(0,112,184,0.2)', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', color: 'var(--ctg-blue)', fontSize: '0.68rem', fontWeight: 600 }}>
+                              + período
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           {/* ── Lista da área selecionada ── */}
           <div className="card" style={{ flexShrink: 0 }}>
             <div style={{ padding: '6px 14px 4px', background: '#1E3A6E', borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0' }}>
@@ -456,38 +552,9 @@ export default function VacationsPage() {
                   const p2 = mp.find(p => p.period_number === 2);
                   const p3 = mp.find(p => p.period_number === 3);
                   const total = mp.reduce((s, p) => s + (p.days||0), 0);
-                  const next = [...mp].sort((a,b) => new Date(a.start_date)-new Date(b.start_date)).find(p => daysUntil(p.start_date) > 0);
+                  const next = [...mp].sort((a,b) => new Date(String(a.start_date).slice(0,10))-new Date(String(b.start_date).slice(0,10))).find(p => daysUntil(p.start_date) > 0);
                   const daysLeft = next ? daysUntil(next.start_date) : null;
                   const canEdit = canEditOthers || member.id === user.id;
-
-                  function PeriodCell({ p, num }) {
-                    if (!p) return (
-                      <td style={{ padding: '7px 12px' }}>
-                        {canEdit
-                          ? <button onClick={() => setModal({ period: { period_number: num, user_id: member.id, area }, userId: member.id })}
-                              style={{ background: 'none', border: '1px dashed var(--border)', borderRadius: 6, padding: '3px 10px', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '0.72rem' }}>
-                              + Adicionar
-                            </button>
-                          : <span style={{ color: 'var(--text-secondary)' }}>—</span>}
-                      </td>
-                    );
-                    const c = PERIOD_COLORS[num-1];
-                    return (
-                      <td style={{ padding: '7px 12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <span style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}`, borderRadius: 5, padding: '2px 7px', fontSize: '0.72rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                            {fmt(p.start_date)} – {fmt(p.end_date)}
-                          </span>
-                          <span style={{ fontSize: '0.68rem', color: 'var(--text-secondary)' }}>{p.days}d</span>
-                          {p.adp_registered && <span style={{ fontSize: '0.6rem', background: '#D1FAE5', color: '#065F46', borderRadius: 4, padding: '1px 5px', fontWeight: 700 }}>ADP</span>}
-                          {canEdit && <>
-                            <button onClick={() => setModal({ period: p, userId: member.id })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ctg-blue)', padding: '0 2px', fontSize: '0.7rem' }}>✎</button>
-                            <button onClick={() => handleDelete(p.id)} disabled={deleting === p.id} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '0 2px', fontSize: '0.7rem' }}>✕</button>
-                          </>}
-                        </div>
-                      </td>
-                    );
-                  }
 
                   return (
                     <tr key={member.id} style={{ background: i%2 ? '#F8FAFC' : 'var(--bg-card)', borderBottom: '1px solid #E2E8F0' }}>
@@ -497,9 +564,9 @@ export default function VacationsPage() {
                           <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{member.name}</span>
                         </div>
                       </td>
-                      <PeriodCell p={p1} num={1} />
-                      <PeriodCell p={p2} num={2} />
-                      <PeriodCell p={p3} num={3} />
+                      <PeriodCellRenderer p={p1} num={1} member={member} canEdit={canEdit} deleting={deleting} onDelete={handleDelete} onEdit={(period, uid) => setModal({ period, userId: uid })} />
+                      <PeriodCellRenderer p={p2} num={2} member={member} canEdit={canEdit} deleting={deleting} onDelete={handleDelete} onEdit={(period, uid) => setModal({ period, userId: uid })} />
+                      <PeriodCellRenderer p={p3} num={3} member={member} canEdit={canEdit} deleting={deleting} onDelete={handleDelete} onEdit={(period, uid) => setModal({ period, userId: uid })} />
                       <td style={{ padding: '7px 12px', fontVariantNumeric: 'tabular-nums' }}>
                         {total > 0 ? <span style={{ color: 'var(--ctg-blue)', fontWeight: 500 }}>{total}d</span> : <span style={{ color: 'var(--text-secondary)' }}>—</span>}
                       </td>

@@ -591,10 +591,13 @@ function fmtNum(v) {
 }
 
 // ── Month input row ───────────────────────────────────────────────────────────
-function MonthRow({ month, year, value, comment, onChange, refValue, refLabel, theme, otherComments }) {
+function MonthRow({ month, year, value, comment, onChange, refValue, refLabel, theme, otherComments, actualValue, activeType }) {
   const [localVal, setLocalVal] = useState(fmtInput(value));
   const [localCmt, setLocalCmt] = useState(comment);
   const didMount = useRef(false);
+
+  // Lock Forecast/Budget fields for months that already have Actual data
+  const isLocked = activeType === 'Forecast' && actualValue != null && actualValue > 0;
 
   useEffect(() => {
     if (!didMount.current) { didMount.current = true; return; }
@@ -619,32 +622,42 @@ function MonthRow({ month, year, value, comment, onChange, refValue, refLabel, t
           <span style={{ fontSize:'0.84rem', fontWeight:600, color:'var(--text-primary)' }}>{MONTHS_FULL_PT[month-1]}</span>
           {isCurrent && <span style={{ fontSize:'0.55rem', fontWeight:700, background:theme.color, color:'#fff', padding:'1px 5px', borderRadius:8, flexShrink:0 }}>Atual</span>}
         </div>
-        <div style={{ display:'flex', flexDirection:'column', gap:3, minWidth:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-            <span style={{ fontSize:'0.72rem', color:'var(--text-muted)', fontWeight:600, flexShrink:0 }}>R$</span>
-            <input style={{ flex:1, minWidth:0, border:`1.5px solid ${isOver?'#FCA5A5':isUnder?'#BBF7D0':'var(--border-strong)'}`, borderRadius:'var(--radius-sm)', padding:'7px 10px', fontFamily:'var(--font-body)', fontSize:'0.9rem', textAlign:'right', outline:'none', fontVariantNumeric:'tabular-nums', background:isOver?'#FEF2F2':'transparent', transition:'border-color 0.15s', boxSizing:'border-box' }}
-              type="text" inputMode="decimal" placeholder="0,00"
-              value={localVal}
-              onChange={e => setLocalVal(e.target.value)}
-              onFocus={e => e.target.select()}
-              onBlur={commitVal}
+        {isLocked ? (
+          <div style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 10px', background:'#F1F5F9', borderRadius:'var(--radius-sm)', border:'1.5px solid #CBD5E1', gridColumn:'span 2' }}>
+            <span style={{ fontSize:'0.72rem', color:'#64748B', fontStyle:'italic' }}>
+              🔒 Mês com Realizado: {formatBRL(actualValue)} — Forecast bloqueado
+            </span>
+          </div>
+        ) : (
+          <>
+            <div style={{ display:'flex', flexDirection:'column', gap:3, minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                <span style={{ fontSize:'0.72rem', color:'var(--text-muted)', fontWeight:600, flexShrink:0 }}>R$</span>
+                <input style={{ flex:1, minWidth:0, border:`1.5px solid ${isOver?'#FCA5A5':isUnder?'#BBF7D0':'var(--border-strong)'}`, borderRadius:'var(--radius-sm)', padding:'7px 10px', fontFamily:'var(--font-body)', fontSize:'0.9rem', textAlign:'right', outline:'none', fontVariantNumeric:'tabular-nums', background:isOver?'#FEF2F2':'transparent', transition:'border-color 0.15s', boxSizing:'border-box' }}
+                  type="text" inputMode="decimal" placeholder="0,00"
+                  value={localVal}
+                  onChange={e => setLocalVal(e.target.value)}
+                  onFocus={e => e.target.select()}
+                  onBlur={commitVal}
+                  onKeyDown={e => { if (e.key==='Enter') e.target.blur(); }}
+                />
+                {diff != null && Math.abs(diff) > 0.01 && (
+                  <span style={{ fontSize:'0.65rem', fontWeight:700, flexShrink:0, color:isOver?'#DC2626':'#166534', whiteSpace:'nowrap' }}>
+                    {isOver?'▲':'▼'} {formatBRL(Math.abs(diff))}
+                  </span>
+                )}
+              </div>
+              {refValue != null && <div style={{ fontSize:'0.6rem', color:'var(--text-muted)', textAlign:'right', paddingRight:4 }}>{refLabel}: {refValue===0?'—':formatBRL(refValue)}</div>}
+            </div>
+            <input className="wz-month-comment" style={{ width:'100%', minWidth:0, border:`1.5px solid ${theme.border}`, borderRadius:'var(--radius-sm)', padding:'7px 10px', fontFamily:'var(--font-body)', fontSize:'0.82rem', outline:'none', background:'transparent', color:'var(--text-secondary)', boxSizing:'border-box' }}
+              type="text" placeholder="Observação..."
+              value={localCmt}
+              onChange={e => setLocalCmt(e.target.value)}
+              onBlur={commitCmt}
               onKeyDown={e => { if (e.key==='Enter') e.target.blur(); }}
             />
-            {diff != null && Math.abs(diff) > 0.01 && (
-              <span style={{ fontSize:'0.65rem', fontWeight:700, flexShrink:0, color:isOver?'#DC2626':'#166534', whiteSpace:'nowrap' }}>
-                {isOver?'▲':'▼'} {formatBRL(Math.abs(diff))}
-              </span>
-            )}
-          </div>
-          {refValue != null && <div style={{ fontSize:'0.6rem', color:'var(--text-muted)', textAlign:'right', paddingRight:4 }}>{refLabel}: {refValue===0?'—':formatBRL(refValue)}</div>}
-        </div>
-        <input className="wz-month-comment" style={{ width:'100%', minWidth:0, border:`1.5px solid ${theme.border}`, borderRadius:'var(--radius-sm)', padding:'7px 10px', fontFamily:'var(--font-body)', fontSize:'0.82rem', outline:'none', background:'transparent', color:'var(--text-secondary)', boxSizing:'border-box' }}
-          type="text" placeholder="Observação..."
-          value={localCmt}
-          onChange={e => setLocalCmt(e.target.value)}
-          onBlur={commitCmt}
-          onKeyDown={e => { if (e.key==='Enter') e.target.blur(); }}
-        />
+          </>
+        )}
       </div>
       {visibleOtherComments.length > 0 && (
         <div className="wz-other-comments" style={{ padding:'0 16px 8px', paddingLeft:138, display:'flex', flexDirection:'column', gap:3 }}>
@@ -906,11 +919,10 @@ export default function ForecastWizard({
     setSaving(true);
     try {
       const ents = [
-        { year:parseInt(year), category:'Total', type:'Actual',   value:consGetVal('Actual') },
-        { year:parseInt(year), category:'Total', type:'Forecast', value:consGetVal('Forecast') },
+        { year:parseInt(year), category:'Total', type:'Actual', value:consGetVal('Actual') },
       ];
       await api.post(`/forecast/project/${projectId}/year-consolidated/bulk`, { entries: ents });
-      setSaved(true); toast(`Valores consolidados de ${year} salvos!`, 'success'); onSaved?.();
+      setSaved(true); toast(`Valor consolidado de ${year} salvo!`, 'success'); onSaved?.();
     } catch { toast('Erro ao salvar.', 'error'); }
     finally { setSaving(false); }
   };
@@ -965,10 +977,6 @@ export default function ForecastWizard({
               <div style={{ fontSize:'0.56rem', fontWeight:700, color:'rgba(255,255,255,0.55)', textTransform:'uppercase', letterSpacing:'0.08em' }}>Realizado</div>
               <div style={{ fontFamily:'var(--font-display)', fontSize:'1rem', color:'#fff', fontWeight:600 }}>{formatBRL(consGetVal('Actual'))}</div>
             </div>
-            <div style={{ textAlign:'center' }}>
-              <div style={{ fontSize:'0.56rem', fontWeight:700, color:'rgba(255,255,255,0.55)', textTransform:'uppercase', letterSpacing:'0.08em' }}>Forecast</div>
-              <div style={{ fontFamily:'var(--font-display)', fontSize:'1rem', color:'#fff', fontWeight:600 }}>{formatBRL(consGetVal('Forecast'))}</div>
-            </div>
             <button onClick={activeSave} disabled={saving} style={{ padding:'8px 22px', border:'none', cursor:saving?'wait':'pointer', background:saved?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.12)', color:'#fff', fontWeight:700, fontSize:'0.82rem', fontFamily:'var(--font-body)', borderRadius:'var(--radius-sm)', whiteSpace:'nowrap', transition:'background 0.15s' }}
               onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.28)'}
               onMouseLeave={e=>e.currentTarget.style.background=saved?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.12)'}
@@ -1015,7 +1023,7 @@ export default function ForecastWizard({
 
   // ── CONSOLIDATED YEAR ──────────────────────────────────────────────────────
   if (isConsolidatedYear) {
-    const thA = TYPE_THEME['Actual'], thF = TYPE_THEME['Forecast'];
+    const thA = TYPE_THEME['Actual'];
     return (
       <>
       <WrapperWithTypeBar>
@@ -1023,8 +1031,8 @@ export default function ForecastWizard({
           <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
             <div style={{ width:44, height:44, borderRadius:'var(--radius-md)', background:'#FEF3C7', border:'2px solid #F59E0B', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1.2rem', flexShrink:0 }}>📦</div>
             <div>
-              <h2 style={{ fontFamily:'var(--font-display)', fontSize:'1.4rem', color:'var(--ctg-navy)', marginBottom:2 }}>{year} — Valores Consolidados</h2>
-              <p style={{ fontSize:'0.82rem', color:'var(--text-secondary)', lineHeight:1.5 }}>Ano encerrado — insira os valores totais consolidados do ano (sem detalhamento mensal).</p>
+              <h2 style={{ fontFamily:'var(--font-display)', fontSize:'1.4rem', color:'var(--ctg-navy)', marginBottom:2 }}>{year} — Valor Consolidado</h2>
+              <p style={{ fontSize:'0.82rem', color:'var(--text-secondary)', lineHeight:1.5 }}>Ano encerrado — insira o valor total realizado consolidado do ano (sem detalhamento mensal).</p>
             </div>
           </div>
           <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
@@ -1036,16 +1044,6 @@ export default function ForecastWizard({
               <div style={{ padding:'16px 18px', background:thA.light }}>
                 <label style={{ fontSize:'0.78rem', fontWeight:600, color:'var(--text-secondary)', marginBottom:6, display:'block' }}>Valor total realizado em {year} (R$)</label>
                 <ConsInputRow cat="Realizado" value={consGetVal('Actual')} theme={thA} onChange={val => handleConsChange('Actual', val)} />
-              </div>
-            </div>
-            <div style={{ borderRadius:'var(--radius-md)', border:`1.5px solid ${thF.border}`, overflow:'hidden' }}>
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 18px', background:`linear-gradient(135deg, ${thF.color}EE, ${thF.color}BB)`, color:'#fff' }}>
-                <span style={{ fontWeight:700, fontSize:'0.95rem' }}>Forecast Total</span>
-                <span style={{ fontFamily:'var(--font-display)', fontSize:'1.2rem' }}>{formatBRL(consGetVal('Forecast'))}</span>
-              </div>
-              <div style={{ padding:'16px 18px', background:thF.light }}>
-                <label style={{ fontSize:'0.78rem', fontWeight:600, color:'var(--text-secondary)', marginBottom:6, display:'block' }}>Valor total do forecast em {year} (R$)</label>
-                <ConsInputRow cat="Forecast" value={consGetVal('Forecast')} theme={thF} onChange={val => handleConsChange('Forecast', val)} />
               </div>
             </div>
           </div>
@@ -1162,6 +1160,8 @@ export default function ForecastWizard({
               refValue={getRef(activeType,cat,month)} refLabel={`Ref. ${TYPE_THEME[REF_TYPE[activeType]]?.label||''}`}
               theme={theme} onChange={(m,v,c)=>handleChange(activeType,cat,m,v,c)}
               otherComments={getOtherComments(activeType,cat,month)}
+              actualValue={getValue('Actual',cat,month)}
+              activeType={activeType}
             />
           ))}
         </div>

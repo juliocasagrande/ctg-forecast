@@ -629,6 +629,8 @@ export default function App() {
   const [planjExportModal, setPlanjExportModal] = useState(false);
   const [plantFilter, setPlantFilter]       = useState([]);
   const [projectFilter, setProjectFilter]   = useState([]);
+  const [areaFilter, setAreaFilter]         = useState('');
+  const [vacYear, setVacYear]               = useState(new Date().getFullYear());
   const location  = useLocation();
   const navigate  = useNavigate();
 
@@ -666,7 +668,7 @@ export default function App() {
   );
 
   const { title, sub } = getPageMeta(location.pathname);
-  const showControls   = ['/', '/projects', '/polos'].includes(location.pathname) && !isAdmin;
+  const showControls   = ['/', '/projects', '/polos', '/vacations'].includes(location.pathname) && !isAdmin;
 
   // Active plants = plants that exist in at least one project
   const activePlants = ALL_PLANTS.filter(pl => projects.some(p => (p.plants || []).includes(pl)));
@@ -737,9 +739,48 @@ export default function App() {
                     </>
                   )}
 
+                  {/* ── Filtros de área (vacations + polos) ── */}
+                  {['/vacations', '/polos'].includes(location.pathname) && (
+                    <>
+                      <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.12)', margin: '0 4px', flexShrink: 0 }} />
+                      {[
+                        { value: '', label: 'Todas' },
+                        { value: 'eletrica', label: 'Elétrica' },
+                        { value: 'mecanica', label: 'Mecânica' },
+                        { value: 'confiabilidade', label: 'Conf.' },
+                        { value: 'modernizacao', label: 'Modern.' },
+                      ].map(opt => (
+                        <button key={opt.value} onClick={() => setAreaFilter(opt.value)} style={{
+                          padding: '3px 9px', borderRadius: 20, cursor: 'pointer',
+                          border: '1px solid rgba(0,31,91,0.18)',
+                          fontSize: '0.72rem', fontWeight: 600,
+                          background: areaFilter === opt.value ? 'var(--ctg-navy)' : 'transparent',
+                          color: areaFilter === opt.value ? '#fff' : 'var(--ctg-blue)',
+                          whiteSpace: 'nowrap',
+                        }}>{opt.label}</button>
+                      ))}
+                    </>
+                  )}
+
+                  {/* ── Seletor de ano (vacations) ── */}
+                  {location.pathname === '/vacations' && (
+                    <>
+                      <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.15)', margin: '0 4px', flexShrink: 0 }} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <button onClick={() => setVacYear(y => y - 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '1rem', padding: '0 2px', lineHeight: 1 }}>‹</button>
+                        <span style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--ctg-navy)', minWidth: 36, textAlign: 'center' }}>{vacYear}</span>
+                        <button onClick={() => setVacYear(y => y + 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '1rem', padding: '0 2px', lineHeight: 1 }}>›</button>
+                      </div>
+                    </>
+                  )}
+
                   {/* Divisor antes do período */}
-                  <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.15)', margin: '0 8px', flexShrink: 0 }} />
-                  <PeriodSelector period={period} onChange={setPeriod} />
+                  {!['/vacations'].includes(location.pathname) && (
+                    <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.15)', margin: '0 8px', flexShrink: 0 }} />
+                  )}
+                  {!['/vacations'].includes(location.pathname) && (
+                    <PeriodSelector period={period} onChange={setPeriod} />
+                  )}
                 </div>
               </div>
             )}
@@ -814,7 +855,7 @@ export default function App() {
 
             <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
             <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
-            <Route path="/polos" element={<RequireAuth><PolosPage period={period} /></RequireAuth>} />
+            <Route path="/polos" element={<RequireAuth><PolosPage period={period} plantFilter={plantFilter} areaFilter={areaFilter} /></RequireAuth>} />
             <Route path="/report" element={<RequireAuth><ReportPage /></RequireAuth>} />
             <Route path="/tutorial" element={<RequireAuth><TutorialPage /></RequireAuth>} />
             <Route path="/feedback" element={<RequireAuth><FeedbackPage /></RequireAuth>} />
@@ -824,7 +865,7 @@ export default function App() {
                 <RequireMonthlyReport><MonthlyReportPage /></RequireMonthlyReport>
               </RequireAuth>
             } />
-            <Route path="/vacations" element={<RequireAuth><VacationsPage /></RequireAuth>} />
+            <Route path="/vacations" element={<RequireAuth><VacationsPage areaFilter={areaFilter} year={vacYear} onYearChange={setVacYear} /></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

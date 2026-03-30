@@ -17,13 +17,19 @@ router.use(requireAuth);
 // GET /api/projects — filtered by role
 router.get('/', async (req, res) => {
   try {
-    const { role, id: userId } = req.user;
-    // Engenheiro: só projetos designados. Todos os outros (incluindo gerente): vê tudo.
-    const isEng = role === 'engenheiro';
+    const { role, id: userId, area: userArea } = req.user;
+    // Engenheiro: só projetos designados.
+    // Coordenador: projetos com pelo menos um engenheiro da sua área.
+    // Todos os outros (incluindo gerente): vê tudo.
+    const isEng   = role === 'engenheiro';
+    const isCoord = role === 'coordenador';
     const engJoin = isEng
       ? `INNER JOIN project_assignments pa_self ON pa_self.project_id = p.id AND pa_self.user_id = $1`
-      : '';
-    const params = isEng ? [userId] : [];
+      : isCoord
+        ? `INNER JOIN project_assignments pa_coord ON pa_coord.project_id = p.id
+           INNER JOIN users u_coord ON u_coord.id = pa_coord.user_id AND u_coord.role = 'engenheiro' AND u_coord.area = $1`
+        : '';
+    const params = isEng ? [userId] : isCoord ? [userArea || ''] : [];
 
     const query = `
       SELECT p.*,

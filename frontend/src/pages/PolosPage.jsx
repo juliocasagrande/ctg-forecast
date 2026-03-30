@@ -162,30 +162,41 @@ function ProjectRow({ project, navigate, isEngenheiro, C }) {
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
-export default function PolosPage({ period: externalPeriod }) {
+export default function PolosPage({ period: externalPeriod, plantFilter = [], areaFilter = '' }) {
   const currentYear = new Date().getFullYear();
   const [projects,  setProjects]  = useState([]);
-  // Use period from App.jsx header — no local period state needed
   const period = externalPeriod || { start: currentYear, end: currentYear };
   const [loading,   setLoading]   = useState(true);
-  // All polos/plants start collapsed (item 2)
-  // Inicia com todos os polos abertos e plantas fechadas
   const [poloOpen,  setPoloOpen]  = useState(() => Object.fromEntries(POLOS.map(p => [p.id, true])));
   const [plantOpen, setPlantOpen] = useState({});
+  // areaFilter is controlled by App.jsx header (prop)
   const navigate = useNavigate();
   const { role, isEngenheiro } = useRole();
   const C = useTypeColors();
 
+  const AREA_OPTIONS = [
+    { value: '', label: 'Todas as áreas' },
+    { value: 'eletrica', label: 'Elétrica' },
+    { value: 'mecanica', label: 'Mecânica' },
+    { value: 'confiabilidade', label: 'Confiabilidade' },
+    { value: 'modernizacao', label: 'Modernização' },
+  ];
+
   useEffect(() => {
     setLoading(true);
-    const params = period.start === period.end
-      ? `year=${period.start}`
-      : `yearStart=${period.start}&yearEnd=${period.end}`;
-    api.get(`/forecast/polo-summary?${params}`)
+    const params = new URLSearchParams();
+    if (period.start === period.end) {
+      params.set('year', period.start);
+    } else {
+      params.set('yearStart', period.start);
+      params.set('yearEnd', period.end);
+    }
+    if (areaFilter) params.set('areaFilter', areaFilter);
+    api.get(`/forecast/polo-summary?${params.toString()}`)
       .then(r => setProjects(r.data))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [period]);
+  }, [period, areaFilter]);
 
   const togglePolo  = id  => setPoloOpen(prev  => ({ ...prev,  [id]:  !prev[id]  }));
   const togglePlant = key => setPlantOpen(prev => ({ ...prev, [key]: !prev[key] }));
@@ -193,8 +204,13 @@ export default function PolosPage({ period: externalPeriod }) {
   // Column header bg — tinted
   const colHeaderBg = (colorKey) => colorKey && C[colorKey] ? C[colorKey] + 'CC' : '#475569';
 
+  // Apply plant filter from header
+  const filteredProjects = plantFilter.length > 0
+    ? projects.filter(p => plantFilter.some(f => (p.plants||[]).includes(f)))
+    : projects;
+
   const allProjects = POLOS.flatMap(polo =>
-    polo.plants.flatMap(pl => projects.filter(p => (p.plants||[]).includes(pl)))
+    polo.plants.flatMap(pl => filteredProjects.filter(p => (p.plants||[]).includes(pl)))
   );
 
   return (
@@ -248,7 +264,7 @@ export default function PolosPage({ period: externalPeriod }) {
 
               <tbody>
                 {POLOS.map(polo => {
-                  const poloProjects = polo.plants.flatMap(pl => projects.filter(p => (p.plants||[]).includes(pl)));
+                  const poloProjects = polo.plants.flatMap(pl => filteredProjects.filter(p => (p.plants||[]).includes(pl)));
                   if (poloProjects.length === 0) return null;
                   const isPoloOpen = !!poloOpen[polo.id];
 
@@ -257,7 +273,7 @@ export default function PolosPage({ period: externalPeriod }) {
                       open={isPoloOpen} onToggle={() => togglePolo(polo.id)} C={C} />,
 
                     ...(isPoloOpen ? polo.plants.flatMap(plant => {
-                      const plantProjects = projects.filter(p => (p.plants||[]).includes(plant));
+                      const plantProjects = filteredProjects.filter(p => (p.plants||[]).includes(plant));
                       if (plantProjects.length === 0) return [];
                       const plantKey = `${polo.id}::${plant}`;
                       const isPlantOpen = !!plantOpen[plantKey];

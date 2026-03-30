@@ -38,19 +38,29 @@ function fmtAxis(v) {
 }
 
 // ── Project tooltip ───────────────────────────────────────────────────────────
-function ProjectTooltip({ active, payload, label, projectMap }) {
+function ProjectTooltip({ active, payload, label, projectMap, projectPlantsMap }) {
   if (!active || !payload?.length) return null;
   const name    = projectMap[label] || label;
+  const plants  = projectPlantsMap?.[label] || [];
   const entries = payload.filter(p => p.value !== 0);
   return (
     <div style={{
       background: 'var(--bg-card)', border: '1px solid var(--border)',
       borderRadius: 8, padding: '10px 14px', boxShadow: 'var(--shadow-lg)',
-      fontSize: '0.8rem', minWidth: 180, maxWidth: 260, zIndex: 9999, pointerEvents: 'none',
+      fontSize: '0.8rem', minWidth: 180, maxWidth: 280, zIndex: 9999, pointerEvents: 'none',
     }}>
       <div style={{ fontWeight: 700, marginBottom: 2, color: 'var(--ctg-navy)', fontSize: '0.82rem' }}>{label}</div>
-      <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginBottom: 6,
-        wordBreak: 'break-word', borderBottom: '1px solid var(--border)', paddingBottom: 5 }}>{name}</div>
+      <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginBottom: plants.length ? 3 : 6,
+        wordBreak: 'break-word', borderBottom: plants.length ? 'none' : '1px solid var(--border)', paddingBottom: plants.length ? 0 : 5 }}>{name}</div>
+      {plants.length > 0 && (
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6, paddingBottom: 5, borderBottom: '1px solid var(--border)' }}>
+          {plants.map(pl => (
+            <span key={pl} style={{ fontSize: '0.65rem', background: 'var(--ctg-navy)', color: '#fff', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>
+              {pl}
+            </span>
+          ))}
+        </div>
+      )}
       {entries.map(p => (
         <div key={p.name} style={{ color: p.fill, display: 'flex', gap: 14, justifyContent: 'space-between', marginBottom: 3 }}>
           <span style={{ opacity: 0.85 }}>{p.name}:</span>
@@ -440,40 +450,6 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
     [allSummaries, filteredIds]
   );
 
-  // Monthly data
-  const monthlyData = useMemo(() => {
-    const result = [];
-    for (let y = period.start; y <= period.end; y++) {
-      MONTHS_PT.forEach((m, i) => {
-        const month = i + 1;
-        const key   = period.start === period.end ? m : `${m}/${y}`;
-        const entry = { month: key };
-        ['Budget', 'Forecast', 'Realizado', 'Meta', 'Pool'].forEach(type => {
-          const apiType = type === 'Realizado' ? 'Actual' : type;
-          entry[type] = filteredSummaries
-            .filter(s => parseInt(s.year) === y && parseInt(s.month) === month && s.type === apiType)
-            .reduce((sum, s) => sum + parseFloat(s.total || 0), 0);
-        });
-        result.push(entry);
-      });
-    }
-    return result;
-  }, [filteredSummaries, period]);
-
-  // S-Curve accumulated data
-  const combinedData = useMemo(() => monthlyData.reduce((acc, d, i) => {
-    const prev = acc[i - 1] || { BudgetAcum: 0, ForecastAcum: 0, RealizadoAcum: 0, MetaAcum: 0, PoolAcum: 0 };
-    acc.push({
-      ...d,
-      BudgetAcum:    prev.BudgetAcum    + d.Budget,
-      ForecastAcum:  prev.ForecastAcum  + d.Forecast,
-      RealizadoAcum: prev.RealizadoAcum + d.Realizado,
-      MetaAcum:      prev.MetaAcum      + d.Meta,
-      PoolAcum:      prev.PoolAcum      + d.Pool,
-    });
-    return acc;
-  }, []), [monthlyData]);
-
   // KPIs
   const totalBudget   = filtered.reduce((s, p) => s + parseFloat(p.budget    || 0), 0);
   const totalForecast = filtered.reduce((s, p) => s + parseFloat(p.forecast   || 0), 0);
@@ -489,6 +465,54 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
     filtered.forEach(p => { map[p.code] = p.name; });
     return map;
   }, [filtered]);
+
+  const projectPlantsMap = useMemo(() => {
+    const map = {};
+    filtered.forEach(p => { map[p.code] = (p.plants || []).map(pl => pl.replace('UHE ', '').replace('PCH ', '')); });
+    return map;
+  }, [filtered]);
+
+  // Current month boundary for Realizado cutoff
+  const now = new Date();
+  const currentYear  = now.getFullYear();
+  const currentMonth = now.getMonth() + 1; // 1-12
+
+  // Monthly data — Realizado zeroed for months beyond current month
+  const monthlyData = useMemo(() => {
+    const result = [];
+    for (let y = period.start; y <= period.end; y++) {
+      MONTHS_PT.forEach((m, i) => {
+        const month = i + 1;
+        const key   = period.start === period.end ? m : `${m}/${y}`;
+        const entry = { month: key };
+        ['Budget', 'Forecast', 'Realizado', 'Meta', 'Pool'].forEach(type => {
+          const apiType = type === 'Realizado' ? 'Actual' : type;
+          let val = filteredSummaries
+            .filter(s => parseInt(s.year) === y && parseInt(s.month) === month && s.type === apiType)
+            .reduce((sum, s) => sum + parseFloat(s.total || 0), 0);
+          if (type === 'Realizado' && (y > currentYear || (y === currentYear && month > currentMonth))) {
+            val = 0;
+          }
+          entry[type] = val;
+        });
+        result.push(entry);
+      });
+    }
+    return result;
+  }, [filteredSummaries, period, currentYear, currentMonth]);
+
+  const combinedData = useMemo(() => monthlyData.reduce((acc, d, i) => {
+    const prev = acc[i - 1] || { BudgetAcum: 0, ForecastAcum: 0, RealizadoAcum: 0, MetaAcum: 0, PoolAcum: 0 };
+    acc.push({
+      ...d,
+      BudgetAcum:    prev.BudgetAcum    + d.Budget,
+      ForecastAcum:  prev.ForecastAcum  + d.Forecast,
+      RealizadoAcum: prev.RealizadoAcum + d.Realizado,
+      MetaAcum:      prev.MetaAcum      + d.Meta,
+      PoolAcum:      prev.PoolAcum      + d.Pool,
+    });
+    return acc;
+  }, []), [monthlyData]);
 
   const LEGEND_LABELS = {
     Budget: 'Budget (mensal)', Forecast: 'Forecast (mensal)', Realizado: 'Realizado (mensal)',
@@ -527,7 +551,7 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '3fr 2fr', gap: 10, flex: 1, minHeight: 0 }}>
 
           {/* S-Curve */}
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'visible' }}>
             <CardHeader
               title={`Evolução Mensal + S-Curve — ${periodLabel}`}
               action={!isMobile ? (
@@ -543,8 +567,8 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
                 </button>
               ) : null}
             />
-            <div style={{ padding: '8px 6px 4px', flex: 1, minHeight: 0 }}>
-              <ResponsiveContainer width="100%" height="100%">
+            <div style={{ padding: '8px 6px 4px', flex: 1, minHeight: isMobile ? 220 : 0, overflow: 'visible' }}>
+              <ResponsiveContainer width="100%" height={isMobile ? 220 : '100%'}>
                 <ComposedChart data={combinedData} margin={{ top: 2, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="month" tick={{ fontSize: 9, fill: '#374151' }} interval={tickInterval} />
@@ -554,8 +578,9 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
                   <YAxis yAxisId="acum" orientation="right" tickFormatter={fmtAxis}
                     tick={{ fontSize: 8, fill: '#6B7280' }} width={50}
                     label={{ value: 'Acumulado', angle: 90, position: 'insideRight', offset: 10, style: { fontSize: 7, fill: '#9CA3AF' } }} />
-                  <Tooltip isAnimationActive={false} content={<ChartTooltip period={period} />}
-                    wrapperStyle={{ zIndex: 9999, pointerEvents: 'none' }}
+                  <Tooltip isAnimationActive={false}
+                    content={(props) => <ModalChartTooltip {...props} period={period} />}
+                    wrapperStyle={{ display: 'none' }}
                     allowEscapeViewBox={{ x: true, y: true }} />
                   {!isMobile && <Legend wrapperStyle={{ fontSize: '0.62rem', color: '#374151', paddingTop: 2 }}
                     formatter={v => LEGEND_LABELS[v] || v} className="dash-legend" />}
@@ -575,7 +600,7 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
           </div>
 
           {/* Por Projeto */}
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'visible' }}>
             <CardHeader
               title={`Por Projeto — ${periodLabel}`}
               action={!isMobile ? (
@@ -591,8 +616,8 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
                 </button>
               ) : null}
             />
-            <div style={{ padding: '8px 6px 4px', flex: 1, minHeight: 0 }}>
-              <ResponsiveContainer width="100%" height="100%">
+            <div style={{ padding: '8px 6px 4px', flex: 1, minHeight: isMobile ? 200 : 0, overflow: 'visible' }}>
+              <ResponsiveContainer width="100%" height={isMobile ? 200 : '100%'}>
                 <BarChart
                   data={filtered.map(p => ({
                     name:      p.code,
@@ -605,7 +630,8 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#374151' }} />
                   <YAxis tickFormatter={fmtAxis} tick={{ fontSize: 9, fill: '#374151' }} width={50} />
-                  <Tooltip isAnimationActive={false} content={<ProjectTooltip projectMap={projectMap} />}
+                  <Tooltip isAnimationActive={false}
+                    content={(props) => <ProjectTooltip {...props} projectMap={projectMap} projectPlantsMap={projectPlantsMap} />}
                     wrapperStyle={{ zIndex: 9999, pointerEvents: 'none' }}
                     allowEscapeViewBox={{ x: true, y: true }} />
                   {!isMobile && <Legend wrapperStyle={{ fontSize: '0.62rem', color: '#374151', paddingTop: 2 }} className="dash-legend" />}

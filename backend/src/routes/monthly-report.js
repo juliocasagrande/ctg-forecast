@@ -111,7 +111,10 @@ router.post(
 
       const colIdx = {};
       for (const [key, target] of Object.entries(COLMAP)) {
-        const found = Object.entries(header).find(([, v]) => v === target);
+        // Try exact match first, then partial/contains match for robustness
+        let found = Object.entries(header).find(([, v]) => v === target);
+        if (!found) found = Object.entries(header).find(([, v]) => v && v.includes(target));
+        if (!found) found = Object.entries(header).find(([, v]) => v && target.includes(v) && v.length > 2);
         if (found) colIdx[key] = parseInt(found[0]);
       }
 
@@ -260,9 +263,17 @@ router.post(
         return '';
       }
 
+      // Log detected columns to help debug mismatches
+      console.log('[monthly-report] Detected colIdx:', JSON.stringify(colIdx));
+      console.log('[monthly-report] Header:', JSON.stringify(header));
+
       const rows = [];
       ws.eachRow((row, rowNum) => {
         if (rowNum === 1) return;
+        // Skip rows where ALL cells are empty
+        let hasAnyValue = false;
+        row.eachCell({ includeEmpty: false }, () => { hasAnyValue = true; });
+        if (!hasAnyValue) return;
         const vencDate = parseDate(cellVal(row, 'VENC'));
         rows.push({
           UHE:     trat(cellVal(row, 'UHE')),
