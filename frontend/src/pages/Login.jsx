@@ -7,22 +7,32 @@ import PasswordInput, { getPasswordStrength } from '../components/ui/PasswordInp
 const ROLE_OPTIONS = [
   {
     value: 'engenheiro',
-    label: 'Engenheiro Responsável',
+    label: 'Engenheiro',
     desc: 'Acesso aos projetos designados. Preenche e atualiza o Forecast.',
     icon: 'ENG',
+    needsArea: true,
   },
   {
-    value: 'planejador',
-    label: 'Planejador',
-    desc: 'Visão geral de todos os projetos. Responsável pelo preenchimento do Budget.',
-    icon: 'PLN',
+    value: 'coordenador',
+    label: 'Coordenador',
+    desc: 'Acesso total à sua área. Gerencia equipe e dados dos projetos.',
+    icon: 'CRD',
+    needsArea: true,
   },
   {
-    value: 'gestor',
-    label: 'Coordenador / Gerente',
-    desc: 'Visão completa de todos os projetos. Gerencia equipes e dados.',
-    icon: 'GES',
+    value: 'gerente',
+    label: 'Gerente / Diretor',
+    desc: 'Visualização de todos os dados. Sem poder de edição.',
+    icon: 'GER',
+    needsArea: false,
   },
+];
+
+const AREA_OPTIONS = [
+  { value: 'eletrica',       label: 'Eng. Elétrica' },
+  { value: 'mecanica',       label: 'Eng. Mecânica' },
+  { value: 'confiabilidade', label: 'Eng. Confiabilidade' },
+  { value: 'modernizacao',   label: 'Modernização' },
 ];
 
 export default function Login() {
@@ -37,12 +47,16 @@ export default function Login() {
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [regRole, setRegRole] = useState('engenheiro');
+  const [regArea, setRegArea] = useState('');
   const [regError, setRegError] = useState('');
   const [regSuccess, setRegSuccess] = useState('');
   const [regLoading, setRegLoading] = useState(false);
 
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  const selectedRoleOpt = ROLE_OPTIONS.find(r => r.value === regRole);
+  const needsArea = selectedRoleOpt?.needsArea ?? false;
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -62,6 +76,10 @@ export default function Login() {
     e.preventDefault();
     setRegError('');
     setRegSuccess('');
+    if (needsArea && !regArea) {
+      setRegError('Selecione a área de atuação');
+      return;
+    }
     setRegLoading(true);
     try {
       const r = await api.post('/auth/register', {
@@ -69,9 +87,10 @@ export default function Login() {
         email: regEmail,
         password: regPassword,
         role: regRole,
+        area: needsArea ? regArea : null,
       });
       setRegSuccess(r.data.message);
-      setRegName(''); setRegEmail(''); setRegPassword('');
+      setRegName(''); setRegEmail(''); setRegPassword(''); setRegArea('');
     } catch (err) {
       setRegError(err.response?.data?.error || 'Erro ao solicitar acesso.');
     } finally {
@@ -99,20 +118,17 @@ export default function Login() {
         <div className="login-form-wrap">
 
           <div className="login-tabs">
-            <button
-              className={`login-tab ${tab === 'login' ? 'active' : ''}`}
-              onClick={() => { setTab('login'); setLoginError(''); }}
-            >
+            <button className={`login-tab ${tab === 'login' ? 'active' : ''}`}
+              onClick={() => { setTab('login'); setLoginError(''); }}>
               Entrar
             </button>
-            <button
-              className={`login-tab ${tab === 'register' ? 'active' : ''}`}
-              onClick={() => { setTab('register'); setRegError(''); setRegSuccess(''); }}
-            >
+            <button className={`login-tab ${tab === 'register' ? 'active' : ''}`}
+              onClick={() => { setTab('register'); setRegError(''); setRegSuccess(''); }}>
               Solicitar Acesso
             </button>
           </div>
 
+          {/* ── LOGIN ── */}
           {tab === 'login' && (
             <>
               <div className="login-form-header">
@@ -150,6 +166,7 @@ export default function Login() {
             </>
           )}
 
+          {/* ── REGISTER ── */}
           {tab === 'register' && (
             <>
               <div className="login-form-header">
@@ -161,7 +178,7 @@ export default function Login() {
 
               {regSuccess ? (
                 <div className="login-success">
-                  <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--forecast-text)', marginBottom: 10 }}>Solicitação enviada</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--ctg-blue)', marginBottom: 10 }}>✓</div>
                   <div style={{ fontWeight: 600, fontSize: '1rem', marginBottom: 8 }}>Solicitação enviada!</div>
                   <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>{regSuccess}</p>
                   <button className="btn btn-secondary" style={{ marginTop: 20, width: '100%' }}
@@ -188,19 +205,19 @@ export default function Login() {
                     placeholder="Crie uma senha segura"
                   />
 
-                  <div className="form-group" style={{ marginBottom: 16 }}>
+                  {/* Seleção de perfil */}
+                  <div className="form-group" style={{ marginBottom: 14 }}>
                     <label className="form-label">Meu perfil no sistema</label>
                     <div className="role-selector">
                       {ROLE_OPTIONS.map(opt => (
                         <div key={opt.value}
                           className={`role-option ${regRole === opt.value ? 'selected' : ''}`}
-                          onClick={() => setRegRole(opt.value)}>
+                          onClick={() => { setRegRole(opt.value); setRegArea(''); }}>
                           <div style={{
                             width: 36, height: 36, borderRadius: 'var(--radius-sm)',
                             background: 'var(--ctg-navy)', color: '#fff',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.05em',
-                            flexShrink: 0,
+                            fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.05em', flexShrink: 0,
                           }}>{opt.icon}</div>
                           <div style={{ flex: 1 }}>
                             <div className="role-option-label">{opt.label}</div>
@@ -214,9 +231,37 @@ export default function Login() {
                     </div>
                   </div>
 
+                  {/* Área de atuação — aparece só para engenheiro/coordenador */}
+                  {needsArea && (
+                    <div className="form-group" style={{ marginBottom: 16 }}>
+                      <label className="form-label">Área de atuação</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        {AREA_OPTIONS.map(a => (
+                          <div key={a.value}
+                            onClick={() => setRegArea(a.value)}
+                            style={{
+                              padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
+                              border: `1.5px solid ${regArea === a.value ? 'var(--ctg-blue)' : 'var(--border)'}`,
+                              background: regArea === a.value ? 'rgba(0,112,184,0.06)' : 'transparent',
+                              display: 'flex', alignItems: 'center', gap: 8,
+                              transition: 'all 0.15s',
+                            }}>
+                            <div style={{
+                              width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                              background: regArea === a.value ? 'var(--ctg-blue)' : 'var(--border)',
+                            }} />
+                            <span style={{ fontSize: '0.8rem', fontWeight: regArea === a.value ? 600 : 400, color: regArea === a.value ? 'var(--ctg-navy)' : 'var(--text-secondary)' }}>
+                              {a.label}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <button type="submit" className="btn btn-primary"
                     style={{ width: '100%', padding: '12px', fontSize: '0.95rem' }}
-                    disabled={regLoading || !getPasswordStrength(regPassword).allPassed}>
+                    disabled={regLoading || !getPasswordStrength(regPassword).allPassed || (needsArea && !regArea)}>
                     {regLoading ? 'Enviando...' : 'Solicitar Acesso'}
                   </button>
                 </form>
@@ -234,27 +279,20 @@ export default function Login() {
 
         </div>
 
-        {/* Developer credit */}
         <div style={{
           position: 'absolute', bottom: 20, left: 0, right: 0,
-          textAlign: 'center',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
           userSelect: 'none',
         }}>
           <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
             Desenvolvido por
           </span>
           <span style={{
-            fontSize: '0.99rem',
-            fontWeight: 700,
-            letterSpacing: '0.02em',
+            fontSize: '0.99rem', fontWeight: 700, letterSpacing: '0.02em',
             background: 'linear-gradient(90deg, #1a56db, #0ea5e9, #1d4ed8, #0ea5e9, #1a56db)',
             backgroundSize: '300% auto',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-            animation: 'devShimmer 4s linear infinite',
-            display: 'inline-block',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text', animation: 'devShimmer 4s linear infinite', display: 'inline-block',
           }}>
             Júlio Casagrande
           </span>

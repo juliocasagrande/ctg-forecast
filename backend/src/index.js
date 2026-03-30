@@ -27,6 +27,7 @@ import sapMappingRouter from './routes/sap-mapping.js';
 import reportRouter from './routes/report.js';
 import feedbackRouter from './routes/feedback.js';
 import delegationsRouter from './routes/delegations.js';
+import vacationsRouter from './routes/vacations.js';
 import monthlyReportRouter from './routes/monthly-report.js';
 
 dotenv.config();
@@ -106,6 +107,7 @@ app.use('/api/settings', sapMappingRouter);
 app.use('/api/report', reportRouter);
 app.use('/api/feedback', feedbackRouter);
 app.use('/api/delegations', delegationsRouter);
+app.use('/api/vacations', vacationsRouter);
 app.use('/api/monthly-report', monthlyReportRouter);
 
 /* ──────────────────────────────────────────────────────────────

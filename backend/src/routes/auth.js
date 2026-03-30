@@ -25,24 +25,33 @@ function safeError(res, err) {
 // ─── POST /api/auth/register — public self-registration (pending approval) ──
 router.post('/register', registerLimiter, async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, area } = req.body;
     if (!name?.trim() || !email?.trim() || !password)
       return res.status(400).json({ error: 'Nome, email e senha são obrigatórios' });
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
       return res.status(400).json({ error: 'Formato de email inválido' });
-    if (!['gestor', 'engenheiro'].includes(role))
+
+    const validRoles = ['coordenador', 'engenheiro', 'gerente'];
+    if (!validRoles.includes(role))
       return res.status(400).json({ error: 'Perfil inválido' });
 
-    // Strong password validation
+    // Engenheiros e coordenadores precisam de área; gerentes não
+    const needsArea = ['engenheiro', 'coordenador'].includes(role);
+    const validAreas = ['eletrica', 'mecanica', 'confiabilidade', 'modernizacao'];
+    if (needsArea && !validAreas.includes(area))
+      return res.status(400).json({ error: 'Selecione a área de atuação' });
+
     const pwCheck = validatePassword(password);
     if (!pwCheck.valid) return res.status(400).json({ error: pwCheck.error });
 
-    const hash = await bcrypt.hash(password, 12); // increased from 10 to 12 rounds
+    const hash = await bcrypt.hash(password, 12);
     const av = initials(name);
+    const userArea = needsArea ? area : null;
+
     await pool.query(
-      `INSERT INTO users (name, email, password_hash, role, avatar_initials, active, pending_approval)
-       VALUES ($1, $2, $3, $4, $5, false, true)`,
-      [name, email.toLowerCase(), hash, role, av]
+      `INSERT INTO users (name, email, password_hash, role, area, avatar_initials, active, pending_approval)
+       VALUES ($1, $2, $3, $4, $5, $6, false, true)`,
+      [name, email.toLowerCase(), hash, role, userArea, av]
     );
 
     await logAuthEvent('register', {
@@ -87,18 +96,16 @@ router.post('/login', loginLimiter, async (req, res) => {
     }
 
     const token = signToken({
-      id: user.id, name: user.name, email: user.email, role: user.role,
+      id: user.id, name: user.name, email: user.email, role: user.role, area: user.area,
     });
 
-    // Set httpOnly cookie
     setAuthCookie(res, token);
 
     await logAuthEvent('login_success', { email: user.email, userId: user.id, ip, userAgent: ua, success: true });
 
-    // Also return token in body for migration period (frontend may still use localStorage)
     res.json({
       token,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role, avatar_initials: user.avatar_initials }
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, area: user.area, avatar_initials: user.avatar_initials }
     });
   } catch (err) {
     safeError(res, err);
@@ -115,7 +122,7 @@ router.post('/logout', (req, res) => {
 router.get('/me', requireAuth, async (req, res) => {
   try {
     const r = await pool.query(
-      'SELECT id, name, email, role, avatar_initials, created_at FROM users WHERE id=$1',
+      'SELECT id, name, email, role, area, avatar_initials, created_at FROM users WHERE id=$1',
       [req.user.id]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Usuário não encontrado' });

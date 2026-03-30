@@ -73,12 +73,13 @@ export async function initDB() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_approval BOOLEAN DEFAULT false;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_initials VARCHAR(4);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS area VARCHAR(30) DEFAULT NULL;
     `);
 
     await client.query(`
       ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
       ALTER TABLE users ADD CONSTRAINT users_role_check
-        CHECK (role IN ('admin','gestor','engenheiro','planejador'));
+        CHECK (role IN ('admin','gestor','coordenador','engenheiro','planejador','gerente'));
     `);
 
     /* ───────── PROJECTS ───────── */
@@ -272,6 +273,31 @@ export async function initDB() {
         dismissed_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(user_id, alert_type, alert_key)
       );
+    `);
+
+    /* ───────── VACATION PERIODS ───────── */
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS vacation_periods (
+        id            SERIAL PRIMARY KEY,
+        user_id       INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        area          VARCHAR(30) NOT NULL DEFAULT 'eletrica',
+        period_number INTEGER NOT NULL CHECK (period_number IN (1,2,3)),
+        start_date    DATE NOT NULL,
+        end_date      DATE NOT NULL,
+        days          INTEGER,
+        adp_registered BOOLEAN DEFAULT false,
+        year          INTEGER NOT NULL,
+        notes         TEXT,
+        created_by    INTEGER REFERENCES users(id),
+        created_at    TIMESTAMPTZ DEFAULT NOW(),
+        updated_at    TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, year, period_number)
+      );
+
+      -- Garante que a constraint de área aceita todas as categorias
+      ALTER TABLE vacation_periods DROP CONSTRAINT IF EXISTS vacation_periods_area_check;
+      ALTER TABLE vacation_periods ADD CONSTRAINT vacation_periods_area_check
+        CHECK (area IN ('eletrica','mecanica','confiabilidade','coordenacao','modernizacao'));
     `);
 
     console.log('✅ Migrations OK');

@@ -18,6 +18,7 @@ import TutorialPage from './pages/TutorialPage.jsx';
 import FeedbackPage from './pages/FeedbackPage.jsx';
 import FeedbackInbox from './pages/FeedbackInbox.jsx';
 import MonthlyReportPage from './pages/MonthlyReportPage.jsx';
+import VacationsPage from './pages/VacationsPage.jsx';
 import AdminPanel from './components/admin/AdminPanel.jsx';
 import AlertBell from './components/ui/AlertBell.jsx';
 import api from './utils/api.js';
@@ -389,6 +390,8 @@ function RequireMonthlyReport({ children }) {
   const allowed =
     user?.role === 'admin' ||
     user?.role === 'gestor' ||
+    user?.role === 'coordenador' ||
+    user?.role === 'gerente' ||
     user?.role === 'planejador' ||
     user?.email === 'julio.casagrande@ctgbr.com.br';
   if (!allowed) return <Navigate to="/" replace />;
@@ -607,6 +610,8 @@ function getPageMeta(pathname) {
   if (pathname === '/tutorial') return { title: 'Tutorial', sub: 'Como utilizar o sistema' };
   if (pathname === '/feedback') return { title: 'Sugestões e Feedback', sub: 'Envie sua contribuição' };
   if (pathname === '/feedback/inbox') return { title: 'Inbox de Feedback', sub: 'Mensagens dos usuários do sistema' };
+  if (pathname === '/monthly-report') return { title: 'Relatório de Acompanhamento Mensal', sub: null };
+  if (pathname === '/vacations') return { title: 'Controle de Férias', sub: null };
   if (pathname.startsWith('/projects/')) return { title: 'Projetos', sub: null };
   return { title: 'CTG.Engenharia', sub: null };
 }
@@ -614,7 +619,7 @@ function getPageMeta(pathname) {
 // ── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const { user, loading, logout } = useAuth();
-  const { isAdmin, isPlanejador } = useRole();
+  const { isAdmin, isPlanejador, isCoordenador, isGerente } = useRole();
   const [sidebarOpen, setSidebarOpen]       = useState(false);
   const [projects, setProjects]             = useState([]);
   const [projectFormOpen, setProjectFormOpen] = useState(false);
@@ -819,6 +824,7 @@ export default function App() {
                 <RequireMonthlyReport><MonthlyReportPage /></RequireMonthlyReport>
               </RequireAuth>
             } />
+            <Route path="/vacations" element={<RequireAuth><VacationsPage /></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

@@ -54,7 +54,8 @@ function groupByPlant(projects) {
 
 export default function Sidebar({ open, onClose, onNewProject, projects }) {
   const { user, logout } = useAuth();
-  const { isAdmin, isGestor, isPlanejador } = useRole();
+  const { isAdmin, isGestor, isCoordenador, isPlanejador, isGerente } = useRole();
+  const canManageSidebar = isGestor || isCoordenador || isPlanejador;
   const navigate = useNavigate();
   const location = useLocation();
   const [unreadMap, setUnreadMap]     = useState({});
@@ -89,8 +90,22 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
     return () => clearInterval(t);
   }, [user?.email]);
 
-  const roleLabel = { admin:'Administrador', gestor:'Gestor', engenheiro:'Engenheiro', planejador:'Planejador' }[user?.role] || '';
-  const initials  = user?.name?.split(' ').slice(0, 2).map(w => w[0].toUpperCase()).join('') || '??';
+  const roleLabel = {
+    admin:       'Administrador',
+    gestor:      'Gestor',
+    coordenador: 'Coordenador',
+    engenheiro:  'Engenheiro',
+    planejador:  'Planejador',
+    gerente:     'Gerente / Diretor',
+  }[user?.role] || '';
+  const areaLabel = {
+    eletrica:       'Eng. Elétrica',
+    mecanica:       'Eng. Mecânica',
+    confiabilidade: 'Eng. Confiabilidade',
+    modernizacao:   'Modernização',
+  }[user?.area] || null;
+
+  const initials = user?.name?.split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() || '').join('') || '?';
 
   const navItem = (to, icon, label) => (
     <NavLink to={to} onClick={onClose}
@@ -112,7 +127,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
         {/* Logo */}
         <div className="sidebar-logo">
           <div className="brand">CTG<span>.</span>Engenharia</div>
-          <div className="subtitle">FUNÇÃO — {roleLabel}</div>
+          <div className="subtitle">FUNÇÃO — {roleLabel}{areaLabel ? ` · ${areaLabel}` : ''}</div>
         </div>
 
         <div className="sidebar-nav">
@@ -138,7 +153,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
                 style={{ flex:1 }}>
                 {IC.projects}<span>Projetos</span>
               </NavLink>
-              {(isGestor || isPlanejador) && (
+              {(canManageSidebar) && (
                 <button
                   title="Novo Projeto"
                   onClick={() => { onNewProject?.(); onClose(); }}
@@ -161,20 +176,24 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
             {navItem('/report', IC.report, 'Relatório HTML')}
 
             {/* ── DIVISOR ───────────────────────────────────────── */}
-            {(isGestor || isPlanejador || user?.email === 'julio.casagrande@ctgbr.com.br') && (
-              <div style={{
-                margin: '10px 8px 4px',
-                borderTop: '1px solid rgba(255,255,255,0.10)',
-              }} />
+            {(canManageSidebar || isGerente || user?.email === 'julio.casagrande@ctgbr.com.br') && (
+              <div style={{ margin: '10px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
             )}
 
-            {/* ── SEÇÃO 2: Acompanhamento — acesso restrito ─────── */}
-            {(isGestor || isPlanejador || user?.email === 'julio.casagrande@ctgbr.com.br') && <>
+            {/* ── SEÇÃO 2: Acompanhamento ───────────────────────── */}
+            {(canManageSidebar || isGerente || user?.email === 'julio.casagrande@ctgbr.com.br') && <>
               <div className="nav-section-label" style={{color:"rgba(255,255,255,0.75)"}}>
                 Acompanhamento
               </div>
               {navItem('/monthly-report', IC.monthly, 'Relatório Mensal')}
             </>}
+
+            {/* ── SEÇÃO 3: Pessoas ──────────────────────────────── */}
+            <div style={{ margin: '10px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
+            <div className="nav-section-label" style={{color:"rgba(255,255,255,0.75)"}}>
+              Pessoas
+            </div>
+            {navItem('/vacations', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd"/></svg>, 'Férias')}
 
           </>}
 

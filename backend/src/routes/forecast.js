@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { pool } from '../db/schema.js';
-import { requireAuth, requireRole, requireProjectAccess } from '../middleware/auth.js';
+import { requireAuth, requireRole, requireProjectAccess, denyGerente } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -43,11 +43,13 @@ router.post('/project/:projectId/bulk', requireProjectAccess, async (req, res) =
     await client.query('BEGIN');
     const results = [];
     const ENGENHEIRO_TYPES = ['Forecast', 'Actual'];
+      if (role === 'gerente') return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
     const PLANEJADOR_TYPES = ['Budget', 'Actual', 'Meta', 'Pool'];
     for (const e of entries) {
-      if (role === 'engenheiro'  && !ENGENHEIRO_TYPES.includes(e.type)) continue;
+      if (role === 'engenheiro' && !ENGENHEIRO_TYPES.includes(e.type)) continue;
+      if (role === 'coordenador' && !['Budget','Forecast','Actual','Meta','Pool'].includes(e.type)) continue;
       if (role === 'planejador'  && !PLANEJADOR_TYPES.includes(e.type)) continue;
-      // gestor and admin can edit all types
+      // gestor, coordenador e admin can edit all types
       if (!VALID_CATS.includes(e.category) || !VALID_TYPES.includes(e.type)) continue;
       const month = parseInt(e.month);
       const year = parseInt(e.year);
@@ -84,13 +86,15 @@ router.put('/project/:projectId', requireProjectAccess, async (req, res) => {
     const { category, type, year, month, value, comment } = req.body;
     const { role, id: userId } = req.user;
     const ENGENHEIRO_TYPES = ['Forecast', 'Actual'];
+      if (role === 'gerente') return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
     const PLANEJADOR_TYPES = ['Budget', 'Actual', 'Meta', 'Pool'];
     const VALID_CATS = ['Viagens', 'Contratos', 'POs'];
     if (role === 'engenheiro' && !ENGENHEIRO_TYPES.includes(type))
       return res.status(403).json({ error: 'Engenheiros só podem editar Forecast e Realizado' });
+    if (role === 'gerente') return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
     if (role === 'planejador' && !PLANEJADOR_TYPES.includes(type))
       return res.status(403).json({ error: 'Planejadores só podem editar Budget, Realizado, Meta e Pool' });
-    // gestor and admin can edit all types
+    // gestor, coordenador e admin can edit all types
     if (!VALID_CATS.includes(category))
       return res.status(400).json({ error: 'Categoria inválida' });
     const m = parseInt(month), y = parseInt(year);
@@ -150,7 +154,7 @@ router.get('/summaries', async (req, res) => {
     const yrStart = parseInt(yearStart || currentYear);
     const yrEnd   = parseInt(yearEnd   || currentYear);
     const { role, id: userId } = req.user;
-    const isEng = role === 'engenheiro';
+    const isEng = role === 'engenheiro'; // gerente vê tudo
     const joinClause = isEng
       ? `INNER JOIN project_assignments pa ON pa.project_id=fe.project_id AND pa.user_id=$3`
       : '';
@@ -174,7 +178,7 @@ router.get('/dashboard', async (req, res) => {
     const yrStart = parseInt(yearStart || year || currentYear);
     const yrEnd   = parseInt(yearEnd   || year || currentYear);
     const { role, id: userId } = req.user;
-    const isEng = role === 'engenheiro';
+    const isEng = role === 'engenheiro'; // gerente vê tudo
     const joinClause = isEng
       ? `INNER JOIN project_assignments pa ON pa.project_id=p.id AND pa.user_id=$3`
       : '';
@@ -260,7 +264,7 @@ router.get('/project/:projectId/actual-consolidated', requireProjectAccess, asyn
 
 router.post('/project/:projectId/actual-consolidated', requireProjectAccess, async (req, res) => {
   const { role, id: userId } = req.user;
-  if (!['gestor','planejador','admin'].includes(role))
+  if (!['gestor','coordenador','planejador','admin'].includes(role))
     return res.status(403).json({ error: 'Sem permissão' });
   try {
     const { value, comment } = req.body;
@@ -395,7 +399,7 @@ router.get('/alerts', async (req, res) => {
     const dismissed = new Set(dismissedRes.rows.map(r => `${r.alert_type}|${r.alert_key}`));
     const isDismissed = (type, key) => dismissed.has(`${type}|${key}`);
 
-    const isEng = role === 'engenheiro';
+    const isEng = role === 'engenheiro'; // gerente vê tudo
     const projJoin = isEng
       ? `INNER JOIN project_assignments pa ON pa.project_id = p.id AND pa.user_id = $2`
       : '';
@@ -612,7 +616,7 @@ router.get('/polo-summary', async (req, res) => {
     const yrEnd   = parseInt(yearEnd   || year || currentYear);
     const { role, id: userId } = req.user;
 
-    const isEng = role === 'engenheiro';
+    const isEng = role === 'engenheiro'; // gerente vê tudo
     const joinClause = isEng
       ? `INNER JOIN project_assignments pa ON pa.project_id=p.id AND pa.user_id=$3`
       : '';
@@ -838,7 +842,7 @@ router.post('/close-year', requireRole('gestor', 'planejador', 'admin'), async (
 router.get('/year-consolidated-summaries', async (req, res) => {
   try {
     const { role, id: userId } = req.user;
-    const isEng = role === 'engenheiro';
+    const isEng = role === 'engenheiro'; // gerente vê tudo
     const joinClause = isEng
       ? `INNER JOIN project_assignments pa ON pa.project_id=yc.project_id AND pa.user_id=$1`
       : '';

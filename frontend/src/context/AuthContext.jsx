@@ -8,12 +8,8 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Try to restore session via httpOnly cookie (server reads it automatically)
-    // Also supports legacy localStorage token during migration period
     const token = localStorage.getItem('ctg_token');
-    if (token) {
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    }
+    if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
     api.get('/auth/me')
       .then(r => setUser(r.data))
@@ -27,9 +23,6 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (email, password) => {
     const r = await api.post('/auth/login', { email, password });
     const { token, user } = r.data;
-
-    // Store token in localStorage as fallback during migration period
-    // Primary auth is via httpOnly cookie set by the server
     localStorage.setItem('ctg_token', token);
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     setUser(user);
@@ -37,9 +30,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(async () => {
-    try {
-      await api.post('/auth/logout'); // server clears httpOnly cookie
-    } catch { /* ignore */ }
+    try { await api.post('/auth/logout'); } catch { /* ignore */ }
     localStorage.removeItem('ctg_token');
     delete api.defaults.headers.common['Authorization'];
     setUser(null);
@@ -54,21 +45,45 @@ export function AuthProvider({ children }) {
   );
 }
 
-export function useAuth() {
-  return useContext(AuthContext);
-}
+export function useAuth() { return useContext(AuthContext); }
 
 export function useRole() {
   const { user } = useAuth();
+  const role = user?.role;
+
+  const isAdmin       = role === 'admin';
+  const isGestor      = role === 'gestor';       // legado — mantido para compatibilidade
+  const isCoordenador = role === 'coordenador';
+  const isEngenheiro  = role === 'engenheiro';
+  const isPlanejador  = role === 'planejador';
+  const isGerente     = role === 'gerente';
+
+  // Pode ver tudo (sem restrição de área ou projeto)
+  const canViewAll = isAdmin || isGestor || isCoordenador || isPlanejador || isGerente;
+
+  // Pode editar (gerente é view-only)
+  const canEdit = !isGerente && role !== undefined;
+
+  // Pode gerenciar projetos (criar, editar, excluir)
+  const canManage = isAdmin || isGestor || isCoordenador || isPlanejador;
+
+  // Restrição de área: coordenador e engenheiro têm área definida
+  const userArea = user?.area || null;
+  const hasAreaRestriction = (isCoordenador || isEngenheiro) && !!userArea;
+
   return {
-    role: user?.role,
-    isAdmin:       user?.role === 'admin',
-    isGestor:      user?.role === 'gestor',
-    isEngenheiro:  user?.role === 'engenheiro',
-    isPlanejador:  user?.role === 'planejador',
-    canEdit:       user?.role !== 'admin',
-    canManage:     user?.role === 'admin' || user?.role === 'gestor' || user?.role === 'planejador',
-    canViewAll:    user?.role === 'admin' || user?.role === 'gestor' || user?.role === 'planejador',
+    role,
+    isAdmin,
+    isGestor,
+    isCoordenador,
+    isEngenheiro,
+    isPlanejador,
+    isGerente,
+    canEdit,
+    canManage,
+    canViewAll,
+    userArea,
+    hasAreaRestriction,
   };
 }
 

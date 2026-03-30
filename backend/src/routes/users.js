@@ -26,7 +26,7 @@ function safeError(res, err) {
 router.get('/for-delegation', async (req, res) => {
   try {
     const r = await pool.query(
-      `SELECT id, name, email, role, avatar_initials FROM users WHERE active=true ORDER BY name`
+      `SELECT id, name, email, role, area, avatar_initials FROM users WHERE active=true ORDER BY name`
     );
     res.json(r.rows);
   } catch (err) { safeError(res, err); }
@@ -36,7 +36,7 @@ router.get('/for-delegation', async (req, res) => {
 router.get('/pending', requireRole('admin'), async (req, res) => {
   try {
     const r = await pool.query(
-      `SELECT id, name, email, role, avatar_initials, created_at
+      `SELECT id, name, email, role, area, avatar_initials, created_at
        FROM users WHERE pending_approval = true ORDER BY created_at DESC`
     );
     res.json(r.rows);
@@ -66,7 +66,7 @@ router.post('/:id/reject', requireRole('admin'), async (req, res) => {
 router.get('/', requireRole('admin', 'gestor', 'planejador'), async (req, res) => {
   try {
     const r = await pool.query(`
-      SELECT u.id, u.name, u.email, u.role, u.active, u.avatar_initials, u.created_at,
+      SELECT u.id, u.name, u.email, u.role, u.area, u.active, u.avatar_initials, u.created_at,
         COUNT(pa.project_id) AS project_count
       FROM users u
       LEFT JOIN project_assignments pa ON pa.user_id = u.id
@@ -90,17 +90,19 @@ router.get('/engineers', requireRole('admin', 'gestor', 'planejador'), async (re
 // POST /api/users — admin creates user
 router.post('/', requireRole('admin'), async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, area } = req.body;
     if (!name?.trim() || !email?.trim() || !password) return res.status(400).json({ error: 'Campos obrigatórios faltando' });
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Formato de email inválido' });
     const pwCheck = validatePassword(password);
     if (!pwCheck.valid) return res.status(400).json({ error: pwCheck.error });
     const hash = await bcrypt.hash(password, 12);
     const av = initials(name);
+    const userRole = role || 'engenheiro';
+    const userArea = ['engenheiro','coordenador'].includes(userRole) ? (area || null) : null;
     const r = await pool.query(
-      `INSERT INTO users (name, email, password_hash, role, avatar_initials)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id, name, email, role, avatar_initials`,
-      [name, email.toLowerCase(), hash, role || 'engenheiro', av]
+      `INSERT INTO users (name, email, password_hash, role, area, avatar_initials)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, role, area, avatar_initials`,
+      [name, email.toLowerCase(), hash, userRole, userArea, av]
     );
     res.status(201).json(r.rows[0]);
   } catch (err) {
@@ -116,20 +118,27 @@ router.put('/:id', async (req, res) => {
     const isAdmin = req.user.role === 'admin';
     if (!isSelf && !isAdmin) return res.status(403).json({ error: 'Sem permissão' });
 
-    const { name, email, role, active } = req.body;
+    const { name, email, role, area, active } = req.body;
     const av = name ? initials(name) : undefined;
 
     const fields = [], vals = [];
     if (name)  { fields.push(`name=$${fields.length+1}`);  vals.push(name); }
     if (email) { fields.push(`email=$${fields.length+1}`); vals.push(email.toLowerCase()); }
     if (av)    { fields.push(`avatar_initials=$${fields.length+1}`); vals.push(av); }
-    if (isAdmin && role)   { fields.push(`role=$${fields.length+1}`); vals.push(role); }
+    if (isAdmin && role) {
+      fields.push(`role=$${fields.length+1}`); vals.push(role);
+      // Update area accordingly
+      const newArea = ['engenheiro','coordenador'].includes(role) ? (area || null) : null;
+      fields.push(`area=$${fields.length+1}`); vals.push(newArea);
+    } else if (isAdmin && area !== undefined) {
+      fields.push(`area=$${fields.length+1}`); vals.push(area || null);
+    }
     if (isAdmin && active !== undefined) { fields.push(`active=$${fields.length+1}`); vals.push(active); }
     fields.push('updated_at=NOW()');
 
     vals.push(targetId);
     const r = await pool.query(
-      `UPDATE users SET ${fields.join(',')} WHERE id=$${vals.length} RETURNING id, name, email, role, active, avatar_initials`,
+      `UPDATE users SET ${fields.join(',')} WHERE id=$${vals.length} RETURNING id, name, email, role, area, active, avatar_initials`,
       vals
     );
     res.json(r.rows[0]);
