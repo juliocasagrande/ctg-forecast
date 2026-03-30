@@ -10,11 +10,11 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       manifest: {
-        name: 'CTG Brasil — Forecast',
-        short_name: 'Forecast',
-        description: 'Controle de forecast de projetos CTG Brasil',
+        name: 'CTG.Engenharia',
+        short_name: 'Engenharia',
+        description: 'Plataforma de gestão de projetos de engenharia — CTG Brasil',
         theme_color: '#001F5B',
         background_color: '#001F5B',
         display: 'standalone',

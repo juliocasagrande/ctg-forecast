@@ -5,6 +5,7 @@ import { AuthProvider } from './context/AuthContext.jsx';
 import App from './App.jsx';
 import './index.css';
 import { SettingsProvider } from './context/SettingsContext.jsx';
+import { PWAUpdatePrompt } from './components/ui/PWAUpdatePrompt.jsx';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -12,6 +13,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <AuthProvider>
       <SettingsProvider>
         <App />
+        <PWAUpdatePrompt />
       </SettingsProvider>
       </AuthProvider>
     </BrowserRouter>
