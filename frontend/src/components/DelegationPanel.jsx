@@ -10,14 +10,17 @@ const STATUS_COLORS = {
 
 function getStatus(d) {
   const today = new Date().toISOString().split('T')[0];
+  const start = String(d.start_date).slice(0, 10);
+  const end   = String(d.end_date).slice(0, 10);
   if (!d.active) return 'expired';
-  if (d.start_date > today) return 'future';
-  if (d.end_date < today) return 'expired';
+  if (start > today) return 'future';
+  if (end < today) return 'expired';
   return 'active';
 }
 
 function fmtDate(d) {
-  return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR');
+  if (!d) return '—';
+  return new Date(String(d).slice(0, 10) + 'T12:00:00').toLocaleDateString('pt-BR');
 }
 
 export default function DelegationPanel() {
@@ -198,6 +201,12 @@ export default function DelegationPanel() {
                   fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: 4,
                   background: s.bg, color: s.color,
                 }}>{s.label}</span>
+                {st !== 'expired' && (
+                  <button className="btn btn-ghost btn-sm" style={{ fontSize: '0.72rem', color: '#DC2626' }}
+                    onClick={() => handleRevoke(d.id)}>
+                    Revogar
+                  </button>
+                )}
               </div>
             );
           })}

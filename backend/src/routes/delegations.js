@@ -117,12 +117,12 @@ router.get('/notifications', async (req, res) => {
   } catch (err) { safeError(res, err); }
 });
 
-// DELETE /api/delegations/:id — revoke a delegation (only delegator can revoke)
+// DELETE /api/delegations/:id — revoke a delegation (delegator OR delegate can revoke)
 router.delete('/:id', async (req, res) => {
   try {
     const userId = req.user.id;
     const r = await pool.query(
-      'UPDATE access_delegations SET active = false WHERE id = $1 AND delegator_id = $2 RETURNING *',
+      'UPDATE access_delegations SET active = false WHERE id = $1 AND (delegator_id = $2 OR delegate_id = $2) RETURNING *',
       [req.params.id, userId]
     );
     if (!r.rows.length)
