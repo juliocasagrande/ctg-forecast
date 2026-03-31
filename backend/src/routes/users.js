@@ -77,11 +77,38 @@ router.get('/', requireRole('admin', 'gestor', 'planejador'), async (req, res) =
   } catch (err) { safeError(res, err); }
 });
 
-// GET /api/users/engineers — for gestor to assign
-router.get('/engineers', requireRole('admin', 'gestor', 'planejador'), async (req, res) => {
+// GET /api/users/engineers — lista para atribuição em projetos
+// - admin, gestor, planejador: todos os usuários ativos
+// - coordenador: apenas engenheiros da sua área
+router.get('/engineers', requireAuth, async (req, res) => {
   try {
+    const { role, area } = req.user;
+    if (!['admin', 'gestor', 'planejador', 'coordenador'].includes(role))
+      return res.status(403).json({ error: 'Acesso não autorizado' });
+
+    if (role === 'coordenador') {
+      // Coordenador vê só engenheiros da sua área
+      const r = await pool.query(
+        `SELECT id, name, email, area, avatar_initials FROM users
+         WHERE role='engenheiro' AND area=$1 AND active=true ORDER BY name`,
+        [area]
+      );
+      return res.json(r.rows);
+    }
+
+    if (role === 'planejador') {
+      // Planejador vê todos os usuários ativos (para nomear qualquer pessoa)
+      const r = await pool.query(
+        `SELECT id, name, email, role, area, avatar_initials FROM users
+         WHERE active=true AND role NOT IN ('admin') ORDER BY name`
+      );
+      return res.json(r.rows);
+    }
+
+    // admin e gestor: todos os engenheiros
     const r = await pool.query(
-      "SELECT id, name, email, avatar_initials FROM users WHERE role='engenheiro' AND active=true ORDER BY name"
+      `SELECT id, name, email, area, avatar_initials FROM users
+       WHERE role='engenheiro' AND active=true ORDER BY name`
     );
     res.json(r.rows);
   } catch (err) { safeError(res, err); }

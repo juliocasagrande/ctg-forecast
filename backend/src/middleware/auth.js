@@ -15,6 +15,9 @@ const COOKIE_OPTIONS = {
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
 
+// Hierarquia de roles para elevação por delegação
+const ROLE_RANK = { engenheiro: 1, coordenador: 2, planejador: 3, gerente: 3, gestor: 4, admin: 5 };
+
 export function signToken(payload) {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 }
@@ -34,17 +37,69 @@ function extractToken(req) {
   return null;
 }
 
-export function requireAuth(req, res, next) {
+// ── requireAuth ───────────────────────────────────────────────────────────────
+// Valida JWT, revalida role/active contra o banco e aplica elevação de role
+// quando existe delegação ativa para o usuário corrente.
+export async function requireAuth(req, res, next) {
   const token = extractToken(req);
   if (!token) return res.status(401).json({ error: 'Não autenticado' });
+
+  let decoded;
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    next();
+    decoded = jwt.verify(token, JWT_SECRET);
   } catch {
     clearAuthCookie(res);
-    res.status(401).json({ error: 'Token inválido ou expirado' });
+    return res.status(401).json({ error: 'Token inválido ou expirado' });
   }
+
+  try {
+    const { pool } = await import('../db/schema.js');
+
+    // 1. Revalida usuário no banco
+    const userR = await pool.query(
+      'SELECT id, role, area, active FROM users WHERE id = $1',
+      [decoded.id]
+    );
+    const user = userR.rows[0];
+    if (!user || !user.active) {
+      clearAuthCookie(res);
+      return res.status(401).json({ error: 'Conta inativa ou não encontrada' });
+    }
+
+    // 2. Verifica delegações ativas PARA este usuário e eleva o role se aplicável
+    const delegR = await pool.query(`
+      SELECT u.id AS delegator_id, u.role AS delegator_role, u.area AS delegator_area
+      FROM access_delegations ad
+      JOIN users u ON u.id = ad.delegator_id
+      WHERE ad.delegate_id = $1
+        AND ad.active = true
+        AND CURRENT_DATE BETWEEN ad.start_date AND ad.end_date
+    `, [decoded.id]);
+
+    let effectiveRole = user.role;
+    let effectiveArea = user.area;
+    const delegatorIds = [];
+    for (const d of delegR.rows) {
+      delegatorIds.push(d.delegator_id);
+      if ((ROLE_RANK[d.delegator_role] || 0) > (ROLE_RANK[effectiveRole] || 0)) {
+        effectiveRole = d.delegator_role;
+        effectiveArea = d.delegator_area;
+      }
+    }
+
+    req.user = {
+      ...decoded,
+      role: effectiveRole,
+      area: effectiveArea,
+      _originalRole: user.role,
+      _delegatorIds: delegatorIds, // IDs dos delegadores — permite acesso aos projetos deles
+    };
+  } catch (dbErr) {
+    console.warn('[AUTH] Falha ao revalidar usuário no banco, usando token como fallback:', dbErr.message);
+    req.user = decoded;
+  }
+
+  next();
 }
 
 export function requireRole(...roles) {
@@ -56,9 +111,10 @@ export function requireRole(...roles) {
   };
 }
 
-// Bloqueia gerente de qualquer escrita
+// Bloqueia gerente de qualquer escrita — usa role original para não bloquear
+// delegados elevados que receberam role de gerente
 export function denyGerente(req, res, next) {
-  if (req.user?.role === 'gerente') {
+  if (req.user?.role === 'gerente' && req.user?._originalRole === 'gerente') {
     return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
   }
   next();
@@ -66,56 +122,50 @@ export function denyGerente(req, res, next) {
 
 /**
  * Controle de acesso a projetos por role:
- * - admin, gestor (legado), planejador: acesso total
- * - coordenador: projetos da sua área ou projetos sem área definida
- * - gerente: acesso de leitura (verificado no route handler)
- * - engenheiro: só projetos designados a ele ou via delegação
+ * - admin, gestor, planejador: acesso total
+ * - coordenador: projetos com engenheiros da sua área
+ * - gerente: acesso de leitura
+ * - engenheiro: projetos designados a ele ou via delegação ativa
+ * - usuário com delegação: acesso aos projetos dos delegadores também
  */
 export async function requireProjectAccess(req, res, next) {
-  const { role, id: userId, area: userArea } = req.user;
+  const { role, id: userId, area: userArea, _delegatorIds = [] } = req.user;
 
-  // Admin, gestor (legado), planejador, gerente: passam direto (gerente bloqueado na escrita)
+  // Admin, gestor, planejador, gerente: acesso total
   if (['admin', 'gestor', 'planejador', 'gerente'].includes(role)) return next();
 
   const { pool } = await import('../db/schema.js');
   const projectId = req.params.projectId || req.params.id;
 
-  // Coordenador: acessa projetos da sua área
+  // Se o usuário tem delegação ativa, verifica se o projeto pertence a algum delegador
+  if (_delegatorIds.length > 0) {
+    const dProj = await pool.query(
+      `SELECT 1 FROM project_assignments WHERE project_id=$1 AND user_id = ANY($2)`,
+      [projectId, _delegatorIds]
+    );
+    if (dProj.rows.length) return next();
+  }
+
+  // Coordenador: acessa projetos com engenheiros da sua área
   if (role === 'coordenador') {
-    // Verifica se o projeto pertence à área do coordenador (via engenheiros do projeto)
     const r = await pool.query(`
       SELECT 1 FROM project_assignments pa
       JOIN users u ON u.id = pa.user_id
-      WHERE pa.project_id = $1 AND (u.area = $2 OR $2 IS NULL)
+      WHERE pa.project_id = $1
+        AND u.role = 'engenheiro'
+        AND u.area = $2
       LIMIT 1
     `, [projectId, userArea]);
     if (r.rows.length) return next();
-
-    // Ou se o projeto não tem engenheiros designados (projeto geral)
-    const noEng = await pool.query(
-      'SELECT 1 FROM project_assignments WHERE project_id=$1 LIMIT 1',
-      [projectId]
-    );
-    if (!noEng.rows.length) return next();
-
     return res.status(403).json({ error: 'Acesso não autorizado a este projeto' });
   }
 
-  // Engenheiro: só projetos diretamente designados ou via delegação
+  // Engenheiro: projetos diretamente designados
   const r = await pool.query(
     'SELECT 1 FROM project_assignments WHERE project_id=$1 AND user_id=$2',
     [projectId, userId]
   );
   if (r.rows.length) return next();
-
-  const d = await pool.query(`
-    SELECT 1 FROM access_delegations ad
-    JOIN project_assignments pa ON pa.user_id = ad.delegator_id AND pa.project_id = $1
-    WHERE ad.delegate_id = $2
-      AND ad.active = true
-      AND CURRENT_DATE BETWEEN ad.start_date AND ad.end_date
-  `, [projectId, userId]);
-  if (d.rows.length) return next();
 
   return res.status(403).json({ error: 'Sem acesso a este projeto' });
 }

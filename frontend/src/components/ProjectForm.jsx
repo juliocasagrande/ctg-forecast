@@ -3,6 +3,7 @@ import Modal from './ui/Modal.jsx';
 import api from '../utils/api.js';
 import { useToast } from './ui/Toast.jsx';
 import { useRole } from '../context/AuthContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 
 const PLANTS = [
   'PCH Palmeiras',
@@ -32,6 +33,9 @@ export default function ProjectForm({ open, onClose, project, onSaved, onDeleted
   const [showDangerZone, setShowDangerZone] = useState(false);
   const { toast } = useToast();
   const { canManage } = useRole();
+  const { user } = useAuth();
+  const isPlanejador = user?.role === 'planejador';
+  const isCoordenador = user?.role === 'coordenador';
 
   useEffect(() => {
     if (!open) return;
@@ -208,7 +212,13 @@ export default function ProjectForm({ open, onClose, project, onSaved, onDeleted
       {/* Engenheiros */}
       {engineers.length > 0 && (
         <>
-          {sectionHeader('Engenheiros Responsáveis')}
+          {sectionHeader(
+            isCoordenador
+              ? `Engenheiro Responsável — ${user?.area ? user.area.charAt(0).toUpperCase() + user.area.slice(1) : 'sua área'}`
+              : isPlanejador
+                ? 'Responsável pelo Projeto'
+                : 'Engenheiros Responsáveis'
+          )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 4 }}>
             {engineers.map(eng => (
               <label key={eng.id} style={{
@@ -234,6 +244,11 @@ export default function ProjectForm({ open, onClose, project, onSaved, onDeleted
                 <div>
                   <div style={{ fontSize: '0.83rem', fontWeight: form.engineer_ids.includes(eng.id) ? 600 : 400, color: form.engineer_ids.includes(eng.id) ? 'var(--forecast-text)' : 'var(--text-primary)' }}>
                     {eng.name}
+                    {isPlanejador && eng.role && (
+                      <span style={{ marginLeft: 6, fontSize: '0.65rem', fontWeight: 600, background: 'var(--bg-app)', color: 'var(--text-muted)', borderRadius: 4, padding: '1px 5px' }}>
+                        {eng.role}{eng.area ? ` · ${eng.area}` : ''}
+                      </span>
+                    )}
                   </div>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{eng.email}</div>
                 </div>

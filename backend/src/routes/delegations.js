@@ -87,13 +87,33 @@ router.post('/', async (req, res) => {
     if (!userR.rows.length)
       return res.status(404).json({ error: 'Usuário delegado não encontrado' });
 
+    const safeReason = reason ? String(reason).slice(0, 500) : null;
+
     const r = await pool.query(`
-      INSERT INTO access_delegations (delegator_id, delegate_id, start_date, end_date, reason)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO access_delegations (delegator_id, delegate_id, start_date, end_date, active, reason)
+      VALUES ($1, $2, $3, $4, true, $5)
       RETURNING *
-    `, [delegatorId, delegate_id, start_date, end_date, reason || null]);
+    `, [delegatorId, delegate_id, start_date, end_date, safeReason]);
 
     res.status(201).json(r.rows[0]);
+  } catch (err) { safeError(res, err); }
+});
+
+// GET /api/delegations/notifications — delegations received by me (for AlertBell)
+router.get('/notifications', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const r = await pool.query(`
+      SELECT d.id, d.start_date, d.end_date, d.reason, d.active,
+        u.name AS delegator_name, u.role AS delegator_role, u.avatar_initials AS delegator_initials
+      FROM access_delegations d
+      JOIN users u ON u.id = d.delegator_id
+      WHERE d.delegate_id = $1
+        AND d.active = true
+        AND d.end_date >= CURRENT_DATE
+      ORDER BY d.start_date ASC
+    `, [userId]);
+    res.json(r.rows);
   } catch (err) { safeError(res, err); }
 });
 

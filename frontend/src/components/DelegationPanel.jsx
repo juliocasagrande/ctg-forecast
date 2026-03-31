@@ -86,7 +86,9 @@ export default function DelegationPanel() {
         <div className="card" style={{ marginBottom: 16, padding: 16 }}>
           <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: 12 }}>
             Delegue seus projetos e privilégios para outro usuário durante um período (ex.: férias).
-            As ações realizadas serão registradas no nome do delegado.
+            O usuário indicado receberá <strong>todos os seus acessos e permissões</strong> enquanto
+            a delegação estiver ativa — incluindo projetos designados, role e área. Um aviso
+            aparecerá no sino de alertas da pessoa indicada.
           </p>
           {error && <div style={{ background: '#FEE2E2', color: '#991B1B', padding: '8px 12px', borderRadius: 'var(--radius-sm)', fontSize: '0.82rem', marginBottom: 12 }}>{error}</div>}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -181,12 +183,17 @@ export default function DelegationPanel() {
               }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    ← De {d.delegator_name} ({d.delegator_role})
+                    ← De {d.delegator_name}
                   </div>
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 2 }}>
                     {fmtDate(d.start_date)} a {fmtDate(d.end_date)}
                     {d.reason && ` — ${d.reason}`}
                   </div>
+                  {st === 'active' && (
+                    <div style={{ fontSize: '0.7rem', color: '#0C4A6E', marginTop: 4, background: '#E0F2FE', borderRadius: 4, padding: '2px 7px', display: 'inline-block', fontWeight: 600 }}>
+                      ✓ Delegação ativa — você tem os privilégios de {d.delegator_role}
+                    </div>
+                  )}
                 </div>
                 <span style={{
                   fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: 4,

@@ -265,6 +265,8 @@ export async function initDB() {
         active BOOLEAN DEFAULT true
       );
 
+      ALTER TABLE access_delegations ADD COLUMN IF NOT EXISTS reason TEXT;
+
       CREATE TABLE IF NOT EXISTS alert_dismissals (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id),

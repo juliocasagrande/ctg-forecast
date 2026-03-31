@@ -22,10 +22,21 @@ export default function AlertBell() {
 
   const fetchAlerts = useCallback(async () => {
     try {
-      const r = await api.get('/forecast/alerts');
-      setAlerts(r.data);
+      const [alertsR, delegR] = await Promise.all([
+        api.get('/forecast/alerts'),
+        api.get('/delegations/notifications'),
+      ]);
+      const data = alertsR.data;
+      // Inject delegation_received into alerts object
+      const delegations = (delegR.data || []);
+      data.delegation_received = {
+        count: delegations.length,
+        delegations,
+      };
+      data.total = (data.total || 0) + delegations.length;
+      setAlerts(data);
       if ('setAppBadge' in navigator) {
-        const count = r.data?.total ?? 0;
+        const count = data?.total ?? 0;
         if (count > 0) navigator.setAppBadge(count).catch(() => {});
         else navigator.clearAppBadge().catch(() => {});
       }
@@ -243,6 +254,40 @@ export default function AlertBell() {
                     )}
                   </Section>
                 )}
+
+                {/* Férias sem ADP */}
+                {alerts.vacation_adp?.count > 0 && (
+                  <Section icon={<VacIcon />} title="Férias sem registro ADP" count={alerts.vacation_adp.count} color="#7C3AED">
+                    {alerts.vacation_adp.periods.map(v => (
+                      <AlertRow
+                        key={v.id}
+                        onClick={() => { navigate('/vacations'); setOpen(false); }}
+                        label={`${v.period_number}º período — ${v.days_until === 0 ? 'começa hoje' : `em ${v.days_until} dia${v.days_until !== 1 ? 's' : ''}`}`}
+                        sub={`${v.days} dias corridos — registre no ADP antes que as férias sejam perdidas`}
+                        accent="#7C3AED"
+                        onDismiss={() => dismiss('vacation_adp', v.id)}
+                        dismissing={isDismissing('vacation_adp', v.id)}
+                      />
+                    ))}
+                  </Section>
+                )}
+
+                {/* Delegações recebidas ativas */}
+                {alerts.delegation_received?.count > 0 && (
+                  <Section icon={<DelegIcon />} title="Delegações recebidas" count={alerts.delegation_received.count} color="#0891B2">
+                    {alerts.delegation_received.delegations.map(d => (
+                      <AlertRow
+                        key={d.id}
+                        onClick={() => { navigate('/profile'); setOpen(false); }}
+                        label={`Delegação de ${d.delegator_name}`}
+                        sub={`${d.delegator_role} · até ${new Date(d.end_date + 'T12:00:00').toLocaleDateString('pt-BR')}${d.reason ? ` — ${d.reason}` : ''}`}
+                        accent="#0891B2"
+                        onDismiss={() => dismiss('delegation_received', d.id)}
+                        dismissing={isDismissing('delegation_received', d.id)}
+                      />
+                    ))}
+                  </Section>
+                )}
               </>
             )}
           </div>
@@ -344,7 +389,9 @@ function AlertRow({ onClick, label, sub, accent, onDismiss, dismissing, indent }
 }
 
 // Mini SVG icons
-const MsgIcon  = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5z"/><path d="M15 7v2a4 4 0 01-4 4H9.828l-1.766 1.767c.28.149.599.233.938.233h2l3 3v-3h2a2 2 0 002-2V9a2 2 0 00-2-2h-1z"/></svg>;
-const EditIcon = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/></svg>;
-const ClockIcon= () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd"/></svg>;
+const MsgIcon     = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5z"/><path d="M15 7v2a4 4 0 01-4 4H9.828l-1.766 1.767c.28.149.599.233.938.233h2l3 3v-3h2a2 2 0 002-2V9a2 2 0 00-2-2h-1z"/></svg>;
+const EditIcon    = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/></svg>;
+const ClockIcon   = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd"/></svg>;
 const WarningIcon = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 10-2 0 1 1 0 002 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd"/></svg>;
+const VacIcon     = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd"/></svg>;
+const DelegIcon   = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/></svg>;

@@ -629,8 +629,31 @@ router.get('/alerts', async (req, res) => {
 
     const MONTHS_PT = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
+    // 5. Férias próximas (≤ 40 dias) sem ADP registrado — alerta pessoal
+    const vacAlertRes = await pool.query(`
+      SELECT vp.id, vp.period_number, vp.start_date, vp.end_date, vp.days,
+        u.name AS user_name, u.id AS user_id
+      FROM vacation_periods vp
+      JOIN users u ON u.id = vp.user_id
+      WHERE vp.user_id = $1
+        AND vp.adp_registered = false
+        AND vp.start_date >= CURRENT_DATE
+        AND vp.start_date <= CURRENT_DATE + INTERVAL '40 days'
+      ORDER BY vp.start_date ASC
+    `, [userId]);
+
+    const vacationAlerts = vacAlertRes.rows.filter(v =>
+      !isDismissed('vacation_adp', String(v.id))
+    ).map(v => ({
+      id: v.id,
+      period_number: v.period_number,
+      start_date: v.start_date,
+      days_until: Math.ceil((new Date(String(v.start_date).slice(0,10) + 'T12:00:00') - new Date()) / 86400000),
+      days: v.days,
+    }));
+
     res.json({
-      total: totalUnread + emptyForecast.length + staleForecast.length + pendingActualResponse.count,
+      total: totalUnread + emptyForecast.length + staleForecast.length + pendingActualResponse.count + vacationAlerts.length,
       unread_messages: {
         count: totalUnread,
         by_project: unreadMap,
@@ -653,6 +676,10 @@ router.get('/alerts', async (req, res) => {
         year: prevYear,
         deadline_business_day: deadlineBizDay,
         is_past_deadline: isPastDeadline,
+      },
+      vacation_adp: {
+        count: vacationAlerts.length,
+        periods: vacationAlerts,
       },
     });
   } catch (err) { safeError(res, err); }
