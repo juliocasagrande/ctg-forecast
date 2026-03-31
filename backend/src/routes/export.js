@@ -375,7 +375,7 @@ router.get('/project/:projectId', requireProjectAccess, async (req, res) => {
 
     // Role-based type whitelist
     const ALLOWED_TYPES = {
-      engenheiro:  ['Budget','Forecast','Actual'],
+      engenheiro:  ['Budget','Forecast','Actual','Meta','Pool'],
       coordenador: ['Budget','Forecast','Actual','Meta','Pool'],
       gestor:      ['Budget','Forecast','Actual','Meta','Pool'],
       planejador:  ['Budget','Forecast','Actual','Meta','Pool'],

@@ -391,7 +391,7 @@ const MAIN_TABS = [
 // ── Export Modal — category + type selection ──────────────────────────────────
 const EXPORT_CATEGORIES = ['Viagens', 'Contratos', 'POs'];
 const EXPORT_TYPES_BY_ROLE = {
-  engenheiro:  ['Forecast', 'Actual'],
+  engenheiro:  ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'],
   coordenador: ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'],
   gestor:      ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'],
   planejador:  ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'],
