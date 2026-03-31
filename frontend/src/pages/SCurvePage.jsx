@@ -198,7 +198,34 @@ export default function SCurvePage({ period }) {
   const effectiveYearEnd   = selectedYears.length > 0 ? Math.max(...selectedYears) : period.end;
   const effectivePeriod = { start: effectiveYearStart, end: effectiveYearEnd };
 
+  // Separate monthly vs consolidated summaries (month=0 = consolidated from backend)
+  const monthlySummaries = useMemo(() =>
+    filteredSummaries.filter(s => parseInt(s.month) > 0),
+    [filteredSummaries]
+  );
+  const consolidatedSummaries = useMemo(() =>
+    filteredSummaries.filter(s => parseInt(s.month) === 0),
+    [filteredSummaries]
+  );
+
+  // Current date for Realizado cutoff
+  const nowSC = new Date();
+  const nowYear  = nowSC.getFullYear();
+  const nowMonth = nowSC.getMonth() + 1;
+
+  // Last month with any Actual data (for Forecast blending)
+  const lastActualPointSC = useMemo(() => {
+    let lastY = 0, lastM = 0;
+    monthlySummaries.forEach(s => {
+      if (s.type !== 'Actual') return;
+      const y = parseInt(s.year), m = parseInt(s.month), v = parseFloat(s.total || 0);
+      if (v > 0 && (y > lastY || (y === lastY && m > lastM))) { lastY = y; lastM = m; }
+    });
+    return { year: lastY, month: lastM };
+  }, [monthlySummaries]);
+
   const monthlyData = useMemo(() => {
+    const { year: lastActY, month: lastActM } = lastActualPointSC;
     const result = [];
     for (let y = effectiveYearStart; y <= effectiveYearEnd; y++) {
       if (selectedYears.length > 0 && !selectedYears.includes(y)) continue;
@@ -206,17 +233,34 @@ export default function SCurvePage({ period }) {
         const month = i + 1;
         const key = effectiveYearStart === effectiveYearEnd ? m : `${m}/${y}`;
         const entry = { month: key };
-        ['Budget', 'Forecast', 'Realizado', 'Meta', 'Pool'].forEach(type => {
-          const apiType = type === 'Realizado' ? 'Actual' : type;
-          entry[type] = filteredSummaries
-            .filter(s => parseInt(s.year) === y && parseInt(s.month) === month && s.type === apiType)
+
+        const actualVal = monthlySummaries
+          .filter(s => parseInt(s.year) === y && parseInt(s.month) === month && s.type === 'Actual')
+          .reduce((sum, s) => sum + parseFloat(s.total || 0), 0);
+        const forecastVal = monthlySummaries
+          .filter(s => parseInt(s.year) === y && parseInt(s.month) === month && s.type === 'Forecast')
+          .reduce((sum, s) => sum + parseFloat(s.total || 0), 0);
+
+        // Realizado: zero after current calendar month
+        const isAfterNow = y > nowYear || (y === nowYear && month > nowMonth);
+        entry['Realizado'] = isAfterNow ? 0 : actualVal;
+
+        // Forecast line: Actual up to lastActual, Forecast thereafter
+        const isBeforeOrAtLastActual = lastActY > 0 &&
+          (y < lastActY || (y === lastActY && month <= lastActM));
+        entry['Forecast'] = isBeforeOrAtLastActual ? actualVal : forecastVal;
+
+        ['Budget', 'Meta', 'Pool'].forEach(type => {
+          entry[type] = monthlySummaries
+            .filter(s => parseInt(s.year) === y && parseInt(s.month) === month && s.type === type)
             .reduce((sum, s) => sum + parseFloat(s.total || 0), 0);
         });
+
         result.push(entry);
       });
     }
     return result;
-  }, [filteredSummaries, effectiveYearStart, effectiveYearEnd, selectedYears]);
+  }, [monthlySummaries, effectiveYearStart, effectiveYearEnd, selectedYears, nowYear, nowMonth, lastActualPointSC]);
 
   // Combined: bars (monthly) + lines (accumulated) — same as Dashboard
   const combinedData = useMemo(() => monthlyData.reduce((acc, d, i) => {
@@ -239,8 +283,9 @@ export default function SCurvePage({ period }) {
 
   // KPIs
   const totalBudget   = filteredProjects.reduce((s, p) => s + parseFloat(p.budget || 0), 0);
-  const totalForecast = filteredProjects.reduce((s, p) => s + parseFloat(p.forecast || 0), 0);
+  const totalForecast = filteredProjects.reduce((s, p) => s + parseFloat(p.act_forecast ?? p.forecast ?? 0), 0);
   const totalActual   = filteredProjects.reduce((s, p) => s + parseFloat(p.actual || 0), 0);
+  const totalActForecast = filteredProjects.reduce((s, p) => s + parseFloat(p.act_forecast ?? p.forecast ?? 0), 0);
 
   const yearSpan = effectiveYearEnd - effectiveYearStart;
   const tickInterval = yearSpan === 0 ? 0 : yearSpan === 1 ? 2 : 5;

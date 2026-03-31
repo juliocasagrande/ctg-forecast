@@ -286,15 +286,16 @@ function PeriodModal({ period, userId, area, year, members, canEditOthers, onSav
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: 'var(--bg-card)', borderRadius: 14, width: 420, maxWidth: '95vw', boxShadow: 'var(--shadow-lg)', padding: '22px 24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-          <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--ctg-navy)' }}>
+      <div style={{ background: 'var(--bg-card)', borderRadius: 14, width: 420, maxWidth: '95vw', boxShadow: 'var(--shadow-lg)', overflow: 'hidden' }}>
+        {/* Header azul igual aos demais modais */}
+        <div style={{ background: 'var(--ctg-navy)', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#fff' }}>
             {period?.id ? 'Editar período' : 'Novo período de férias'}
           </span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', color: 'var(--text-secondary)' }}>✕</button>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: '0.85rem', color: '#fff', width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>✕</button>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '18px 20px' }}>
           {canEditOthers && (
             <div>
               <label style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>COLABORADOR</label>

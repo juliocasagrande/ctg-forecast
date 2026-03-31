@@ -104,7 +104,7 @@ export default function ProjectsList({ projects, onEditProject, onProjectsChange
 
                 <div className="project-meta">
                   <span className="meta-pill budget">Bdg {fmt(p.total_budget)}</span>
-                  <span className="meta-pill forecast">Fcst {fmt(p.total_forecast)}</span>
+                  <span className="meta-pill forecast">Fcst {fmt(p.act_forecast ?? p.total_forecast)}</span>
                   <span className="meta-pill actual">Real {fmt(p.total_actual)}</span>
                   {p.engineer_names && (
                     <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display:'flex', alignItems:'center', gap:4 }}>

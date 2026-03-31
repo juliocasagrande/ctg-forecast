@@ -37,6 +37,38 @@ router.get('/', async (req, res) => {
           + COALESCE(SUM(CASE WHEN combined.source='consolidated' AND combined.type='Actual' THEN combined.value ELSE 0 END),0) AS total_budget,
         COALESCE(SUM(CASE WHEN combined.type='Forecast' THEN combined.value ELSE 0 END),0) AS total_forecast,
         COALESCE(SUM(CASE WHEN combined.type='Actual'   THEN combined.value ELSE 0 END),0) AS total_actual,
+        -- act_forecast: per month use Actual if > 0, else Forecast; plus consolidated
+        COALESCE((
+          SELECT SUM(CASE WHEN a.actual_val > 0 THEN a.actual_val ELSE a.forecast_val END)
+          FROM (
+            SELECT
+              COALESCE(act.total, 0) AS actual_val,
+              COALESCE(fct.total, 0) AS forecast_val
+            FROM (
+              SELECT year, month, SUM(value) AS total
+              FROM forecast_entries
+              WHERE project_id = p.id AND type = 'Actual'
+                AND NOT EXISTS (SELECT 1 FROM year_consolidated yc3 WHERE yc3.project_id = p.id AND yc3.year = forecast_entries.year AND yc3.type = 'Actual' AND yc3.value > 0)
+              GROUP BY year, month
+            ) act
+            FULL OUTER JOIN (
+              SELECT year, month, SUM(value) AS total
+              FROM forecast_entries
+              WHERE project_id = p.id AND type = 'Forecast'
+                AND NOT EXISTS (SELECT 1 FROM year_consolidated yc3 WHERE yc3.project_id = p.id AND yc3.year = forecast_entries.year AND yc3.type = 'Actual' AND yc3.value > 0)
+              GROUP BY year, month
+            ) fct USING (year, month)
+          ) a
+        ), 0)
+        + COALESCE((
+          SELECT SUM(CASE WHEN yc_act.val > 0 THEN yc_act.val ELSE yc_fct.val END)
+          FROM (
+            SELECT year, COALESCE(SUM(value),0) AS val FROM year_consolidated WHERE project_id = p.id AND type = 'Actual' AND value > 0 GROUP BY year
+          ) yc_act
+          FULL OUTER JOIN (
+            SELECT year, COALESCE(SUM(value),0) AS val FROM year_consolidated WHERE project_id = p.id AND type = 'Forecast' AND value > 0 GROUP BY year
+          ) yc_fct USING (year)
+        ), 0) AS act_forecast,
         COALESCE(pa_agg.engineer_count, 0) AS engineer_count,
         COALESCE(msg_agg.message_count, 0) AS message_count,
         eng_agg.engineer_names,

@@ -342,7 +342,7 @@ function TableModal({ open, onClose, filtered, showEngCol, periodLabel, C, navig
               {filtered.length === 0 ? (
                 <tr><td colSpan={showEngCol ? 11 : 10} style={{ textAlign:'center', padding:40, color:'var(--text-secondary)' }}>Nenhum projeto</td></tr>
               ) : filtered.map((p, i) => {
-                const f    = parseFloat(p.forecast) || 0;
+                const f    = parseFloat(p.act_forecast ?? p.forecast) || 0;
                 const a    = parseFloat(p.actual)   || 0;
                 const exec = f ? ((a / f) * 100).toFixed(1) : '—';
                 return (
@@ -365,7 +365,7 @@ function TableModal({ open, onClose, filtered, showEngCol, periodLabel, C, navig
                       </td>
                     )}
                     <td style={{ padding:'9px 16px', textAlign:'right', color:C.budget,   fontVariantNumeric:'tabular-nums', fontWeight:500 }}>{fmt(p.budget)}</td>
-                    <td style={{ padding:'9px 16px', textAlign:'right', color:C.forecast, fontVariantNumeric:'tabular-nums', fontWeight:600 }}>{fmt(p.forecast)}</td>
+                    <td style={{ padding:'9px 16px', textAlign:'right', color:C.forecast, fontVariantNumeric:'tabular-nums', fontWeight:600 }}>{fmt(p.act_forecast ?? p.forecast)}</td>
                     <td style={{ padding:'9px 16px', textAlign:'right', color:C.actual,   fontVariantNumeric:'tabular-nums', fontWeight:500 }}>{fmt(p.actual)}</td>
                     <td style={{ padding:'9px 16px', textAlign:'right' }}>
                       {exec !== '—' ? (
@@ -450,10 +450,12 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
     [allSummaries, filteredIds]
   );
 
-  // KPIs (totalForecast computed after monthlyData below)
-  const totalBudget   = filtered.reduce((s, p) => s + parseFloat(p.budget    || 0), 0);
-  const totalActual   = filtered.reduce((s, p) => s + parseFloat(p.actual     || 0), 0);
-  const totalSI       = filtered.reduce((s, p) => s + parseFloat(p.si_value   || 0), 0);
+  // KPIs — from dashData (includes year_consolidated via UNION ALL in backend)
+  const totalBudget   = filtered.reduce((s, p) => s + parseFloat(p.budget   || 0), 0);
+  const totalActual   = filtered.reduce((s, p) => s + parseFloat(p.actual    || 0), 0);
+  const totalSI       = filtered.reduce((s, p) => s + parseFloat(p.si_value  || 0), 0);
+  // Use act_forecast from backend (Actual where available + Forecast otherwise, no duplication)
+  const totalActForecastKPI = filtered.reduce((s, p) => s + parseFloat(p.act_forecast ?? p.forecast ?? 0), 0);
 
   const periodLabel  = period.start === period.end ? `${period.start}` : `${period.start}–${period.end}`;
   const yearSpan     = period.end - period.start;
@@ -476,10 +478,20 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
   const currentYear  = now.getFullYear();
   const currentMonth = now.getMonth() + 1; // 1-12
 
-  // Find the last month/year that has any Actual data across all filtered projects
+  // Separate monthly entries (month > 0) from consolidated yearly totals (month = 0)
+  const monthlySummaries = useMemo(() =>
+    filteredSummaries.filter(s => parseInt(s.month) > 0),
+    [filteredSummaries]
+  );
+  const consolidatedSummaries = useMemo(() =>
+    filteredSummaries.filter(s => parseInt(s.month) === 0),
+    [filteredSummaries]
+  );
+
+  // Find the last month/year that has any monthly Actual data across all filtered projects
   const lastActualPoint = useMemo(() => {
     let lastY = 0, lastM = 0;
-    filteredSummaries.forEach(s => {
+    monthlySummaries.forEach(s => {
       if (s.type !== 'Actual') return;
       const y = parseInt(s.year), m = parseInt(s.month);
       const v = parseFloat(s.total || 0);
@@ -487,10 +499,30 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
       if (y > lastY || (y === lastY && m > lastM)) { lastY = y; lastM = m; }
     });
     return { year: lastY, month: lastM };
-  }, [filteredSummaries]);
+  }, [monthlySummaries]);
+
+  // Consolidated actual total (sum of all year_consolidated Actual rows in filtered projects)
+  const consolidatedActualTotal = useMemo(() =>
+    consolidatedSummaries
+      .filter(s => s.type === 'Actual')
+      .reduce((sum, s) => sum + parseFloat(s.total || 0), 0),
+    [consolidatedSummaries]
+  );
+
+  // Consolidated forecast total (years that only have consolidated Forecast, not Actual)
+  const consolidatedForecastTotal = useMemo(() => {
+    // For each year that has a consolidated Actual, use Actual (not Forecast) to avoid duplication
+    const yearActuals = {};
+    consolidatedSummaries.filter(s => s.type === 'Actual').forEach(s => {
+      yearActuals[s.year] = (yearActuals[s.year] || 0) + parseFloat(s.total || 0);
+    });
+    return consolidatedSummaries
+      .filter(s => s.type === 'Forecast' && !yearActuals[s.year])
+      .reduce((sum, s) => sum + parseFloat(s.total || 0), 0);
+  }, [consolidatedSummaries]);
 
   // Monthly data — Realizado truncated at current month;
-  // Forecast = Actual for months <= lastActual, Forecast for later months
+  // Forecast line = Actual for months <= lastActual, Forecast thereafter
   const monthlyData = useMemo(() => {
     const { year: lastActY, month: lastActM } = lastActualPoint;
     const result = [];
@@ -500,10 +532,10 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
         const key   = period.start === period.end ? m : `${m}/${y}`;
         const entry = { month: key };
 
-        const actualVal = filteredSummaries
+        const actualVal = monthlySummaries
           .filter(s => parseInt(s.year) === y && parseInt(s.month) === month && s.type === 'Actual')
           .reduce((sum, s) => sum + parseFloat(s.total || 0), 0);
-        const forecastVal = filteredSummaries
+        const forecastVal = monthlySummaries
           .filter(s => parseInt(s.year) === y && parseInt(s.month) === month && s.type === 'Forecast')
           .reduce((sum, s) => sum + parseFloat(s.total || 0), 0);
 
@@ -517,7 +549,7 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
         entry['Forecast'] = isBeforeOrAtLastActual ? actualVal : forecastVal;
 
         ['Budget', 'Meta', 'Pool'].forEach(type => {
-          entry[type] = filteredSummaries
+          entry[type] = monthlySummaries
             .filter(s => parseInt(s.year) === y && parseInt(s.month) === month && s.type === type)
             .reduce((sum, s) => sum + parseFloat(s.total || 0), 0);
         });
@@ -526,7 +558,7 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
       });
     }
     return result;
-  }, [filteredSummaries, period, currentYear, currentMonth, lastActualPoint]);
+  }, [monthlySummaries, period, currentYear, currentMonth, lastActualPoint]);
 
   const combinedData = useMemo(() => monthlyData.reduce((acc, d, i) => {
     const prev = acc[i - 1] || { BudgetAcum: 0, ForecastAcum: 0, RealizadoAcum: 0, MetaAcum: 0, PoolAcum: 0 };
@@ -541,8 +573,11 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
     return acc;
   }, []), [monthlyData]);
 
-  // totalForecast: blended (Actual up to last actual month + Forecast after)
-  const totalForecast = monthlyData.reduce((s, d) => s + (d.Forecast || 0), 0);
+  // totalForecast KPI: use act_forecast from projects (already blended in backend)
+  const totalForecastMonthly = monthlyData.reduce((s, d) => s + (d.Forecast || 0), 0);
+  // Chart forecast uses monthly blended + consolidated; KPI uses pre-computed act_forecast
+  const totalForecast = totalActForecastKPI > 0 ? totalActForecastKPI
+    : (totalForecastMonthly + consolidatedActualTotal + consolidatedForecastTotal);
 
   const LEGEND_LABELS = {
     Budget: 'Budget (mensal)', Forecast: 'Forecast (mensal)', Realizado: 'Realizado (mensal)',
@@ -651,8 +686,8 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
                 <BarChart
                   data={filtered.map(p => ({
                     name:      p.code,
-                    Budget:    parseFloat(p.budget)   || 0,
-                    Forecast:  parseFloat(p.forecast)  || 0,
+                    Budget:    parseFloat(p.budget)    || 0,
+                    Forecast:  parseFloat(p.act_forecast ?? p.forecast) || 0,
                     Realizado: parseFloat(p.actual)    || 0,
                   }))}
                   margin={{ top: 2, right: 4, left: 0, bottom: 0 }}
@@ -707,7 +742,7 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
                 {filtered.length === 0 ? (
                   <tr><td colSpan={showEngCol ? 11 : 10} style={{ textAlign: 'center', padding: 28, color: 'var(--text-secondary)' }}>Nenhum projeto</td></tr>
                 ) : filtered.map((p, i) => {
-                  const f    = parseFloat(p.forecast) || 0;
+                  const f    = parseFloat(p.act_forecast ?? p.forecast) || 0;
                   const a    = parseFloat(p.actual)   || 0;
                   const exec = f ? ((a / f) * 100).toFixed(1) : '—';
                   return (
@@ -732,7 +767,7 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
                         </td>
                       )}
                       <td style={{ padding: '7px 12px', textAlign: 'right', color: C.budget,   fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>{fmt(p.budget)}</td>
-                      <td style={{ padding: '7px 12px', textAlign: 'right', color: C.forecast, fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmt(p.forecast)}</td>
+                      <td style={{ padding: '7px 12px', textAlign: 'right', color: C.forecast, fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmt(p.act_forecast ?? p.forecast)}</td>
                       <td style={{ padding: '7px 12px', textAlign: 'right', color: C.actual,   fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>{fmt(p.actual)}</td>
                       <td style={{ padding: '7px 12px', textAlign: 'right' }}>
                         {exec !== '—' ? (
@@ -802,7 +837,7 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
         data={filtered.map(p => ({
           name:      p.code,
           Budget:    parseFloat(p.budget)   || 0,
-          Forecast:  parseFloat(p.forecast)  || 0,
+          Forecast:  parseFloat(p.act_forecast ?? p.forecast) || 0,
           Realizado: parseFloat(p.actual)    || 0,
         }))}
         projectMap={projectMap}

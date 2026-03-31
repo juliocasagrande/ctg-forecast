@@ -18,7 +18,7 @@ const ALL_PLANTS = [
 
 function SummaryCard({ title, subtitle, projects, onClick, selected }) {
   const budget   = projects.reduce((s, p) => s + parseFloat(p.total_budget   || 0), 0);
-  const forecast = projects.reduce((s, p) => s + parseFloat(p.total_forecast || 0), 0);
+  const forecast = projects.reduce((s, p) => s + parseFloat(p.act_forecast ?? p.total_forecast ?? 0), 0);
   const actual   = projects.reduce((s, p) => s + parseFloat(p.total_actual   || 0), 0);
   if (projects.length === 0) return null;
 
@@ -78,7 +78,7 @@ export default function ProjectsPage({ projects, period, plantFilter = [], onEdi
     return {
       name:      pl.replace('UHE ', '').replace('PCH ', ''),
       Budget:    pjs.reduce((s, p) => s + parseFloat(p.total_budget   || 0), 0),
-      Forecast:  pjs.reduce((s, p) => s + parseFloat(p.total_forecast || 0), 0),
+      Forecast:  pjs.reduce((s, p) => s + parseFloat(p.act_forecast ?? p.total_forecast ?? 0), 0),
       Realizado: pjs.reduce((s, p) => s + parseFloat(p.total_actual   || 0), 0),
     };
   }).filter(d => d.Budget > 0 || d.Forecast > 0);
@@ -103,7 +103,7 @@ export default function ProjectsPage({ projects, period, plantFilter = [], onEdi
   const engChartData = engineers.filter(e => e.name !== 'Sem engenheiro').map(e => ({
     name: e.name.split(' ').slice(0,2).join(' '),
     Budget:    e.projects.reduce((s, p) => s + parseFloat(p.total_budget   || 0), 0),
-    Forecast:  e.projects.reduce((s, p) => s + parseFloat(p.total_forecast || 0), 0),
+    Forecast:  e.projects.reduce((s, p) => s + parseFloat(p.act_forecast ?? p.total_forecast ?? 0), 0),
     Realizado: e.projects.reduce((s, p) => s + parseFloat(p.total_actual   || 0), 0),
   })).filter(d => d.Budget > 0 || d.Forecast > 0);
 
