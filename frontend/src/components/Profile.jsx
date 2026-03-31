@@ -5,7 +5,14 @@ import { useToast } from './ui/Toast.jsx';
 import PasswordInput, { getPasswordStrength } from './ui/PasswordInput.jsx';
 import DelegationPanel from './DelegationPanel.jsx';
 
-const ROLE_LABELS = { admin:'Administrador', gestor:'Gestor', engenheiro:'Engenheiro' };
+const ROLE_LABELS = {
+  admin:       'Administrador',
+  gestor:      'Gestor',
+  engenheiro:  'Engenheiro',
+  coordenador: 'Coordenador',
+  planejador:  'Planejador',
+  gerente:     'Gerente',
+};
 
 export default function Profile() {
   const { user, updateUser } = useAuth();
@@ -52,17 +59,36 @@ export default function Profile() {
   return (
     <div style={{maxWidth:560}}>
       {/* Avatar + role banner */}
-      <div style={{background:`linear-gradient(135deg, ${roleColor}, ${roleColor}CC)`,borderRadius:'var(--radius-lg)',padding:'24px 24px 20px',marginBottom:20,display:'flex',alignItems:'center',gap:16}}>
+      <div style={{background:`linear-gradient(135deg, ${roleColor}, ${roleColor}CC)`,borderRadius:'var(--radius-lg)',padding:'24px 24px 20px',marginBottom: user?._hasDelegation ? 8 : 20,display:'flex',alignItems:'center',gap:16}}>
         <div style={{width:56,height:56,borderRadius:'50%',background:'rgba(255,255,255,0.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'1.3rem',fontWeight:700,color:'#fff',flexShrink:0}}>
           {initials}
         </div>
         <div>
           <div style={{fontFamily:'var(--font-display)',fontSize:'1.3rem',color:'#fff',lineHeight:1.1}}>{user?.name}</div>
           <div style={{fontSize:'0.8rem',color:'rgba(255,255,255,0.7)',marginTop:3}}>
-            {ROLE_LABELS[user?.role]} · {user?.email}
+            {user?._hasDelegation
+              ? <>{ROLE_LABELS[user?._originalRole]} <span style={{opacity:0.6}}>→</span> <strong style={{color:'#fff'}}>{ROLE_LABELS[user?.role]}</strong></>
+              : ROLE_LABELS[user?.role]
+            } · {user?.email}
           </div>
         </div>
       </div>
+
+      {/* Banner de delegação ativa */}
+      {user?._hasDelegation && (
+        <div style={{
+          marginBottom: 20, borderRadius: 'var(--radius-md)',
+          background: '#E0F2FE', border: '1px solid #7DD3FC',
+          padding: '10px 16px', fontSize: '0.8rem', color: '#0C4A6E',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <span style={{fontSize: '1rem'}}>🔑</span>
+          <span>
+            <strong>Delegação ativa</strong> — você está operando com privilégios de <strong>{ROLE_LABELS[user?.role]}</strong>.
+            Seu cargo real é {ROLE_LABELS[user?._originalRole]}.
+          </span>
+        </div>
+      )}
 
       {/* Edit profile */}
       <div className="card" style={{marginBottom:16}}>

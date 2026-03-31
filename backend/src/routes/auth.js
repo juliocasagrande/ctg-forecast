@@ -126,7 +126,17 @@ router.get('/me', requireAuth, async (req, res) => {
       [req.user.id]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Usuário não encontrado' });
-    res.json(r.rows[0]);
+
+    const dbUser = r.rows[0];
+    // Retorna o effective role calculado pelo requireAuth (pode estar elevado por delegação)
+    // mas mantém os dados pessoais (nome, email, initials) do banco
+    res.json({
+      ...dbUser,
+      role:           req.user.role,           // effective role (elevado se há delegação)
+      area:           req.user.area,           // effective area
+      _originalRole:  dbUser.role,             // role real para exibição no perfil
+      _hasDelegation: req.user._delegatorIds?.length > 0,
+    });
   } catch (err) {
     safeError(res, err);
   }

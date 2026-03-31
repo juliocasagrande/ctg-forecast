@@ -3,22 +3,35 @@ import api from '../utils/api.js';
 
 const AuthContext = createContext(null);
 
+// Revalida o role do usuário a cada 5 minutos para capturar
+// início/fim de delegações sem exigir novo login
+const REVALIDATE_INTERVAL = 5 * 60 * 1000;
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const fetchMe = useCallback(async () => {
+    try {
+      const r = await api.get('/auth/me');
+      setUser(r.data);
+    } catch {
+      localStorage.removeItem('ctg_token');
+      delete api.defaults.headers.common['Authorization'];
+      setUser(null);
+    }
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem('ctg_token');
     if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
-    api.get('/auth/me')
-      .then(r => setUser(r.data))
-      .catch(() => {
-        localStorage.removeItem('ctg_token');
-        delete api.defaults.headers.common['Authorization'];
-      })
-      .finally(() => setLoading(false));
-  }, []);
+    fetchMe().finally(() => setLoading(false));
+
+    // Revalida periodicamente para detectar delegações que começam/terminam
+    const interval = setInterval(fetchMe, REVALIDATE_INTERVAL);
+    return () => clearInterval(interval);
+  }, [fetchMe]);
 
   const login = useCallback(async (email, password) => {
     const r = await api.post('/auth/login', { email, password });
