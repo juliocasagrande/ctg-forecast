@@ -40,7 +40,7 @@ function SummaryCard({ title, subtitle, projects, onClick, selected }) {
       </div>
       {[
         { label: 'Budget',   value: budget,   color: selected ? '#BFDBFE' : 'var(--budget-text)' },
-        { label: 'Previsão', value: forecast, color: selected ? '#86EFAC' : 'var(--forecast-text)' },
+        { label: 'Previsão', value: previsao, color: selected ? '#86EFAC' : 'var(--forecast-text)' },
         { label: 'Real',     value: actual,   color: selected ? '#FCD34D' : 'var(--actual-text)' },
       ].map(s => (
         <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -103,7 +103,7 @@ export default function ProjectsPage({ projects, period, plantFilter = [], onEdi
   const engChartData = engineers.filter(e => e.name !== 'Sem engenheiro').map(e => ({
     name: e.name.split(' ').slice(0,2).join(' '),
     Budget:    e.projects.reduce((s, p) => s + parseFloat(p.total_budget   || 0), 0),
-    Forecast:  e.projects.reduce((s, p) => s + parseFloat(p.act_forecast ?? p.total_forecast ?? 0), 0),
+    'Previsão':  e.projects.reduce((s, p) => s + parseFloat(p.act_forecast ?? p.total_forecast ?? 0), 0),
     Realizado: e.projects.reduce((s, p) => s + parseFloat(p.total_actual   || 0), 0),
   })).filter(d => d.Budget > 0 || d.Forecast > 0);
 
