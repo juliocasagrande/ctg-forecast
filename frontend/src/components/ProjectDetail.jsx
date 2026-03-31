@@ -692,11 +692,16 @@ export default function ProjectDetail({ onEdit }) {
     );
 
     // For Budget: also exclude years that have Actual consolidated (those replace monthly Budget)
-    const excludeYears = type === 'Budget'
-      ? new Set([
-        ...consYears,
-        ...(yearConsData || []).filter(e => e.type === 'Actual' && parseFloat(e.value||0) > 0).map(e => parseInt(e.year)),
-      ])
+    const consActualYears = new Set(
+      (yearConsData || [])
+        .filter(e => e.type === 'Actual' && parseFloat(e.value||0) > 0)
+        .map(e => parseInt(e.year))
+    );
+
+    // Budget: exclui anos com Actual consolidado (substitui o Budget do ano)
+    // Forecast: também exclui anos com Actual consolidado (Actual encerrado substitui o Forecast)
+    const excludeYears = (type === 'Budget' || type === 'Forecast')
+      ? new Set([...consYears, ...consActualYears])
       : consYears;
 
     // Sum from monthly entries — exclude years that have consolidated data
@@ -1100,8 +1105,8 @@ export default function ProjectDetail({ onEdit }) {
                     <YAxis type="category" dataKey="name" tick={{fontSize:12,fill:'#374151'}} width={72} />
                     <Tooltip isAnimationActive={false} content={<ChartTooltip year={selectedYear} />} wrapperStyle={{zIndex:9999}} />
                     <Legend wrapperStyle={{fontSize:'0.78rem'}} className="project-chart-legend" />
-                    <Bar dataKey="Previsão"  fill={C.forecast} radius={[0,3,3,0]} barSize={14} />
-                    <Bar dataKey="Previsão" fill={C.actual} radius={[0,3,3,0]} barSize={14} />
+                    <Bar dataKey="Previsão"   fill={C.forecast} radius={[0,3,3,0]} barSize={14} name="Forecast" />
+                    <Bar dataKey="Realizado"  fill={C.actual}   radius={[0,3,3,0]} barSize={14} name="Realizado" />
                   </BarChart>
                 </ResponsiveContainer>
                 {/* Execution percentages */}
@@ -1128,8 +1133,8 @@ export default function ProjectDetail({ onEdit }) {
                   <YAxis tickFormatter={v=>fmt(v)} tick={{fontSize:10,fill:'#374151'}} width={68} />
                   <Tooltip isAnimationActive={false} content={<ChartTooltip year={selectedYear} />} wrapperStyle={{zIndex:9999}} />
                   <Legend wrapperStyle={{fontSize:'0.78rem'}} className="project-chart-legend" />
-                  <Bar dataKey="Budget"   fill={C.budget} radius={[3,3,0,0]} />
-                  <Bar dataKey="Previsão" fill={C.forecast} radius={[3,3,0,0]} />
+                  <Bar dataKey="Budget"   fill={C.budget}   radius={[3,3,0,0]} name="Budget" />
+                  <Bar dataKey="Forecast" fill={C.forecast} radius={[3,3,0,0]} name="Forecast" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
