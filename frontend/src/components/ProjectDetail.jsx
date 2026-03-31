@@ -915,7 +915,7 @@ export default function ProjectDetail({ onEdit }) {
                 textAlign:'center',
               }}>
                 <div style={{fontSize:'0.6rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:s.cls?`var(--${s.cls}-text)`:'var(--text-muted)',marginBottom:2}}>{s.label}</div>
-                <div style={{fontFamily:'var(--font-display)',fontSize:'0.8rem',color:(s.label==='SI'&&overSI)?'#DC2626':'var(--text-primary)',lineHeight:1.2}}>{formatBRL(s.v)}</div>
+                <div style={{fontFamily:'var(--font-display)',fontSize:'0.92rem',color:(s.label==='SI'&&overSI)?'#DC2626':'var(--text-primary)',lineHeight:1.2}}>{formatBRL(s.v)}</div>
               </div>
             ))}
           </div>
