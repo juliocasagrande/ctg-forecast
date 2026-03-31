@@ -681,35 +681,62 @@ export default function ProjectDetail({ onEdit }) {
   // year_consolidated ALWAYS takes precedence when it exists
   // Rule: Actual consolidated adds to Budget AND Actual totals; Forecast consolidated adds to Forecast total
   const totalAllFor = (type) => {
-    // Determine which consolidated type(s) should be added to this display type
     const consTypeForDisplay = type === 'Budget' ? 'Actual' : type;
 
-    // Find which years have consolidated data for this type
-    const consYears = new Set(
-      (yearConsData || [])
-        .filter(e => (e.type === consTypeForDisplay || (e.type === 'Actual' && e.category === 'Total' && consTypeForDisplay === 'Actual')) && parseFloat(e.value||0) > 0)
-        .map(e => parseInt(e.year))
-    );
-
-    // For Budget: also exclude years that have Actual consolidated (those replace monthly Budget)
     const consActualYears = new Set(
       (yearConsData || [])
         .filter(e => e.type === 'Actual' && parseFloat(e.value||0) > 0)
         .map(e => parseInt(e.year))
     );
 
-    // Budget: exclui anos com Actual consolidado (substitui o Budget do ano)
-    // Forecast: também exclui anos com Actual consolidado (Actual encerrado substitui o Forecast)
+    const consYears = new Set(
+      (yearConsData || [])
+        .filter(e => e.type === consTypeForDisplay && parseFloat(e.value||0) > 0)
+        .map(e => parseInt(e.year))
+    );
+
     const excludeYears = (type === 'Budget' || type === 'Forecast')
       ? new Set([...consYears, ...consActualYears])
       : consYears;
 
-    // Sum from monthly entries — exclude years that have consolidated data
+    // Para Forecast: blenda Actual até último mês realizado + Forecast depois
+    // (mesma lógica do computeSITotal — é o "Forecast Atual" do Excel)
+    if (type === 'Forecast') {
+      const activeYears = [...new Set(entries.map(e => parseInt(e.year)))]
+        .filter(y => !excludeYears.has(y))
+        .sort();
+
+      const blended = activeYears.reduce((total, yr) => {
+        const yearEntries = entries.filter(e => parseInt(e.year) === yr);
+        const actualMonths = yearEntries
+          .filter(e => e.type === 'Actual' && parseFloat(e.value||0) > 0)
+          .map(e => parseInt(e.month));
+        const lastActM = actualMonths.length > 0 ? Math.max(...actualMonths) : 0;
+
+        const actualSum = yearEntries
+          .filter(e => e.type === 'Actual' && parseInt(e.month) <= lastActM)
+          .reduce((s, e) => s + parseFloat(e.value||0), 0);
+
+        const forecastSum = yearEntries
+          .filter(e => e.type === 'Forecast' && parseInt(e.month) > lastActM)
+          .reduce((s, e) => s + parseFloat(e.value||0), 0);
+
+        return total + actualSum + forecastSum;
+      }, 0);
+
+      // Anos consolidados com Actual substituem o Forecast
+      const fromConsolidated = (yearConsData || [])
+        .filter(e => e.type === 'Actual' && parseFloat(e.value||0) > 0)
+        .reduce((s, e) => s + parseFloat(e.value||0), 0);
+
+      return blended + fromConsolidated;
+    }
+
+    // Budget / Actual / Meta / Pool — lógica original
     const fromEntries = entries
       .filter(e => e.type === type && !excludeYears.has(parseInt(e.year)))
       .reduce((s,e) => s + parseFloat(e.value||0), 0);
 
-    // Sum from consolidated years
     const fromConsolidated = (yearConsData || [])
       .filter(e => (e.type === consTypeForDisplay || (e.type === 'Actual' && e.category === 'Total' && consTypeForDisplay === 'Actual')) && parseFloat(e.value||0) > 0)
       .reduce((s,e) => s + parseFloat(e.value||0), 0);
