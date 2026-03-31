@@ -281,7 +281,7 @@ function PeriodModal({ period, userId, area, year, members, canEditOthers, onSav
     finally { setSaving(false); }
   }
 
-  const inp = { padding: '7px 10px', borderRadius: 7, border: '1px solid var(--border)', fontSize: '0.82rem', background: 'var(--bg-card)', color: 'var(--text-primary)', width: '100%', outline: 'none' };
+  const inp = { padding: '7px 10px', borderRadius: 7, border: '1px solid var(--border)', fontSize: '0.82rem', background: 'var(--bg-card)', color: 'var(--text-primary)', width: '100%', outline: 'none', fontFamily: 'var(--font-body)' };
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}

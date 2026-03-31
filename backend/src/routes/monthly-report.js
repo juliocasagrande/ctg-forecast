@@ -344,7 +344,71 @@ router.post(
           <td>${fmtDateBR(r.VENC)}</td><td>${badgeAditivo(r.ADITIVO_EM_ANDAMENTO)}</td>
         </tr>`).join('\n');
 
+      // Build summary table: Polo > UHE > Project (collapsed at project level)
+      const poloNames = {};
+      for (const uhe of uheKeys) {
+        // Map UHE to polo name (simple heuristic using UHE_ORDER grouping)
+        const poloRio = ['Jurumirim','Taquaruçu','Rosana','Chavantes','Canoas 1','Canoas 2','Retiro','Palmeiras','Capivara','Salto Grande'].includes(uhe.replace(/UHE |PCH /,''))
+          ? 'Rio Paranapanema'
+          : ['Garibaldi','Ilha Solteira','Jupiá','Salto'].includes(uhe.replace(/UHE |PCH /,''))
+            ? 'Rio Canoas / Paraná'
+            : 'Outros';
+        poloNames[uhe] = poloRio;
+      }
+      // Group UHEs by polo
+      const poloGroups = {};
+      for (const uhe of uheKeys) {
+        const polo = poloNames[uhe];
+        if (!poloGroups[polo]) poloGroups[polo] = [];
+        poloGroups[polo].push(uhe);
+      }
+
+      const tableRows = [];
+      tableRows.push(`<table id='sumTable' class='sum-table'>`);
+      tableRows.push(`<thead><tr>
+        <th style='width:38%'>Usina / Projeto</th>
+        <th style='width:12%'>PP/Contrato</th>
+        <th style='width:14%'>Fornecedor</th>
+        <th style='width:10%'>Gestor</th>
+        <th style='width:10%'>Vencimento</th>
+        <th style='width:8%'>Área</th>
+        <th style='width:8%'>Aditivo?</th>
+      </tr></thead>`);
+      tableRows.push(`<tbody>`);
+
+      for (const polo of Object.keys(poloGroups)) {
+        const poloUhes = poloGroups[polo];
+        const poloId = polo.replace(/[^a-z0-9]/gi,'_');
+        tableRows.push(`<tr class='row-polo' onclick="togglePolo('${poloId}')" data-polo='${poloId}'>
+          <td colspan='7'><span class='row-arrow' id='arrow-polo-${poloId}' style='display:inline-block;transition:transform 0.15s;margin-right:6px'>▼</span><strong>${polo}</strong></td>
+        </tr>`);
+        for (const uhe of poloUhes) {
+          const uheId = uhe.replace(/[^a-z0-9]/gi,'_');
+          const uheRows = Object.values(grouped[uhe]).flat();
+          tableRows.push(`<tr class='row-uhe polo-${poloId}' onclick="toggleUHETable('${uheId}')" data-uhe='${uheId}'>
+            <td colspan='7'>&nbsp;&nbsp;<span class='row-arrow' id='arrow-uhe-${uheId}' style='display:inline-block;transition:transform 0.15s;margin-right:6px'>▶</span>${uhe}</td>
+          </tr>`);
+          for (const row of uheRows) {
+            tableRows.push(`<tr class='row-proj uhe-${uheId}' data-kind='trow' data-uhe='${row.UHE}' data-area='${row.AREA}' style='display:none'>
+              <td>&nbsp;&nbsp;&nbsp;&nbsp;${row.PROJ !== '-' ? row.PROJ : row.PROJRES}</td>
+              <td>${row.PP}</td>
+              <td>${row.FORN}</td>
+              <td>${row.GEST}</td>
+              <td class='${dueClass(row.VENC)}'>${fmtDateBR(row.VENC)}</td>
+              <td>${row.AREA}</td>
+              <td>${badgeAditivo(row.ADITIVO_EM_ANDAMENTO)}</td>
+            </tr>`);
+          }
+        }
+      }
+      tableRows.push(`</tbody></table>`);
+
       const sections = [];
+      // Prepend summary table
+      sections.push(`<h2 class='section-title'>Tabela Resumo — Polo / Usina / Projeto</h2>`);
+      sections.push(tableRows.join('\n'));
+      sections.push(`<h2 class='section-title' style='margin-top:32px'>Detalhamento por Projeto</h2>`);
+
       for (let ui = 0; ui < uheKeys.length; ui++) {
         const uhe = uheKeys[ui];
         sections.push(`<section data-kind='uheBlock' data-uhe='${uhe}'>`);
@@ -463,6 +527,22 @@ h2{font-size:calc(22pt*var(--scale));margin:26px 0 12px;}
 h3{font-size:calc(12pt*var(--scale));margin:8px 0;color:var(--muted);font-weight:600;}
 p{margin:0 0 6px;}.lead{color:var(--muted);}.container{margin:0 5mm;}
 .section-title{margin:18px 0 10px;padding-bottom:6px;border-bottom:2px solid var(--line);break-after:avoid;}
+.sum-table{width:100%;border-collapse:collapse;font-size:calc(9.5pt*var(--scale));margin-bottom:24px;}
+.sum-table thead th{background:#0b3d6b;color:#fff;padding:8px 10px;text-align:left;font-weight:700;font-size:calc(8pt*var(--scale));letter-spacing:.04em;white-space:nowrap;}
+.sum-table tbody tr{border-bottom:1px solid #e2e8f0;}
+.sum-table tbody tr:hover{background:#f0f7ff;}
+.row-polo{background:#001f5b!important;color:#fff;cursor:pointer;font-size:calc(9pt*var(--scale));}
+.row-polo td{padding:8px 10px;font-weight:700;color:#fff;}
+.row-polo:hover{background:#00317a!important;}
+.row-uhe{background:#1e3a6e!important;color:#fff;cursor:pointer;}
+.row-uhe td{padding:7px 10px;font-weight:600;color:#e8f0fe;font-size:calc(9pt*var(--scale));}
+.row-uhe:hover{background:#274d8c!important;}
+.row-proj td{padding:6px 10px;font-size:calc(8.5pt*var(--scale));color:#334155;background:#f8fafc;}
+.row-proj:hover td{background:#e8f4fd;}
+.row-arrow{font-size:0.8em;opacity:0.85;}
+.due-2 td:nth-child(5){color:#b91c1c;font-weight:700;}
+.due-6 td:nth-child(5){color:#c2410c;font-weight:700;}
+.due-12 td:nth-child(5){color:#92400e;}
 .cover{height:100vh;display:flex;flex-direction:column;justify-content:center;margin:0 15px;page-break-after:always;}
 .shell{display:flex;min-height:100vh;}.main{flex:1;min-width:0;}.main .container{margin:0 5mm;}
 .sidebar{width:18%;min-width:200px;max-width:320px;border-right:2px solid var(--line);background:#fbfdff;padding:12px;position:sticky;top:0;height:100vh;overflow:auto;transition:width .2s,padding .2s;}
@@ -571,7 +651,7 @@ tr.due-2 td:first-child{border-left:6px solid #ef4444;}tr.due-6 td:first-child{b
   function stats(){const all=Array.from(document.querySelectorAll("[data-kind='card']")),vis=all.filter(e=>e.style.display!=="none");sT&&(sT.innerHTML="Exibindo <strong>"+vis.length+"</strong> de <strong>"+all.length+"</strong>");sU&&(sU.innerHTML=vis.length?toHtml(counts(vis,"data-uhe")):"-");sA&&(sA.innerHTML=vis.length?toHtml(counts(vis,"data-area")):"-");}
   function filter(){const u=(fU?.value||"").trim(),a=(fA?.value||"").trim();document.querySelectorAll("[data-kind='card']").forEach(el=>{el.style.display=(!u||el.getAttribute("data-uhe")===u)&&(!a||el.getAttribute("data-area")===a)?"":"none";});document.querySelectorAll("[data-kind='row12']").forEach(tr=>{tr.style.display=(!u||tr.getAttribute("data-uhe")===u)&&(!a||tr.getAttribute("data-area")===a)?"":"none";});document.querySelectorAll("[data-kind='areaBlock']").forEach(s=>{s.style.display=s.querySelector("[data-kind='card']:not([style*='display: none'])")?"":"none";});document.querySelectorAll("[data-kind='uheBlock']").forEach(s=>{s.style.display=s.querySelector("[data-kind='areaBlock']:not([style*='display: none'])")?"":"none";});stats();}
   tog?.addEventListener("click",()=>sb?.classList.toggle("collapsed"));
-  // UHE expand/collapse
+  // UHE expand/collapse (detail cards)
   window.toggleUHE = function(uhe, el) {
     const content = document.querySelector('[data-uhe-content="'+uhe+'"]');
     if (!content) return;
@@ -579,6 +659,33 @@ tr.due-2 td:first-child{border-left:6px solid #ef4444;}tr.due-6 td:first-child{b
     const open = content.style.display === 'block';
     content.style.display = open ? 'none' : 'block';
     if (arrow) arrow.style.transform = open ? '' : 'rotate(90deg)';
+  };
+  // Polo row toggle in summary table
+  window.togglePolo = function(poloId) {
+    const rows = document.querySelectorAll('.polo-'+poloId);
+    const arrow = document.getElementById('arrow-polo-'+poloId);
+    const allHidden = Array.from(rows).every(r => r.style.display === 'none');
+    rows.forEach(r => { r.style.display = allHidden ? '' : 'none'; });
+    if (arrow) arrow.style.transform = allHidden ? '' : 'rotate(-90deg)';
+    // Also hide project rows when polo is collapsed
+    if (!allHidden) {
+      rows.forEach(r => {
+        const uheId = r.getAttribute('data-uhe');
+        if (uheId) {
+          document.querySelectorAll('.uhe-'+uheId).forEach(pr => { pr.style.display='none'; });
+          const ua = document.getElementById('arrow-uhe-'+uheId);
+          if (ua) ua.style.transform = '';
+        }
+      });
+    }
+  };
+  // UHE row toggle in summary table
+  window.toggleUHETable = function(uheId) {
+    const rows = document.querySelectorAll('.uhe-'+uheId);
+    const arrow = document.getElementById('arrow-uhe-'+uheId);
+    const allHidden = Array.from(rows).every(r => r.style.display === 'none');
+    rows.forEach(r => { r.style.display = allHidden ? '' : 'none'; });
+    if (arrow) arrow.style.transform = allHidden ? 'rotate(90deg)' : '';
   };
   fU?.addEventListener("change",filter);fA?.addEventListener("change",filter);
   clr?.addEventListener("click",()=>{fU.value="";fA.value="";filter();});

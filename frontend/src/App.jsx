@@ -41,7 +41,7 @@ class ErrorBoundary extends React.Component {
             border: '1px solid #E2E8F0',
           }}>
             <div style={{ fontSize: '2.5rem', marginBottom: 16 }}>⚠️</div>
-            <h1 style={{ fontFamily: 'Georgia, serif', fontSize: '1.4rem', color: '#001F5B', marginBottom: 8 }}>
+            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem', color: '#001F5B', marginBottom: 8 }}>
               Algo deu errado
             </h1>
             <p style={{ fontSize: '0.88rem', color: '#64748B', lineHeight: 1.6, marginBottom: 24 }}>
@@ -171,9 +171,11 @@ function PlantFilter({ activePlants, selected, onChange }) {
           padding: 0,
         }}
       >
-        {/* "Usina" label — same font-display as period-label */}
-        <span className="period-label" style={{
+        <span style={{
+          fontSize: '0.58rem', fontWeight: 700, textTransform: 'uppercase',
+          letterSpacing: '0.08em', fontFamily: 'var(--font-body)',
           color: selected.length > 0 ? 'var(--ctg-blue)' : 'var(--ctg-navy)',
+          display: 'block', lineHeight: 1,
         }}>
           Usina
         </span>
@@ -309,9 +311,12 @@ function ProjectFilter({ projects, plantFilter, selected, onChange }) {
         display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2,
         background: 'none', border: 'none', cursor: 'pointer', padding: 0,
       }}>
-        <span className="period-label" style={{ color: selected.length > 0 ? 'var(--ctg-blue)' : 'var(--ctg-navy)' }}>
-          Projeto
-        </span>
+        <span style={{
+          fontSize: '0.58rem', fontWeight: 700, textTransform: 'uppercase',
+          letterSpacing: '0.08em', fontFamily: 'var(--font-body)',
+          color: selected.length > 0 ? 'var(--ctg-blue)' : 'var(--ctg-navy)',
+          display: 'block', lineHeight: 1,
+        }}>Projeto</span>
         <span style={{
           display: 'flex', alignItems: 'center', gap: 5,
           fontSize: '0.72rem', fontWeight: selected.length > 0 ? 600 : 400,
@@ -567,7 +572,12 @@ function AreaFilter({ value, onChange }) {
         display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2,
         background: 'none', border: 'none', cursor: 'pointer', padding: 0,
       }}>
-        <span className="period-label" style={{ color: value ? 'var(--ctg-blue)' : 'var(--ctg-navy)' }}>Área</span>
+        <span style={{
+          fontSize: '0.58rem', fontWeight: 700, textTransform: 'uppercase',
+          letterSpacing: '0.08em', fontFamily: 'var(--font-body)',
+          color: value ? 'var(--ctg-blue)' : 'var(--ctg-navy)',
+          display: 'block', lineHeight: 1,
+        }}>Área</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.72rem',
           fontWeight: value ? 600 : 400, color: value ? 'var(--ctg-blue)' : 'var(--text-muted)',
           fontFamily: 'var(--font-body)', whiteSpace: 'nowrap' }}>
@@ -765,79 +775,83 @@ export default function App() {
             {sub && <div className="page-subtitle">{sub}</div>}
           </div>
 
-          {/* Desktop: full controls */}
+          {/* Desktop: full controls — always same height, pill always visible */}
           <div className="header-controls-desktop">
-            {showControls && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
-                <AlertBell />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+              <AlertBell />
 
-                {/* ── Área de filtros destacada ── */}
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 2,
-                  marginLeft: 10,
-                  padding: '3px 10px 3px 8px',
-                  background: 'rgba(0,31,91,0.06)',
-                  border: '1px solid rgba(0,31,91,0.12)',
-                  borderRadius: 'var(--radius-md)',
-                  boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.04)',
-                  position: 'relative',
-                }}>
-                  {/* Ícone de filtro decorativo */}
-                  <svg viewBox="0 0 16 16" fill="none" stroke="var(--ctg-blue)" strokeWidth="1.5"
-                    width="13" height="13" style={{ opacity: 0.45, flexShrink: 0, marginRight: 4 }}>
-                    <path d="M2 4h12M4.5 8h7M7 12h2" strokeLinecap="round"/>
-                  </svg>
+              {/* ── Pill de filtros — sempre renderizado para altura consistente ── */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 2,
+                marginLeft: 10,
+                padding: '3px 10px 3px 8px',
+                background: 'rgba(0,31,91,0.06)',
+                border: '1px solid rgba(0,31,91,0.12)',
+                borderRadius: 'var(--radius-md)',
+                boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.04)',
+                position: 'relative',
+                minHeight: 36,
+              }}>
+                {/* Ícone de filtro decorativo — sempre visível */}
+                <svg viewBox="0 0 16 16" fill="none" stroke="var(--ctg-blue)" strokeWidth="1.5"
+                  width="13" height="13" style={{ opacity: 0.45, flexShrink: 0, marginRight: 4 }}>
+                  <path d="M2 4h12M4.5 8h7M7 12h2" strokeLinecap="round"/>
+                </svg>
 
+                {/* Filtro de usina — páginas com showControls exceto férias */}
+                {showControls && location.pathname !== '/vacations' && (
                   <PlantFilter
                     activePlants={activePlants}
                     selected={plantFilter}
                     onChange={(v) => { setPlantFilter(v); setProjectFilter([]); }}
                   />
+                )}
 
-                  {location.pathname === '/' && (
-                    <>
-                      {/* Divisor entre filtros */}
-                      <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.12)', margin: '0 4px', flexShrink: 0 }} />
-                      <ProjectFilter
-                        projects={projects}
-                        plantFilter={plantFilter}
-                        selected={projectFilter}
-                        onChange={setProjectFilter}
-                      />
-                    </>
-                  )}
+                {/* Filtro de projeto — só no dashboard */}
+                {showControls && location.pathname === '/' && (
+                  <>
+                    <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.12)', margin: '0 4px', flexShrink: 0 }} />
+                    <ProjectFilter
+                      projects={projects}
+                      plantFilter={plantFilter}
+                      selected={projectFilter}
+                      onChange={setProjectFilter}
+                    />
+                  </>
+                )}
 
-                  {/* ── Filtro de área dropdown (vacations + polos) ── */}
-                  {['/vacations', '/polos'].includes(location.pathname) && (
-                    <>
-                      <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.12)', margin: '0 4px', flexShrink: 0 }} />
-                      <AreaFilter value={areaFilter} onChange={setAreaFilter} />
-                    </>
-                  )}
+                {/* Filtro de área — férias e polos */}
+                {showControls && ['/vacations', '/polos'].includes(location.pathname) && (
+                  <>
+                    <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.12)', margin: '0 4px', flexShrink: 0 }} />
+                    <AreaFilter value={areaFilter} onChange={setAreaFilter} />
+                  </>
+                )}
 
-                  {/* ── Seletor de ano (vacations) ── */}
-                  {location.pathname === '/vacations' && (
-                    <>
-                      <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.15)', margin: '0 4px', flexShrink: 0 }} />
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <button onClick={() => setVacYear(y => y - 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '1rem', padding: '0 2px', lineHeight: 1 }}>‹</button>
-                        <span style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--ctg-navy)', minWidth: 36, textAlign: 'center' }}>{vacYear}</span>
-                        <button onClick={() => setVacYear(y => y + 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '1rem', padding: '0 2px', lineHeight: 1 }}>›</button>
-                      </div>
-                    </>
-                  )}
-
-                  {/* Divisor antes do período */}
-                  {!['/vacations'].includes(location.pathname) && (
+                {/* Seletor de ano — apenas férias */}
+                {showControls && location.pathname === '/vacations' && (
+                  <>
                     <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.15)', margin: '0 8px', flexShrink: 0 }} />
-                  )}
-                  {!['/vacations'].includes(location.pathname) && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                      <span style={{ fontSize: '0.58rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'var(--font-body)', color: 'var(--ctg-navy)', lineHeight: 1 }}>Ano</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                        <button onClick={() => setVacYear(y => y - 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.9rem', padding: '0 1px', lineHeight: 1, fontFamily: 'var(--font-body)' }}>‹</button>
+                        <span style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--ctg-navy)', minWidth: 32, textAlign: 'center', fontFamily: 'var(--font-body)' }}>{vacYear}</span>
+                        <button onClick={() => setVacYear(y => y + 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.9rem', padding: '0 1px', lineHeight: 1, fontFamily: 'var(--font-body)' }}>›</button>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Seletor de período — todas as páginas exceto férias */}
+                {!showControls || location.pathname !== '/vacations' ? (
+                  <>
+                    <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.15)', margin: '0 8px', flexShrink: 0 }} />
                     <PeriodSelector period={period} onChange={setPeriod} />
-                  )}
-                </div>
+                  </>
+                ) : null}
               </div>
-            )}
-            {!showControls && !isAdmin && <AlertBell />}
+            </div>
           </div>
 
           {/* Mobile: bell + filter button only */}
