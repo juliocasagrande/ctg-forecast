@@ -30,14 +30,17 @@ function buildHTML(data, config, C) {
   const getPlantProjects = (plant) => projects.filter(p => (p.plants||[]).includes(plant));
 
   // ── KPI card helpers ──────────────────────────────────────────────────────
-  function kpiCard(label, value, color, bg, size) {
+  function kpiCard(label, value, color, bg, size, sub) {
     const s = size || 'md';
     const valSize = s==='lg' ? '22px' : s==='sm' ? '13px' : '17px';
     const lblSize = s==='lg' ? '10px' : s==='sm' ? '8px'  : '9px';
+    const subSize = s==='lg' ? '9px'  : s==='sm' ? '7px'  : '8px';
     const pad     = s==='lg' ? '16px 18px' : s==='sm' ? '8px 10px' : '12px 14px';
+    const subHtml = sub ? `<div style="font-size:${subSize};color:#64748B;margin-top:2px">${sub}</div>` : '';
     return `<div class="kpi-card" style="border-top:3px solid ${color};background:${bg};padding:${pad}">
       <div class="kpi-label" style="font-size:${lblSize}">${label}</div>
       <div class="kpi-value" style="color:${color};font-size:${valSize}">${fmtBRL(value)}</div>
+      ${subHtml}
     </div>`;
   }
 
@@ -47,11 +50,16 @@ function buildHTML(data, config, C) {
     const paf = pjs.reduce((s,p)=>s+parseFloat(p.act_forecast||p.forecast||0),0);
     const pa  = pjs.reduce((s,p)=>s+parseFloat(p.actual||0),0);
     const pp  = pjs.reduce((s,p)=>s+parseFloat(p.pool||0),0);
+    const psi = pjs.reduce((s,p)=>s+parseFloat(p.si_value||0),0);
+    const siPct = psi>0 ? (paf/psi*100).toFixed(1)+'% utilizado' : null;
+    const siColor = psi>0 && paf>psi ? '#DC2626' : '#475569';
+    const siBg    = psi>0 && paf>psi ? '#FEF2F2' : '#F8FAFC';
     return `<div class="kpi-grid">
       ${kpiCard('Budget',    pb,  C.budget,   '#F0FDF4', sz)}
       ${kpiCard('Forecast',  paf, C.forecast, '#F0F9FF', sz)}
       ${kpiCard('Realizado', pa,  C.actual,   '#EFF6FF', sz)}
       ${kpiCard('Pool',      pp,  C.pool,     '#F0F9FF', sz)}
+      ${psi>0 ? kpiCard('SI',psi,siColor,siBg,sz,siPct) : ''}
     </div>`;
   }
 
@@ -194,6 +202,14 @@ function buildHTML(data, config, C) {
       +kpiCard('Forecast',  kpis.actForecast||kpis.forecast, C.forecast, '#F0F9FF','lg')
       +kpiCard('Realizado', kpis.actual,                        C.actual,   '#EFF6FF','lg')
       +kpiCard('Pool',      kpis.pool,                          C.pool,     '#F0F9FF','lg')
+      +(function(){
+        const si = projects.reduce(function(s,p){return s+parseFloat(p.si_value||0);},0);
+        const af = kpis.actForecast||kpis.forecast||0;
+        const pct = si>0?(af/si*100).toFixed(1)+'% utilizado':null;
+        const col = si>0&&af>si?'#DC2626':'#475569';
+        const bg  = si>0&&af>si?'#FEF2F2':'#F8FAFC';
+        return si>0?kpiCard('SI Total',si,col,bg,'lg',pct):'';
+      })()
       +'</div></div>';
 
     // ── 2. Tabela Geral ──
