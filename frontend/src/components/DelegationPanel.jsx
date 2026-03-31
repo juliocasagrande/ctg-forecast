@@ -30,14 +30,13 @@ export default function DelegationPanel() {
   const [error, setError]   = useState('');
 
   const fetchAll = useCallback(async () => {
-    try {
-      const [dRes, uRes] = await Promise.all([
-        api.get('/delegations'),
-        api.get('/users/for-delegation'),
-      ]);
-      setDelegations(dRes.data);
-      setAllUsers(uRes.data.filter(u => u.id !== user?.id && u.active));
-    } catch {}
+    // Busca separada para que uma falha não bloqueie a outra
+    api.get('/users/for-delegation')
+      .then(r => setAllUsers((r.data || []).filter(u => u.id !== user?.id)))
+      .catch(() => {});
+    api.get('/delegations')
+      .then(r => setDelegations(r.data || []))
+      .catch(() => {});
   }, [user?.id]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
