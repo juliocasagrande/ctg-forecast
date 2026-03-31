@@ -283,9 +283,9 @@ export default function SCurvePage({ period }) {
 
   // KPIs
   const totalBudget   = filteredProjects.reduce((s, p) => s + parseFloat(p.budget || 0), 0);
-  const totalForecast = filteredProjects.reduce((s, p) => s + parseFloat(p.act_forecast ?? p.forecast ?? 0), 0);
-  const totalActual   = filteredProjects.reduce((s, p) => s + parseFloat(p.actual || 0), 0);
-  const totalActForecast = filteredProjects.reduce((s, p) => s + parseFloat(p.act_forecast ?? p.forecast ?? 0), 0);
+  const totalForecast    = filteredProjects.reduce((s, p) => s + parseFloat(p.act_forecast ?? p.forecast ?? 0), 0);
+  const totalActual      = filteredProjects.reduce((s, p) => s + parseFloat(p.actual || 0), 0);
+  const totalActForecast = totalForecast;
 
   const yearSpan = effectiveYearEnd - effectiveYearStart;
   const tickInterval = yearSpan === 0 ? 0 : yearSpan === 1 ? 2 : 5;
@@ -326,8 +326,8 @@ export default function SCurvePage({ period }) {
       <div className="dash-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
         {[
           { cls: 'budget',   label: `Budget ${yearLabel}`,   val: totalBudget,   sub: `${filteredProjects.length} projeto(s)` },
-          { cls: 'forecast', label: `Forecast ${yearLabel}`, val: totalForecast, sub: totalBudget ? `${((totalForecast / totalBudget) * 100).toFixed(1)}% do budget` : '—' },
-          { cls: 'actual',   label: 'Realizado',             val: totalActual,   sub: totalForecast ? `${((totalActual / totalForecast) * 100).toFixed(1)}% do forecast` : '—' },
+          { cls: 'forecast', label: `Forecast ${yearLabel}`, val: totalForecast, sub: totalBudget   ? `${((totalForecast / totalBudget) * 100).toFixed(1)}% do budget`     : '—' },
+          { cls: 'actual',   label: 'Realizado',             val: totalActual,   sub: totalForecast ? `${((totalActual   / totalForecast) * 100).toFixed(1)}% da previsão` : '—' },
           { cls: '',         label: 'SI Total',              val: filteredProjects.reduce((s,p)=>s+parseFloat(p.si_value||0),0), sub: 'Valor aprovado' },
         ].map(c => (
           <div key={c.label} className={`stat-card ${c.cls}`} style={{ padding: '10px 14px' }}>
@@ -368,25 +368,25 @@ export default function SCurvePage({ period }) {
 
               <Legend wrapperStyle={{ fontSize: '0.68rem', color: '#374151', paddingTop: 4 }} formatter={(value) => {
                 const L = {
-                  Budget: 'Budget (mensal)', Forecast: 'Forecast (mensal)', Realizado: 'Realizado (mensal)',
-                  Meta: 'Meta (mensal)', Pool: 'Pool (mensal)',
-                  BudgetAcum: 'Budget (acum.)', ForecastAcum: 'Forecast (acum.)', RealizadoAcum: 'Realizado (acum.)',
-                  MetaAcum: 'Meta (acum.)', PoolAcum: 'Pool (acum.)',
+                  'Previsão': 'Previsão (mensal)',
+                  Budget: 'Budget (mensal)', Meta: 'Meta (mensal)', Pool: 'Pool (mensal)',
+                  'PrevisãoAcum': 'Previsão (acum.)',
+                  BudgetAcum: 'Budget (acum.)', MetaAcum: 'Meta (acum.)', PoolAcum: 'Pool (acum.)',
                 };
                 return L[value] || value;
               }} className="dash-legend" />
 
               {/* Monthly bars */}
               <Bar yAxisId="monthly" dataKey="Budget"    fill={C.budget+'88'}   radius={[2,2,0,0]} barSize={6} />
-              <Bar yAxisId="monthly" dataKey="Forecast"  fill={C.forecast+'88'} radius={[2,2,0,0]} barSize={6} />
-              <Bar yAxisId="monthly" dataKey="Realizado" fill={C.actual+'88'}   radius={[2,2,0,0]} barSize={6} />
+              <Bar yAxisId="monthly" dataKey="Previsão"  fill={C.forecast+'88'} radius={[2,2,0,0]} barSize={6} />
+              
               <Bar yAxisId="monthly" dataKey="Meta"      fill={C.meta+'88'}     radius={[2,2,0,0]} barSize={6} />
               <Bar yAxisId="monthly" dataKey="Pool"      fill={C.pool+'88'}     radius={[2,2,0,0]} barSize={6} />
 
               {/* Accumulated lines */}
               <Line yAxisId="acum" type="linear" dataKey="BudgetAcum"    stroke={C.budget}   strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
-              <Line yAxisId="acum" type="linear" dataKey="ForecastAcum"  stroke={C.forecast} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
-              <Line yAxisId="acum" type="linear" dataKey="RealizadoAcum" stroke={C.actual}   strokeWidth={2.5} strokeDasharray="5 3" dot={false} activeDot={{ r: 4 }} />
+              <Line yAxisId="acum" type="linear" dataKey="PrevisãoAcum"  stroke={C.forecast} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+              
               <Line yAxisId="acum" type="linear" dataKey="MetaAcum"      stroke={C.meta}     strokeWidth={2}   strokeDasharray="8 3" dot={false} activeDot={{ r: 3 }} />
               <Line yAxisId="acum" type="linear" dataKey="PoolAcum"      stroke={C.pool}     strokeWidth={2}   strokeDasharray="4 2" dot={false} activeDot={{ r: 3 }} />
             </ComposedChart>
@@ -405,7 +405,7 @@ export default function SCurvePage({ period }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
             <thead>
               <tr>
-                {['Código','Projeto','Usinas',...(showEngCol ? ['Eng.'] : []),'Budget','Forecast','Realizado','% Exec.','SI','Atualizado',''].map(h => (
+                {['Código','Projeto','Usinas',...(showEngCol ? ['Eng.'] : []),'Budget','Previsão','% Exec.','SI','Atualizado',''].map(h => (
                   <th key={h} style={{
                     background: 'var(--ctg-navy)', color: '#fff', padding: '8px 14px',
                     textAlign: ['Código','Projeto','Usinas','Atualizado','Eng.'].includes(h) ? 'left' : h === '' ? 'center' : 'right',
@@ -420,8 +420,8 @@ export default function SCurvePage({ period }) {
               {filteredProjects.length === 0 ? (
                 <tr><td colSpan={showEngCol ? 11 : 10} style={{ textAlign: 'center', padding: 30, color: 'var(--text-secondary)' }}>Nenhum projeto</td></tr>
               ) : filteredProjects.map((p, i) => {
-                const f = parseFloat(p.forecast) || 0;
-                const a = parseFloat(p.actual) || 0;
+                const f = parseFloat(p.act_forecast ?? p.forecast) || 0;
+                const b = parseFloat(p.budget) || 0;
                 const exec = f ? ((a / f) * 100).toFixed(1) : '—';
                 return (
                   <tr key={p.id} style={{ background: i % 2 ? '#F8FAFC' : 'var(--bg-card)', cursor: 'pointer', borderBottom: '1px solid #E2E8F0' }}

@@ -391,10 +391,11 @@ const MAIN_TABS = [
 // ── Export Modal — category + type selection ──────────────────────────────────
 const EXPORT_CATEGORIES = ['Viagens', 'Contratos', 'POs'];
 const EXPORT_TYPES_BY_ROLE = {
-  engenheiro: ['Forecast', 'Actual'],
-  gestor:     ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'],
-  planejador: ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'],
-  admin:      ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'],
+  engenheiro:  ['Forecast', 'Actual'],
+  coordenador: ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'],
+  gestor:      ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'],
+  planejador:  ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'],
+  admin:       ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'],
 };
 const TYPE_LABELS = { Budget:'Budget', Forecast:'Forecast', Actual:'Realizado', Meta:'Meta', Pool:'Pool' };
 
@@ -727,14 +728,26 @@ export default function ProjectDetail({ onEdit }) {
     return CATEGORIES.reduce((s, c) => s + getConsVal(type, c), 0);
   };
 
-  const chartData = useMemo(() => MONTHS_PT.map((m,i) => {
-    const get = type => entries.filter(e=>parseInt(e.year)===selectedYear&&parseInt(e.month)===i+1&&e.type===type).reduce((s,e)=>s+parseFloat(e.value||0),0);
-    return { month:m, Budget:get('Budget'), Forecast:get('Forecast'), Realizado:get('Actual'), Meta:get('Meta'), Pool:get('Pool') };
-  }), [entries, selectedYear]);
+  const chartData = useMemo(() => {
+    // Encontra o último mês com Actual > 0 para o ano selecionado
+    const actualEntries = entries.filter(e => parseInt(e.year) === selectedYear && e.type === 'Actual' && parseFloat(e.value || 0) > 0);
+    const lastActM = actualEntries.length > 0 ? Math.max(...actualEntries.map(e => parseInt(e.month))) : 0;
+    const nowYear = new Date().getFullYear(), nowMonth = new Date().getMonth() + 1;
 
-  const sCurveData = useMemo(() => chartData.reduce((acc,d,i) => {
-    const p = acc[i-1] || {Budget:0,Forecast:0,Realizado:0,Meta:0,Pool:0};
-    acc.push({month:d.month, Budget:p.Budget+d.Budget, Forecast:p.Forecast+d.Forecast, Realizado:p.Realizado+d.Realizado, Meta:p.Meta+d.Meta, Pool:p.Pool+d.Pool});
+    return MONTHS_PT.map((m, i) => {
+      const month = i + 1;
+      const get = type => entries.filter(e => parseInt(e.year) === selectedYear && parseInt(e.month) === month && e.type === type).reduce((s, e) => s + parseFloat(e.value || 0), 0);
+      const actual = get('Actual'), forecast = get('Forecast');
+      // Previsão: Actual nos meses realizados, Forecast nos meses futuros
+      const isAfterNow = selectedYear > nowYear || (selectedYear === nowYear && month > nowMonth);
+      const previsao = isAfterNow ? forecast : (lastActM > 0 && month <= lastActM ? actual : forecast);
+      return { month: m, Budget: get('Budget'), 'Previsão': previsao, Meta: get('Meta'), Pool: get('Pool') };
+    });
+  }, [entries, selectedYear]);
+
+  const sCurveData = useMemo(() => chartData.reduce((acc, d, i) => {
+    const p = acc[i-1] || { Budget: 0, 'Previsão': 0, Meta: 0, Pool: 0 };
+    acc.push({ month: d.month, Budget: p.Budget + d.Budget, 'Previsão': p['Previsão'] + d['Previsão'], Meta: p.Meta + d.Meta, Pool: p.Pool + d.Pool });
     return acc;
   }, []), [chartData]);
 
@@ -981,7 +994,7 @@ export default function ProjectDetail({ onEdit }) {
         // Donut data: total by category for Forecast
         const donutData = CATEGORIES.map(cat => ({
           name: cat,
-          value: chartData.reduce((s, d) => s + (entries.filter(e=>e.category===cat&&e.type==='Forecast'&&parseInt(e.year)===selectedYear&&parseInt(e.month)===(MONTHS_PT.indexOf(d.month)+1)).reduce((ss,e)=>ss+parseFloat(e.value||0),0)), 0),
+          value: chartData.reduce((s, d) => s + (d['Previsão'] && entries.filter(e=>e.category===cat&&e.type==='Forecast'&&parseInt(e.year)===selectedYear&&parseInt(e.month)===(MONTHS_PT.indexOf(d.month)+1)).reduce((ss,e)=>ss+parseFloat(e.value||0),0) || 0), 0),
         })).filter(d => d.value > 0);
         const CAT_COLORS = ['#0EA5E9', '#8B5CF6', '#F59E0B'];
 
@@ -999,18 +1012,14 @@ export default function ProjectDetail({ onEdit }) {
           return { name: cat, Budget: bg, Forecast: fc };
         });
 
-        // Combined data for main chart
-        const combinedChartData = chartData.map((d, i) => {
-          const prev = i > 0 ? sCurveData[i] : { Budget:0, Forecast:0, Realizado:0 };
-          return {
-            ...d,
-            BudgetAcum: sCurveData[i]?.Budget || 0,
-            ForecastAcum: sCurveData[i]?.Forecast || 0,
-            RealizadoAcum: sCurveData[i]?.Realizado || 0,
-            MetaAcum: sCurveData[i]?.Meta || 0,
-            PoolAcum: sCurveData[i]?.Pool || 0,
-          };
-        });
+        // Combined data for main chart — Previsão absorve Actual+Forecast
+        const combinedChartData = chartData.map((d, i) => ({
+          ...d,
+          BudgetAcum:   sCurveData[i]?.Budget    || 0,
+          PrevisãoAcum: sCurveData[i]?.['Previsão'] || 0,
+          MetaAcum:     sCurveData[i]?.Meta       || 0,
+          PoolAcum:     sCurveData[i]?.Pool       || 0,
+        }));
 
         return (
         <div style={{display:'flex',flexDirection:'column',gap:20}}>
@@ -1038,18 +1047,16 @@ export default function ProjectDetail({ onEdit }) {
                   <Legend wrapperStyle={{fontSize:'0.78rem'}} className="project-chart-legend"/>
 
                   {/* Monthly bars */}
-                  <Bar yAxisId="monthly" dataKey="Budget"    fill={C.budget+'88'} radius={[2,2,0,0]} barSize={8} name="Budget (mensal)" />
-                  <Bar yAxisId="monthly" dataKey="Forecast"  fill={C.forecast+'88'} radius={[2,2,0,0]} barSize={8} name="Forecast (mensal)" />
-                  <Bar yAxisId="monthly" dataKey="Realizado" fill={C.actual+'88'} radius={[2,2,0,0]} barSize={8} name="Realizado (mensal)" />
-                  <Bar yAxisId="monthly" dataKey="Meta"      fill={C.meta+'88'} radius={[2,2,0,0]} barSize={8} name="Meta (mensal)" />
-                  <Bar yAxisId="monthly" dataKey="Pool"      fill={C.pool+'88'} radius={[2,2,0,0]} barSize={8} name="Pool (mensal)" />
+                  <Bar yAxisId="monthly" dataKey="Budget"   fill={C.budget+'88'}   radius={[2,2,0,0]} barSize={8} name="Budget (mensal)" />
+                  <Bar yAxisId="monthly" dataKey="Previsão" fill={C.forecast+'88'} radius={[2,2,0,0]} barSize={8} name="Previsão (mensal)" />
+                  <Bar yAxisId="monthly" dataKey="Meta"     fill={C.meta+'88'}     radius={[2,2,0,0]} barSize={8} name="Meta (mensal)" />
+                  <Bar yAxisId="monthly" dataKey="Pool"     fill={C.pool+'88'}     radius={[2,2,0,0]} barSize={8} name="Pool (mensal)" />
 
                   {/* Accumulated lines */}
-                  <Line yAxisId="acum" type="linear" dataKey="BudgetAcum"    stroke={C.budget} strokeWidth={2} dot={false} name="Budget (acum.)" />
-                  <Line yAxisId="acum" type="linear" dataKey="ForecastAcum"  stroke={C.forecast} strokeWidth={2} dot={false} name="Forecast (acum.)" />
-                  <Line yAxisId="acum" type="linear" dataKey="RealizadoAcum" stroke={C.actual} strokeWidth={2} strokeDasharray="5 3" dot={false} name="Realizado (acum.)" />
-                  <Line yAxisId="acum" type="linear" dataKey="MetaAcum"      stroke={C.meta} strokeWidth={2} strokeDasharray="8 3" dot={false} name="Meta (acum.)" />
-                  <Line yAxisId="acum" type="linear" dataKey="PoolAcum"      stroke={C.pool} strokeWidth={2} strokeDasharray="4 2" dot={false} name="Pool (acum.)" />
+                  <Line yAxisId="acum" type="linear" dataKey="BudgetAcum"   stroke={C.budget}   strokeWidth={2} dot={false} name="Budget (acum.)" />
+                  <Line yAxisId="acum" type="linear" dataKey="PrevisãoAcum" stroke={C.forecast} strokeWidth={2} dot={false} name="Previsão (acum.)" />
+                  <Line yAxisId="acum" type="linear" dataKey="MetaAcum"     stroke={C.meta}     strokeWidth={2} strokeDasharray="8 3" dot={false} name="Meta (acum.)" />
+                  <Line yAxisId="acum" type="linear" dataKey="PoolAcum"     stroke={C.pool}     strokeWidth={2} strokeDasharray="4 2" dot={false} name="Pool (acum.)" />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -1093,8 +1100,8 @@ export default function ProjectDetail({ onEdit }) {
                     <YAxis type="category" dataKey="name" tick={{fontSize:12,fill:'#374151'}} width={72} />
                     <Tooltip isAnimationActive={false} content={<ChartTooltip year={selectedYear} />} wrapperStyle={{zIndex:9999}} />
                     <Legend wrapperStyle={{fontSize:'0.78rem'}} className="project-chart-legend" />
-                    <Bar dataKey="Forecast"  fill={C.forecast} radius={[0,3,3,0]} barSize={14} />
-                    <Bar dataKey="Realizado" fill={C.actual} radius={[0,3,3,0]} barSize={14} />
+                    <Bar dataKey="Previsão"  fill={C.forecast} radius={[0,3,3,0]} barSize={14} />
+                    <Bar dataKey="Previsão" fill={C.actual} radius={[0,3,3,0]} barSize={14} />
                   </BarChart>
                 </ResponsiveContainer>
                 {/* Execution percentages */}
@@ -1122,7 +1129,7 @@ export default function ProjectDetail({ onEdit }) {
                   <Tooltip isAnimationActive={false} content={<ChartTooltip year={selectedYear} />} wrapperStyle={{zIndex:9999}} />
                   <Legend wrapperStyle={{fontSize:'0.78rem'}} className="project-chart-legend" />
                   <Bar dataKey="Budget"   fill={C.budget} radius={[3,3,0,0]} />
-                  <Bar dataKey="Forecast" fill={C.forecast} radius={[3,3,0,0]} />
+                  <Bar dataKey="Previsão" fill={C.forecast} radius={[3,3,0,0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

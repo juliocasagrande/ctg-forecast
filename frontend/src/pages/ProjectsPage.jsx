@@ -18,7 +18,7 @@ const ALL_PLANTS = [
 
 function SummaryCard({ title, subtitle, projects, onClick, selected }) {
   const budget   = projects.reduce((s, p) => s + parseFloat(p.total_budget   || 0), 0);
-  const forecast = projects.reduce((s, p) => s + parseFloat(p.act_forecast ?? p.total_forecast ?? 0), 0);
+  const previsao = projects.reduce((s, p) => s + parseFloat(p.act_forecast ?? p.total_forecast ?? 0), 0);
   const actual   = projects.reduce((s, p) => s + parseFloat(p.total_actual   || 0), 0);
   if (projects.length === 0) return null;
 
@@ -40,7 +40,7 @@ function SummaryCard({ title, subtitle, projects, onClick, selected }) {
       </div>
       {[
         { label: 'Budget',   value: budget,   color: selected ? '#BFDBFE' : 'var(--budget-text)' },
-        { label: 'Forecast', value: forecast, color: selected ? '#86EFAC' : 'var(--forecast-text)' },
+        { label: 'Previsão', value: forecast, color: selected ? '#86EFAC' : 'var(--forecast-text)' },
         { label: 'Real',     value: actual,   color: selected ? '#FCD34D' : 'var(--actual-text)' },
       ].map(s => (
         <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -78,7 +78,7 @@ export default function ProjectsPage({ projects, period, plantFilter = [], onEdi
     return {
       name:      pl.replace('UHE ', '').replace('PCH ', ''),
       Budget:    pjs.reduce((s, p) => s + parseFloat(p.total_budget   || 0), 0),
-      Forecast:  pjs.reduce((s, p) => s + parseFloat(p.act_forecast ?? p.total_forecast ?? 0), 0),
+      'Previsão':  pjs.reduce((s, p) => s + parseFloat(p.act_forecast ?? p.total_forecast ?? 0), 0),
       Realizado: pjs.reduce((s, p) => s + parseFloat(p.total_actual   || 0), 0),
     };
   }).filter(d => d.Budget > 0 || d.Forecast > 0);
@@ -169,7 +169,7 @@ export default function ProjectsPage({ projects, period, plantFilter = [], onEdi
                         <Tooltip formatter={v => fmt(v)} />
                         <Legend />
                         <Bar dataKey="Budget"    fill="#16A34A" radius={[2, 2, 0, 0]} />
-                        <Bar dataKey="Forecast"  fill="#38BDF8" radius={[2, 2, 0, 0]} />
+                        <Bar dataKey="Previsão"  fill="#38BDF8" radius={[2, 2, 0, 0]} />
                         <Bar dataKey="Realizado" fill="#2563EB" radius={[2, 2, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -222,7 +222,7 @@ export default function ProjectsPage({ projects, period, plantFilter = [], onEdi
                         <Tooltip formatter={v => fmt(v)} />
                         <Legend />
                         <Bar dataKey="Budget"    fill="#16A34A" radius={[2, 2, 0, 0]} />
-                        <Bar dataKey="Forecast"  fill="#38BDF8" radius={[2, 2, 0, 0]} />
+                        <Bar dataKey="Previsão"  fill="#38BDF8" radius={[2, 2, 0, 0]} />
                         <Bar dataKey="Realizado" fill="#2563EB" radius={[2, 2, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>

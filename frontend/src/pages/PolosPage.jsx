@@ -24,7 +24,7 @@ const COLS = [
   { key:'actual',       label:'Actual',            colorKey:'actual'   },
   { key:'forecast',     label:'Forecast',          colorKey:'forecast' },
   { key:'act_forecast', label:'ACT + Forecast',    colorKey:'forecast' },
-  { key:'variacao',     label:'Variação Previsão', colorKey:null       },
+  { key:'variacao',     label:'Variação Forecast', colorKey:null       },
 ];
 
 function fmtBRL(v) {

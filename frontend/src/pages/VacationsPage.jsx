@@ -12,6 +12,15 @@ const AREAS = [
   { value: 'confiabilidade', label: 'Confiabilidade' },
 ];
 
+// Paleta pastel por área — header sólido claro, fundo de membros super transparente
+const AREA_COLORS = {
+  coordenacao:    { header: '#E8EDF7', headerText: '#1E3A6E', memberBg: 'rgba(30,58,110,0.04)',  stripe: 'rgba(30,58,110,0.07)'  },
+  eletrica:       { header: '#E0F0FF', headerText: '#0C5A9E', memberBg: 'rgba(12,90,158,0.04)',  stripe: 'rgba(12,90,158,0.08)'  },
+  mecanica:       { header: '#E6F9F0', headerText: '#065F46', memberBg: 'rgba(6,95,70,0.04)',    stripe: 'rgba(6,95,70,0.08)'    },
+  confiabilidade: { header: '#F5F0FF', headerText: '#5B21B6', memberBg: 'rgba(91,33,182,0.04)',  stripe: 'rgba(91,33,182,0.08)'  },
+  modernizacao:   { header: '#FFF7E6', headerText: '#92400E', memberBg: 'rgba(146,64,14,0.04)', stripe: 'rgba(146,64,14,0.08)'  },
+};
+
 const TIMELINE_GROUPS = [
   { key: 'coordenacao',    label: 'Coordenação' },
   { key: 'eletrica',       label: 'Eng. Elétrica' },
@@ -152,14 +161,15 @@ function VacationTimeline({ periodsByUser, allMembers, year }) {
         {TIMELINE_GROUPS.map(group => {
           const gMembers = grouped[group.key];
           if (!gMembers?.length) return null;
+          const ac = AREA_COLORS[group.key] || AREA_COLORS.eletrica;
           return (
             <div key={group.key}>
-              {/* Label do grupo */}
-              <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(0,31,91,0.04)', borderBottom: '1px solid var(--border)', borderTop: '1px solid var(--border)' }}>
-                <div style={{ width: 172, flexShrink: 0, padding: '4px 10px', fontSize: '0.62rem', fontWeight: 700, color: 'var(--ctg-navy)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              {/* Label do grupo — cor sólida pastel da área */}
+              <div style={{ display: 'flex', alignItems: 'center', background: ac.header, borderBottom: '1px solid var(--border)', borderTop: '1px solid var(--border)' }}>
+                <div style={{ width: 172, flexShrink: 0, padding: '4px 10px', fontSize: '0.62rem', fontWeight: 700, color: ac.headerText, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                   {group.label}
                 </div>
-                <div style={{ flex: 1, position: 'relative', height: 22 }}>
+                <div style={{ flex: 1, position: 'relative', height: 22, background: ac.header }}>
                   {MONTHS.map((_, i) => (
                     <div key={i} style={{ position: 'absolute', left: `${(i/12)*100}%`, top: 0, bottom: 0, width: 1, background: 'var(--border)', opacity: 0.4 }} />
                   ))}
@@ -169,18 +179,19 @@ function VacationTimeline({ periodsByUser, allMembers, year }) {
                 </div>
               </div>
 
-              {/* Linhas por pessoa */}
-              {gMembers.map(member => {
+              {/* Linhas por pessoa — fundo tintado alternado da área */}
+              {gMembers.map((member, mi) => {
                 const userPeriods = periodsByUser[member.id] || [];
+                const rowBg = mi % 2 === 0 ? ac.memberBg : ac.stripe;
                 return (
-                  <div key={member.id} style={{ display: 'flex', alignItems: 'center', minHeight: 34, borderBottom: '1px solid var(--border)' }}>
+                  <div key={member.id} style={{ display: 'flex', alignItems: 'center', minHeight: 34, borderBottom: '1px solid var(--border)', background: rowBg }}>
                     <div style={{ width: 172, flexShrink: 0, padding: '0 10px 0 8px', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden' }}>
                       <Avatar name={member.name} initials={member.avatar_initials} size={24} />
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {member.name.split(' ')[0]}
                       </span>
                     </div>
-                    <div style={{ flex: 1, position: 'relative', height: 34, display: 'flex', alignItems: 'center' }}>
+                    <div style={{ flex: 1, position: 'relative', height: 34, display: 'flex', alignItems: 'center', background: rowBg }}>
                       {MONTHS.map((_, i) => (
                         <div key={i} style={{ position: 'absolute', left: `${(i/12)*100}%`, top: 0, bottom: 0, width: 1, background: 'var(--border)', opacity: 0.4 }} />
                       ))}

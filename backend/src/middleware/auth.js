@@ -34,17 +34,52 @@ function extractToken(req) {
   return null;
 }
 
-export function requireAuth(req, res, next) {
+// ── requireAuth — valida JWT e revalida role/active contra o banco ────────────
+// O role embedado no token é confiável para roteamento rápido, mas pode estar
+// desatualizado se o admin alterou permissões enquanto o token ainda era válido.
+// Aqui fazemos uma query leve para garantir que o usuário ainda está ativo
+// e para puxar o role/area mais recentes do banco.
+export async function requireAuth(req, res, next) {
   const token = extractToken(req);
   if (!token) return res.status(401).json({ error: 'Não autenticado' });
+
+  let decoded;
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    next();
+    decoded = jwt.verify(token, JWT_SECRET);
   } catch {
     clearAuthCookie(res);
-    res.status(401).json({ error: 'Token inválido ou expirado' });
+    return res.status(401).json({ error: 'Token inválido ou expirado' });
   }
+
+  // Revalida estado do usuário no banco — garante que desativações e
+  // mudanças de role têm efeito imediato sem esperar expiração do token.
+  try {
+    const { pool } = await import('../db/schema.js');
+    const r = await pool.query(
+      'SELECT id, role, area, active FROM users WHERE id = $1',
+      [decoded.id]
+    );
+
+    const user = r.rows[0];
+    if (!user || !user.active) {
+      clearAuthCookie(res);
+      return res.status(401).json({ error: 'Conta inativa ou não encontrada' });
+    }
+
+    // Mescla payload do token com dados frescos do banco
+    req.user = {
+      ...decoded,
+      role: user.role,   // role sempre vem do banco
+      area: user.area,   // area sempre vem do banco
+    };
+  } catch (dbErr) {
+    // Se o banco estiver indisponível, usa os dados do token como fallback
+    // para evitar que uma instabilidade derrube toda a autenticação.
+    console.warn('[AUTH] Falha ao revalidar usuário no banco, usando token como fallback:', dbErr.message);
+    req.user = decoded;
+  }
+
+  next();
 }
 
 export function requireRole(...roles) {
@@ -56,7 +91,7 @@ export function requireRole(...roles) {
   };
 }
 
-// Bloqueia gerente de qualquer escrita
+// Bloqueia gerente de qualquer escrita — use como middleware de rota
 export function denyGerente(req, res, next) {
   if (req.user?.role === 'gerente') {
     return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
@@ -67,41 +102,39 @@ export function denyGerente(req, res, next) {
 /**
  * Controle de acesso a projetos por role:
  * - admin, gestor (legado), planejador: acesso total
- * - coordenador: projetos da sua área ou projetos sem área definida
- * - gerente: acesso de leitura (verificado no route handler)
+ * - coordenador: projetos com engenheiros da sua área
+ * - gerente: acesso de leitura (escrita bloqueada via denyGerente na rota)
  * - engenheiro: só projetos designados a ele ou via delegação
+ *
+ * SEGURANÇA: projetos sem engenheiros designados ("órfãos") só são acessíveis
+ * por admin/gestor/planejador — coordenadores não têm acesso automático a eles,
+ * pois isso exporia projetos de outras áreas/usinas.
  */
 export async function requireProjectAccess(req, res, next) {
   const { role, id: userId, area: userArea } = req.user;
 
-  // Admin, gestor (legado), planejador, gerente: passam direto (gerente bloqueado na escrita)
+  // Admin, gestor (legado), planejador, gerente: passam direto
   if (['admin', 'gestor', 'planejador', 'gerente'].includes(role)) return next();
 
   const { pool } = await import('../db/schema.js');
   const projectId = req.params.projectId || req.params.id;
 
-  // Coordenador: acessa projetos da sua área
+  // Coordenador: acessa apenas projetos com engenheiros da sua área
   if (role === 'coordenador') {
-    // Verifica se o projeto pertence à área do coordenador (via engenheiros do projeto)
     const r = await pool.query(`
       SELECT 1 FROM project_assignments pa
       JOIN users u ON u.id = pa.user_id
-      WHERE pa.project_id = $1 AND (u.area = $2 OR $2 IS NULL)
+      WHERE pa.project_id = $1
+        AND u.role = 'engenheiro'
+        AND u.area = $2
       LIMIT 1
     `, [projectId, userArea]);
+
     if (r.rows.length) return next();
-
-    // Ou se o projeto não tem engenheiros designados (projeto geral)
-    const noEng = await pool.query(
-      'SELECT 1 FROM project_assignments WHERE project_id=$1 LIMIT 1',
-      [projectId]
-    );
-    if (!noEng.rows.length) return next();
-
     return res.status(403).json({ error: 'Acesso não autorizado a este projeto' });
   }
 
-  // Engenheiro: só projetos diretamente designados ou via delegação
+  // Engenheiro: só projetos diretamente designados ou via delegação ativa
   const r = await pool.query(
     'SELECT 1 FROM project_assignments WHERE project_id=$1 AND user_id=$2',
     [projectId, userId]

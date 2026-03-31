@@ -42,17 +42,16 @@ function buildHTML(data, config, C) {
   }
 
   function kpiRow(pjs, size) {
-    const sz = size || 'md';
-    const pb = pjs.reduce((s,p)=>s+parseFloat(p.budget||0),0);
-    const pf = pjs.reduce((s,p)=>s+parseFloat(p.forecast||0),0);
-    const pa = pjs.reduce((s,p)=>s+parseFloat(p.actual||0),0);
-    const pp = pjs.reduce((s,p)=>s+parseFloat(p.pool||0),0);
+    const sz  = size || 'md';
+    const pb  = pjs.reduce((s,p)=>s+parseFloat(p.budget||0),0);
+    const paf = pjs.reduce((s,p)=>s+parseFloat(p.act_forecast||p.forecast||0),0);
+    const pa  = pjs.reduce((s,p)=>s+parseFloat(p.actual||0),0);
+    const pp  = pjs.reduce((s,p)=>s+parseFloat(p.pool||0),0);
     return `<div class="kpi-grid">
-      ${kpiCard('Budget',    pb,    C.budget,   '#F0FDF4', sz)}
-      ${kpiCard('Forecast',  pf,    C.forecast, '#F0F9FF', sz)}
-      ${kpiCard('Realizado', pa,    C.actual,   '#EFF6FF', sz)}
-      ${kpiCard('ACT+Fcst',  pa+pf, '#475569',  '#F8FAFC', sz)}
-      ${kpiCard('Pool',      pp,    C.pool,     '#F0F9FF', sz)}
+      ${kpiCard('Budget',    pb,  C.budget,   '#F0FDF4', sz)}
+      ${kpiCard('Forecast',  paf, C.forecast, '#F0F9FF', sz)}
+      ${kpiCard('Realizado', pa,  C.actual,   '#EFF6FF', sz)}
+      ${kpiCard('Pool',      pp,  C.pool,     '#F0F9FF', sz)}
     </div>`;
   }
 
@@ -89,9 +88,7 @@ function buildHTML(data, config, C) {
     const hasPool = allP.some(function(v){return v>0;});
     let ds = '[';
     ds += '{label:"Budget (acum.)",data:'+bJson+',borderColor:"'+cb+'",backgroundColor:"'+cb+'22",borderWidth:2,fill:false,pointRadius:0,tension:0.25},';
-    ds += '{label:"Forecast (acum.)",data:'+fJson+',borderColor:"'+cf+'",backgroundColor:"'+cf+'22",borderWidth:2,fill:false,pointRadius:0,tension:0.25},';
-    ds += '{label:"Realizado (acum.)",data:'+aJson+',borderColor:"'+ca+'",backgroundColor:"'+ca+'22",borderWidth:2,fill:true,pointRadius:0,tension:0.25,borderDash:[5,3]},';
-    ds += '{label:"ACT+Forecast",data:'+afJson+',borderColor:"#475569",backgroundColor:"#47556922",borderWidth:2,fill:false,pointRadius:0,tension:0.25,borderDash:[3,2]},';
+    ds += '{label:"Previsão (acum.)",data:'+afJson+',borderColor:"'+cf+'",backgroundColor:"'+cf+'22",borderWidth:2.5,fill:false,pointRadius:0,tension:0.25},';
     if (hasPool) { ds += '{label:"Pool (acum.)",data:'+pJson+',borderColor:"'+cp+'",backgroundColor:"'+cp+'22",borderWidth:1.5,fill:false,pointRadius:0,tension:0.25,borderDash:[6,4]},'; }
     ds += ']';
     return '<div class="chart-card">'      +'<div class="chart-title">'+titleTxt+'</div>'      +'<canvas id="'+safeId+'" height="'+h+'"></canvas>'      +'<script>(function(){'      +'var ctx=document.getElementById("'+safeId+'").getContext("2d");'      +'new Chart(ctx,{type:"line",data:{labels:'+labelsJson+',datasets:'+ds+'},'      +'options:{responsive:true,plugins:{legend:{labels:{font:{size:9},boxWidth:10}},tooltip:{callbacks:{label:function(c){return c.dataset.label+": R$ "+c.raw.toLocaleString("pt-BR",{minimumFractionDigits:2});}}}},'      +'scales:{y:{ticks:{callback:function(v){return v>=1000000?"R$"+(v/1000000).toFixed(1)+"M":v>=1000?"R$"+(v/1000).toFixed(0)+"k":"R$"+v;},font:{size:8}},grid:{color:"#F1F5F9"}},x:{ticks:{font:{size:8},maxRotation:45},grid:{display:false}}}}});'      +'})();<\/script>'      +'</div>';
@@ -113,9 +110,11 @@ function buildHTML(data, config, C) {
       const paf = poloProjs.reduce(function(s,p){return s+(p.act_forecast||0);},0);
       totBudget+=pb; totPool+=pp; totActual+=pa; totForecast+=pf; totActFcst+=paf;
       html+='<tr class="row-polo"><td colspan="2"><span class="expand-btn" onclick="toggleGroup(\'polo_'+polo.id+'\')">▼</span> '+polo.name+'</td>'
-        +'<td class="num c-budget">'+fmtBRL(pb)+'</td><td class="num" style="color:#EF4444">'+fmtBRL(pp)+'</td>'
-        +'<td class="num c-actual">'+fmtBRL(pa)+'</td><td class="num c-forecast">'+fmtBRL(pf)+'</td>'
-        +'<td class="num">'+fmtBRL(paf)+'</td><td class="num '+(pb-paf<0?'neg':'')+'">'+fmtBRL(pb-paf)+'</td></tr>';
+        +'<td class="num c-budget">'+fmtBRL(pb)+'</td>'
+        +'<td class="num" style="color:#EF4444">'+fmtBRL(pp)+'</td>'
+        +'<td class="num c-actual">'+fmtBRL(pa)+'</td>'
+        +'<td class="num c-forecast">'+fmtBRL(paf)+'</td>'
+        +'<td class="num '+(pb-paf<0?'neg':'')+'">'+fmtBRL(pb-paf)+'</td></tr>';
       polo.plants.forEach(function(plant) {
         const plantProjs = getPlantProjects(plant);
         if (!plantProjs.length) return;
@@ -127,28 +126,32 @@ function buildHTML(data, config, C) {
         const plantKey='plant_'+plant.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
         html+='<tr class="row-plant group-polo_'+polo.id+'"><td></td>'
           +'<td><span class="expand-btn" onclick="toggleGroup(\''+plantKey+'\')">▼</span> '+plant+'</td>'
-          +'<td class="num c-budget">'+fmtBRL(ub)+'</td><td class="num" style="color:#EF4444">'+fmtBRL(up)+'</td>'
-          +'<td class="num c-actual">'+fmtBRL(ua)+'</td><td class="num c-forecast">'+fmtBRL(uf)+'</td>'
-          +'<td class="num">'+fmtBRL(uaf)+'</td><td class="num '+(ub-uaf<0?'neg':'')+'">'+fmtBRL(ub-uaf)+'</td></tr>';
-        if (showProjects) {
-          plantProjs.forEach(function(p) {
-            // Pular projetos sem dados no período
-            const projB=parseFloat(p.budget||0), projF=parseFloat(p.forecast||0), projA=parseFloat(p.actual||0);
-            if (projB===0 && projF===0 && projA===0) return;
-            const projAF=p.act_forecast||0;
-            html+='<tr class="row-proj group-'+plantKey+'"><td class="proj-code">'+p.code+'</td><td>'+p.name+'</td>'
-              +'<td class="num c-budget">'+fmtBRL(p.budget)+'</td><td class="num" style="color:#EF4444">'+fmtBRL(p.pool)+'</td>'
-              +'<td class="num c-actual">'+fmtBRL(p.actual)+'</td><td class="num c-forecast">'+fmtBRL(p.forecast)+'</td>'
-              +'<td class="num">'+fmtBRL(projAF)+'</td><td class="num '+(projB-projAF<0?'neg':'')+'">'+fmtBRL(projB-projAF)+'</td></tr>';
-          });
-        }
+          +'<td class="num c-budget">'+fmtBRL(ub)+'</td>'
+          +'<td class="num" style="color:#EF4444">'+fmtBRL(up)+'</td>'
+          +'<td class="num c-actual">'+fmtBRL(ua)+'</td>'
+          +'<td class="num c-forecast">'+fmtBRL(uaf)+'</td>'
+          +'<td class="num '+(ub-uaf<0?'neg':'')+'">'+fmtBRL(ub-uaf)+'</td></tr>';
+        // Projetos sempre emitidos, colapsados por padrão (display:none), expandíveis pelo usuário
+        plantProjs.forEach(function(p) {
+          const projB=parseFloat(p.budget||0), projA=parseFloat(p.actual||0), projAF=p.act_forecast||0;
+          if (projB===0 && projA===0 && projAF===0) return;
+          html+='<tr class="row-proj group-'+plantKey+'" style="display:none">'
+            +'<td class="proj-code">'+p.code+'</td><td>'+p.name+'</td>'
+            +'<td class="num c-budget">'+fmtBRL(p.budget)+'</td>'
+            +'<td class="num" style="color:#EF4444">'+fmtBRL(p.pool)+'</td>'
+            +'<td class="num c-actual">'+fmtBRL(p.actual)+'</td>'
+            +'<td class="num c-forecast">'+fmtBRL(projAF)+'</td>'
+            +'<td class="num '+(projB-projAF<0?'neg':'')+'">'+fmtBRL(projB-projAF)+'</td></tr>';
+        });
       });
     });
     const totVar=totBudget-totActFcst;
     html+='<tr class="row-total"><td colspan="2">Total Geral</td>'
-      +'<td class="num">'+fmtBRL(totBudget)+'</td><td class="num">'+fmtBRL(totPool)+'</td>'
-      +'<td class="num">'+fmtBRL(totActual)+'</td><td class="num">'+fmtBRL(totForecast)+'</td>'
-      +'<td class="num">'+fmtBRL(totActFcst)+'</td><td class="num '+(totVar<0?'neg':'')+'">'+fmtBRL(totVar)+'</td></tr>';
+      +'<td class="num">'+fmtBRL(totBudget)+'</td>'
+      +'<td class="num">'+fmtBRL(totPool)+'</td>'
+      +'<td class="num">'+fmtBRL(totActual)+'</td>'
+      +'<td class="num">'+fmtBRL(totActFcst)+'</td>'
+      +'<td class="num '+(totVar<0?'neg':'')+'">'+fmtBRL(totVar)+'</td></tr>';
     return html;
   }
 
@@ -188,20 +191,19 @@ function buildHTML(data, config, C) {
       +'<div class="section-title">KPIs Gerais</div>'
       +'<div class="kpi-grid">'
       +kpiCard('Budget',    kpis.budget,   C.budget,   '#F0FDF4','lg')
-      +kpiCard('Forecast',  kpis.forecast, C.forecast, '#F0F9FF','lg')
-      +kpiCard('Realizado', kpis.actual,   C.actual,   '#EFF6FF','lg')
-      +kpiCard('ACT+Fcst',  kpis.actual+kpis.forecast,'#475569','#F8FAFC','lg')
-      +kpiCard('Pool',      kpis.pool,     C.pool,     '#F0F9FF','lg')
+      +kpiCard('Forecast',  kpis.actForecast||kpis.forecast, C.forecast, '#F0F9FF','lg')
+      +kpiCard('Realizado', kpis.actual,                        C.actual,   '#EFF6FF','lg')
+      +kpiCard('Pool',      kpis.pool,                          C.pool,     '#F0F9FF','lg')
       +'</div></div>';
 
     // ── 2. Tabela Geral ──
     if (sections.includes('table')) {
       html += '<div class="section">'
-        +'<div class="section-title">Tabela Geral — Polo / Usina'+(showProjects?' / Projeto':'')+'</div>'
+        +'<div class="section-title">Tabela Geral — Polo / Usina / Projeto</div>'
         +'<table class="data-table"><thead><tr>'
         +'<th style="width:70px">Código</th><th>Empresa / Usina / Projeto</th>'
-        +'<th>Budget</th><th style="color:#EF4444">Pool</th><th>Realizado</th>'
-        +'<th>Forecast</th><th>ACT+Fcst</th><th>Variação</th>'
+        +'<th>Budget</th><th style="color:#EF4444">Pool</th>'
+        +'<th>Realizado</th><th>Forecast</th><th>Variação</th>'
         +'</tr></thead><tbody>'+tableBody()+'</tbody></table></div>';
     }
 
@@ -391,8 +393,19 @@ ${sections.includes('kpis') ? hierSection() : ''}
 
 </div>
 <script>
-function toggleGroup(cls){document.querySelectorAll('.group-'+cls).forEach(function(r){r.style.display=r.style.display==='none'?'':'none';});}
-${!showProjects ? "document.addEventListener('DOMContentLoaded',function(){document.querySelectorAll('.row-proj').forEach(function(r){r.style.display='none';});});" : ''}
+function toggleGroup(cls){
+  var rows=document.querySelectorAll('.group-'+cls);
+  var isHidden=rows.length>0&&rows[0].style.display==='none';
+  rows.forEach(function(r){r.style.display=isHidden?'':'none';});
+  // Toggle arrow direction on the expand button in the parent row
+  var btn=document.querySelector('[onclick*=\''+cls+'\']');
+  if(btn){btn.textContent=isHidden?'▼':'▶';}
+}
+document.addEventListener('DOMContentLoaded',function(){
+  // Plant rows visible by default, arrow pointing down
+  // Project rows already have display:none inline — just sync the plant arrows
+  document.querySelectorAll('.row-plant .expand-btn').forEach(function(btn){btn.textContent='▶';});
+});
 <\/script>
 </body>
 </html>`;

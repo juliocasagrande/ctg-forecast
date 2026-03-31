@@ -184,13 +184,11 @@ function SCurveModal({ open, onClose, combinedData, period, tickInterval }) {
               <Legend wrapperStyle={{ fontSize: '0.74rem', color: '#374151', paddingTop: 8 }}
                 formatter={v => LEGEND_LABELS[v] || v} />
               <Bar yAxisId="monthly" dataKey="Budget"    fill={C.budget+'88'}   radius={[2,2,0,0]} barSize={9} />
-              <Bar yAxisId="monthly" dataKey="Forecast"  fill={C.forecast+'88'} radius={[2,2,0,0]} barSize={9} />
-              <Bar yAxisId="monthly" dataKey="Realizado" fill={C.actual+'88'}   radius={[2,2,0,0]} barSize={9} />
+              <Bar yAxisId="monthly" dataKey="Previsão"  fill={C.forecast+'88'} radius={[2,2,0,0]} barSize={9} />
               <Bar yAxisId="monthly" dataKey="Meta"      fill={C.meta+'88'}     radius={[2,2,0,0]} barSize={9} />
               <Bar yAxisId="monthly" dataKey="Pool"      fill={C.pool+'88'}     radius={[2,2,0,0]} barSize={9} />
               <Line yAxisId="acum" type="linear" dataKey="BudgetAcum"    stroke={C.budget}   strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} />
-              <Line yAxisId="acum" type="linear" dataKey="ForecastAcum"  stroke={C.forecast} strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} />
-              <Line yAxisId="acum" type="linear" dataKey="RealizadoAcum" stroke={C.actual}   strokeWidth={2.5} strokeDasharray="5 3" dot={false} activeDot={{ r: 5 }} />
+              <Line yAxisId="acum" type="linear" dataKey="PrevisãoAcum"  stroke={C.forecast} strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} />
               <Line yAxisId="acum" type="linear" dataKey="MetaAcum"      stroke={C.meta}     strokeWidth={2}   strokeDasharray="8 3" dot={false} />
               <Line yAxisId="acum" type="linear" dataKey="PoolAcum"      stroke={C.pool}     strokeWidth={2}   strokeDasharray="4 2" dot={false} />
             </ComposedChart>
@@ -340,11 +338,11 @@ function TableModal({ open, onClose, filtered, showEngCol, periodLabel, C, navig
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={showEngCol ? 11 : 10} style={{ textAlign:'center', padding:40, color:'var(--text-secondary)' }}>Nenhum projeto</td></tr>
+                <tr><td colSpan={showEngCol ? 12 : 11} style={{ textAlign:'center', padding:40, color:'var(--text-secondary)' }}>Nenhum projeto</td></tr>
               ) : filtered.map((p, i) => {
                 const f    = parseFloat(p.act_forecast ?? p.forecast) || 0;
-                const a    = parseFloat(p.actual)   || 0;
-                const exec = f ? ((a / f) * 100).toFixed(1) : '—';
+                const b    = parseFloat(p.budget) || 0;
+                const exec = b ? ((f / b) * 100).toFixed(1) : '—';
                 return (
                   <tr key={p.id}
                     style={{ background: i % 2 ? '#F8FAFC' : 'var(--bg-card)', cursor:'pointer', borderBottom:'1px solid #E2E8F0' }}
@@ -522,7 +520,10 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
   }, [consolidatedSummaries]);
 
   // Monthly data — Realizado truncated at current month;
-  // Forecast line = Actual for months <= lastActual, Forecast thereafter
+  // Metodologia: Previsão = Actual nos meses já realizados + Forecast nos meses futuros.
+  // A série "Realizado" some dos gráficos — ela é absorvida pela linha de Previsão.
+  // Isso reflete o conceito contábil de "Latest Estimate": o forecast se atualiza
+  // automaticamente à medida que dados realizados chegam.
   const monthlyData = useMemo(() => {
     const { year: lastActY, month: lastActM } = lastActualPoint;
     const result = [];
@@ -539,14 +540,14 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
           .filter(s => parseInt(s.year) === y && parseInt(s.month) === month && s.type === 'Forecast')
           .reduce((sum, s) => sum + parseFloat(s.total || 0), 0);
 
-        // Realizado: zero after current calendar month
+        // Previsão: para meses com Actual > 0, usa Actual; caso contrário usa Forecast.
+        // Meses futuros ao calendário atual ficam zerados (sem Actual nem Forecast lançado).
         const isAfterNow = y > currentYear || (y === currentYear && month > currentMonth);
-        entry['Realizado'] = isAfterNow ? 0 : actualVal;
-
-        // Forecast line: use Actual for months up to lastActual, Forecast thereafter
         const isBeforeOrAtLastActual = lastActY > 0 &&
           (y < lastActY || (y === lastActY && month <= lastActM));
-        entry['Forecast'] = isBeforeOrAtLastActual ? actualVal : forecastVal;
+        entry['Previsão'] = isAfterNow ? forecastVal
+          : isBeforeOrAtLastActual ? actualVal
+          : forecastVal;
 
         ['Budget', 'Meta', 'Pool'].forEach(type => {
           entry[type] = monthlySummaries
@@ -561,29 +562,29 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
   }, [monthlySummaries, period, currentYear, currentMonth, lastActualPoint]);
 
   const combinedData = useMemo(() => monthlyData.reduce((acc, d, i) => {
-    const prev = acc[i - 1] || { BudgetAcum: 0, ForecastAcum: 0, RealizadoAcum: 0, MetaAcum: 0, PoolAcum: 0 };
+    const prev = acc[i - 1] || { BudgetAcum: 0, PrevisãoAcum: 0, MetaAcum: 0, PoolAcum: 0 };
     acc.push({
       ...d,
-      BudgetAcum:    prev.BudgetAcum    + d.Budget,
-      ForecastAcum:  prev.ForecastAcum  + d.Forecast,
-      RealizadoAcum: prev.RealizadoAcum + d.Realizado,
-      MetaAcum:      prev.MetaAcum      + d.Meta,
-      PoolAcum:      prev.PoolAcum      + d.Pool,
+      BudgetAcum:   prev.BudgetAcum  + d.Budget,
+      PrevisãoAcum: prev.PrevisãoAcum + d['Previsão'],
+      MetaAcum:     prev.MetaAcum    + d.Meta,
+      PoolAcum:     prev.PoolAcum    + d.Pool,
     });
     return acc;
   }, []), [monthlyData]);
 
   // totalForecast KPI: use act_forecast from projects (already blended in backend)
   const totalForecastMonthly = monthlyData.reduce((s, d) => s + (d.Forecast || 0), 0);
-  // Chart forecast uses monthly blended + consolidated; KPI uses pre-computed act_forecast
+  // KPI de Previsão: act_forecast do backend (Actual onde existe + Forecast nos meses restantes)
+  const totalPrevisaoMonthly = monthlyData.reduce((s, d) => s + (d['Previsão'] || 0), 0);
   const totalForecast = totalActForecastKPI > 0 ? totalActForecastKPI
-    : (totalForecastMonthly + consolidatedActualTotal + consolidatedForecastTotal);
+    : (totalPrevisaoMonthly + consolidatedActualTotal + consolidatedForecastTotal);
 
   const LEGEND_LABELS = {
-    Budget: 'Budget (mensal)', Forecast: 'Forecast (mensal)', Realizado: 'Realizado (mensal)',
-    Meta: 'Meta (mensal)', Pool: 'Pool (mensal)',
-    BudgetAcum: 'Budget (acum.)', ForecastAcum: 'Forecast (acum.)', RealizadoAcum: 'Realizado (acum.)',
-    MetaAcum: 'Meta (acum.)', PoolAcum: 'Pool (acum.)',
+    'Previsão': 'Previsão (mensal)',
+    Budget: 'Budget (mensal)', Meta: 'Meta (mensal)', Pool: 'Pool (mensal)',
+    'PrevisãoAcum': 'Previsão (acum.)',
+    BudgetAcum: 'Budget (acum.)', MetaAcum: 'Meta (acum.)', PoolAcum: 'Pool (acum.)',
   };
 
   if (loading) return <div className="loading-spinner"><div className="spinner" /></div>;
@@ -601,7 +602,7 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
           {[
             { cls: 'budget',   label: `Budget ${periodLabel}`,   val: totalBudget,   sub: `${filtered.length} projeto${filtered.length !== 1 ? 's' : ''}` },
             { cls: 'forecast', label: `Forecast ${periodLabel}`, val: totalForecast, sub: totalBudget   ? `${((totalForecast / totalBudget)   * 100).toFixed(1)}% do budget`   : '—' },
-            { cls: 'actual',   label: 'Realizado',               val: totalActual,   sub: totalForecast ? `${((totalActual   / totalForecast) * 100).toFixed(1)}% do forecast` : '—' },
+            { cls: 'actual',   label: 'Realizado',               val: totalActual,   sub: totalForecast ? `${((totalActual / totalForecast) * 100).toFixed(1)}% da previsão` : '—' },
             { cls: '',         label: 'SI Total',                val: totalSI,       sub: 'Valor aprovado' },
           ].map(c => (
             <div key={c.label} className={`stat-card ${c.cls}`} style={{ padding: '10px 14px' }}>
@@ -650,13 +651,11 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
                   {!isMobile && <Legend wrapperStyle={{ fontSize: '0.62rem', color: '#374151', paddingTop: 2 }}
                     formatter={v => LEGEND_LABELS[v] || v} className="dash-legend" />}
                   <Bar yAxisId="monthly" dataKey="Budget"    fill={C.budget+'88'}   radius={[2,2,0,0]} barSize={5} />
-                  <Bar yAxisId="monthly" dataKey="Forecast"  fill={C.forecast+'88'} radius={[2,2,0,0]} barSize={5} />
-                  <Bar yAxisId="monthly" dataKey="Realizado" fill={C.actual+'88'}   radius={[2,2,0,0]} barSize={5} />
+                  <Bar yAxisId="monthly" dataKey="Previsão"  fill={C.forecast+'88'} radius={[2,2,0,0]} barSize={5} />
                   <Bar yAxisId="monthly" dataKey="Meta"      fill={C.meta+'88'}     radius={[2,2,0,0]} barSize={5} />
                   <Bar yAxisId="monthly" dataKey="Pool"      fill={C.pool+'88'}     radius={[2,2,0,0]} barSize={5} />
                   <Line yAxisId="acum" type="linear" dataKey="BudgetAcum"    stroke={C.budget}   strokeWidth={2} dot={false} />
-                  <Line yAxisId="acum" type="linear" dataKey="ForecastAcum"  stroke={C.forecast} strokeWidth={2} dot={false} />
-                  <Line yAxisId="acum" type="linear" dataKey="RealizadoAcum" stroke={C.actual}   strokeWidth={2} strokeDasharray="5 3" dot={false} activeDot={{ r: 3 }} />
+                  <Line yAxisId="acum" type="linear" dataKey="PrevisãoAcum"  stroke={C.forecast} strokeWidth={2} dot={false} />
                   <Line yAxisId="acum" type="linear" dataKey="MetaAcum"      stroke={C.meta}     strokeWidth={1.5} strokeDasharray="8 3" dot={false} />
                   <Line yAxisId="acum" type="linear" dataKey="PoolAcum"      stroke={C.pool}     strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
                 </ComposedChart>
@@ -686,9 +685,9 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
                 <BarChart
                   data={filtered.map(p => ({
                     name:      p.code,
-                    Budget:    parseFloat(p.budget)    || 0,
+                    Budget:    parseFloat(p.budget)             || 0,
                     Forecast:  parseFloat(p.act_forecast ?? p.forecast) || 0,
-                    Realizado: parseFloat(p.actual)    || 0,
+                    Realizado: parseFloat(p.actual)             || 0,
                   }))}
                   margin={{ top: 2, right: 4, left: 0, bottom: 0 }}
                 >
@@ -836,9 +835,9 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
         onClose={() => setProjectChartOpen(false)}
         data={filtered.map(p => ({
           name:      p.code,
-          Budget:    parseFloat(p.budget)   || 0,
+          Budget:    parseFloat(p.budget)             || 0,
           Forecast:  parseFloat(p.act_forecast ?? p.forecast) || 0,
-          Realizado: parseFloat(p.actual)    || 0,
+          Realizado: parseFloat(p.actual)             || 0,
         }))}
         projectMap={projectMap}
         periodLabel={periodLabel}

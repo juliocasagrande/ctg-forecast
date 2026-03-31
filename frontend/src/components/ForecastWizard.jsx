@@ -911,6 +911,19 @@ export default function ForecastWizard({
   const getCatTotal  = (type, cat) => Array.from({length:12},(_,i)=>i+1).reduce((s,m) => s+getValue(type,cat,m), 0);
   const getTypeTotal = (type)      => CATEGORIES.reduce((s,c) => s+getCatTotal(type,c), 0);
 
+  // Previsão atualizada: para Forecast, meses com Actual > 0 usam Actual, demais usam Forecast.
+  // Reflete a metodologia contábil de Latest Estimate.
+  const getActForecastTotal = () => {
+    if (activeType !== 'Forecast') return getTypeTotal(activeType);
+    return CATEGORIES.reduce((sum, cat) => {
+      return sum + Array.from({length:12},(_,i)=>i+1).reduce((s, m) => {
+        const actualVal   = getValue('Actual', cat, m);
+        const forecastVal = getValue('Forecast', cat, m);
+        return s + (lastActualMonth > 0 && m <= lastActualMonth ? actualVal : forecastVal);
+      }, 0);
+    }, 0);
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -1016,8 +1029,8 @@ export default function ForecastWizard({
                 </div>
               ))}
               <div style={{ borderLeft:'1px solid rgba(255,255,255,0.25)', paddingLeft:16, textAlign:'center' }}>
-                <div style={{ fontSize:'0.56rem', fontWeight:700, color:'rgba(255,255,255,0.55)', textTransform:'uppercase', letterSpacing:'0.08em' }}>Total</div>
-                <div style={{ fontFamily:'var(--font-display)', fontSize:'1rem', color:'#fff', fontWeight:600 }}>{formatBRL(getTypeTotal(activeType))}</div>
+                <div style={{ fontSize:'0.56rem', fontWeight:700, color:'rgba(255,255,255,0.55)', textTransform:'uppercase', letterSpacing:'0.08em' }}>{activeType === 'Forecast' ? 'Previsão' : 'Total'}</div>
+                <div style={{ fontFamily:'var(--font-display)', fontSize:'1rem', color:'#fff', fontWeight:600 }}>{formatBRL(getActForecastTotal())}</div>
               </div>
             </div>
             <button onClick={activeSave} disabled={saving} style={{ padding:'0 22px', alignSelf:'stretch', border:'none', cursor:saving?'wait':'pointer', background:saved?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.12)', color:'#fff', fontWeight:700, fontSize:'0.82rem', fontFamily:'var(--font-body)', borderLeft:'1px solid rgba(255,255,255,0.2)', whiteSpace:'nowrap', transition:'background 0.15s' }}
@@ -1188,7 +1201,7 @@ export default function ForecastWizard({
   }
 
   // ── STEP 4: Revisão ────────────────────────────────────────────────────────
-  const totalValue = getTypeTotal(activeType);
+  const totalValue = getActForecastTotal();
   return (
     <>
     <WrapperWithTypeBar>

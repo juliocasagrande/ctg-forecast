@@ -375,10 +375,11 @@ router.get('/project/:projectId', requireProjectAccess, async (req, res) => {
 
     // Role-based type whitelist
     const ALLOWED_TYPES = {
-      engenheiro: ['Budget','Forecast','Actual'],   // engenheiros veem Budget no Excel
-      gestor:     ['Budget','Forecast','Actual','Meta','Pool'],
-      planejador: ['Budget','Forecast','Actual','Meta','Pool'],
-      admin:      ['Budget','Forecast','Actual','Meta','Pool'],
+      engenheiro:  ['Budget','Forecast','Actual'],
+      coordenador: ['Budget','Forecast','Actual','Meta','Pool'],
+      gestor:      ['Budget','Forecast','Actual','Meta','Pool'],
+      planejador:  ['Budget','Forecast','Actual','Meta','Pool'],
+      admin:       ['Budget','Forecast','Actual','Meta','Pool'],
     };
     const allowedTypes = ALLOWED_TYPES[role] || ALLOWED_TYPES.gestor;
     const activeTypes  = selTypes ? selTypes.filter(t => allowedTypes.includes(t)) : allowedTypes;
@@ -455,15 +456,16 @@ router.get('/project/:projectId', requireProjectAccess, async (req, res) => {
 // ── Planejador export: all projects × months, with type selection ─────────────
 router.get('/planejador', async (req, res) => {
   const { role, id: userId } = req.user;
-  if (!['admin','gestor','planejador','engenheiro'].includes(role))
+  if (!['admin','gestor','coordenador','planejador','engenheiro'].includes(role))
     return res.status(403).json({ error: 'Sem permissão' });
 
   // Role-based type whitelist
   const ALLOWED = {
-    engenheiro: ['Budget','Forecast','Actual'],   // engenheiros veem Budget no Excel geral
-    gestor:     ['Budget','Forecast','Actual','Meta','Pool'],
-    planejador: ['Budget','Forecast','Actual','Meta','Pool'],
-    admin:      ['Budget','Forecast','Actual','Meta','Pool'],
+    engenheiro:  ['Budget','Forecast','Actual'],
+    coordenador: ['Budget','Forecast','Actual','Meta','Pool'],
+    gestor:      ['Budget','Forecast','Actual','Meta','Pool'],
+    planejador:  ['Budget','Forecast','Actual','Meta','Pool'],
+    admin:       ['Budget','Forecast','Actual','Meta','Pool'],
   };
   const allowed = ALLOWED[role] || [];
   const reqTypes = req.query.types

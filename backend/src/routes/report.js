@@ -56,8 +56,14 @@ router.get('/data', async (req, res) => {
     const { yearStart=2026, yearEnd=2026 } = req.query;
     const yrS = parseInt(yearStart), yrE = parseInt(yearEnd);
     const { role, id: userId } = req.user;
-    const engJoin = role==='engenheiro'
-      ? `INNER JOIN project_assignments ea ON ea.project_id=p.id AND ea.user_id=${userId}` : '';
+
+    // FIX: userId era interpolado diretamente na string SQL — substituído por
+    // parâmetro posicional $3 para prevenir SQL injection.
+    const isEng = role === 'engenheiro';
+    const engJoinClause = isEng
+      ? 'INNER JOIN project_assignments ea ON ea.project_id=p.id AND ea.user_id=$3'
+      : '';
+    const params = isEng ? [yrS, yrE, userId] : [yrS, yrE];
 
     // All projects with totals
     // Rule: Actual consolidated adds to Budget AND Actual; Forecast consolidated adds to Forecast
@@ -71,7 +77,7 @@ router.get('/data', async (req, res) => {
         COALESCE(SUM(CASE WHEN combined.type='Meta'     THEN combined.value ELSE 0 END),0) AS meta,
         eng_agg.engineers,
         MAX(combined.updated_at) AS last_update
-      FROM projects p ${engJoin}
+      FROM projects p ${engJoinClause}
       LEFT JOIN (
         SELECT fe.project_id, fe.type, fe.value, fe.updated_at, 'entries' AS source
         FROM forecast_entries fe
@@ -96,7 +102,7 @@ router.get('/data', async (req, res) => {
       ) eng_agg ON eng_agg.project_id = p.id
       GROUP BY p.id, p.code, p.name, p.plants, p.si_value, p.pool_value, eng_agg.engineers
       ORDER BY p.code
-    `, [yrS, yrE]);
+    `, params);
 
     // Monthly data for each project (for charts)
     const monthlyRes = await pool.query(`
@@ -121,7 +127,6 @@ router.get('/data', async (req, res) => {
       const monthly = monthlyRes.rows.filter(r => r.project_id===p.id);
       const notes   = notesRes.rows.filter(r => r.project_id===p.id).slice(0,5);
       const charts  = {};
-      // Calculate ACT+FORECAST correctly: for each month, use Actual if > 0, else Forecast
       let actForecastTotal = 0;
       for (let y = yrS; y <= yrE; y++) {
         const budgetArr   = monthlyArr(monthly,'Budget',y);
@@ -134,19 +139,15 @@ router.get('/data', async (req, res) => {
           meta:      monthlyArr(monthly,'Meta',y),
           pool:      monthlyArr(monthly,'Pool',y),
         };
-        // For each month: actual > 0 → use actual, else → use forecast
         for (let m = 0; m < 12; m++) {
           actForecastTotal += actualArr[m] > 0 ? actualArr[m] : forecastArr[m];
         }
       }
-      // Also add consolidated actual for years where monthly data was excluded
-      // (consolidated years have their actual in p.actual but no monthly breakdown)
-      const monthlyActualTotal = Object.values(charts).reduce((s, yr) => s + yr.actual.reduce((a,b) => a+b, 0), 0);
+      const monthlyActualTotal   = Object.values(charts).reduce((s, yr) => s + yr.actual.reduce((a,b) => a+b, 0), 0);
       const monthlyForecastTotal = Object.values(charts).reduce((s, yr) => s + yr.forecast.reduce((a,b) => a+b, 0), 0);
-      const projActual = parseFloat(p.actual || 0);
+      const projActual   = parseFloat(p.actual   || 0);
       const projForecast = parseFloat(p.forecast || 0);
-      // If project-level totals are larger (due to consolidated), add the difference
-      const consActualDiff = projActual - monthlyActualTotal;
+      const consActualDiff   = projActual   - monthlyActualTotal;
       const consForecastDiff = projForecast - monthlyForecastTotal;
       if (consActualDiff > 0) actForecastTotal += consActualDiff;
       else if (consForecastDiff > 0 && consActualDiff <= 0) actForecastTotal += consForecastDiff;
@@ -155,12 +156,12 @@ router.get('/data', async (req, res) => {
     });
 
     // Global KPIs
-    const totBudget   = projects.reduce((s,p) => s+parseFloat(p.budget||0),  0);
-    const totForecast = projects.reduce((s,p) => s+parseFloat(p.forecast||0),0);
-    const totActual   = projects.reduce((s,p) => s+parseFloat(p.actual||0),  0);
-    const totPool     = projects.reduce((s,p) => s+parseFloat(p.pool||0),    0);
-    const totSI       = projects.reduce((s,p) => s+parseFloat(p.si_value||0),0);
-    const totActForecast = projects.reduce((s,p) => s + (p.act_forecast || 0), 0);
+    const totBudget      = projects.reduce((s,p) => s+parseFloat(p.budget||0),   0);
+    const totForecast    = projects.reduce((s,p) => s+parseFloat(p.forecast||0), 0);
+    const totActual      = projects.reduce((s,p) => s+parseFloat(p.actual||0),   0);
+    const totPool        = projects.reduce((s,p) => s+parseFloat(p.pool||0),     0);
+    const totSI          = projects.reduce((s,p) => s+parseFloat(p.si_value||0), 0);
+    const totActForecast = projects.reduce((s,p) => s + (p.act_forecast || 0),   0);
 
     res.json({ projects, polos:POLOS, yearStart:yrS, yearEnd:yrE,
       kpis:{ budget:totBudget, forecast:totForecast, actual:totActual, pool:totPool, si:totSI, actForecast:totActForecast },

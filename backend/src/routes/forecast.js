@@ -39,7 +39,7 @@ router.get('/project/:projectId', requireProjectAccess, async (req, res) => {
 });
 
 // Bulk upsert — role-based type restrictions + activity log
-router.post('/project/:projectId/bulk', requireProjectAccess, async (req, res) => {
+router.post('/project/:projectId/bulk', requireProjectAccess, denyGerente, async (req, res) => {
   const { projectId } = req.params;
   const { entries } = req.body;
   const { role, id: userId } = req.user;
@@ -47,13 +47,12 @@ router.post('/project/:projectId/bulk', requireProjectAccess, async (req, res) =
     return res.status(400).json({ error: 'Nenhuma entrada fornecida' });
   const VALID_CATS = ['Viagens', 'Contratos', 'POs'];
   const VALID_TYPES = ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'];
+  const ENGENHEIRO_TYPES = ['Forecast', 'Actual'];
+  const PLANEJADOR_TYPES = ['Budget', 'Actual', 'Meta', 'Pool'];
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const results = [];
-    const ENGENHEIRO_TYPES = ['Forecast', 'Actual'];
-      if (role === 'gerente') return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
-    const PLANEJADOR_TYPES = ['Budget', 'Actual', 'Meta', 'Pool'];
     for (const e of entries) {
       if (role === 'engenheiro' && !ENGENHEIRO_TYPES.includes(e.type)) continue;
       if (role === 'coordenador' && !['Budget','Forecast','Actual','Meta','Pool'].includes(e.type)) continue;
@@ -90,17 +89,15 @@ router.post('/project/:projectId/bulk', requireProjectAccess, async (req, res) =
 });
 
 // Single upsert
-router.put('/project/:projectId', requireProjectAccess, async (req, res) => {
+router.put('/project/:projectId', requireProjectAccess, denyGerente, async (req, res) => {
   try {
     const { category, type, year, month, value, comment } = req.body;
     const { role, id: userId } = req.user;
     const ENGENHEIRO_TYPES = ['Forecast', 'Actual'];
-      if (role === 'gerente') return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
     const PLANEJADOR_TYPES = ['Budget', 'Actual', 'Meta', 'Pool'];
     const VALID_CATS = ['Viagens', 'Contratos', 'POs'];
     if (role === 'engenheiro' && !ENGENHEIRO_TYPES.includes(type))
       return res.status(403).json({ error: 'Engenheiros só podem editar Forecast e Realizado' });
-    if (role === 'gerente') return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
     if (role === 'planejador' && !PLANEJADOR_TYPES.includes(type))
       return res.status(403).json({ error: 'Planejadores só podem editar Budget, Realizado, Meta e Pool' });
     // gestor, coordenador e admin can edit all types
@@ -327,19 +324,21 @@ router.get('/project/:projectId/actual-consolidated', requireProjectAccess, asyn
   } catch (err) { safeError(res, err); }
 });
 
-router.post('/project/:projectId/actual-consolidated', requireProjectAccess, async (req, res) => {
+router.post('/project/:projectId/actual-consolidated', requireProjectAccess, denyGerente, async (req, res) => {
   const { role, id: userId } = req.user;
   if (!['gestor','coordenador','planejador','admin'].includes(role))
     return res.status(403).json({ error: 'Sem permissão' });
   try {
     const { value, comment } = req.body;
+    const safeValue  = Math.max(0, parseFloat(value) || 0);
+    const safeComment = comment ? String(comment).slice(0, 500) : '';
     const r = await pool.query(`
       INSERT INTO actual_consolidated (project_id, value, comment, updated_by, updated_at)
       VALUES ($1,$2,$3,$4,NOW())
       ON CONFLICT (project_id) DO UPDATE
         SET value=$2, comment=$3, updated_by=$4, updated_at=NOW()
       RETURNING *
-    `, [req.params.projectId, value||0, comment||'', userId]);
+    `, [req.params.projectId, safeValue, safeComment, userId]);
     await pool.query(
       `INSERT INTO project_activity_log (project_id,user_id,role,action,acted_at) VALUES ($1,$2,$3,'actual_consolidated',NOW())`,
       [req.params.projectId, userId, role]
@@ -706,8 +705,14 @@ router.get('/polo-summary', async (req, res) => {
       filterVal = effectiveArea;
     }
 
+    // FIX: mineParam antes era interpolado diretamente na string da query ('$3' ou '$4').
+    // Embora o valor seja uma referência de parâmetro e não dados do usuário, o padrão
+    // era frágil. A query foi reestruturada para sempre passar userId como último param,
+    // com posição fixa, eliminando a interpolação condicional.
+    // Estrutura: [yrStart, yrEnd, filterVal?, userId] — userId sempre no último slot.
     const params = filterVal !== null ? [yrStart, yrEnd, filterVal, userId] : [yrStart, yrEnd, userId];
-    const mineParam = filterVal !== null ? '$4' : '$3';
+    // O índice do parâmetro userId na query: $4 quando filterVal existe, $3 caso contrário.
+    const userIdParamIdx = filterVal !== null ? '$4' : '$3';
 
     // Main aggregation — budget/forecast/actual/pool totals
     const r = await pool.query(`
@@ -765,7 +770,7 @@ router.get('/polo-summary', async (req, res) => {
         JOIN users u ON u.id = pa2.user_id AND u.role = 'engenheiro'
         GROUP BY pa2.project_id
       ) eng_agg ON eng_agg.project_id = p.id
-      LEFT JOIN project_assignments pa_mine ON pa_mine.project_id = p.id AND pa_mine.user_id = ${mineParam}
+      LEFT JOIN project_assignments pa_mine ON pa_mine.project_id = p.id AND pa_mine.user_id = ${userIdParamIdx}
       GROUP BY p.id, p.code, p.name, p.plants, eng_agg.engineers, pa_mine.user_id
       ORDER BY p.code
     `, params);
@@ -789,17 +794,28 @@ router.get('/project/:projectId/year-consolidated', requireProjectAccess, async 
 });
 
 // ── Year Consolidated: Upsert single value ───────────────────────────────────
-router.post('/project/:projectId/year-consolidated', requireProjectAccess, async (req, res) => {
+router.post('/project/:projectId/year-consolidated', requireProjectAccess, denyGerente, async (req, res) => {
   const { role, id: userId } = req.user;
   const { year, category, type, value, comment } = req.body;
-  // Engenheiros can only save Forecast and Actual consolidated
+
+  // Whitelist validation
+  const VALID_CATS  = ['Viagens', 'Contratos', 'POs', 'Total'];
+  const VALID_TYPES = ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'];
   const ENGENHEIRO_CONS_TYPES = ['Forecast', 'Actual'];
+
+  if (!VALID_CATS.includes(category))
+    return res.status(400).json({ error: 'Categoria inválida' });
+  if (!VALID_TYPES.includes(type))
+    return res.status(400).json({ error: 'Tipo inválido' });
+  const y = parseInt(year);
+  if (!y || y < 2020 || y > 2050)
+    return res.status(400).json({ error: 'Ano inválido' });
+
   if (role === 'engenheiro' && !ENGENHEIRO_CONS_TYPES.includes(type))
     return res.status(403).json({ error: 'Engenheiros só podem editar Forecast e Realizado consolidado' });
-  if (role === 'gerente')
-    return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
   if (!['gestor', 'planejador', 'admin', 'engenheiro', 'coordenador'].includes(role))
     return res.status(403).json({ error: 'Sem permissão para editar valores consolidados' });
+
   try {
     const r = await pool.query(`
       INSERT INTO year_consolidated (project_id, year, category, type, value, comment, consolidated_by, consolidated_at)
@@ -808,37 +824,49 @@ router.post('/project/:projectId/year-consolidated', requireProjectAccess, async
       DO UPDATE SET value=EXCLUDED.value, comment=EXCLUDED.comment,
         consolidated_by=EXCLUDED.consolidated_by, consolidated_at=NOW()
       RETURNING *
-    `, [req.params.projectId, year, category, type, parseFloat(value)||0, comment||null, userId]);
+    `, [req.params.projectId, y, category, type, parseFloat(value)||0, comment ? String(comment).slice(0, 500) : null, userId]);
     res.json(r.rows[0]);
   } catch (err) { safeError(res, err); }
 });
 
 // ── Year Consolidated: Bulk upsert ───────────────────────────────────────────
-router.post('/project/:projectId/year-consolidated/bulk', requireProjectAccess, async (req, res) => {
+router.post('/project/:projectId/year-consolidated/bulk', requireProjectAccess, denyGerente, async (req, res) => {
   const { role, id: userId } = req.user;
-  // Engenheiros can only save Forecast and Actual consolidated
   const ENGENHEIRO_CONS_TYPES = ['Forecast', 'Actual'];
-  if (role === 'gerente')
-    return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
+  const VALID_CATS  = ['Viagens', 'Contratos', 'POs', 'Total'];
+  const VALID_TYPES = ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'];
+
   if (!['gestor', 'planejador', 'admin', 'engenheiro', 'coordenador'].includes(role))
     return res.status(403).json({ error: 'Sem permissão para editar valores consolidados' });
+
+  const { entries } = req.body;
+  if (!Array.isArray(entries) || entries.length === 0)
+    return res.status(400).json({ error: 'Nenhuma entrada fornecida' });
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { entries } = req.body;
+    let count = 0;
     for (const e of entries) {
-      // Skip types the engenheiro can't edit
+      // Filtros de permissão por role
       if (role === 'engenheiro' && !ENGENHEIRO_CONS_TYPES.includes(e.type)) continue;
+      // Validação de whitelist por entrada — entradas inválidas são silenciosamente
+      // ignoradas para não abortar a transação inteira por um item mal-formado
+      if (!VALID_CATS.includes(e.category) || !VALID_TYPES.includes(e.type)) continue;
+      const y = parseInt(e.year);
+      if (!y || y < 2020 || y > 2050) continue;
       await client.query(`
         INSERT INTO year_consolidated (project_id, year, category, type, value, comment, consolidated_by, consolidated_at)
         VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
         ON CONFLICT (project_id, year, category, type)
         DO UPDATE SET value=EXCLUDED.value, comment=EXCLUDED.comment,
           consolidated_by=EXCLUDED.consolidated_by, consolidated_at=NOW()
-      `, [req.params.projectId, e.year, e.category, e.type, parseFloat(e.value)||0, e.comment||null, userId]);
+      `, [req.params.projectId, y, e.category, e.type, parseFloat(e.value)||0,
+          e.comment ? String(e.comment).slice(0, 500) : null, userId]);
+      count++;
     }
     await client.query('COMMIT');
-    res.json({ count: entries.length });
+    res.json({ count });
   } catch (err) {
     await client.query('ROLLBACK');
     safeError(res, err);
