@@ -309,7 +309,7 @@ function DocModal({ open, onClose, onSaved, doc, nextSeq }) {
           </div>
 
           {/* Assunto */}
-          <Field label="Assunto" required>
+          <Field label="Título do Documento" required>
             <textarea value={form.subject} onChange={e => set('subject', e.target.value)}
               rows={2} style={{ ...fieldStyle, resize: 'vertical' }} />
           </Field>
@@ -405,7 +405,7 @@ function generateHTMLReport(docs, stats, year) {
     <div><h2>Documentos por Status</h2><table><thead><tr><th>Status</th><th>Qtd</th></tr></thead><tbody>${statusRows}</tbody></table></div>
   </div>
   <div class="section"><h2>Lista de Documentos — ${year}</h2>
-    <table><thead><tr><th>Código</th><th>Responsável</th><th>Data</th><th>Assunto</th><th>Status</th><th>Link</th></tr></thead><tbody>${docRows}</tbody></table>
+    <table><thead><tr><th>Código</th><th>Responsável</th><th>Data</th><th>Título do Documento</th><th>Status</th><th>Link</th></tr></thead><tbody>${docRows}</tbody></table>
   </div>
   <div class="footer">CTG Brasil · CTG.Engenharia · Gerado em ${now}</div>
 </div></body></html>`;
@@ -578,7 +578,7 @@ export default function DocumentsPage() {
             <thead>
               <tr style={{ background: '#001F5B' }}>
                 <th style={TH}>Código</th><th style={TH}>Responsável</th><th style={TH}>Data</th>
-                <th style={TH}>Assunto</th><th style={TH}>Status</th><th style={{ ...TH, width: 32 }}></th>
+                <th style={TH}>Título do Documento</th><th style={TH}>Status</th><th style={{ ...TH, width: 32 }}></th>
               </tr>
             </thead>
             <tbody>
