@@ -19,6 +19,7 @@ import FeedbackPage from './pages/FeedbackPage.jsx';
 import FeedbackInbox from './pages/FeedbackInbox.jsx';
 import MonthlyReportPage from './pages/MonthlyReportPage.jsx';
 import VacationsPage from './pages/VacationsPage.jsx';
+import DocumentsPage from './pages/DocumentsPage.jsx';
 import AdminPanel from './components/admin/AdminPanel.jsx';
 import AlertBell from './components/ui/AlertBell.jsx';
 import api from './utils/api.js';
@@ -690,6 +691,7 @@ function getPageMeta(pathname) {
   if (pathname === '/feedback/inbox') return { title: 'Inbox de Feedback', sub: 'Mensagens dos usuários do sistema' };
   if (pathname === '/monthly-report') return { title: 'Relatório de Acompanhamento Mensal', sub: null };
   if (pathname === '/vacations') return { title: 'Controle de Férias', sub: null };
+  if (pathname === '/documents') return { title: 'Controle de Documentos', sub: null };
   if (pathname.startsWith('/projects/')) return { title: 'Projetos', sub: null };
   return { title: 'CTG.Engenharia', sub: null };
 }
@@ -933,6 +935,7 @@ export default function App() {
               </RequireAuth>
             } />
             <Route path="/vacations" element={<RequireAuth><VacationsPage areaFilter={areaFilter} year={vacYear} onYearChange={setVacYear} /></RequireAuth>} />
+            <Route path="/documents" element={<RequireAuth><DocumentsPage /></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
