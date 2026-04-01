@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
 import { useToast } from '../components/ui/Toast.jsx';
@@ -585,67 +585,69 @@ export default function DocumentsPage() {
               {filtered.map((doc, i) => {
                 const expanded = expandedId === doc.id;
                 const rowBg    = i % 2 === 0 ? '#fff' : '#F8FAFC';
-                return [
-                  <tr key={doc.id}
-                    onClick={() => setExpandedId(expanded ? null : doc.id)}
-                    style={{ background: rowBg, cursor: 'pointer', borderBottom: expanded ? 'none' : '1px solid #F1F5F9' }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#F0F9FF'}
-                    onMouseLeave={e => e.currentTarget.style.background = rowBg}
-                  >
-                    <td style={TD}><span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#001F5B', fontSize: '0.82rem' }}>{doc.code}</span></td>
-                    <td style={{ ...TD, fontSize: '0.82rem' }}>{doc.responsible}</td>
-                    <td style={{ ...TD, fontSize: '0.82rem', whiteSpace: 'nowrap' }}>{new Date(doc.date).toLocaleDateString('pt-BR')}</td>
-                    <td style={{ ...TD, fontSize: '0.82rem', maxWidth: 320 }}>
-                      <span style={{ display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{doc.subject}</span>
-                    </td>
-                    <td style={TD}><StatusBadge status={doc.status} /></td>
-                    <td style={{ ...TD, textAlign: 'right' }}><span style={{ fontSize: '0.7rem', color: '#94A3B8' }}>{expanded ? '▲' : '▼'}</span></td>
-                  </tr>,
-                  expanded && (
-                    <tr key={`${doc.id}-exp`} style={{ background: '#F0F9FF', borderBottom: '1px solid #E2E8F0' }}>
-                      <td colSpan={6} style={{ padding: '14px 16px' }}>
-                        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                          <div style={{ flex: 1, minWidth: 240 }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
-                              {doc.plant && <InfoItem label="Usina" value={doc.plant} />}
-                              <InfoItem label="Tipo" value={`${doc.type} — ${TYPE_META[doc.type]?.label || ''}`} />
-                              <InfoItem label="Área" value={`${doc.area} — ${AREAS.find(a => a.value === doc.area)?.label || doc.area}`} />
-                              {doc.revision !== null && doc.revision !== undefined && <InfoItem label="Revisão" value={`R${doc.revision}`} />}
-                              {doc.notes && <InfoItem label="Observações" value={doc.notes} full />}
+                return (
+                  <Fragment key={doc.id}>
+                    <tr
+                      onClick={() => setExpandedId(expanded ? null : doc.id)}
+                      style={{ background: rowBg, cursor: 'pointer', borderBottom: expanded ? 'none' : '1px solid #F1F5F9' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#F0F9FF'}
+                      onMouseLeave={e => e.currentTarget.style.background = rowBg}
+                    >
+                      <td style={TD}><span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#001F5B', fontSize: '0.82rem' }}>{doc.code}</span></td>
+                      <td style={{ ...TD, fontSize: '0.82rem' }}>{doc.responsible}</td>
+                      <td style={{ ...TD, fontSize: '0.82rem', whiteSpace: 'nowrap' }}>{new Date(doc.date).toLocaleDateString('pt-BR')}</td>
+                      <td style={{ ...TD, fontSize: '0.82rem', maxWidth: 320 }}>
+                        <span style={{ display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{doc.subject}</span>
+                      </td>
+                      <td style={TD}><StatusBadge status={doc.status} /></td>
+                      <td style={{ ...TD, textAlign: 'right' }}><span style={{ fontSize: '0.7rem', color: '#94A3B8' }}>{expanded ? '▲' : '▼'}</span></td>
+                    </tr>
+                    {expanded && (
+                      <tr style={{ background: '#F0F9FF', borderBottom: '1px solid #E2E8F0' }}>
+                        <td colSpan={6} style={{ padding: '14px 16px' }}>
+                          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                            <div style={{ flex: 1, minWidth: 240 }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
+                                {doc.plant && <InfoItem label="Usina" value={doc.plant} />}
+                                <InfoItem label="Tipo" value={`${doc.type} — ${TYPE_META[doc.type]?.label || ''}`} />
+                                <InfoItem label="Área" value={`${doc.area} — ${AREAS.find(a => a.value === doc.area)?.label || doc.area}`} />
+                                {doc.revision !== null && doc.revision !== undefined && <InfoItem label="Revisão" value={`R${doc.revision}`} />}
+                                {doc.notes && <InfoItem label="Observações" value={doc.notes} full />}
+                              </div>
+                              {doc.status === 'Publicado' && (
+                                <div style={{ marginTop: 10 }}>
+                                  {doc.document_link
+                                    ? <a href={doc.document_link} target="_blank" rel="noopener noreferrer"
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.8rem', color: '#0066B3', fontWeight: 600, textDecoration: 'none' }}>
+                                        🔗 Acessar documento
+                                      </a>
+                                    : <span style={{ fontSize: '0.78rem', color: '#EF4444', fontWeight: 600 }}>⚠ Publicado sem link cadastrado</span>
+                                  }
+                                </div>
+                              )}
                             </div>
-                            {doc.status === 'Publicado' && (
-                              <div style={{ marginTop: 10 }}>
-                                {doc.document_link
-                                  ? <a href={doc.document_link} target="_blank" rel="noopener noreferrer"
-                                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.8rem', color: '#0066B3', fontWeight: 600, textDecoration: 'none' }}>
-                                      🔗 Acessar documento
-                                    </a>
-                                  : <span style={{ fontSize: '0.78rem', color: '#EF4444', fontWeight: 600 }}>⚠ Publicado sem link cadastrado</span>
-                                }
+                            {(canEditDoc(doc) || canDeleteDoc(doc)) && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+                                {canEditDoc(doc) && (
+                                  <button onClick={e => { e.stopPropagation(); openEdit(doc); }}
+                                    style={{ padding: '6px 14px', border: '1.5px solid #0066B3', borderRadius: 6, background: '#fff', color: '#0066B3', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
+                                    ✏️ Editar
+                                  </button>
+                                )}
+                                {canDeleteDoc(doc) && (
+                                  <button onClick={e => { e.stopPropagation(); handleDelete(doc); }}
+                                    style={{ padding: '6px 14px', border: '1.5px solid #EF4444', borderRadius: 6, background: '#fff', color: '#EF4444', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
+                                    🗑 Excluir
+                                  </button>
+                                )}
                               </div>
                             )}
                           </div>
-                          {(canEditDoc(doc) || canDeleteDoc(doc)) && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-                              {canEditDoc(doc) && (
-                                <button onClick={e => { e.stopPropagation(); openEdit(doc); }}
-                                  style={{ padding: '6px 14px', border: '1.5px solid #0066B3', borderRadius: 6, background: '#fff', color: '#0066B3', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
-                                  ✏️ Editar
-                                </button>
-                              )}
-                              {canDeleteDoc(doc) && (
-                                <button onClick={e => { e.stopPropagation(); handleDelete(doc); }}
-                                  style={{ padding: '6px 14px', border: '1.5px solid #EF4444', borderRadius: 6, background: '#fff', color: '#EF4444', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
-                                  🗑 Excluir
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ),
-                ];
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
               })}
             </tbody>
           </table>
