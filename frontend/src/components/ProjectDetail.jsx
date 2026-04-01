@@ -904,7 +904,6 @@ export default function ProjectDetail({ onEdit }) {
               {label:'Budget',   v:totalAllFor('Budget'),   cls:'budget'},
               {label:'Forecast', v:totalAllFor('Forecast'), cls:'forecast'},
               {label:'Realizado',v:totalAllFor('Actual'),   cls:'actual'},
-              {label:'SI', v:project.si_value, cls: overSI ? 'actual' : ''},
             ].map(s=>(
               <div key={s.label} style={{
                 padding:'0 14px',
@@ -916,9 +915,36 @@ export default function ProjectDetail({ onEdit }) {
                 textAlign:'center',
               }}>
                 <div style={{fontSize:'0.6rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:s.cls?`var(--${s.cls}-text)`:'var(--text-muted)',marginBottom:2}}>{s.label}</div>
-                <div style={{fontFamily:'var(--font-display)',fontSize:'0.92rem',color:(s.label==='SI'&&overSI)?'#DC2626':'var(--text-primary)',lineHeight:1.2}}>{formatBRL(s.v)}</div>
+                <div style={{fontFamily:'var(--font-display)',fontSize:'0.92rem',color:'var(--text-primary)',lineHeight:1.2}}>{formatBRL(s.v)}</div>
               </div>
             ))}
+            {/* SI card with SI - Forecast variation */}
+            {(() => {
+              const siV = parseFloat(project?.si_value)||0;
+              const forecastV = totalAllFor('Forecast');
+              const diff = siV - forecastV;
+              const isPos = diff >= 0;
+              return (
+                <div style={{
+                  padding:'0 14px',
+                  background: overSI ? 'var(--actual-bg)' : 'var(--bg-app)',
+                  border:`1px solid ${overSI ? 'var(--actual-border)' : 'var(--border)'}`,
+                  borderRadius:'var(--radius-md)',
+                  minWidth:140,
+                  display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+                  textAlign:'center',
+                }}>
+                  <div style={{fontSize:'0.6rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:'var(--text-muted)',marginBottom:2}}>SI</div>
+                  <div style={{fontFamily:'var(--font-display)',fontSize:'0.92rem',color: overSI ? '#DC2626' : 'var(--text-primary)',lineHeight:1.2}}>{formatBRL(siV)}</div>
+                  {siV > 0 && forecastV > 0 && (
+                    <div style={{display:'flex',alignItems:'center',gap:3,marginTop:3,fontSize:'0.68rem',fontWeight:700,color: isPos ? '#16A34A' : '#DC2626'}}>
+                      <span style={{fontSize:'0.75rem'}}>{isPos ? '▲' : '▼'}</span>
+                      <span>{formatBRL(Math.abs(diff))}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Actions */}
