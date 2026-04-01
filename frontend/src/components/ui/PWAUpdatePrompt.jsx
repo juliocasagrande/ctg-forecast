@@ -12,9 +12,26 @@ export function PWAUpdatePrompt() {
     },
   });
 
-  const [dismissed, setDismissed] = useState(false);
+  const [countdown, setCountdown] = useState(30);
 
-  if (!needRefresh || dismissed) return null;
+  // Auto-atualiza após 30 segundos mesmo sem interação do usuário
+  useEffect(() => {
+    if (!needRefresh) return;
+    setCountdown(30);
+    const interval = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          updateServiceWorker(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [needRefresh]);
+
+  if (!needRefresh) return null;
 
   return (
     <div style={{
@@ -56,23 +73,12 @@ export function PWAUpdatePrompt() {
           Nova versão disponível
         </div>
         <div style={{ fontSize: '0.73rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.4 }}>
-          CTG.Engenharia foi atualizado. Recarregue para aplicar.
+          Atualizando automaticamente em {countdown}s…
         </div>
       </div>
 
-      {/* Ações */}
+      {/* Ação */}
       <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-        <button
-          onClick={() => setDismissed(true)}
-          style={{
-            background: 'transparent',
-            border: '1px solid rgba(255,255,255,0.2)',
-            borderRadius: 7, color: 'rgba(255,255,255,0.6)',
-            cursor: 'pointer', padding: '5px 10px', fontSize: '0.72rem',
-          }}
-        >
-          Depois
-        </button>
         <button
           onClick={() => updateServiceWorker(true)}
           style={{
@@ -82,7 +88,7 @@ export function PWAUpdatePrompt() {
             padding: '5px 14px', fontSize: '0.72rem', fontWeight: 700,
           }}
         >
-          Atualizar
+          Atualizar agora
         </button>
       </div>
     </div>
