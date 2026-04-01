@@ -277,6 +277,30 @@ export async function initDB() {
       );
     `);
 
+    /* ───────── DOCUMENTS ───────── */
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS documents (
+        id              SERIAL PRIMARY KEY,
+        code            VARCHAR(60) UNIQUE,
+        type            VARCHAR(20) NOT NULL,
+        area            VARCHAR(30) NOT NULL,
+        sequence_number INTEGER NOT NULL,
+        year            INTEGER NOT NULL,
+        revision        INTEGER DEFAULT NULL,
+        plant           VARCHAR(60) DEFAULT NULL,
+        responsible     VARCHAR(120) NOT NULL,
+        date            DATE NOT NULL,
+        subject         TEXT NOT NULL,
+        status          VARCHAR(30) NOT NULL DEFAULT 'Em elaboração',
+        document_link   TEXT DEFAULT NULL,
+        notes           TEXT DEFAULT NULL,
+        created_by      INTEGER REFERENCES users(id),
+        updated_by      INTEGER REFERENCES users(id),
+        created_at      TIMESTAMPTZ DEFAULT NOW(),
+        updated_at      TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
     /* ───────── VACATION PERIODS ───────── */
     await client.query(`
       CREATE TABLE IF NOT EXISTS vacation_periods (
