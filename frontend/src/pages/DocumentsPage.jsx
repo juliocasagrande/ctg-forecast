@@ -193,7 +193,7 @@ function Field({ label, required, children }) {
 
 /* ─── DocModal ───────────────────────────────────────────────────────────────── */
 function DocModal({ open, onClose, onSaved, doc, nextSeq, isNewRevision }) {
-  const toast  = useToast();
+  const { toast } = useToast();
   const isEdit = !!doc && !isNewRevision;
   const [users, setUsers] = useState([]);
 
@@ -227,19 +227,30 @@ function DocModal({ open, onClose, onSaved, doc, nextSeq, isNewRevision }) {
   const preview = buildCode(form.type, form.area, form.sequence_number, form.year, form.revision);
 
   const handleSubmit = async () => {
-    if (!form.type || !form.area || !form.responsible || !form.date || !form.subject || !form.status) {
-      toast('Preencha todos os campos obrigatórios.', 'error'); return;
+    // Validação com mensagem específica por campo
+    const missing = [];
+    if (!form.type)        missing.push('Tipo de Documento');
+    if (!form.area)        missing.push('Área');
+    if (!form.responsible) missing.push('Responsável');
+    if (!form.date)        missing.push('Data');
+    if (!form.subject)     missing.push('Título do Documento');
+    if (!form.status)      missing.push('Status');
+    if (missing.length > 0) {
+      toast(`Campo obrigatório não preenchido: ${missing.join(', ')}`, 'error', 4000);
+      return;
     }
     setSaving(true);
     try {
       if (isEdit) {
         await api.put(`/documents/${doc.id}`, form);
-        toast('Documento atualizado!', 'success');
+        toast('Documento atualizado com sucesso!', 'success');
       } else {
         await api.post('/documents', form);
-        toast(isNewRevision ? 'Nova revisão registrada!' : 'Documento registrado!', 'success');
+        toast(isNewRevision ? 'Nova revisão registrada com sucesso!' : 'Documento registrado com sucesso!', 'success');
       }
-      onSaved(); onClose();
+      onSaved();
+      // Fechar o modal após um breve delay para o toast aparecer
+      setTimeout(() => onClose(), 600);
     } catch (err) { toast(err.response?.data?.error || 'Erro ao salvar.', 'error'); }
     finally { setSaving(false); }
   };
@@ -281,15 +292,19 @@ function DocModal({ open, onClose, onSaved, doc, nextSeq, isNewRevision }) {
           {/* Tipo + Área */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <Field label="Tipo de Documento" required>
-              <select value={form.type} onChange={e => set('type', e.target.value)} style={fieldStyle}
-                disabled={isNewRevision}>
+              <select value={form.type} onChange={e => set('type', e.target.value)} style={{
+                ...fieldStyle,
+                ...((isEdit || isNewRevision) ? { background: '#F8FAFC', color: '#64748B', cursor: 'not-allowed' } : {}),
+              }} disabled={isEdit || isNewRevision}>
                 <option value="">— Selecionar —</option>
                 {DOC_TYPES.map(o => <option key={o.value} value={o.value}>{o.value} — {o.label}</option>)}
               </select>
             </Field>
             <Field label="Área" required>
-              <select value={form.area} onChange={e => set('area', e.target.value)} style={fieldStyle}
-                disabled={isNewRevision}>
+              <select value={form.area} onChange={e => set('area', e.target.value)} style={{
+                ...fieldStyle,
+                ...((isEdit || isNewRevision) ? { background: '#F8FAFC', color: '#64748B', cursor: 'not-allowed' } : {}),
+              }} disabled={isEdit || isNewRevision}>
                 {AREAS.map(o => <option key={o.value} value={o.value}>{o.value} — {o.label}</option>)}
               </select>
             </Field>
@@ -304,26 +319,39 @@ function DocModal({ open, onClose, onSaved, doc, nextSeq, isNewRevision }) {
             </Field>
             <Field label="Ano (2 dígitos)" required>
               <input type="number" value={form.year} onChange={e => set('year', e.target.value)}
-                min={0} max={99} style={fieldStyle} disabled={isNewRevision} />
+                min={0} max={99} style={{
+                  ...fieldStyle,
+                  ...((isEdit || isNewRevision) ? { background: '#F8FAFC', color: '#64748B', cursor: 'not-allowed' } : {}),
+                }} readOnly={isEdit || isNewRevision} />
             </Field>
             <Field label="Revisão">
               <input type="number" value={form.revision} onChange={e => set('revision', e.target.value)}
                 min={0} placeholder="Sem rev."
-                style={{ ...fieldStyle, ...(isNewRevision ? { background: '#EFF6FF', borderColor: '#3B82F6', fontWeight: 700 } : {}) }}
-                readOnly={isNewRevision} />
+                style={{
+                  ...fieldStyle,
+                  ...(isNewRevision ? { background: '#EFF6FF', borderColor: '#3B82F6', fontWeight: 700, cursor: 'not-allowed' } : {}),
+                  ...(isEdit && !isNewRevision ? { background: '#F8FAFC', color: '#64748B', cursor: 'not-allowed' } : {}),
+                }}
+                readOnly={isNewRevision || isEdit} />
             </Field>
           </div>
 
           {/* Usina + Responsável + Data */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
             <Field label="Usina">
-              <select value={form.plant} onChange={e => set('plant', e.target.value)} style={fieldStyle}>
+              <select value={form.plant} onChange={e => set('plant', e.target.value)} style={{
+                ...fieldStyle,
+                ...(isNewRevision ? { background: '#F8FAFC', color: '#64748B', cursor: 'not-allowed' } : {}),
+              }} disabled={isNewRevision}>
                 <option value="">— Selecionar —</option>
                 {ALL_PLANTS.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </Field>
             <Field label="Responsável" required>
-              <select value={form.responsible} onChange={e => set('responsible', e.target.value)} style={fieldStyle}>
+              <select value={form.responsible} onChange={e => set('responsible', e.target.value)} style={{
+                ...fieldStyle,
+                ...(isNewRevision ? { background: '#F8FAFC', color: '#64748B', cursor: 'not-allowed' } : {}),
+              }} disabled={isNewRevision}>
                 <option value="">— Selecionar —</option>
                 {users.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
               </select>
@@ -336,24 +364,27 @@ function DocModal({ open, onClose, onSaved, doc, nextSeq, isNewRevision }) {
           {/* Título do Documento */}
           <Field label="Título do Documento" required>
             <textarea value={form.subject} onChange={e => set('subject', e.target.value)}
-              rows={2} style={{ ...fieldStyle, resize: 'vertical' }} />
+              rows={2} style={{
+                ...fieldStyle, resize: 'vertical',
+                ...(isNewRevision ? { background: '#F8FAFC', color: '#64748B', cursor: 'not-allowed' } : {}),
+              }} readOnly={isNewRevision} />
           </Field>
 
           {/* Status */}
           <Field label="Status" required>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', opacity: isNewRevision ? 0.5 : 1, pointerEvents: isNewRevision ? 'none' : 'auto' }}>
               {STATUSES.map(s => (
                 <label key={s.value} style={{
                   display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px',
                   border: `1.5px solid ${form.status === s.value ? s.color : '#E2E8F0'}`,
-                  borderRadius: 20, cursor: 'pointer', fontSize: '0.82rem',
+                  borderRadius: 20, cursor: isNewRevision ? 'not-allowed' : 'pointer', fontSize: '0.82rem',
                   background: form.status === s.value ? s.bg : '#fff',
                   color: form.status === s.value ? s.text : '#64748B',
                   fontWeight: form.status === s.value ? 700 : 400,
                   transition: 'all 0.12s', userSelect: 'none',
                 }}>
                   <input type="radio" name="doc_status" value={s.value} checked={form.status === s.value}
-                    onChange={() => set('status', s.value)} style={{ display: 'none' }} />
+                    onChange={() => !isNewRevision && set('status', s.value)} style={{ display: 'none' }} />
                   <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
                   {s.value}
                 </label>
@@ -362,7 +393,7 @@ function DocModal({ open, onClose, onSaved, doc, nextSeq, isNewRevision }) {
           </Field>
 
           {/* Link — só quando Publicado */}
-          {form.status === 'Publicado' && (
+          {form.status === 'Publicado' && !isNewRevision && (
             <Field label="Link do Documento">
               <input type="text" value={form.document_link} onChange={e => set('document_link', e.target.value)}
                 placeholder="https://... ou \\servidor\pasta\arquivo"
@@ -371,11 +402,13 @@ function DocModal({ open, onClose, onSaved, doc, nextSeq, isNewRevision }) {
           )}
 
           {/* Observações */}
-          <Field label="Observações">
-            <textarea value={form.notes} onChange={e => set('notes', e.target.value)}
-              rows={2} placeholder="Informações adicionais..."
-              style={{ ...fieldStyle, resize: 'vertical' }} />
-          </Field>
+          {!isNewRevision && (
+            <Field label="Observações">
+              <textarea value={form.notes} onChange={e => set('notes', e.target.value)}
+                rows={2} placeholder="Informações adicionais..."
+                style={{ ...fieldStyle, resize: 'vertical' }} />
+            </Field>
+          )}
         </div>
 
         <div className="modal-footer" style={{ flexShrink: 0 }}>
@@ -439,7 +472,7 @@ function generateHTMLReport(docs, stats, year) {
 /* ─── Main Page ──────────────────────────────────────────────────────────────── */
 export default function DocumentsPage() {
   const { user } = useAuth();
-  const toast    = useToast();
+  const { toast } = useToast();
 
   const [docs, setDocs]             = useState([]);
   const [stats, setStats]           = useState(null);
