@@ -21,6 +21,7 @@ const ROLE_COLORS  = { admin:'#001F5B', gestor:'#0070B8', engenheiro:'#166534', 
 const FORECAST_TABS = {
   planejador: [
     { id: 'Budget',              label: 'Budget'             },
+    { id: 'Forecast',            label: 'Forecast'           },
     { id: 'Actual',              label: 'Realizado'          },
     { id: 'Pool',                label: 'Pool'               },
     { id: 'Meta',                label: 'Meta'               },

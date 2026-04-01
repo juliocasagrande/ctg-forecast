@@ -53,7 +53,7 @@ router.post('/project/:projectId/bulk', requireProjectAccess, async (req, res) =
     const results = [];
     const ENGENHEIRO_TYPES = ['Forecast', 'Actual'];
       if (role === 'gerente') return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
-    const PLANEJADOR_TYPES = ['Budget', 'Actual', 'Meta', 'Pool'];
+    const PLANEJADOR_TYPES = ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'];
     for (const e of entries) {
       if (role === 'engenheiro' && !ENGENHEIRO_TYPES.includes(e.type)) continue;
       if (role === 'coordenador' && !['Budget','Forecast','Actual','Meta','Pool'].includes(e.type)) continue;
@@ -96,13 +96,13 @@ router.put('/project/:projectId', requireProjectAccess, async (req, res) => {
     const { role, id: userId } = req.user;
     const ENGENHEIRO_TYPES = ['Forecast', 'Actual'];
       if (role === 'gerente') return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
-    const PLANEJADOR_TYPES = ['Budget', 'Actual', 'Meta', 'Pool'];
+    const PLANEJADOR_TYPES = ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'];
     const VALID_CATS = ['Viagens', 'Contratos', 'POs'];
     if (role === 'engenheiro' && !ENGENHEIRO_TYPES.includes(type))
       return res.status(403).json({ error: 'Engenheiros só podem editar Forecast e Realizado' });
     if (role === 'gerente') return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
     if (role === 'planejador' && !PLANEJADOR_TYPES.includes(type))
-      return res.status(403).json({ error: 'Planejadores só podem editar Budget, Realizado, Meta e Pool' });
+      return res.status(403).json({ error: 'Planejadores só podem editar Budget, Forecast, Realizado, Meta e Pool' });
     // gestor, coordenador e admin can edit all types
     if (!VALID_CATS.includes(category))
       return res.status(400).json({ error: 'Categoria inválida' });
