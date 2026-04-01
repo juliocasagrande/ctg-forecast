@@ -239,13 +239,28 @@ export async function initDB() {
     /* ───────── FEEDBACK / AUDIT ───────── */
     await client.query(`
       CREATE TABLE IF NOT EXISTS feedback (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id),
-        subject TEXT,
-        message TEXT,
+        id         SERIAL PRIMARY KEY,
+        user_id    INTEGER REFERENCES users(id),
+        type       VARCHAR(30) DEFAULT 'suggestion',
+        subject    TEXT,
+        message    TEXT,
+        user_name  VARCHAR(120),
+        user_email VARCHAR(120),
+        user_role  VARCHAR(30),
+        status     VARCHAR(20) DEFAULT 'new',
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
+    `);
 
+    await client.query(`
+      ALTER TABLE feedback ADD COLUMN IF NOT EXISTS type       VARCHAR(30)  DEFAULT 'suggestion';
+      ALTER TABLE feedback ADD COLUMN IF NOT EXISTS user_name  VARCHAR(120);
+      ALTER TABLE feedback ADD COLUMN IF NOT EXISTS user_email VARCHAR(120);
+      ALTER TABLE feedback ADD COLUMN IF NOT EXISTS user_role  VARCHAR(30);
+      ALTER TABLE feedback ADD COLUMN IF NOT EXISTS status     VARCHAR(20)  DEFAULT 'new';
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS audit_log (
         id SERIAL PRIMARY KEY,
         event VARCHAR(40),
