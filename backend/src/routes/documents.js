@@ -65,17 +65,20 @@ router.get('/next-sequence', async (req, res) => {
 
 // POST create document
 router.post('/', async (req, res) => {
-  const { type, area, sequence_number, year, revision, plant, responsible, date, subject, status, document_link, notes } = req.body;
+  const { type, area, plant, responsible, date, subject, status, document_link, notes } = req.body;
+  const sequence_number = req.body.sequence_number !== undefined && req.body.sequence_number !== '' ? parseInt(req.body.sequence_number) : null;
+  const year     = req.body.year     !== undefined && req.body.year     !== '' ? parseInt(req.body.year)     : null;
+  const revision = req.body.revision !== undefined && req.body.revision !== '' ? parseInt(req.body.revision) : null;
   const userId = req.user.id;
 
   if (!type || !area || !sequence_number || !year || !responsible || !date || !subject || !status)
     return res.status(400).json({ error: 'Campos obrigatórios: tipo, área, número, ano, responsável, data, assunto, status' });
 
-  // Build the document code: TYPE-AREA-SEQ-YY[-R#][-PLANT]
+  // Build the document code: TYPE-AREA-SEQ-YY[-R#]
   const seq = String(sequence_number).padStart(3, '0');
   const yy  = String(year).padStart(2, '0');
   let code  = `${type}-${area}-${seq}-${yy}`;
-  if (revision !== null && revision !== undefined && revision !== '') code += `-R${revision}`;
+  if (revision !== null) code += `-R${revision}`;
 
   try {
     const r = await pool.query(`
@@ -83,7 +86,7 @@ router.post('/', async (req, res) => {
         (type, area, sequence_number, year, revision, plant, responsible, date, subject, status, document_link, notes, code, created_by, updated_by, created_at, updated_at)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14,NOW(),NOW())
       RETURNING *
-    `, [type, area, sequence_number, year, revision ?? null, plant || null, responsible, date, subject, status, document_link || null, notes || null, code, userId]);
+    `, [type, area, sequence_number, year, revision, plant || null, responsible, date, subject, status, document_link || null, notes || null, code, userId]);
     res.status(201).json(r.rows[0]);
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'Já existe um documento com este código.' });
@@ -95,7 +98,10 @@ router.post('/', async (req, res) => {
 const SUPERIOR_ROLES = ['gestor', 'planejador', 'coordenador', 'admin'];
 
 router.put('/:id', async (req, res) => {
-  const { type, area, sequence_number, year, revision, plant, responsible, date, subject, status, document_link, notes } = req.body;
+  const { type, area, plant, responsible, date, subject, status, document_link, notes } = req.body;
+  const sequence_number = req.body.sequence_number !== undefined && req.body.sequence_number !== '' ? parseInt(req.body.sequence_number) : null;
+  const year     = req.body.year     !== undefined && req.body.year     !== '' ? parseInt(req.body.year)     : null;
+  const revision = req.body.revision !== undefined && req.body.revision !== '' ? parseInt(req.body.revision) : null;
   const { id: userId, role } = req.user;
   const id = parseInt(req.params.id);
 
@@ -111,7 +117,7 @@ router.put('/:id', async (req, res) => {
     const seq = String(sequence_number).padStart(3, '0');
     const yy  = String(year).padStart(2, '0');
     let code  = `${type}-${area}-${seq}-${yy}`;
-    if (revision !== null && revision !== undefined && revision !== '') code += `-R${revision}`;
+    if (revision !== null) code += `-R${revision}`;
 
     const r = await pool.query(`
       UPDATE documents SET
@@ -119,7 +125,7 @@ router.put('/:id', async (req, res) => {
         plant=$6, responsible=$7, date=$8, subject=$9, status=$10,
         document_link=$11, notes=$12, code=$13, updated_by=$14, updated_at=NOW()
       WHERE id=$15 RETURNING *
-    `, [type, area, sequence_number, year, revision ?? null, plant || null, responsible, date, subject, status, document_link || null, notes || null, code, userId, id]);
+    `, [type, area, sequence_number, year, revision, plant || null, responsible, date, subject, status, document_link || null, notes || null, code, userId, id]);
     if (!r.rows.length) return res.status(404).json({ error: 'Documento não encontrado' });
     res.json(r.rows[0]);
   } catch (err) {

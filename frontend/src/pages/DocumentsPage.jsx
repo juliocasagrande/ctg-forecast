@@ -47,7 +47,8 @@ function buildCode(type, area, seq, year, revision) {
   const seqStr = String(seq).padStart(3, '0');
   const yy     = String(year).padStart(2, '0');
   let code = `${type}-${area}-${seqStr}-${yy}`;
-  if (revision !== '' && revision !== null && revision !== undefined) code += `-R${revision}`;
+  const rev = parseInt(revision);
+  if (!isNaN(rev) && revision !== '' && revision !== null && revision !== undefined) code += `-R${rev}`;
   return code;
 }
 
@@ -191,30 +192,32 @@ function Field({ label, required, children }) {
 }
 
 /* ─── DocModal ───────────────────────────────────────────────────────────────── */
-function DocModal({ open, onClose, onSaved, doc, nextSeq }) {
+function DocModal({ open, onClose, onSaved, doc, nextSeq, isNewRevision }) {
   const toast  = useToast();
-  const isEdit = !!doc;
+  const isEdit = !!doc && !isNewRevision;
   const [users, setUsers] = useState([]);
 
   const initForm = () => ({
     type:            doc?.type           || '',
     area:            doc?.area           || 'ENG',
-    sequence_number: doc?.sequence_number ?? nextSeq ?? '',
+    sequence_number: isNewRevision ? doc?.sequence_number : (doc?.sequence_number ?? nextSeq ?? ''),
     year:            doc?.year           ?? CURRENT_YEAR_SHORT,
-    revision:        doc?.revision       ?? '',
+    revision:        isNewRevision
+                       ? ((doc?.revision ?? -1) + 1)
+                       : (doc?.revision !== null && doc?.revision !== undefined ? doc.revision : ''),
     plant:           doc?.plant          || '',
     responsible:     doc?.responsible    || '',
     date:            doc?.date ? doc.date.slice(0, 10) : new Date().toISOString().slice(0, 10),
     subject:         doc?.subject        || '',
-    status:          doc?.status         || 'Em elaboração',
-    document_link:   doc?.document_link  || '',
-    notes:           doc?.notes          || '',
+    status:          isNewRevision ? 'Em elaboração' : (doc?.status || 'Em elaboração'),
+    document_link:   isNewRevision ? '' : (doc?.document_link || ''),
+    notes:           isNewRevision ? '' : (doc?.notes || ''),
   });
 
   const [form, setForm]     = useState(initForm);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { if (open) setForm(initForm()); }, [open, doc, nextSeq]);
+  useEffect(() => { if (open) setForm(initForm()); }, [open, doc, nextSeq, isNewRevision]);
   useEffect(() => {
     if (!open) return;
     api.get('/users/for-delegation').then(r => setUsers(r.data)).catch(() => {});
@@ -229,14 +232,23 @@ function DocModal({ open, onClose, onSaved, doc, nextSeq }) {
     }
     setSaving(true);
     try {
-      if (isEdit) { await api.put(`/documents/${doc.id}`, form); toast('Documento atualizado!', 'success'); }
-      else        { await api.post('/documents', form);           toast('Documento registrado!', 'success'); }
+      if (isEdit) {
+        await api.put(`/documents/${doc.id}`, form);
+        toast('Documento atualizado!', 'success');
+      } else {
+        await api.post('/documents', form);
+        toast(isNewRevision ? 'Nova revisão registrada!' : 'Documento registrado!', 'success');
+      }
       onSaved(); onClose();
     } catch (err) { toast(err.response?.data?.error || 'Erro ao salvar.', 'error'); }
     finally { setSaving(false); }
   };
 
   if (!open) return null;
+
+  const modalTitle = isNewRevision
+    ? `🔄 Nova Revisão — ${doc?.code}`
+    : isEdit ? '✏️ Editar Documento' : '📄 Novo Documento';
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -245,11 +257,18 @@ function DocModal({ open, onClose, onSaved, doc, nextSeq }) {
         onClick={e => e.stopPropagation()}>
 
         <div className="modal-header" style={{ flexShrink: 0 }}>
-          <span className="modal-title">{isEdit ? '✏️ Editar Documento' : '📄 Novo Documento'}</span>
+          <span className="modal-title">{modalTitle}</span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.7)', fontSize: '1.1rem' }}>✕</button>
         </div>
 
         <div className="modal-body" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+          {/* Aviso de nova revisão */}
+          {isNewRevision && (
+            <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 8, padding: '9px 14px', fontSize: '0.78rem', color: '#1D4ED8' }}>
+              ℹ️ Criando <strong>Revisão R{(doc?.revision ?? -1) + 1}</strong> do documento <strong>{doc?.code}</strong>. O documento original será mantido.
+            </div>
+          )}
 
           {/* Code preview */}
           <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -262,13 +281,15 @@ function DocModal({ open, onClose, onSaved, doc, nextSeq }) {
           {/* Tipo + Área */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <Field label="Tipo de Documento" required>
-              <select value={form.type} onChange={e => set('type', e.target.value)} style={fieldStyle}>
+              <select value={form.type} onChange={e => set('type', e.target.value)} style={fieldStyle}
+                disabled={isNewRevision}>
                 <option value="">— Selecionar —</option>
                 {DOC_TYPES.map(o => <option key={o.value} value={o.value}>{o.value} — {o.label}</option>)}
               </select>
             </Field>
             <Field label="Área" required>
-              <select value={form.area} onChange={e => set('area', e.target.value)} style={fieldStyle}>
+              <select value={form.area} onChange={e => set('area', e.target.value)} style={fieldStyle}
+                disabled={isNewRevision}>
                 {AREAS.map(o => <option key={o.value} value={o.value}>{o.value} — {o.label}</option>)}
               </select>
             </Field>
@@ -282,10 +303,14 @@ function DocModal({ open, onClose, onSaved, doc, nextSeq }) {
                 title="Preenchido automaticamente" />
             </Field>
             <Field label="Ano (2 dígitos)" required>
-              <input type="number" value={form.year} onChange={e => set('year', e.target.value)} min={0} max={99} style={fieldStyle} />
+              <input type="number" value={form.year} onChange={e => set('year', e.target.value)}
+                min={0} max={99} style={fieldStyle} disabled={isNewRevision} />
             </Field>
             <Field label="Revisão">
-              <input type="number" value={form.revision} onChange={e => set('revision', e.target.value)} min={0} placeholder="Sem rev." style={fieldStyle} />
+              <input type="number" value={form.revision} onChange={e => set('revision', e.target.value)}
+                min={0} placeholder="Sem rev."
+                style={{ ...fieldStyle, ...(isNewRevision ? { background: '#EFF6FF', borderColor: '#3B82F6', fontWeight: 700 } : {}) }}
+                readOnly={isNewRevision} />
             </Field>
           </div>
 
@@ -308,7 +333,7 @@ function DocModal({ open, onClose, onSaved, doc, nextSeq }) {
             </Field>
           </div>
 
-          {/* Assunto */}
+          {/* Título do Documento */}
           <Field label="Título do Documento" required>
             <textarea value={form.subject} onChange={e => set('subject', e.target.value)}
               rows={2} style={{ ...fieldStyle, resize: 'vertical' }} />
@@ -356,7 +381,7 @@ function DocModal({ open, onClose, onSaved, doc, nextSeq }) {
         <div className="modal-footer" style={{ flexShrink: 0 }}>
           <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
           <button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
-            {saving ? 'Salvando...' : isEdit ? '💾 Salvar Alterações' : '📄 Registrar Documento'}
+            {saving ? 'Salvando...' : isNewRevision ? '🔄 Criar Revisão' : isEdit ? '💾 Salvar Alterações' : '📄 Registrar Documento'}
           </button>
         </div>
       </div>
@@ -416,17 +441,19 @@ export default function DocumentsPage() {
   const { user } = useAuth();
   const toast    = useToast();
 
-  const [docs, setDocs]         = useState([]);
-  const [stats, setStats]       = useState(null);
-  const [loading, setLoading]   = useState(true);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editDoc, setEditDoc]   = useState(null);
-  const [nextSeq, setNextSeq]   = useState(null);
-  const [yearFilter, setYearFilter]     = useState(0);
-  const [search, setSearch]             = useState('');
+  const [docs, setDocs]             = useState([]);
+  const [stats, setStats]           = useState(null);
+  const [loading, setLoading]       = useState(true);
+  const [modalOpen, setModalOpen]   = useState(false);
+  const [editDoc, setEditDoc]       = useState(null);
+  const [isNewRevision, setIsNewRevision] = useState(false);
+  const [nextSeq, setNextSeq]       = useState(null);
+  const [yearFilter, setYearFilter] = useState(0);
+  const [search, setSearch]         = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [typeFilter, setTypeFilter]     = useState('');
-  const [expandedId, setExpandedId]     = useState(null);
+  const [typeFilter, setTypeFilter] = useState('');
+  const [myDocsOnly, setMyDocsOnly] = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
 
   const SUPERIOR_ROLES = ['admin', 'gestor', 'planejador', 'coordenador'];
   const isSuperior   = SUPERIOR_ROLES.includes(user?.role);
@@ -442,7 +469,7 @@ export default function DocumentsPage() {
         api.get(`/documents${params}`),
         api.get(`/documents/stats${params}`),
       ]);
-      setDocs(docsRes.data);
+      setDocs(Array.isArray(docsRes.data) ? docsRes.data : []);
       setStats(statsRes.data);
     } catch { toast('Erro ao carregar documentos.', 'error'); }
     finally { setLoading(false); }
@@ -457,8 +484,9 @@ export default function DocumentsPage() {
     } catch {}
   };
 
-  const openNew  = () => { fetchNextSeq(); setEditDoc(null); setModalOpen(true); };
-  const openEdit = (doc) => { setEditDoc(doc); setModalOpen(true); };
+  const openNew  = () => { fetchNextSeq(); setEditDoc(null); setIsNewRevision(false); setModalOpen(true); };
+  const openEdit = (doc) => { setEditDoc(doc); setIsNewRevision(false); setModalOpen(true); };
+  const openNewRevision = (doc) => { setEditDoc(doc); setIsNewRevision(true); setModalOpen(true); };
 
   const handleDelete = async (doc) => {
     if (!window.confirm(`Excluir documento "${doc.code}"?`)) return;
@@ -477,12 +505,13 @@ export default function DocumentsPage() {
   };
 
   const filtered = useMemo(() => docs.filter(d => {
+    if (myDocsOnly && d.created_by !== user?.id) return false;
     if (statusFilter && d.status !== statusFilter) return false;
     if (typeFilter   && d.type   !== typeFilter)   return false;
     const q = search.toLowerCase();
     if (q) return d.code.toLowerCase().includes(q) || d.responsible.toLowerCase().includes(q) || d.subject.toLowerCase().includes(q) || (d.plant||'').toLowerCase().includes(q);
     return true;
-  }), [docs, statusFilter, typeFilter, search]);
+  }), [docs, statusFilter, typeFilter, search, myDocsOnly, user]);
 
   /* ── KPI values ── */
   const totalAll  = docs.length;
@@ -498,17 +527,19 @@ export default function DocumentsPage() {
   const statusChartData = STATUSES.map(s => ({ label: s.value, value: docs.filter(d => d.status === s.value).length, color: s.color }));
 
   const years = [...new Set(docs.map(d => 2000 + d.year))].sort((a, b) => b - a);
+  const myDocsCount = docs.filter(d => d.created_by === user?.id).length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '0 2px' }}>
 
-      {/* ── KPI Cards — full width, auto-fill ── */}
+      {/* ── KPI Cards ── */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <StatCard label="Total Geral"           value={totalAll}  color="#001F5B" />
         <StatCard label={`Ano ${CURRENT_YEAR}`} value={yearDocs}  color="#0066B3" sub={`de ${totalAll} total`} />
         <StatCard label="Publicados"            value={published} color="#10B981" />
         <StatCard label="Em Elaboração"         value={inProg}    color="#F59E0B" />
         <StatCard label="Pub. sem link"         value={pubNoLink} color={pubNoLink > 0 ? '#EF4444' : '#94A3B8'} sub={pubNoLink > 0 ? 'Atenção necessária' : 'Tudo ok'} />
+        <StatCard label="Meus documentos"       value={myDocsCount} color="#8B5CF6" />
       </div>
 
       {/* ── Charts row ── */}
@@ -518,7 +549,7 @@ export default function DocumentsPage() {
         <DonutChart title="Status dos Documentos" data={statusChartData} />
       </div>
 
-      {/* ── Filter bar row: [+ Novo] [search/filters…] [Exportar] ── */}
+      {/* ── Filter bar ── */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
 
         {canCreate && (
@@ -532,9 +563,25 @@ export default function DocumentsPage() {
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flex: 1, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '7px 12px', minWidth: 0 }}>
           <span style={{ color: '#94A3B8', fontSize: '0.85rem', flexShrink: 0 }}>🔍</span>
           <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar código, responsável, assunto..."
+            placeholder="Buscar código, responsável, título..."
             style={{ flex: 1, border: 'none', outline: 'none', fontSize: '0.82rem', fontFamily: 'var(--font-body)', color: '#1E293B', background: 'transparent', minWidth: 0 }} />
           {search && <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', flexShrink: 0 }}>✕</button>}
+          <Div />
+          {/* Filtro: Meus documentos */}
+          <button
+            onClick={() => setMyDocsOnly(v => !v)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5, padding: '3px 10px',
+              border: `1.5px solid ${myDocsOnly ? '#8B5CF6' : '#E2E8F0'}`,
+              borderRadius: 20, background: myDocsOnly ? '#F5F3FF' : 'transparent',
+              fontSize: '0.75rem', fontWeight: myDocsOnly ? 700 : 400,
+              color: myDocsOnly ? '#6D28D9' : '#94A3B8', cursor: 'pointer', flexShrink: 0,
+              transition: 'all 0.15s',
+            }}
+          >
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: myDocsOnly ? '#8B5CF6' : '#CBD5E1', flexShrink: 0 }} />
+            Meus docs
+          </button>
           <Div />
           <select value={yearFilter} onChange={e => setYearFilter(parseInt(e.target.value))} style={selStyle(!!yearFilter)}>
             <option value={0}>Todos os anos</option>
@@ -570,7 +617,9 @@ export default function DocumentsPage() {
         ) : filtered.length === 0 ? (
           <div style={{ padding: 48, textAlign: 'center' }}>
             <div style={{ fontSize: '2rem', marginBottom: 10 }}>📄</div>
-            <div style={{ fontSize: '0.9rem', color: '#64748B', fontWeight: 600 }}>Nenhum documento encontrado</div>
+            <div style={{ fontSize: '0.9rem', color: '#64748B', fontWeight: 600 }}>
+              {myDocsOnly ? 'Você ainda não criou nenhum documento' : 'Nenhum documento encontrado'}
+            </div>
             {canCreate && <button onClick={openNew} style={{ marginTop: 12, padding: '8px 18px', border: 'none', borderRadius: 8, background: '#001F5B', color: '#fff', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer' }}>+ Registrar Documento</button>}
           </div>
         ) : (
@@ -585,6 +634,7 @@ export default function DocumentsPage() {
               {filtered.map((doc, i) => {
                 const expanded = expandedId === doc.id;
                 const rowBg    = i % 2 === 0 ? '#fff' : '#F8FAFC';
+                const isMine   = doc.created_by === user?.id;
                 return (
                   <Fragment key={doc.id}>
                     <tr
@@ -593,7 +643,12 @@ export default function DocumentsPage() {
                       onMouseEnter={e => e.currentTarget.style.background = '#F0F9FF'}
                       onMouseLeave={e => e.currentTarget.style.background = rowBg}
                     >
-                      <td style={TD}><span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#001F5B', fontSize: '0.82rem' }}>{doc.code}</span></td>
+                      <td style={TD}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#001F5B', fontSize: '0.82rem' }}>{doc.code}</span>
+                          {isMine && <span style={{ fontSize: '0.6rem', background: '#F5F3FF', color: '#6D28D9', border: '1px solid #DDD6FE', borderRadius: 10, padding: '1px 6px', fontWeight: 700 }}>meu</span>}
+                        </div>
+                      </td>
                       <td style={{ ...TD, fontSize: '0.82rem' }}>{doc.responsible}</td>
                       <td style={{ ...TD, fontSize: '0.82rem', whiteSpace: 'nowrap' }}>{new Date(doc.date).toLocaleDateString('pt-BR')}</td>
                       <td style={{ ...TD, fontSize: '0.82rem', maxWidth: 320 }}>
@@ -612,6 +667,7 @@ export default function DocumentsPage() {
                                 <InfoItem label="Tipo" value={`${doc.type} — ${TYPE_META[doc.type]?.label || ''}`} />
                                 <InfoItem label="Área" value={`${doc.area} — ${AREAS.find(a => a.value === doc.area)?.label || doc.area}`} />
                                 {doc.revision !== null && doc.revision !== undefined && <InfoItem label="Revisão" value={`R${doc.revision}`} />}
+                                {doc.created_by_name && <InfoItem label="Criado por" value={doc.created_by_name} />}
                                 {doc.notes && <InfoItem label="Observações" value={doc.notes} full />}
                               </div>
                               {doc.status === 'Publicado' && (
@@ -626,22 +682,27 @@ export default function DocumentsPage() {
                                 </div>
                               )}
                             </div>
-                            {(canEditDoc(doc) || canDeleteDoc(doc)) && (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-                                {canEditDoc(doc) && (
-                                  <button onClick={e => { e.stopPropagation(); openEdit(doc); }}
-                                    style={{ padding: '6px 14px', border: '1.5px solid #0066B3', borderRadius: 6, background: '#fff', color: '#0066B3', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
-                                    ✏️ Editar
-                                  </button>
-                                )}
-                                {canDeleteDoc(doc) && (
-                                  <button onClick={e => { e.stopPropagation(); handleDelete(doc); }}
-                                    style={{ padding: '6px 14px', border: '1.5px solid #EF4444', borderRadius: 6, background: '#fff', color: '#EF4444', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
-                                    🗑 Excluir
-                                  </button>
-                                )}
-                              </div>
-                            )}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+                              {/* Nova Revisão — disponível para o criador e superiores */}
+                              {(isMine || isSuperior) && (
+                                <button onClick={e => { e.stopPropagation(); openNewRevision(doc); }}
+                                  style={{ padding: '6px 14px', border: '1.5px solid #8B5CF6', borderRadius: 6, background: '#fff', color: '#7C3AED', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
+                                  🔄 Nova Revisão
+                                </button>
+                              )}
+                              {canEditDoc(doc) && (
+                                <button onClick={e => { e.stopPropagation(); openEdit(doc); }}
+                                  style={{ padding: '6px 14px', border: '1.5px solid #0066B3', borderRadius: 6, background: '#fff', color: '#0066B3', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
+                                  ✏️ Editar
+                                </button>
+                              )}
+                              {canDeleteDoc(doc) && (
+                                <button onClick={e => { e.stopPropagation(); handleDelete(doc); }}
+                                  style={{ padding: '6px 14px', border: '1.5px solid #EF4444', borderRadius: 6, background: '#fff', color: '#EF4444', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
+                                  🗑 Excluir
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -656,10 +717,11 @@ export default function DocumentsPage() {
 
       <DocModal
         open={modalOpen}
-        onClose={() => { setModalOpen(false); setEditDoc(null); }}
+        onClose={() => { setModalOpen(false); setEditDoc(null); setIsNewRevision(false); }}
         onSaved={fetchDocs}
         doc={editDoc}
         nextSeq={nextSeq}
+        isNewRevision={isNewRevision}
       />
     </div>
   );
