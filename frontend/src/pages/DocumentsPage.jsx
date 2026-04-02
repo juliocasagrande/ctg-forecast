@@ -501,12 +501,12 @@ function VBarChart({ data, title }) {
       <div style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#94A3B8', marginBottom:10 }}>{title}</div>
       {visible.length === 0
         ? <div style={{ fontSize:'0.78rem', color:'#CBD5E1', textAlign:'center', padding:'16px 0' }}>Sem dados</div>
-        : <div style={{ display:'flex', alignItems:'flex-end', gap:3, height:80 }}>
+        : <div style={{ display:'flex', alignItems:'flex-end', gap:3, height:120, flexWrap:'nowrap', overflowX:'auto' }}>
             {visible.map((d,i) => (
               <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:2, minWidth:0 }}>
                 <div style={{ fontSize:'0.62rem', fontWeight:700, color:'#1E293B' }}>{d.value}</div>
                 <div style={{ width:'100%', height:`${Math.max((d.value/max)*56,4)}px`, background:d.color||'#0066B3', borderRadius:'3px 3px 0 0', transition:'height 0.4s ease' }}/>
-                <div style={{ fontSize:'0.58rem', color:'#64748B', textAlign:'center', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', width:'100%' }}>{d.label}</div>
+                <div style={{ fontSize:'0.55rem', color:'#64748B', textAlign:'center', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', width:'100%', transform:'rotate(-30deg)', transformOrigin:'top center', marginTop:4 }}>{d.label}</div>
               </div>
             ))}
           </div>
@@ -569,7 +569,8 @@ export default function DocumentsPage() {
   const [docs, setDocs]         = useState([]);
   const [stats, setStats]       = useState(null);
   const [loading, setLoading]   = useState(true);
-  const [allUsers, setAllUsers] = useState([]);
+  const [allUsers, setAllUsers]           = useState([]);
+  const [activeDelegations, setActiveDelegations] = useState([]); // delegações recebidas ativas
 
   // Modals
   const [docModal, setDocModal]         = useState({ open:false, doc:null });
@@ -589,18 +590,31 @@ export default function DocumentsPage() {
   const SUPERIOR_ROLES = ['admin','gestor','planejador','coordenador'];
   const isSuperior = SUPERIOR_ROLES.includes(user?.role);
 
-  // "Meu" = responsável pelo documento OU autor cadastrado OU superior
-  const isAuthor = (doc) => {
-    if (isSuperior) return true;
-    // Checa pelo nome do responsável (principal critério)
+  // isOwner: o documento É do usuário (responsável ou autor cadastrado)
+  // NÃO inclui superiores — serve apenas para badge "meu" e filtro "Meus docs"
+  const isOwner = (doc) => {
+    // Critério principal: é o responsável pelo nome
     if (user?.name && doc.responsible &&
         doc.responsible.trim().toLowerCase() === user.name.trim().toLowerCase()) return true;
-    // Checa tabela de autores como fallback
+    // Fallback: está na tabela de autores
     const uid = Number(user?.id);
-    if (Number(doc.created_by) === uid) return true;
     if (Array.isArray(doc.authors) && doc.authors.some(a => Number(a.id) === uid)) return true;
     return false;
   };
+
+  // canAct: pode editar/status/revisão = dono OU superior OU delegado ativo
+  const canAct = (doc) => {
+    if (isOwner(doc)) return true;
+    if (isSuperior) return true;
+    // Delegação: delegator_name corresponde ao responsável do doc
+    if (activeDelegations.some(d =>
+      d.delegator_name?.trim().toLowerCase() === doc.responsible?.trim().toLowerCase()
+    )) return true;
+    return false;
+  };
+
+  // Alias para compatibilidade com usos do isAuthor existentes no JSX
+  const isAuthor = canAct;
 
   const fetchDocs = useCallback(async () => {
     setLoading(true);
@@ -619,6 +633,10 @@ export default function DocumentsPage() {
   useEffect(() => { fetchDocs(); }, [fetchDocs]);
   useEffect(() => {
     api.get('/users/for-delegation').then(r => setAllUsers(r.data || [])).catch(() => {});
+    // Carregar delegações ativas recebidas: documentos dos meus delegadores
+    api.get('/delegations/active-to-me')
+      .then(r => setActiveDelegations(r.data || []))
+      .catch(() => {});
   }, []);
 
   const fetchNextSeq = async () => {
@@ -641,12 +659,12 @@ export default function DocumentsPage() {
   // Filtro "Meus docs" — filtra onde o usuário é autor (consta em doc.authors)
   const filtered = useMemo(() => docs.filter(d => {
     if (myDocsOnly) {
+      // "Meus" = sou o responsável pelo nome OU estou na tabela de autores
       const uid = Number(user?.id);
       const byName = user?.name && d.responsible &&
         d.responsible.trim().toLowerCase() === user.name.trim().toLowerCase();
-      const byId = Number(d.created_by) === uid ||
-        (Array.isArray(d.authors) && d.authors.some(a => Number(a.id) === uid));
-      if (!byName && !byId) return false;
+      const byAuthors = Array.isArray(d.authors) && d.authors.some(a => Number(a.id) === uid);
+      if (!byName && !byAuthors) return false;
     }
     if (statusFilter && d.status !== statusFilter) return false;
     if (typeFilter   && d.type   !== typeFilter)   return false;
@@ -691,8 +709,8 @@ export default function DocumentsPage() {
     const uid = Number(user?.id);
     const byName = user?.name && d.responsible &&
       d.responsible.trim().toLowerCase() === user.name.trim().toLowerCase();
-    return byName || Number(d.created_by) === uid ||
-      (Array.isArray(d.authors) && d.authors.some(a => Number(a.id) === uid));
+    const byAuthors = Array.isArray(d.authors) && d.authors.some(a => Number(a.id) === uid);
+    return byName || byAuthors;
   }).length;
 
   /* Charts */
@@ -717,10 +735,10 @@ export default function DocumentsPage() {
       </div>
 
       {/* Charts */}
-      <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
-        <HBarChart  title="Documentos por Tipo"    data={typeChartData}/>
-        <VBarChart  title="Documentos por Usina"   data={plantChartData}/>
-        <DonutChart title="Status dos Documentos"  data={statusChartData}/>
+      <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'stretch' }}>
+        <div style={{ flex:'1 1 180px', minWidth:160, display:'flex' }}><HBarChart  title="Documentos por Tipo"    data={typeChartData}/></div>
+        <div style={{ flex:'2 1 320px', minWidth:220, display:'flex' }}><VBarChart  title="Documentos por Usina"   data={plantChartData}/></div>
+        <div style={{ flex:'1 1 180px', minWidth:160, display:'flex' }}><DonutChart title="Status dos Documentos"  data={statusChartData}/></div>
       </div>
 
       {/* Filter bar */}
@@ -813,7 +831,7 @@ export default function DocumentsPage() {
               {groups.map(({ key, items, latest }) => {
                 const hasRevisions = items.length > 1;
                 const groupOpen    = expandedGroup === key;
-                const isMine       = isAuthor(latest);
+                const isMine       = isOwner(latest);
 
                 return (
                   <Fragment key={key}>
