@@ -212,8 +212,14 @@ export async function initDB() {
 
       INSERT INTO system_settings (key, value) VALUES
         ('alert_stale_days','30'),
-        ('alert_empty_forecast','true')
-      ON CONFLICT (key) DO NOTHING;
+        ('alert_empty_forecast','true'),
+        ('doc_alert_enabled','true'),
+        ('doc_alert_interval_days','7'),
+        ('doc_alert_exclude_cancelled','true'),
+        ('doc_alert_exclude_published','true'),
+        ('doc_alert_roles','engenheiro,coordenador,planejador'),
+        ('doc_alert_areas','')
+      ON CONFLICT (KEY) DO NOTHING;
     `);
 
     /* ───────── YEAR CONSOLIDATED ───────── */

@@ -521,8 +521,12 @@ export default function DocumentsPage() {
 
   const isAuthor = (doc) => {
     if (isSuperior) return true;
-    if (!doc.authors) return doc.created_by === user?.id;
-    return doc.authors.some(a => a.id === user?.id);
+    const uid = Number(user?.id);
+    // Checa created_by (fallback para docs sem autores cadastrados)
+    if (Number(doc.created_by) === uid) return true;
+    // Checa tabela de autores
+    if (!doc.authors || !Array.isArray(doc.authors)) return false;
+    return doc.authors.some(a => Number(a.id) === uid);
   };
 
   const fetchDocs = useCallback(async () => {
@@ -554,7 +558,9 @@ export default function DocumentsPage() {
   // Filtro "Meus docs" — filtra onde o usuário é autor (consta em doc.authors)
   const filtered = useMemo(() => docs.filter(d => {
     if (myDocsOnly) {
-      const isAuth = d.authors?.some(a => a.id === user?.id) || d.created_by === user?.id;
+      const uid = Number(user?.id);
+      const isAuth = Number(d.created_by) === uid ||
+        (Array.isArray(d.authors) && d.authors.some(a => Number(a.id) === uid));
       if (!isAuth) return false;
     }
     if (statusFilter && d.status !== statusFilter) return false;
@@ -593,7 +599,10 @@ export default function DocumentsPage() {
   const inProg    = docs.filter(d => d.status==='Em elaboração').length;
   const pubNoLink = stats?.published_without_link ?? 0;
   const yearDocs  = docs.filter(d => d.year===CURRENT_YEAR_SHORT).length;
-  const myDocsCount = docs.filter(d => d.authors?.some(a=>a.id===user?.id)||d.created_by===user?.id).length;
+  const myDocsCount = docs.filter(d => {
+    const uid = Number(user?.id);
+    return Number(d.created_by) === uid || (Array.isArray(d.authors) && d.authors.some(a => Number(a.id) === uid));
+  }).length;
 
   /* Charts */
   const TYPE_COLORS = ['#0066B3','#0891B2','#10B981','#8B5CF6','#F59E0B','#EF4444','#6366F1','#EC4899','#14B8A6'];
@@ -732,15 +741,15 @@ export default function DocumentsPage() {
                         <div style={{ display:'flex', gap:5, alignItems:'center' }}>
                           {isAuthor(latest) && (
                             <>
-                              <ActionBtn color="#8B5CF6" onClick={() => setRevModal({ open:true, doc:latest })}>🔄</ActionBtn>
-                              <ActionBtn color="#0066B3" onClick={() => setStatusModal({ open:true, doc:latest })}>🔖</ActionBtn>
-                              <ActionBtn color="#475569" onClick={() => openEdit(latest)}>✏️</ActionBtn>
+                              <ActionBtn color="#8B5CF6" onClick={() => setRevModal({ open:true, doc:latest })} tooltip="Nova Revisão">🔄</ActionBtn>
+                              <ActionBtn color="#0066B3" onClick={() => setStatusModal({ open:true, doc:latest })} tooltip="Alterar Status">🔖</ActionBtn>
+                              <ActionBtn color="#475569" onClick={() => openEdit(latest)} tooltip="Editar Documento">✏️</ActionBtn>
                             </>
                           )}
                           {!isAuthor(latest) && isSuperior && (
                             <>
-                              <ActionBtn color="#8B5CF6" onClick={() => setRevModal({ open:true, doc:latest })}>🔄</ActionBtn>
-                              <ActionBtn color="#0066B3" onClick={() => setStatusModal({ open:true, doc:latest })}>🔖</ActionBtn>
+                              <ActionBtn color="#8B5CF6" onClick={() => setRevModal({ open:true, doc:latest })} tooltip="Nova Revisão">🔄</ActionBtn>
+                              <ActionBtn color="#0066B3" onClick={() => setStatusModal({ open:true, doc:latest })} tooltip="Alterar Status">🔖</ActionBtn>
                             </>
                           )}
                         </div>
@@ -784,8 +793,8 @@ export default function DocumentsPage() {
                           <td style={{ ...TD }} onClick={e => e.stopPropagation()}>
                             {isAuthor(rev) && (
                               <div style={{ display:'flex', gap:5 }}>
-                                <ActionBtn color="#0066B3" onClick={() => setStatusModal({ open:true, doc:rev })}>🔖</ActionBtn>
-                                <ActionBtn color="#475569" onClick={() => openEdit(rev)}>✏️</ActionBtn>
+                                <ActionBtn color="#0066B3" onClick={() => setStatusModal({ open:true, doc:rev })} tooltip="Alterar Status">🔖</ActionBtn>
+                                <ActionBtn color="#475569" onClick={() => openEdit(rev)} tooltip="Editar Documento">✏️</ActionBtn>
                               </div>
                             )}
                           </td>
@@ -870,17 +879,35 @@ const TH = { padding:'10px 14px', textAlign:'left', fontSize:'0.68rem', fontWeig
 const TD = { padding:'10px 14px', verticalAlign:'middle' };
 const Div = () => <div style={{ width:1, height:18, background:'#E2E8F0', flexShrink:0 }}/>;
 const selStyle = (active) => ({ border:'none', outline:'none', fontSize:'0.78rem', fontFamily:'var(--font-body)', color: active?'#001F5B':'#94A3B8', fontWeight: active?700:400, cursor:'pointer', background:'transparent', flexShrink:0 });
-const ActionBtn = ({ color, onClick, children }) => (
-  <button onClick={onClick} style={{
-    width:30, height:30, border:`1.5px solid ${color}20`, borderRadius:7,
-    background:`${color}10`, color, fontSize:'0.82rem', cursor:'pointer',
-    display:'flex', alignItems:'center', justifyContent:'center',
-    transition:'all 0.1s', flexShrink:0,
-  }}
-    onMouseEnter={e => { e.currentTarget.style.background=`${color}25`; e.currentTarget.style.borderColor=color; }}
-    onMouseLeave={e => { e.currentTarget.style.background=`${color}10`; e.currentTarget.style.borderColor=`${color}20`; }}
-  >{children}</button>
-);
+function ActionBtn({ color, onClick, children, tooltip }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div style={{ position:'relative', display:'inline-flex' }}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}>
+      <button onClick={onClick} style={{
+        width:30, height:30, border:`1.5px solid ${color}20`, borderRadius:7,
+        background:`${color}10`, color, fontSize:'0.82rem', cursor:'pointer',
+        display:'flex', alignItems:'center', justifyContent:'center',
+        transition:'all 0.1s', flexShrink:0,
+      }}
+        onMouseEnter={e => { e.currentTarget.style.background=`${color}25`; e.currentTarget.style.borderColor=color; }}
+        onMouseLeave={e => { e.currentTarget.style.background=`${color}10`; e.currentTarget.style.borderColor=`${color}20`; }}
+      >{children}</button>
+      {show && tooltip && (
+        <div style={{
+          position:'absolute', bottom:'calc(100% + 6px)', left:'50%', transform:'translateX(-50%)',
+          background:'#1E293B', color:'#fff', fontSize:'0.68rem', fontWeight:600,
+          padding:'4px 9px', borderRadius:6, whiteSpace:'nowrap', zIndex:9999,
+          pointerEvents:'none', boxShadow:'0 2px 8px rgba(0,0,0,0.25)',
+        }}>
+          {tooltip}
+          <div style={{ position:'absolute', top:'100%', left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'4px solid transparent', borderRight:'4px solid transparent', borderTop:'4px solid #1E293B' }}/>
+        </div>
+      )}
+    </div>
+  );
+}
 function InfoItem({ label, value, full }) {
   return (
     <div style={{ gridColumn: full?'1 / -1':undefined }}>

@@ -161,17 +161,24 @@ function FeedbackList({ toast }) {
 }
 
 const SECTIONS = [
-  { id: 'alerts',  label: '🔔 Alertas',        icon: '🔔' },
-  { id: 'colors',  label: '🎨 Cores',           icon: '🎨' },
-  { id: 'period',  label: '📆 Período',         icon: '📆' },
-  { id: 'export',  label: '📊 Exportação',      icon: '📊' },
-  { id: 'fiscal',  label: '📅 Ano Fiscal',      icon: '📅' },
-  { id: 'sap',     label: '🗂️ Mapeamento SAP',  icon: '🗂️' },
-  { id: 'feedback',label: '💡 Feedbacks',       icon: '💡' },
+  { id: 'alerts',    label: '🔔 Alertas',        icon: '🔔' },
+  { id: 'documents', label: '📄 Documentos',     icon: '📄' },
+  { id: 'colors',    label: '🎨 Cores',           icon: '🎨' },
+  { id: 'period',    label: '📆 Período',         icon: '📆' },
+  { id: 'export',    label: '📊 Exportação',      icon: '📊' },
+  { id: 'fiscal',    label: '📅 Ano Fiscal',      icon: '📅' },
+  { id: 'sap',       label: '🗂️ Mapeamento SAP',  icon: '🗂️' },
+  { id: 'feedback',  label: '💡 Feedbacks',       icon: '💡' },
 ];
 
 const DEFAULTS = {
   alert_stale_days:      '30',
+  doc_alert_enabled:         'true',
+  doc_alert_interval_days:   '7',
+  doc_alert_exclude_cancelled:'true',
+  doc_alert_exclude_published:'true',
+  doc_alert_roles:           'engenheiro,coordenador,planejador',
+  doc_alert_areas:           '',
   alert_empty_forecast:  'true',
   alert_unread_messages: 'true',
   actual_deadline_business_day: '6',
@@ -410,6 +417,106 @@ export default function SettingsPage() {
                 value={settings.alert_unread_messages === 'true'}
                 onChange={v => set('alert_unread_messages', v)}
               />
+            </SectionCard>
+          </>
+        )}
+
+        {/* ── DOCUMENTOS ── */}
+        {activeSection === 'documents' && (
+          <>
+            <SectionCard
+              title="Alerta de documentos não publicados"
+              description="Notifica os responsáveis sobre documentos criados há mais de X dias que ainda não foram publicados ou cancelados."
+            >
+              <Toggle
+                label="Habilitar alertas de documentos"
+                description="Ativa o envio de lembretes para documentos em elaboração ou para aprovação."
+                value={settings.doc_alert_enabled === 'true'}
+                onChange={v => set('doc_alert_enabled', v)}
+              />
+              <NumberInput
+                label="Intervalo de lembrete"
+                description="A cada quantos dias o alerta de documento não publicado é reexibido."
+                value={settings.doc_alert_interval_days}
+                onChange={v => set('doc_alert_interval_days', v)}
+                min={1} max={90} unit="dias"
+              />
+            </SectionCard>
+
+            <SectionCard
+              title="Filtro de status"
+              description="Define quais documentos entram no filtro de alertas."
+            >
+              <Toggle
+                label="Excluir documentos Cancelados"
+                description="Documentos com status Cancelado não geram alertas."
+                value={settings.doc_alert_exclude_cancelled === 'true'}
+                onChange={v => set('doc_alert_exclude_cancelled', v)}
+              />
+              <Toggle
+                label="Excluir documentos Publicados"
+                description="Documentos com status Publicado não geram alertas."
+                value={settings.doc_alert_exclude_published === 'true'}
+                onChange={v => set('doc_alert_exclude_published', v)}
+              />
+            </SectionCard>
+
+            <SectionCard
+              title="Quem recebe os alertas"
+              description="Defina por cargo e área quem recebe os alertas de documentos não publicados. Deixe área em branco para todas."
+            >
+              <div className="settings-field">
+                <label className="settings-field-label">Cargos que recebem alertas</label>
+                <p className="settings-field-desc">Selecione os cargos que devem ser notificados.</p>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:8 }}>
+                  {['engenheiro','coordenador','planejador','gestor','gerente','admin'].map(role => {
+                    const active = (settings.doc_alert_roles||'').split(',').map(r=>r.trim()).filter(Boolean).includes(role);
+                    return (
+                      <button key={role} type="button"
+                        onClick={() => {
+                          const cur = (settings.doc_alert_roles||'').split(',').map(r=>r.trim()).filter(Boolean);
+                          const next = active ? cur.filter(r=>r!==role) : [...cur, role];
+                          set('doc_alert_roles', next.join(','));
+                        }}
+                        style={{
+                          padding:'5px 14px', borderRadius:20, fontSize:'0.78rem', cursor:'pointer',
+                          border:`1.5px solid ${active?'#0066B3':'#E2E8F0'}`,
+                          background: active?'#EFF6FF':'#F8FAFC',
+                          color: active?'#0066B3':'#64748B',
+                          fontWeight: active?700:400,
+                        }}>
+                        {active?'✓ ':''}{role}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="settings-field" style={{ marginTop:16 }}>
+                <label className="settings-field-label">Filtrar por área (opcional)</label>
+                <p className="settings-field-desc">Deixe em branco para notificar todas as áreas.</p>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:8 }}>
+                  {['eletrica','mecanica','confiabilidade','coordenacao','modernizacao'].map(area => {
+                    const active = (settings.doc_alert_areas||'').split(',').map(a=>a.trim()).filter(Boolean).includes(area);
+                    return (
+                      <button key={area} type="button"
+                        onClick={() => {
+                          const cur = (settings.doc_alert_areas||'').split(',').map(a=>a.trim()).filter(Boolean);
+                          const next = active ? cur.filter(a=>a!==area) : [...cur, area];
+                          set('doc_alert_areas', next.join(','));
+                        }}
+                        style={{
+                          padding:'5px 14px', borderRadius:20, fontSize:'0.78rem', cursor:'pointer',
+                          border:`1.5px solid ${active?'#7C3AED':'#E2E8F0'}`,
+                          background: active?'#F5F3FF':'#F8FAFC',
+                          color: active?'#7C3AED':'#64748B',
+                          fontWeight: active?700:400,
+                        }}>
+                        {active?'✓ ':''}{area}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </SectionCard>
           </>
         )}

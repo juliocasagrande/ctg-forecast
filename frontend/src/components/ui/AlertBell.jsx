@@ -33,7 +33,7 @@ export default function AlertBell() {
         count: delegations.length,
         delegations,
       };
-      data.total = (data.total || 0) + delegations.length;
+      data.total = (data.total || 0) + delegations.length + (data.doc_unpublished?.count || 0);
       setAlerts(data);
       if ('setAppBadge' in navigator) {
         const count = data?.total ?? 0;
@@ -272,6 +272,23 @@ export default function AlertBell() {
                   </Section>
                 )}
 
+                {/* Documentos não publicados */}
+                {alerts.doc_unpublished?.count > 0 && (
+                  <Section icon={<DocIcon />} title="Documentos não publicados" count={alerts.doc_unpublished.count} color="#F59E0B">
+                    {alerts.doc_unpublished.docs.map(d => (
+                      <AlertRow
+                        key={d.id}
+                        onClick={() => { navigate('/documents'); setOpen(false); }}
+                        label={d.subject}
+                        sub={`${d.code} · ${d.status}`}
+                        accent="#F59E0B"
+                        onDismiss={() => dismiss('doc_unpublished', d.id)}
+                        dismissing={isDismissing('doc_unpublished', d.id)}
+                      />
+                    ))}
+                  </Section>
+                )}
+
                 {/* Delegações recebidas ativas */}
                 {alerts.delegation_received?.count > 0 && (
                   <Section icon={<DelegIcon />} title="Delegações recebidas" count={alerts.delegation_received.count} color="#0891B2">
@@ -395,3 +412,4 @@ const ClockIcon   = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="
 const WarningIcon = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 10-2 0 1 1 0 002 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd"/></svg>;
 const VacIcon     = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd"/></svg>;
 const DelegIcon   = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/></svg>;
+const DocIcon     = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd"/></svg>;
