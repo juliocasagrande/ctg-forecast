@@ -492,6 +492,75 @@ function DocModal({ open, onClose, onSaved, doc, nextSeq, allUsers }) {
   );
 }
 
+/* ─── VBarChart ──────────────────────────────────────────────────────────────── */
+function VBarChart({ data, title }) {
+  const max = Math.max(...data.map(d => d.value), 1);
+  const visible = data.filter(d => d.value > 0);
+  return (
+    <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:10, padding:'14px 16px', flex:1, minWidth:0 }}>
+      <div style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#94A3B8', marginBottom:10 }}>{title}</div>
+      {visible.length === 0
+        ? <div style={{ fontSize:'0.78rem', color:'#CBD5E1', textAlign:'center', padding:'16px 0' }}>Sem dados</div>
+        : <div style={{ display:'flex', alignItems:'flex-end', gap:3, height:80 }}>
+            {visible.map((d,i) => (
+              <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:2, minWidth:0 }}>
+                <div style={{ fontSize:'0.62rem', fontWeight:700, color:'#1E293B' }}>{d.value}</div>
+                <div style={{ width:'100%', height:`${Math.max((d.value/max)*56,4)}px`, background:d.color||'#0066B3', borderRadius:'3px 3px 0 0', transition:'height 0.4s ease' }}/>
+                <div style={{ fontSize:'0.58rem', color:'#64748B', textAlign:'center', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', width:'100%' }}>{d.label}</div>
+              </div>
+            ))}
+          </div>
+      }
+    </div>
+  );
+}
+
+function generateHTMLReport(docs, stats, year) {
+  const now      = new Date().toLocaleDateString('pt-BR', { day:'2-digit', month:'long', year:'numeric' });
+  const yearDocs = docs.filter(d => d.year === (year % 100));
+  const statusRows = STATUSES.map(s => {
+    const count = docs.filter(d => d.status === s.value).length;
+    return `<tr><td>${s.value}</td><td style="text-align:center;font-weight:700;color:${s.color}">${count}</td></tr>`;
+  }).join('');
+  const typeRows = DOC_TYPES.map(t => {
+    const count = docs.filter(d => d.type === t.value).length;
+    if (!count) return '';
+    return `<tr><td>${t.value}</td><td>${t.label}</td><td style="text-align:center;font-weight:700">${count}</td></tr>`;
+  }).filter(Boolean).join('');
+  const docRows = yearDocs.map((d, i) => {
+    const sm   = STATUS_META[d.status] || {};
+    const link = d.document_link ? `<a href="${d.document_link}" style="color:#0066B3;text-decoration:none">Acessar</a>` : '—';
+    return `<tr style="background:${i%2===0?'#fff':'#F8FAFC'}">
+      <td style="font-family:monospace;font-size:0.82rem;font-weight:700;color:#001F5B">${d.code}</td>
+      <td>${d.plant||'—'}</td><td>${d.responsible}</td><td>${new Date(d.date).toLocaleDateString('pt-BR')}</td>
+      <td>${d.subject}</td>
+      <td><span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:0.72rem;font-weight:700;background:${sm.bg};color:${sm.text};border:1px solid ${sm.color}33">${d.status}</span></td>
+      <td style="text-align:center">${link}</td></tr>`;
+  }).join('');
+  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Relatório de Documentação — CTG Brasil ${year}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;color:#1E293B;background:#F8FAFC}.page{max-width:1200px;margin:0 auto;padding:32px 24px}.header{padding:24px 28px;background:#001F5B;color:#fff;border-radius:12px;margin-bottom:28px}.header h1{font-size:1.4rem;font-weight:700}.header .sub{font-size:0.85rem;opacity:.7;margin-top:4px}.section{margin-bottom:28px}.section h2{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#64748B;margin-bottom:14px;padding-bottom:6px;border-bottom:2px solid #E2E8F0}.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px}.stat-card{background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:16px;border-top:3px solid #0066B3}.stat-card .num{font-size:2rem;font-weight:700;color:#0066B3;line-height:1}.stat-card .lbl{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94A3B8;margin-bottom:6px}table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;border:1px solid #E2E8F0;font-size:.83rem}th{background:#001F5B;color:#fff;padding:10px 12px;text-align:left;font-size:.72rem;text-transform:uppercase;letter-spacing:.06em}td{padding:9px 12px;border-bottom:1px solid #F1F5F9}.tables-row{display:grid;grid-template-columns:1fr 1fr;gap:20px}.footer{text-align:center;font-size:.72rem;color:#94A3B8;margin-top:32px;padding-top:16px;border-top:1px solid #E2E8F0}@media print{body{background:#fff}.page{padding:20px}}</style>
+</head><body><div class="page">
+  <div class="header"><div class="sub">CTG Brasil — Engenharia de Manutenção</div><h1>Relatório de Controle de Documentação</h1><div class="sub">Gerado em ${now} · Total: ${docs.length} documentos</div></div>
+  <div class="section"><h2>Resumo Geral</h2><div class="stats-grid">
+    <div class="stat-card"><div class="lbl">Total Geral</div><div class="num">${docs.length}</div></div>
+    <div class="stat-card" style="border-top-color:#10B981"><div class="lbl">Publicados</div><div class="num" style="color:#10B981">${docs.filter(d=>d.status==='Publicado').length}</div></div>
+    <div class="stat-card" style="border-top-color:#F59E0B"><div class="lbl">Em Elaboração</div><div class="num" style="color:#F59E0B">${docs.filter(d=>d.status==='Em elaboração').length}</div></div>
+    <div class="stat-card" style="border-top-color:#3B82F6"><div class="lbl">Para Aprovação</div><div class="num" style="color:#3B82F6">${docs.filter(d=>d.status==='Para aprovação').length}</div></div>
+    <div class="stat-card" style="border-top-color:#EF4444"><div class="lbl">Pub. sem Link</div><div class="num" style="color:#EF4444">${stats?.published_without_link??0}</div></div>
+    <div class="stat-card" style="border-top-color:#8B5CF6"><div class="lbl">Ano ${year}</div><div class="num" style="color:#8B5CF6">${yearDocs.length}</div></div>
+  </div></div>
+  <div class="tables-row section">
+    <div><h2>Documentos por Tipo</h2><table><thead><tr><th>Sigla</th><th>Tipo</th><th>Qtd</th></tr></thead><tbody>${typeRows}</tbody></table></div>
+    <div><h2>Documentos por Status</h2><table><thead><tr><th>Status</th><th>Qtd</th></tr></thead><tbody>${statusRows}</tbody></table></div>
+  </div>
+  <div class="section"><h2>Lista de Documentos — ${year}</h2>
+    <table><thead><tr><th>Código</th><th>Usina</th><th>Responsável</th><th>Data</th><th>Título do Documento</th><th>Status</th><th>Link</th></tr></thead><tbody>${docRows}</tbody></table>
+  </div>
+  <div class="footer">CTG Brasil · CTG.Engenharia · Gerado em ${now}</div>
+</div></body></html>`;
+}
+
 /* ─── Main Page ──────────────────────────────────────────────────────────────── */
 export default function DocumentsPage() {
   const { user }    = useAuth();
@@ -513,20 +582,24 @@ export default function DocumentsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter]     = useState('');
   const [myDocsOnly, setMyDocsOnly]     = useState(false);
+  const [plantFilter, setPlantFilter]   = useState('');
   const [expandedGroup, setExpandedGroup] = useState(null); // base_code
   const [expandedDoc, setExpandedDoc]   = useState(null);   // doc.id
 
   const SUPERIOR_ROLES = ['admin','gestor','planejador','coordenador'];
   const isSuperior = SUPERIOR_ROLES.includes(user?.role);
 
+  // "Meu" = responsável pelo documento OU autor cadastrado OU superior
   const isAuthor = (doc) => {
     if (isSuperior) return true;
+    // Checa pelo nome do responsável (principal critério)
+    if (user?.name && doc.responsible &&
+        doc.responsible.trim().toLowerCase() === user.name.trim().toLowerCase()) return true;
+    // Checa tabela de autores como fallback
     const uid = Number(user?.id);
-    // Checa created_by (fallback para docs sem autores cadastrados)
     if (Number(doc.created_by) === uid) return true;
-    // Checa tabela de autores
-    if (!doc.authors || !Array.isArray(doc.authors)) return false;
-    return doc.authors.some(a => Number(a.id) === uid);
+    if (Array.isArray(doc.authors) && doc.authors.some(a => Number(a.id) === uid)) return true;
+    return false;
   };
 
   const fetchDocs = useCallback(async () => {
@@ -552,6 +625,16 @@ export default function DocumentsPage() {
     try { const r = await api.get(`/documents/next-sequence?year=${CURRENT_YEAR_SHORT}`); setNextSeq(r.data.next); } catch {}
   };
 
+  const exportHTML = () => {
+    const html = generateHTMLReport(docs, stats, CURRENT_YEAR);
+    const blob = new Blob([html], { type:'text/html;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `CTG_Documentacao_${CURRENT_YEAR}.html`;
+    a.click(); URL.revokeObjectURL(a.href);
+    toast('Relatório exportado!', 'success');
+  };
+
   const openNew  = () => { fetchNextSeq(); setDocModal({ open:true, doc:null }); };
   const openEdit = (doc) => setDocModal({ open:true, doc });
 
@@ -559,12 +642,15 @@ export default function DocumentsPage() {
   const filtered = useMemo(() => docs.filter(d => {
     if (myDocsOnly) {
       const uid = Number(user?.id);
-      const isAuth = Number(d.created_by) === uid ||
+      const byName = user?.name && d.responsible &&
+        d.responsible.trim().toLowerCase() === user.name.trim().toLowerCase();
+      const byId = Number(d.created_by) === uid ||
         (Array.isArray(d.authors) && d.authors.some(a => Number(a.id) === uid));
-      if (!isAuth) return false;
+      if (!byName && !byId) return false;
     }
     if (statusFilter && d.status !== statusFilter) return false;
     if (typeFilter   && d.type   !== typeFilter)   return false;
+    if (plantFilter  && d.plant  !== plantFilter)  return false;
     const q = search.toLowerCase();
     if (q) return (d.code||'').toLowerCase().includes(q)
                 || (d.responsible||'').toLowerCase().includes(q)
@@ -572,7 +658,7 @@ export default function DocumentsPage() {
                 || (d.plant||'').toLowerCase().includes(q)
                 || (d.authors||[]).some(a => a.name.toLowerCase().includes(q));
     return true;
-  }), [docs, statusFilter, typeFilter, search, myDocsOnly, user]);
+  }), [docs, statusFilter, typeFilter, plantFilter, search, myDocsOnly, user]);
 
   // Agrupar por base_code
   const groups = useMemo(() => {
@@ -598,17 +684,24 @@ export default function DocumentsPage() {
   const published = docs.filter(d => d.status==='Publicado').length;
   const inProg    = docs.filter(d => d.status==='Em elaboração').length;
   const pubNoLink = stats?.published_without_link ?? 0;
-  const yearDocs  = docs.filter(d => d.year===CURRENT_YEAR_SHORT).length;
+  const activeYear = yearFilter ? (yearFilter % 100) : CURRENT_YEAR_SHORT;
+  const activeYearFull = yearFilter || CURRENT_YEAR;
+  const yearDocs  = docs.filter(d => d.year === activeYear).length;
   const myDocsCount = docs.filter(d => {
     const uid = Number(user?.id);
-    return Number(d.created_by) === uid || (Array.isArray(d.authors) && d.authors.some(a => Number(a.id) === uid));
+    const byName = user?.name && d.responsible &&
+      d.responsible.trim().toLowerCase() === user.name.trim().toLowerCase();
+    return byName || Number(d.created_by) === uid ||
+      (Array.isArray(d.authors) && d.authors.some(a => Number(a.id) === uid));
   }).length;
 
   /* Charts */
   const TYPE_COLORS = ['#0066B3','#0891B2','#10B981','#8B5CF6','#F59E0B','#EF4444','#6366F1','#EC4899','#14B8A6'];
   const typeChartData   = DOC_TYPES.map((t,i) => ({ label:t.value, value:docs.filter(d=>d.type===t.value).length, color:TYPE_COLORS[i%TYPE_COLORS.length] }));
   const statusChartData = STATUSES.map(s => ({ label:s.value, value:docs.filter(d=>d.status===s.value).length, color:s.color }));
+  const plantChartData  = ALL_PLANTS.map(p => ({ label:p.replace('UHE ','').replace('PCH ',''), value:docs.filter(d=>d.plant===p).length, color:'#0066B3' })).filter(d=>d.value>0);
   const years = [...new Set(docs.map(d=>2000+d.year))].sort((a,b)=>b-a);
+  const plantsUsed = ALL_PLANTS.filter(p => docs.some(d => d.plant === p));
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:16, padding:'0 2px' }}>
@@ -616,7 +709,7 @@ export default function DocumentsPage() {
       {/* KPI Cards */}
       <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
         <StatCard label="Total Geral"           value={totalAll}    color="#001F5B"/>
-        <StatCard label={`Ano ${CURRENT_YEAR}`} value={yearDocs}    color="#0066B3" sub={`de ${totalAll} total`}/>
+        <StatCard label={`Ano ${activeYearFull}`} value={yearDocs}    color="#0066B3" sub={`de ${totalAll} total`}/>
         <StatCard label="Publicados"            value={published}   color="#10B981"/>
         <StatCard label="Em Elaboração"         value={inProg}      color="#F59E0B"/>
         <StatCard label="Pub. sem link"         value={pubNoLink}   color={pubNoLink>0?'#EF4444':'#94A3B8'} sub={pubNoLink>0?'Atenção':'Tudo ok'}/>
@@ -626,6 +719,7 @@ export default function DocumentsPage() {
       {/* Charts */}
       <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
         <HBarChart  title="Documentos por Tipo"    data={typeChartData}/>
+        <VBarChart  title="Documentos por Usina"   data={plantChartData}/>
         <DonutChart title="Status dos Documentos"  data={statusChartData}/>
       </div>
 
@@ -673,8 +767,19 @@ export default function DocumentsPage() {
             {STATUSES.map(s => <option key={s.value} value={s.value}>{s.value}</option>)}
           </select>
           <Div/>
+          <select value={plantFilter} onChange={e => setPlantFilter(e.target.value)} style={selStyle(!!plantFilter)}>
+            <option value="">Todas as usinas</option>
+            {plantsUsed.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+          <Div/>
           <span style={{ fontSize:'0.72rem', color:'#94A3B8', whiteSpace:'nowrap', flexShrink:0 }}>{groups.length} grupos / {filtered.length} docs</span>
         </div>
+
+        <button onClick={exportHTML} style={{
+          display:'flex', alignItems:'center', gap:6, padding:'8px 14px',
+          border:'1.5px solid #CBD5E1', borderRadius:8, background:'#fff',
+          fontSize:'0.8rem', fontWeight:600, cursor:'pointer', color:'#475569', flexShrink:0,
+        }}>📊 Exportar HTML</button>
       </div>
 
       {/* Tabela agrupada */}
@@ -696,6 +801,7 @@ export default function DocumentsPage() {
             <thead>
               <tr style={{ background:'#001F5B' }}>
                 <th style={TH}>Código</th>
+                <th style={TH}>Usina</th>
                 <th style={TH}>Responsável</th>
                 <th style={TH}>Data</th>
                 <th style={TH}>Título do Documento</th>
@@ -723,17 +829,26 @@ export default function DocumentsPage() {
                           {/* Botão de expandir revisões */}
                           {hasRevisions && (
                             <button onClick={e => { e.stopPropagation(); setExpandedGroup(groupOpen ? null : key); }}
-                              style={{ display:'inline-flex', alignItems:'center', gap:3, padding:'2px 7px', borderRadius:10, border:'1.5px solid #0066B3', background: groupOpen?'#0066B3':'#EFF6FF', color: groupOpen?'#fff':'#0066B3', fontSize:'0.65rem', fontWeight:700, cursor:'pointer', flexShrink:0 }}>
-                              {groupOpen ? '▲' : '▼'} {items.length} rev.
+                              title={groupOpen ? 'Recolher revisões' : `Ver ${items.length} versões deste documento`}
+                              style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'3px 9px', borderRadius:10,
+                                border:`1.5px solid ${groupOpen?'#0066B3':'#CBD5E1'}`,
+                                background: groupOpen?'#0066B3':'#F8FAFC',
+                                color: groupOpen?'#fff':'#64748B',
+                                fontSize:'0.65rem', fontWeight:700, cursor:'pointer', flexShrink:0,
+                                transition:'all 0.15s',
+                              }}>
+                              <span style={{ fontSize:'0.6rem' }}>{groupOpen?'▲':'▼'}</span>
+                              {items.length} {items.length===1?'versão':'versões'}
                             </button>
                           )}
                           <span style={{ fontFamily:'monospace', fontWeight:700, color:'#001F5B', fontSize:'0.82rem' }}>{latest.code}</span>
                           {isMine && <span style={{ fontSize:'0.6rem', background:'#F5F3FF', color:'#6D28D9', border:'1px solid #DDD6FE', borderRadius:10, padding:'1px 5px', fontWeight:700 }}>meu</span>}
                         </div>
                       </td>
+                      <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B' }}>{latest.plant||'—'}</td>
                       <td style={{ ...TD, fontSize:'0.82rem' }}>{latest.responsible}</td>
                       <td style={{ ...TD, fontSize:'0.82rem', whiteSpace:'nowrap' }}>{new Date(latest.date).toLocaleDateString('pt-BR')}</td>
-                      <td style={{ ...TD, fontSize:'0.82rem', maxWidth:280 }}>
+                      <td style={{ ...TD, fontSize:'0.82rem', maxWidth:240 }}>
                         <span style={{ display:'-webkit-box', WebkitLineClamp:1, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{latest.subject}</span>
                       </td>
                       <td style={TD}><StatusBadge status={latest.status}/></td>
@@ -759,7 +874,7 @@ export default function DocumentsPage() {
                     {/* ── Detalhe expandido do documento principal ── */}
                     {expandedDoc === latest.id && (
                       <tr style={{ background:'#F8FBFF', borderBottom:'1px solid #E2E8F0' }}>
-                        <td colSpan={6} style={{ padding:'12px 16px' }}>
+                        <td colSpan={7} style={{ padding:'12px 16px' }}>
                           <DocDetail doc={latest} isAuthor={isAuthor(latest)}/>
                         </td>
                       </tr>
@@ -774,16 +889,24 @@ export default function DocumentsPage() {
                           onMouseEnter={e => e.currentTarget.style.background='#F0F9FF'}
                           onMouseLeave={e => e.currentTarget.style.background='#FAFAFA'}
                         >
-                          <td style={{ ...TD, paddingLeft:32 }}>
-                            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                              <span style={{ color:'#CBD5E1', fontSize:'0.7rem', marginRight:2 }}>└</span>
+                          <td style={{ ...TD, paddingLeft:0 }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:0 }}>
+                              {/* Conector visual de árvore */}
+                              <div style={{ width:28, display:'flex', flexDirection:'column', alignItems:'center', flexShrink:0 }}>
+                                <div style={{ width:1, height:'50%', background:'#CBD5E1' }}/>
+                                <div style={{ width:12, height:1, background:'#CBD5E1', alignSelf:'flex-end' }}/>
+                                <div style={{ width:1, height:'50%', background:'transparent' }}/>
+                              </div>
+                              <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                               <span style={{ fontFamily:'monospace', fontWeight:600, color:'#64748B', fontSize:'0.78rem' }}>{rev.code}</span>
                               {rev.revision === null || rev.revision === undefined
                                 ? <span style={{ fontSize:'0.6rem', background:'#F1F5F9', color:'#94A3B8', borderRadius:10, padding:'1px 6px' }}>original</span>
                                 : <span style={{ fontSize:'0.6rem', background:'#EFF6FF', color:'#3B82F6', border:'1px solid #BFDBFE', borderRadius:10, padding:'1px 6px', fontWeight:700 }}>R{rev.revision}</span>
                               }
+                              </div>
                             </div>
                           </td>
+                          <td style={{ ...TD, fontSize:'0.75rem', color:'#94A3B8' }}>{rev.plant||'—'}</td>
                           <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B' }}>{rev.responsible}</td>
                           <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B', whiteSpace:'nowrap' }}>{new Date(rev.date).toLocaleDateString('pt-BR')}</td>
                           <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B', maxWidth:280 }}>
@@ -801,7 +924,7 @@ export default function DocumentsPage() {
                         </tr>
                         {expandedDoc === rev.id && (
                           <tr style={{ background:'#F8FBFF', borderBottom:'1px solid #E2E8F0' }}>
-                            <td colSpan={6} style={{ padding:'12px 16px 12px 32px' }}>
+                            <td colSpan={7} style={{ padding:'12px 16px 12px 32px' }}>
                               <DocDetail doc={rev} isAuthor={isAuthor(rev)}/>
                             </td>
                           </tr>
