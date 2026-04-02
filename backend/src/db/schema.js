@@ -316,6 +316,23 @@ export async function initDB() {
       );
     `);
 
+    /* ───────── DOCUMENT AUTHORS (multi-author support) ───────── */
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS document_authors (
+        id          SERIAL PRIMARY KEY,
+        document_id INTEGER REFERENCES documents(id) ON DELETE CASCADE,
+        user_id     INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        added_by    INTEGER REFERENCES users(id),
+        added_at    TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(document_id, user_id)
+      );
+    `);
+
+    /* ───────── DOCUMENT GROUP (agrupamento por base_code) ───────── */
+    await client.query(`
+      ALTER TABLE documents ADD COLUMN IF NOT EXISTS base_code VARCHAR(50) DEFAULT NULL;
+    `);
+
     /* ───────── VACATION PERIODS ───────── */
     await client.query(`
       CREATE TABLE IF NOT EXISTS vacation_periods (
