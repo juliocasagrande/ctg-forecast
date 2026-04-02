@@ -493,20 +493,40 @@ function DocModal({ open, onClose, onSaved, doc, nextSeq, allUsers }) {
 }
 
 /* ─── VBarChart ──────────────────────────────────────────────────────────────── */
+// Tons de azul CTG para as barras de usina
+const PLANT_BLUES = [
+  '#001F5B','#003A8C','#0050B3','#0066B3','#0070CC',
+  '#0082E6','#0091EA','#00AEEF','#29BAF0','#64CCF4',
+  '#97DDF7','#BFECFA','#D6F4FF','#E8F8FF',
+];
+
 function VBarChart({ data, title }) {
   const max = Math.max(...data.map(d => d.value), 1);
   const visible = data.filter(d => d.value > 0);
+  // Altura da barra área: 100px fixo, sem scroll — barras se adaptam à largura disponível
   return (
-    <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:10, padding:'14px 16px', flex:1, minWidth:0 }}>
+    <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:10, padding:'14px 16px', flex:1, minWidth:0, width:'100%' }}>
       <div style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#94A3B8', marginBottom:10 }}>{title}</div>
       {visible.length === 0
         ? <div style={{ fontSize:'0.78rem', color:'#CBD5E1', textAlign:'center', padding:'16px 0' }}>Sem dados</div>
-        : <div style={{ display:'flex', alignItems:'flex-end', gap:3, height:120, flexWrap:'nowrap', overflowX:'auto' }}>
+        : <div style={{ display:'flex', alignItems:'flex-end', gap:4, height:120, overflow:'hidden' }}>
             {visible.map((d,i) => (
-              <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:2, minWidth:0 }}>
-                <div style={{ fontSize:'0.62rem', fontWeight:700, color:'#1E293B' }}>{d.value}</div>
-                <div style={{ width:'100%', height:`${Math.max((d.value/max)*56,4)}px`, background:d.color||'#0066B3', borderRadius:'3px 3px 0 0', transition:'height 0.4s ease' }}/>
-                <div style={{ fontSize:'0.55rem', color:'#64748B', textAlign:'center', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', width:'100%', transform:'rotate(-30deg)', transformOrigin:'top center', marginTop:4 }}>{d.label}</div>
+              <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:0, minWidth:0 }}>
+                <div style={{ fontSize:'0.62rem', fontWeight:700, color:'#1E293B', marginBottom:2 }}>{d.value}</div>
+                <div style={{
+                  width:'100%',
+                  height:`${Math.max((d.value/max)*80,6)}px`,
+                  background: PLANT_BLUES[i % PLANT_BLUES.length],
+                  borderRadius:'4px 4px 0 0',
+                  transition:'height 0.4s ease',
+                  minHeight:6,
+                }}/>
+                <div style={{
+                  fontSize:'0.58rem', color:'#475569', textAlign:'center',
+                  width:'100%', marginTop:4, lineHeight:1.2,
+                  overflow:'hidden', display:'-webkit-box',
+                  WebkitLineClamp:2, WebkitBoxOrient:'vertical',
+                }}>{d.label}</div>
               </div>
             ))}
           </div>
@@ -590,16 +610,11 @@ export default function DocumentsPage() {
   const SUPERIOR_ROLES = ['admin','gestor','planejador','coordenador'];
   const isSuperior = SUPERIOR_ROLES.includes(user?.role);
 
-  // isOwner: o documento É do usuário (responsável ou autor cadastrado)
-  // NÃO inclui superiores — serve apenas para badge "meu" e filtro "Meus docs"
+  // isOwner: o documento É do usuário — SOMENTE se for o responsável pelo nome
+  // NÃO usa created_by nem authors (criar um doc para outra pessoa não te torna dono)
   const isOwner = (doc) => {
-    // Critério principal: é o responsável pelo nome
-    if (user?.name && doc.responsible &&
-        doc.responsible.trim().toLowerCase() === user.name.trim().toLowerCase()) return true;
-    // Fallback: está na tabela de autores
-    const uid = Number(user?.id);
-    if (Array.isArray(doc.authors) && doc.authors.some(a => Number(a.id) === uid)) return true;
-    return false;
+    if (!user?.name || !doc.responsible) return false;
+    return doc.responsible.trim().toLowerCase() === user.name.trim().toLowerCase();
   };
 
   // canAct: pode editar/status/revisão = dono OU superior OU delegado ativo
@@ -659,12 +674,9 @@ export default function DocumentsPage() {
   // Filtro "Meus docs" — filtra onde o usuário é autor (consta em doc.authors)
   const filtered = useMemo(() => docs.filter(d => {
     if (myDocsOnly) {
-      // "Meus" = sou o responsável pelo nome OU estou na tabela de autores
-      const uid = Number(user?.id);
-      const byName = user?.name && d.responsible &&
-        d.responsible.trim().toLowerCase() === user.name.trim().toLowerCase();
-      const byAuthors = Array.isArray(d.authors) && d.authors.some(a => Number(a.id) === uid);
-      if (!byName && !byAuthors) return false;
+      // "Meus" = SOMENTE sou o responsável pelo nome
+      if (!user?.name || !d.responsible) return false;
+      if (d.responsible.trim().toLowerCase() !== user.name.trim().toLowerCase()) return false;
     }
     if (statusFilter && d.status !== statusFilter) return false;
     if (typeFilter   && d.type   !== typeFilter)   return false;
@@ -678,11 +690,17 @@ export default function DocumentsPage() {
     return true;
   }), [docs, statusFilter, typeFilter, plantFilter, search, myDocsOnly, user]);
 
-  // Agrupar por base_code
+  // Agrupar por base_code — normalizar: CTA-PRD-002-26-R0 → CTA-PRD-002-26
+  const normalizeBaseCode = (doc) => {
+    if (doc.base_code) return doc.base_code;
+    // Derivar base_code do code: remover sufixo -R{n}
+    return (doc.code || '').replace(/-R\d+$/, '');
+  };
+
   const groups = useMemo(() => {
     const map = new Map();
     filtered.forEach(d => {
-      const key = d.base_code || d.code;
+      const key = normalizeBaseCode(d);
       if (!map.has(key)) map.set(key, []);
       map.get(key).push(d);
     });
@@ -705,13 +723,10 @@ export default function DocumentsPage() {
   const activeYear = yearFilter ? (yearFilter % 100) : CURRENT_YEAR_SHORT;
   const activeYearFull = yearFilter || CURRENT_YEAR;
   const yearDocs  = docs.filter(d => d.year === activeYear).length;
-  const myDocsCount = docs.filter(d => {
-    const uid = Number(user?.id);
-    const byName = user?.name && d.responsible &&
-      d.responsible.trim().toLowerCase() === user.name.trim().toLowerCase();
-    const byAuthors = Array.isArray(d.authors) && d.authors.some(a => Number(a.id) === uid);
-    return byName || byAuthors;
-  }).length;
+  const myDocsCount = docs.filter(d =>
+    user?.name && d.responsible &&
+    d.responsible.trim().toLowerCase() === user.name.trim().toLowerCase()
+  ).length;
 
   /* Charts */
   const TYPE_COLORS = ['#0066B3','#0891B2','#10B981','#8B5CF6','#F59E0B','#EF4444','#6366F1','#EC4899','#14B8A6'];
