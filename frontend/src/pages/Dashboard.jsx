@@ -475,11 +475,16 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
   const plantChartData = useMemo(() => {
     const map = {};
     filtered.forEach(p => {
-      const plants = (p.plants || []);
-      const share  = plants.length > 0 ? 1 / plants.length : 1;
+      // plants pode chegar como string JSON, array, ou null — normalizar
+      let plants = p.plants;
+      if (!Array.isArray(plants)) {
+        try { plants = plants ? JSON.parse(plants) : []; } catch { plants = []; }
+      }
+      const share   = plants.length > 0 ? 1 / plants.length : 1;
       const pl_list = plants.length > 0 ? plants : ['Sem Usina'];
       pl_list.forEach(plant => {
-        const key = plant.replace('UHE ','').replace('PCH ','');
+        const key = (typeof plant === 'string' ? plant : String(plant))
+          .replace('UHE ','').replace('PCH ','');
         if (!map[key]) map[key] = { name: key, Budget: 0, Forecast: 0, Realizado: 0 };
         map[key].Budget    += (parseFloat(p.budget) || 0) * share;
         map[key].Forecast  += (parseFloat(p.act_forecast ?? p.forecast) || 0) * share;
@@ -493,12 +498,16 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
   const engChartData = useMemo(() => {
     const map = {};
     filtered.forEach(p => {
-      const engineers = p.engineers || [];
+      // engineers pode chegar como string JSON, array, ou null — normalizar
+      let engineers = p.engineers;
+      if (!Array.isArray(engineers)) {
+        try { engineers = engineers ? JSON.parse(engineers) : []; } catch { engineers = []; }
+      }
       const names = engineers.length > 0 ? engineers : ['Sem Eng.'];
+      const share = engineers.length > 0 ? 1 / engineers.length : 1;
       names.forEach(eng => {
-        const key = eng.split(' ')[0]; // primeiro nome
+        const key = (typeof eng === 'string' ? eng : String(eng)).split(' ')[0];
         if (!map[key]) map[key] = { name: key, Budget: 0, Forecast: 0, Realizado: 0 };
-        const share = engineers.length > 0 ? 1 / engineers.length : 1;
         map[key].Budget    += (parseFloat(p.budget) || 0) * share;
         map[key].Forecast  += (parseFloat(p.act_forecast ?? p.forecast) || 0) * share;
         map[key].Realizado += (parseFloat(p.actual) || 0) * share;
