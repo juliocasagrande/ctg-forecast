@@ -498,16 +498,22 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
   const engChartData = useMemo(() => {
     const map = {};
     filtered.forEach(p => {
-      // engineers pode chegar como string JSON, array, ou null — normalizar
-      let engineers = p.engineers;
-      if (!Array.isArray(engineers)) {
-        try { engineers = engineers ? JSON.parse(engineers) : []; } catch { engineers = []; }
+      // engineers vem do backend como string CSV: "Ana Silva, João Costa"
+      // Nunca é JSON — tratar sempre como string separada por vírgula
+      let engineers = [];
+      if (Array.isArray(p.engineers)) {
+        engineers = p.engineers;
+      } else if (typeof p.engineers === 'string' && p.engineers.trim()) {
+        engineers = p.engineers.split(',').map(e => e.trim()).filter(Boolean);
       }
       const names = engineers.length > 0 ? engineers : ['Sem Eng.'];
       const share = engineers.length > 0 ? 1 / engineers.length : 1;
       names.forEach(eng => {
-        const key = (typeof eng === 'string' ? eng : String(eng)).split(' ')[0];
-        if (!map[key]) map[key] = { name: key, Budget: 0, Forecast: 0, Realizado: 0 };
+        // Usar o nome completo como chave para evitar colisões de primeiro nome
+        const key = typeof eng === 'string' ? eng : String(eng);
+        // Exibir apenas o primeiro nome no gráfico (label curto)
+        const label = key.split(' ')[0];
+        if (!map[key]) map[key] = { name: label, Budget: 0, Forecast: 0, Realizado: 0 };
         map[key].Budget    += (parseFloat(p.budget) || 0) * share;
         map[key].Forecast  += (parseFloat(p.act_forecast ?? p.forecast) || 0) * share;
         map[key].Realizado += (parseFloat(p.actual) || 0) * share;

@@ -162,25 +162,16 @@ function ProjectRow({ project, navigate, isEngenheiro, C }) {
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
-export default function PolosPage({ period: externalPeriod, plantFilter = [], areaFilter = '' }) {
+export default function PolosPage({ period: externalPeriod, plantFilter = [] }) {
   const currentYear = new Date().getFullYear();
   const [projects,  setProjects]  = useState([]);
   const period = externalPeriod || { start: currentYear, end: currentYear };
   const [loading,   setLoading]   = useState(true);
   const [poloOpen,  setPoloOpen]  = useState(() => Object.fromEntries(POLOS.map(p => [p.id, true])));
   const [plantOpen, setPlantOpen] = useState({});
-  // areaFilter is controlled by App.jsx header (prop)
   const navigate = useNavigate();
   const { role, isEngenheiro } = useRole();
   const C = useTypeColors();
-
-  const AREA_OPTIONS = [
-    { value: '', label: 'Todas as áreas' },
-    { value: 'eletrica', label: 'Elétrica' },
-    { value: 'mecanica', label: 'Mecânica' },
-    { value: 'confiabilidade', label: 'Confiabilidade' },
-    { value: 'modernizacao', label: 'Modernização' },
-  ];
 
   useEffect(() => {
     setLoading(true);
@@ -191,12 +182,12 @@ export default function PolosPage({ period: externalPeriod, plantFilter = [], ar
       params.set('yearStart', period.start);
       params.set('yearEnd', period.end);
     }
-    if (areaFilter) params.set('areaFilter', areaFilter);
+    // Sem filtro de área — Visão Geral Consolidada exibe todos os projetos
     api.get(`/forecast/polo-summary?${params.toString()}`)
       .then(r => setProjects(r.data))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [period, areaFilter]);
+  }, [period]);
 
   const togglePolo  = id  => setPoloOpen(prev  => ({ ...prev,  [id]:  !prev[id]  }));
   const togglePlant = key => setPlantOpen(prev => ({ ...prev, [key]: !prev[key] }));

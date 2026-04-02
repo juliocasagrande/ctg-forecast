@@ -742,35 +742,22 @@ router.post('/alerts/dismiss', async (req, res) => {
 // ── Polo Consolidado — aggregated by polo → plant → project ──────────────────
 router.get('/polo-summary', async (req, res) => {
   try {
-    const { year, yearStart, yearEnd, areaFilter: rawAreaFilter } = req.query;
+    const { year, yearStart, yearEnd } = req.query;
     const currentYear = new Date().getFullYear();
     const yrStart = parseInt(yearStart || year || currentYear);
     const yrEnd   = parseInt(yearEnd   || year || currentYear);
-    const { role, id: userId, area: userArea } = req.user;
+    const { role, id: userId } = req.user;
 
-    // Validate areaFilter against whitelist
-    const VALID_AREAS = ['eletrica', 'mecanica', 'confiabilidade', 'modernizacao', ''];
-    const areaFilter = VALID_AREAS.includes(rawAreaFilter || '') ? rawAreaFilter : null;
+    // polo-summary (Visão Geral Consolidada): todos os roles veem todos os projetos.
+    // Exceção: engenheiro vê apenas os projetos aos quais está atribuído.
+    const isEng = role === 'engenheiro';
 
-    // polo-summary: engenheiro vê só seus projetos
-    // coordenador vê projetos da sua área (ou areaFilter se fornecido)
-    // gerente/gestor/admin/planejador: vê tudo, mas pode filtrar por areaFilter
-    const isEng   = role === 'engenheiro';
-    const isCoord = role === 'coordenador';
-
-    // Determine effective area: coordenador uses own area unless areaFilter overrides; others use areaFilter
-    const effectiveArea = isCoord ? (areaFilter || userArea || '') : (areaFilter || null);
-
-    // Build join clause
+    // Build join clause — somente engenheiro tem escopo restrito
     let joinClause = '';
     let filterVal = null;
     if (isEng) {
       joinClause = `INNER JOIN project_assignments pa ON pa.project_id=p.id AND pa.user_id=$3`;
       filterVal = userId;
-    } else if (effectiveArea) {
-      joinClause = `INNER JOIN project_assignments pa ON pa.project_id=p.id
-           INNER JOIN users pu ON pu.id=pa.user_id AND pu.role='engenheiro' AND pu.area=$3`;
-      filterVal = effectiveArea;
     }
 
     const params = filterVal !== null ? [yrStart, yrEnd, filterVal, userId] : [yrStart, yrEnd, userId];

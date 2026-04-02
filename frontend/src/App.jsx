@@ -822,8 +822,8 @@ export default function App() {
                   </>
                 )}
 
-                {/* Filtro de área — férias e polos */}
-                {showControls && ['/vacations', '/polos'].includes(location.pathname) && (
+                {/* Filtro de área — férias */}
+                {showControls && location.pathname === '/vacations' && (
                   <>
                     <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.12)', margin: '0 4px', flexShrink: 0 }} />
                     <AreaFilter value={areaFilter} onChange={setAreaFilter} />
@@ -924,7 +924,7 @@ export default function App() {
 
             <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
             <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
-            <Route path="/polos" element={<RequireAuth><PolosPage period={period} plantFilter={plantFilter} areaFilter={areaFilter} /></RequireAuth>} />
+            <Route path="/polos" element={<RequireAuth><PolosPage period={period} plantFilter={plantFilter} /></RequireAuth>} />
             <Route path="/report" element={<RequireAuth><ReportPage /></RequireAuth>} />
             <Route path="/tutorial" element={<RequireAuth><TutorialPage /></RequireAuth>} />
             <Route path="/feedback" element={<RequireAuth><FeedbackPage /></RequireAuth>} />
