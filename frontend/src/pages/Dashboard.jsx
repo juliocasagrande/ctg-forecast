@@ -341,8 +341,8 @@ function TableModal({ open, onClose, filtered, showEngCol, periodLabel, C, navig
                 <tr><td colSpan={showEngCol ? 12 : 11} style={{ textAlign:'center', padding:40, color:'var(--text-secondary)' }}>Nenhum projeto</td></tr>
               ) : filtered.map((p, i) => {
                 const f    = parseFloat(p.act_forecast ?? p.forecast) || 0;
-                const b    = parseFloat(p.budget) || 0;
-                const exec = b ? ((f / b) * 100).toFixed(1) : '—';
+                const a    = parseFloat(p.actual) || 0;
+                const exec = f ? ((a / f) * 100).toFixed(1) : '—';
                 return (
                   <tr key={p.id}
                     style={{ background: i % 2 ? '#F8FAFC' : 'var(--bg-card)', cursor:'pointer', borderBottom:'1px solid #E2E8F0' }}
@@ -403,7 +403,7 @@ function CardHeader({ title, action }) {
 // ── Main dashboard ────────────────────────────────────────────────────────────
 export default function Dashboard({ period, plantFilter = [], projectFilter = [] }) {
   const C = useTypeColors();
-  const { isEngenheiro } = useRole();
+  const { isEngenheiro, isCoordenador, isGerente } = useRole();
   const showEngCol = !isEngenheiro;
   const navigate   = useNavigate();
 
@@ -469,6 +469,42 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
     const map = {};
     filtered.forEach(p => { map[p.code] = (p.plants || []).map(pl => pl.replace('UHE ', '').replace('PCH ', '')); });
     return map;
+  }, [filtered]);
+
+  // ── Dados agregados por usina (gerente) ──────────────────────────────────────
+  const plantChartData = useMemo(() => {
+    const map = {};
+    filtered.forEach(p => {
+      const plants = (p.plants || []);
+      const share  = plants.length > 0 ? 1 / plants.length : 1;
+      const pl_list = plants.length > 0 ? plants : ['Sem Usina'];
+      pl_list.forEach(plant => {
+        const key = plant.replace('UHE ','').replace('PCH ','');
+        if (!map[key]) map[key] = { name: key, Budget: 0, Forecast: 0, Realizado: 0 };
+        map[key].Budget    += (parseFloat(p.budget) || 0) * share;
+        map[key].Forecast  += (parseFloat(p.act_forecast ?? p.forecast) || 0) * share;
+        map[key].Realizado += (parseFloat(p.actual) || 0) * share;
+      });
+    });
+    return Object.values(map).sort((a, b) => b.Budget - a.Budget);
+  }, [filtered]);
+
+  // ── Dados agregados por engenheiro (coordenador) ──────────────────────────────
+  const engChartData = useMemo(() => {
+    const map = {};
+    filtered.forEach(p => {
+      const engineers = p.engineers || [];
+      const names = engineers.length > 0 ? engineers : ['Sem Eng.'];
+      names.forEach(eng => {
+        const key = eng.split(' ')[0]; // primeiro nome
+        if (!map[key]) map[key] = { name: key, Budget: 0, Forecast: 0, Realizado: 0 };
+        const share = engineers.length > 0 ? 1 / engineers.length : 1;
+        map[key].Budget    += (parseFloat(p.budget) || 0) * share;
+        map[key].Forecast  += (parseFloat(p.act_forecast ?? p.forecast) || 0) * share;
+        map[key].Realizado += (parseFloat(p.actual) || 0) * share;
+      });
+    });
+    return Object.values(map).sort((a, b) => b.Forecast - a.Forecast);
   }, [filtered]);
 
   // Current month boundary for Realizado cutoff
@@ -663,10 +699,14 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
             </div>
           </div>
 
-          {/* Por Projeto */}
+          {/* Gráfico contextual — varia por role */}
           <div className="card" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'visible' }}>
             <CardHeader
-              title={`Por Projeto — ${periodLabel}`}
+              title={
+                isGerente     ? `Por Usina — ${periodLabel}` :
+                isCoordenador ? `Por Engenheiro — ${periodLabel}` :
+                                `Por Projeto — ${periodLabel}`
+              }
               action={!isMobile ? (
                 <button onClick={() => setProjectChartOpen(true)} title="Expandir gráfico" style={{
                   background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: 6,
@@ -682,27 +722,65 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
             />
             <div style={{ padding: '8px 6px 4px', flex: 1, minHeight: isMobile ? 200 : 0, overflow: 'visible' }}>
               <ResponsiveContainer width="100%" height={isMobile ? 200 : '100%'}>
-                <BarChart
-                  data={filtered.map(p => ({
-                    name:      p.code,
-                    Budget:    parseFloat(p.budget)             || 0,
-                    Forecast:  parseFloat(p.act_forecast ?? p.forecast) || 0,
-                    Realizado: parseFloat(p.actual)             || 0,
-                  }))}
-                  margin={{ top: 2, right: 4, left: 0, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#374151' }} />
-                  <YAxis tickFormatter={fmtAxis} tick={{ fontSize: 9, fill: '#374151' }} width={50} />
-                  <Tooltip isAnimationActive={false}
-                    content={(props) => <ProjectTooltip {...props} projectMap={projectMap} projectPlantsMap={projectPlantsMap} />}
-                    wrapperStyle={{ zIndex: 9999, pointerEvents: 'none' }}
-                    allowEscapeViewBox={{ x: true, y: true }} />
-                  {!isMobile && <Legend wrapperStyle={{ fontSize: '0.62rem', color: '#374151', paddingTop: 2 }} className="dash-legend" />}
-                  <Bar dataKey="Budget"    fill={C.budget}   radius={[2,2,0,0]} />
-                  <Bar dataKey="Forecast"  fill={C.forecast} radius={[2,2,0,0]} />
-                  <Bar dataKey="Realizado" fill={C.actual}   radius={[2,2,0,0]} />
-                </BarChart>
+                {isGerente ? (
+                  /* Gerente: barras agrupadas por usina + linha de % execução */
+                  <ComposedChart data={plantChartData} margin={{ top: 2, right: 4, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#374151' }}
+                      angle={plantChartData.length > 7 ? -30 : 0}
+                      textAnchor={plantChartData.length > 7 ? 'end' : 'middle'} interval={0} />
+                    <YAxis yAxisId="val" tickFormatter={fmtAxis} tick={{ fontSize: 9, fill: '#374151' }} width={50} />
+                    <YAxis yAxisId="pct" orientation="right" tickFormatter={v => `${v}%`}
+                      tick={{ fontSize: 9, fill: '#6B7280' }} width={36} domain={[0, 120]} />
+                    <Tooltip isAnimationActive={false} formatter={(v, name) =>
+                      name === '% Exec' ? [`${v.toFixed(1)}%`, name] : [fmt(v), name]
+                    } />
+                    {!isMobile && <Legend wrapperStyle={{ fontSize: '0.62rem', paddingTop: 2 }} />}
+                    <Bar yAxisId="val" dataKey="Budget"    fill={C.budget}   radius={[2,2,0,0]} barSize={14} />
+                    <Bar yAxisId="val" dataKey="Forecast"  fill={C.forecast} radius={[2,2,0,0]} barSize={14} />
+                    <Bar yAxisId="val" dataKey="Realizado" fill={C.actual}   radius={[2,2,0,0]} barSize={14} />
+                    <Line yAxisId="pct" type="monotone"
+                      dataKey={d => d.Forecast > 0 ? parseFloat(((d.Realizado / d.Forecast) * 100).toFixed(1)) : 0}
+                      name="% Exec" stroke="#F59E0B" strokeWidth={2} dot={{ r: 3, fill: '#F59E0B' }} />
+                  </ComposedChart>
+                ) : isCoordenador ? (
+                  /* Coordenador: barras agrupadas por engenheiro */
+                  <BarChart data={engChartData} margin={{ top: 2, right: 4, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#374151' }}
+                      angle={engChartData.length > 7 ? -30 : 0}
+                      textAnchor={engChartData.length > 7 ? 'end' : 'middle'} interval={0} />
+                    <YAxis tickFormatter={fmtAxis} tick={{ fontSize: 9, fill: '#374151' }} width={50} />
+                    <Tooltip isAnimationActive={false} formatter={(v, name) => [fmt(v), name]} />
+                    {!isMobile && <Legend wrapperStyle={{ fontSize: '0.62rem', paddingTop: 2 }} />}
+                    <Bar dataKey="Budget"    fill={C.budget}   radius={[2,2,0,0]} />
+                    <Bar dataKey="Forecast"  fill={C.forecast} radius={[2,2,0,0]} />
+                    <Bar dataKey="Realizado" fill={C.actual}   radius={[2,2,0,0]} />
+                  </BarChart>
+                ) : (
+                  /* Engenheiro: por projeto (comportamento original) */
+                  <BarChart
+                    data={filtered.map(p => ({
+                      name:      p.code,
+                      Budget:    parseFloat(p.budget) || 0,
+                      Forecast:  parseFloat(p.act_forecast ?? p.forecast) || 0,
+                      Realizado: parseFloat(p.actual) || 0,
+                    }))}
+                    margin={{ top: 2, right: 4, left: 0, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#374151' }} />
+                    <YAxis tickFormatter={fmtAxis} tick={{ fontSize: 9, fill: '#374151' }} width={50} />
+                    <Tooltip isAnimationActive={false}
+                      content={(props) => <ProjectTooltip {...props} projectMap={projectMap} projectPlantsMap={projectPlantsMap} />}
+                      wrapperStyle={{ zIndex: 9999, pointerEvents: 'none' }}
+                      allowEscapeViewBox={{ x: true, y: true }} />
+                    {!isMobile && <Legend wrapperStyle={{ fontSize: '0.62rem', color: '#374151', paddingTop: 2 }} className="dash-legend" />}
+                    <Bar dataKey="Budget"    fill={C.budget}   radius={[2,2,0,0]} />
+                    <Bar dataKey="Forecast"  fill={C.forecast} radius={[2,2,0,0]} />
+                    <Bar dataKey="Realizado" fill={C.actual}   radius={[2,2,0,0]} />
+                  </BarChart>
+                )}
               </ResponsiveContainer>
             </div>
           </div>
@@ -829,16 +907,20 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
         tickInterval={tickInterval}
       />
 
-      {/* Por Projeto modal */}
+      {/* Modal expandido — contextual por role */}
       <ProjectChartModal
         open={projectChartOpen}
         onClose={() => setProjectChartOpen(false)}
-        data={filtered.map(p => ({
-          name:      p.code,
-          Budget:    parseFloat(p.budget)             || 0,
-          Forecast:  parseFloat(p.act_forecast ?? p.forecast) || 0,
-          Realizado: parseFloat(p.actual)             || 0,
-        }))}
+        data={
+          isGerente     ? plantChartData :
+          isCoordenador ? engChartData   :
+          filtered.map(p => ({
+            name:      p.code,
+            Budget:    parseFloat(p.budget) || 0,
+            Forecast:  parseFloat(p.act_forecast ?? p.forecast) || 0,
+            Realizado: parseFloat(p.actual) || 0,
+          }))
+        }
         projectMap={projectMap}
         periodLabel={periodLabel}
       />
