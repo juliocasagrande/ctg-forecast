@@ -20,6 +20,16 @@ const AREAS = [
   { value: 'PRD', label: 'Produção' },
   { value: 'COP', label: 'Coordenação Operação' },
 ];
+const PLANT_SIGLAS = {
+  'PCH Palmeiras':'PLM', 'PCH Retiro':'RET',
+  'UHE Canoas 1':'CN1',  'UHE Canoas 2':'CN2',
+  'UHE Capivara':'CPV',  'UHE Chavantes':'CHV',
+  'UHE Garibaldi':'GAR', 'UHE Ilha Solteira':'ILS',
+  'UHE Jupiá':'JUP',     'UHE Jurumirim':'JUR',
+  'UHE Rosana':'ROS',    'UHE Salto':'STO',
+  'UHE Salto Grande':'SAG', 'UHE Taquaruçu':'TAQ',
+};
+
 const ALL_PLANTS = [
   'PCH Palmeiras','PCH Retiro','UHE Canoas 1','UHE Canoas 2',
   'UHE Capivara','UHE Chavantes','UHE Garibaldi','UHE Ilha Solteira',
@@ -512,7 +522,7 @@ function VBarChart({ data, title }) {
         : <div style={{ display:'flex', alignItems:'flex-end', gap:4, height:120, overflow:'hidden' }}>
             {visible.map((d,i) => (
               <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:0, minWidth:0 }}>
-                <div style={{ fontSize:'0.62rem', fontWeight:700, color:'#1E293B', marginBottom:2 }}>{d.value}</div>
+                <div style={{ fontSize:'0.75rem', fontWeight:700, color:'#1E293B', marginBottom:3 }}>{d.value}</div>
                 <div style={{
                   width:'100%',
                   height:`${Math.max((d.value/max)*80,6)}px`,
@@ -522,10 +532,9 @@ function VBarChart({ data, title }) {
                   minHeight:6,
                 }}/>
                 <div style={{
-                  fontSize:'0.58rem', color:'#475569', textAlign:'center',
-                  width:'100%', marginTop:4, lineHeight:1.2,
-                  overflow:'hidden', display:'-webkit-box',
-                  WebkitLineClamp:2, WebkitBoxOrient:'vertical',
+                  fontSize:'0.72rem', fontWeight:600, color:'#334155', textAlign:'center',
+                  width:'100%', marginTop:5, lineHeight:1,
+                  letterSpacing:'0.02em',
                 }}>{d.label}</div>
               </div>
             ))}
@@ -732,7 +741,7 @@ export default function DocumentsPage() {
   const TYPE_COLORS = ['#0066B3','#0891B2','#10B981','#8B5CF6','#F59E0B','#EF4444','#6366F1','#EC4899','#14B8A6'];
   const typeChartData   = DOC_TYPES.map((t,i) => ({ label:t.value, value:docs.filter(d=>d.type===t.value).length, color:TYPE_COLORS[i%TYPE_COLORS.length] }));
   const statusChartData = STATUSES.map(s => ({ label:s.value, value:docs.filter(d=>d.status===s.value).length, color:s.color }));
-  const plantChartData  = ALL_PLANTS.map(p => ({ label:p.replace('UHE ','').replace('PCH ',''), value:docs.filter(d=>d.plant===p).length, color:'#0066B3' })).filter(d=>d.value>0);
+  const plantChartData  = ALL_PLANTS.map(p => ({ label: PLANT_SIGLAS[p] || p, fullName: p, value:docs.filter(d=>d.plant===p).length, color:'#0066B3' })).filter(d=>d.value>0);
   const years = [...new Set(docs.map(d=>2000+d.year))].sort((a,b)=>b-a);
   const plantsUsed = ALL_PLANTS.filter(p => docs.some(d => d.plant === p));
 
