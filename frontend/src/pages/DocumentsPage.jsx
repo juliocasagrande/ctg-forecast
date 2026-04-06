@@ -47,7 +47,7 @@ const TYPE_META   = Object.fromEntries(DOC_TYPES.map(t => [t.value, t]));
 const CURRENT_YEAR       = new Date().getFullYear();
 const CURRENT_YEAR_SHORT = CURRENT_YEAR % 100;
 
-/* ─── Helpers ────────────────────────────────────────────────────────────────── */
+/* ─── Helpers ────────────────────────────────────────────────────────────────── */ 
 function buildCode(type, area, seq, year, revision) {
   if (!type || !area || !seq || !year) return '';
   const seqStr = String(seq).padStart(3, '0');
