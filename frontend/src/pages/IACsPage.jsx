@@ -14,7 +14,6 @@ const AREAS = ['Confiabilidade', 'Elétrica', 'Mecânica'];
 const STATUS_OPTIONS = [
   { value: '0 - Not started yet',       color: '#94A3B8', bg: '#F1F5F9', text: '#475569' },
   { value: '1 - IA and PDs',            color: '#3B82F6', bg: '#EFF6FF', text: '#1D4ED8' },
-  { value: '10 - Cancelado',            color: '#EF4444', bg: '#FEE2E2', text: '#991B1B' },
   { value: '2 - Invitation letter',     color: '#8B5CF6', bg: '#F5F3FF', text: '#5B21B6' },
   { value: '3 - Proposal received',     color: '#F59E0B', bg: '#FEF3C7', text: '#92400E' },
   { value: '4 - Clarification',         color: '#F97316', bg: '#FFF7ED', text: '#9A3412' },
@@ -23,6 +22,7 @@ const STATUS_OPTIONS = [
   { value: '8 - Draft Contract',        color: '#22C55E', bg: '#DCFCE7', text: '#14532D' },
   { value: '9 - Contract signed',       color: '#16A34A', bg: '#BBF7D0', text: '#14532D' },
   { value: '91 - Hired 2025',           color: '#64748B', bg: '#F1F5F9', text: '#334155' },
+  { value: '10 - Cancelado',            color: '#EF4444', bg: '#FEE2E2', text: '#991B1B' },
 ];
 const STATUS_META = Object.fromEntries(STATUS_OPTIONS.map(s => [s.value, s]));
 
@@ -1099,32 +1099,55 @@ export default function IACsPage() {
             )}
           </div>
           <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, borderTop: '3px solid #0b5cab', padding: '10px', flex: 1, overflowY: 'auto', minHeight: 140 }}>
-            <div style={{ columnCount: 4, columnGap: 8 }}>
-              {statusBarData.filter(d => d.count > 0).map((d, i) => {
-                const m = STATUS_META[d.status] || { color: '#94A3B8', bg: '#F1F5F9', text: '#475569' };
-                const isActive = filterStatus === d.status;
-                const statusLabel = getStatusLabel(d.status);
-                return (
-                  <div
-                    key={d.status}
-                    onClick={() => setFilterStatus(isActive ? '' : d.status)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '8px 12px', borderRadius: 8, cursor: 'pointer',
-                      marginBottom: 6,
-                      background: isActive ? m.bg : (i % 2 === 0 ? '#FAFAFA' : '#fff'),
-                      border: isActive ? `1.5px solid ${m.color}55` : '1.5px solid transparent',
-                      transition: 'all 0.15s',
-                      breakInside: 'avoid',
-                    }}
-                  >
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: m.color, flexShrink: 0 }} />
-                    <span style={{ fontSize: '0.82rem', color: '#1E293B', flex: 1, fontWeight: 600, lineHeight: 1.3 }}>{statusLabel}</span>
-                    <span style={{ fontSize: '0.9rem', fontWeight: 700, color: m.text, flexShrink: 0 }}>{d.count}</span>
-                  </div>
-                );
-              })}
-            </div>
+            {(() => {
+              const visibleData = statusBarData.filter(d => d.count > 0);
+              const maxCount = Math.max(...visibleData.map(d => d.count), 1);
+              return (
+                <div style={{ columnCount: 4, columnGap: 8 }}>
+                  {visibleData.map((d, i) => {
+                    const m = STATUS_META[d.status] || { color: '#94A3B8', bg: '#F1F5F9', text: '#475569' };
+                    const isActive = filterStatus === d.status;
+                    const statusLabel = getStatusLabel(d.status);
+                    const barWidth = maxCount > 0 ? (d.count / maxCount) * 100 : 0;
+                    return (
+                      <div
+                        key={d.status}
+                        onClick={() => setFilterStatus(isActive ? '' : d.status)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          padding: '8px 12px', borderRadius: 8, cursor: 'pointer',
+                          marginBottom: 6,
+                          background: isActive ? m.bg : (i % 2 === 0 ? '#FAFAFA' : '#fff'),
+                          border: isActive ? `1.5px solid ${m.color}55` : '1.5px solid transparent',
+                          transition: 'all 0.15s',
+                          breakInside: 'avoid',
+                          position: 'relative',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        {/* Barra translúcida de fundo */}
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: 0,
+                            top: 0,
+                            bottom: 0,
+                            width: `${barWidth}%`,
+                            background: m.color,
+                            opacity: 0.12,
+                            transition: 'width 0.3s ease',
+                            pointerEvents: 'none',
+                          }}
+                        />
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: m.color, flexShrink: 0, position: 'relative', zIndex: 1 }} />
+                        <span style={{ fontSize: '0.82rem', color: '#1E293B', flex: 1, fontWeight: 600, lineHeight: 1.3, position: 'relative', zIndex: 1 }}>{statusLabel}</span>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 700, color: m.text, flexShrink: 0, position: 'relative', zIndex: 1 }}>{d.count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         </div>
 
