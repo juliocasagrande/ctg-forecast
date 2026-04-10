@@ -859,6 +859,153 @@ router.get('/projects-tracking', requireAuth, async (req, res) => {
 });
 
 /* ══════════════════════════════════════════════════════
+ * DOCUMENTS EXPORT
+ * ══════════════════════════════════════════════════════ */
+router.get('/documents', requireAuth, async (req, res) => {
+  try {
+    const { year } = req.query;
+    let query = `
+      SELECT d.*,
+        STRING_AGG(DISTINCT au.name, ', ' ORDER BY au.name) AS authors_list
+      FROM documents d
+      LEFT JOIN document_authors da ON da.document_id = d.id
+      LEFT JOIN users au ON au.id = da.user_id
+    `;
+    const params = [];
+    if (year) {
+      query += ' WHERE d.year = $1';
+      params.push(parseInt(year));
+    }
+    query += ` GROUP BY d.id ORDER BY d.type ASC, d.area ASC, d.sequence_number ASC, d.year ASC, d.revision ASC`;
+
+    const r = await pool.query(query, params);
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Documentos');
+
+    // Header row
+    const headers = [
+      'Código', 'Tipo', 'Área', 'Nº Seq.', 'Ano', 'Revisão',
+      'Usina', 'Responsável', 'Data', 'Título do Documento',
+      'Status', 'Link do Documento', 'Autores', 'Observações',
+      'Criado Por', 'Última Atualização'
+    ];
+    const keys = [
+      'code', 'type', 'area', 'sequence_number', 'year', 'revision',
+      'plant', 'responsible', 'date', 'subject',
+      'status', 'document_link', 'authors_list', 'notes',
+      'created_by_name', 'updated_at'
+    ];
+
+    headers.forEach((h, i) => {
+      const cell = ws.getCell(1, i + 1);
+      cell.value = h;
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '001F5B' } };
+      cell.font = { color: { argb: 'FFFFFF' }, bold: true, size: 10 };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'D1D5DB' } },
+        bottom: { style: 'thin', color: { argb: 'D1D5DB' } },
+        left: { style: 'thin', color: { argb: 'D1D5DB' } },
+        right: { style: 'thin', color: { argb: 'D1D5DB' } }
+      };
+    });
+
+    // Type and area lookup maps
+    const TYPE_MAP = {
+      'ATA': 'Atas', 'CTA': 'Cartas', 'RT': 'Relatório Técnico',
+      'EP': 'Ensaios Preditivos', 'ET': 'Especificação Técnica',
+      'ROP': 'Rel. de Ocorrências e Perturbações', 'MC': 'Memorial de Cálculo',
+      'ROG': 'Rel. Ocorrência Grave e Indisponibilidade', 'RFH': 'Relatório de Falha Humana'
+    };
+    const AREA_MAP = {
+      'ENG': 'Eng. de Manutenção', 'PRD': 'Produção', 'COP': 'Coordenação Operação'
+    };
+
+    // Status color map
+    const STATUS_COLORS = {
+      'Em elaboração': 'F59E0B',
+      'Para aprovação': '3B82F6',
+      'Publicado': '10B981',
+      'Cancelado': 'EF4444'
+    };
+
+    // Data rows
+    r.rows.forEach((row, rowIdx) => {
+      keys.forEach((key, colIdx) => {
+        const cell = ws.getCell(rowIdx + 2, colIdx + 1);
+        let val = row[key];
+
+        // Format date
+        if (key === 'date' && val) {
+          val = new Date(val).toLocaleDateString('pt-BR');
+        }
+        if (key === 'updated_at' && val) {
+          val = new Date(val).toLocaleDateString('pt-BR');
+        }
+        // Format year (convert 2-digit to 4-digit for readability)
+        if (key === 'year' && val) {
+          val = 2000 + parseInt(val);
+        }
+        // Format revision
+        if (key === 'revision') {
+          val = val !== null && val !== undefined ? `R${val}` : '—';
+        }
+        // Type and area full labels
+        if (key === 'type' && val) {
+          val = `${val} — ${TYPE_MAP[val] || val}`;
+        }
+        if (key === 'area' && val) {
+          val = `${val} — ${AREA_MAP[val] || val}`;
+        }
+        // Authors
+        if (key === 'authors_list' && !val) {
+          val = row.responsible || '—';
+        }
+
+        cell.value = val || '—';
+        cell.alignment = { vertical: 'middle', wrapText: true };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'E2E8F0' } },
+          bottom: { style: 'thin', color: { argb: 'E2E8F0' } },
+          left: { style: 'thin', color: { argb: 'E2E8F0' } },
+          right: { style: 'thin', color: { argb: 'E2E8F0' } }
+        };
+
+        // Color status column background
+        if (key === 'status' && val) {
+          const color = STATUS_COLORS[val];
+          if (color) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `${color}20` } };
+            cell.font = { color: { argb: `FF${color}` }, bold: true, size: 10 };
+          }
+        }
+      });
+    });
+
+    // Column widths
+    const widths = [22, 28, 26, 10, 8, 10, 24, 22, 12, 45, 20, 40, 30, 35, 22, 16];
+    widths.forEach((w, i) => ws.getColumn(i + 1).width = w);
+
+    // Freeze header row
+    ws.views = [{ state: 'frozen', ySplit: 1 }];
+
+    // Auto-filter
+    ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: r.rows.length + 1, column: keys.length } };
+
+    const yearLabel = year || 'Todos';
+    const filename = `CTG_Documentos_${yearLabel}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('Documents export error:', err);
+    safeError(res, err);
+  }
+});
+
+/* ══════════════════════════════════════════════════════
  * IACS EXPORT
  * ══════════════════════════════════════════════════════ */
 router.get('/iacs', requireAuth, async (req, res) => {

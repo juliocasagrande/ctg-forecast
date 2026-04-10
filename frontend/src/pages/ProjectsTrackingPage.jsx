@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import api from '../utils/api.js';
 import { useToast } from '../components/ui/Toast.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
+import ColumnFilterDropdown from '../components/ui/ColumnFilterDropdown.jsx';
+import StatusDot from '../components/ui/StatusDot.jsx';
 
 /* ─── Constants ─────────────────────────────────────────────────────────────── */
 const AREAS = ['Confiabilidade', 'Elétrica', 'Mecânica'];
@@ -1008,6 +1010,13 @@ export default function ProjectsTrackingPage() {
   const [clearing, setClearing]       = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
 
+  // Column filters
+  const [colFilterUHE, setColFilterUHE] = useState([]);
+  const [colFilterStatus, setColFilterStatus] = useState([]);
+  const [colFilterGestor, setColFilterGestor] = useState([]);
+  const [colFilterNatureza, setColFilterNatureza] = useState([]);
+  const [colFilterAditivo, setColFilterAditivo] = useState([]);
+
   const fetchItems = async () => {
     setLoading(true);
     try {
@@ -1160,6 +1169,22 @@ export default function ProjectsTrackingPage() {
     if (filterUHE) data = data.filter(i => i.uhe === filterUHE);
     if (filterStatus) data = data.filter(i => i.status === filterStatus);
     if (filterNatureza) data = data.filter(i => i.natureza === filterNatureza);
+    // Column filters
+    if (colFilterUHE.length > 0 && colFilterUHE.length < UHE_LIST.length) {
+      data = data.filter(i => colFilterUHE.includes(i.uhe));
+    }
+    if (colFilterStatus.length > 0) {
+      data = data.filter(i => colFilterStatus.includes(i.status));
+    }
+    if (colFilterGestor.length > 0) {
+      data = data.filter(i => colFilterGestor.includes(i.gestor));
+    }
+    if (colFilterNatureza.length > 0 && colFilterNatureza.length < NATUREZA_OPTIONS.length) {
+      data = data.filter(i => colFilterNatureza.includes(i.natureza));
+    }
+    if (colFilterAditivo.length > 0) {
+      data = data.filter(i => colFilterAditivo.includes(i.aditivo_em_andamento || 'NÃO'));
+    }
     if (search.trim()) {
       const q = search.toLowerCase();
       data = data.filter(i =>
@@ -1171,7 +1196,7 @@ export default function ProjectsTrackingPage() {
       );
     }
     return data;
-  }, [items, search, filterStatus, filterNatureza, filterUHE, activeTab, showMyContracts, user]);
+  }, [items, search, filterStatus, filterNatureza, filterUHE, activeTab, showMyContracts, user, colFilterUHE, colFilterStatus, colFilterGestor, colFilterNatureza, colFilterAditivo]);
 
   const grouped = useMemo(() => {
     const map = {};
@@ -1369,9 +1394,9 @@ export default function ProjectsTrackingPage() {
             ].map(c => (
               <div key={c.label} style={{
                 background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10,
-                borderTop: `3px solid ${c.color}`, padding: '5px 8px',
+                borderTop: `3px solid ${c.color}`, padding: '8px 10px',
               }}>
-                <div style={{ fontSize: '0.52rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94A3B8' }}>{c.label}</div>
+                <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94A3B8' }}>{c.label}</div>
                 <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '2rem', fontWeight: 700, color: c.color, lineHeight: 1.1 }}>{c.value}</div>
               </div>
             ))}
@@ -1381,29 +1406,23 @@ export default function ProjectsTrackingPage() {
         {/* Center-left: Totals */}
         <div style={{ flex: '0 0 200px', borderLeft: '2px solid #E2E8F0', paddingLeft: 10, display: 'flex', flexDirection: 'column' }}>
           <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748B', marginBottom: 4 }}>Valores</div>
-          <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, borderTop: '3px solid #0b5cab', padding: '5px 10px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <div style={{ marginBottom: 6 }}>
-              <div style={{ fontSize: '0.58rem', fontWeight: 700, color: '#0b5cab', textTransform: 'uppercase' }}>Contrato</div>
-              <div style={{ fontSize: '0.55rem', color: '#94A3B8' }}>Total</div>
-              <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '0.95rem', fontWeight: 700, color: '#0F172A', lineHeight: 1.2 }}>
-                {fmtBRL(totalContrato)}
+          <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, borderTop: '3px solid #0b5cab', padding: '10px 12px', flex: 1, display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center' }}>
+            {[
+              { section: 'Contrato', color: '#0b5cab', valorTotal: totalContrato, valorSaldo: totalSaldo },
+              { section: 'SI', color: '#7C3AED', valorTotal: totalSI, valorSaldo: totalSISaldo },
+            ].map(({ section, color, valorTotal, valorSaldo }, idx) => (
+              <div key={section} style={{ ...(idx > 0 ? { borderTop: '1px solid #F1F5F9', paddingTop: 6 } : {}) }}>
+                <div style={{ fontSize: '0.65rem', fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>{section}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 4, marginBottom: 2 }}>
+                  <span style={{ fontSize: '0.62rem', color: '#94A3B8' }}>Total</span>
+                  <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '0.88rem', fontWeight: 700, color: '#0F172A' }}>{fmtBRL(valorTotal)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 4 }}>
+                  <span style={{ fontSize: '0.62rem', color: '#94A3B8' }}>Saldo</span>
+                  <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '0.88rem', fontWeight: 700, color: '#065F46' }}>{fmtBRL(valorSaldo)}</span>
+                </div>
               </div>
-              <div style={{ fontSize: '0.55rem', color: '#94A3B8' }}>Saldo</div>
-              <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '0.95rem', fontWeight: 700, color: '#065F46', lineHeight: 1.2 }}>
-                {fmtBRL(totalSaldo)}
-              </div>
-            </div>
-            <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: 6 }}>
-              <div style={{ fontSize: '0.58rem', fontWeight: 700, color: '#0b5cab', textTransform: 'uppercase' }}>SI</div>
-              <div style={{ fontSize: '0.55rem', color: '#94A3B8' }}>Total</div>
-              <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '0.95rem', fontWeight: 700, color: '#0F172A', lineHeight: 1.2 }}>
-                {fmtBRL(totalSI)}
-              </div>
-              <div style={{ fontSize: '0.55rem', color: '#94A3B8' }}>Saldo</div>
-              <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '0.95rem', fontWeight: 700, color: '#065F46', lineHeight: 1.2 }}>
-                {fmtBRL(totalSISaldo)}
-              </div>
-            </div>
+            ))}
           </div>
         </div>
 
@@ -1513,16 +1532,159 @@ export default function ProjectsTrackingPage() {
                 boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
               }}>
                 <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", minWidth: 1600 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", tableLayout: 'fixed', minWidth: 2200 }}>
+                  <colgroup>
+                    <col style={{ width: 40 }} />
+                    <col style={{ width: 130 }} />
+                    <col style={{ width: 110 }} />
+                    <col style={{ width: 280 }} />
+                    <col style={{ width: 180 }} />
+                    <col style={{ width: 160 }} />
+                    <col style={{ width: 170 }} />
+                    <col style={{ width: 220 }} />
+                    <col style={{ width: 100 }} />
+                    <col style={{ width: 120 }} />
+                    <col style={{ width: 110 }} />
+                    <col style={{ width: 110 }} />
+                    <col style={{ width: 100 }} />
+                    <col style={{ width: 100 }} />
+                    <col style={{ width: 100 }} />
+                    <col style={{ width: 150 }} />
+                    <col style={{ width: 100 }} />
+                    <col style={{ width: 90 }} />
+                  </colgroup>
                   <thead>
-                    <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                      {['UHE', 'PP/Contrato', 'Projeto/Atividade', 'Projeto', 'Status', 'Gestor', 'Resumo', 'Vencimento', 'Val. Contrato', 'Realizado', 'Saldo', 'Val. SI', 'Real. SI', 'Saldo SI', 'Fornecedor', 'Natureza', 'Aditivo'].map(h => (
-                        <th key={h} style={{
-                          padding: '10px 12px', textAlign: 'left',
-                          fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
-                          letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
-                        }}>{h}</th>
-                      ))}
+                    <tr style={{ background: '#F8FAFC', borderBottom: '2px solid #E2E8F0' }}>
+                      <th style={{
+                        padding: '10px 12px', textAlign: 'center',
+                        fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
+                      }}>●</th>
+                      <th style={{
+                        padding: '10px 12px', textAlign: 'left',
+                        fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
+                      }}>
+                        UHE
+                        <ColumnFilterDropdown
+                          column="UHE"
+                          uniqueValues={UHE_LIST}
+                          selectedValues={colFilterUHE}
+                          onChange={setColFilterUHE}
+                        />
+                      </th>
+                      <th style={{
+                        padding: '10px 12px', textAlign: 'left',
+                        fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
+                      }}>PP/Contrato</th>
+                      <th style={{
+                        padding: '10px 12px', textAlign: 'left',
+                        fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
+                      }}>Projeto/Atividade</th>
+                      <th style={{
+                        padding: '10px 12px', textAlign: 'left',
+                        fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
+                      }}>Projeto</th>
+                      <th style={{
+                        padding: '10px 12px', textAlign: 'left',
+                        fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
+                      }}>
+                        Status
+                        <ColumnFilterDropdown
+                          column="Status"
+                          uniqueValues={STATUS_OPTIONS.map(s => s.value)}
+                          selectedValues={colFilterStatus}
+                          onChange={setColFilterStatus}
+                        />
+                      </th>
+                      <th style={{
+                        padding: '10px 12px', textAlign: 'left',
+                        fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
+                      }}>
+                        Gestor
+                        <ColumnFilterDropdown
+                          column="Gestor"
+                          uniqueValues={[...new Set(items.map(i => i.gestor).filter(Boolean))]}
+                          selectedValues={colFilterGestor}
+                          onChange={setColFilterGestor}
+                        />
+                      </th>
+                      <th style={{
+                        padding: '10px 12px', textAlign: 'left',
+                        fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
+                      }}>Resumo</th>
+                      <th style={{
+                        padding: '10px 12px', textAlign: 'left',
+                        fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
+                      }}>Vencimento</th>
+                      <th style={{
+                        padding: '10px 12px', textAlign: 'left',
+                        fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
+                      }}>Val. Contrato</th>
+                      <th style={{
+                        padding: '10px 12px', textAlign: 'left',
+                        fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
+                      }}>Realizado</th>
+                      <th style={{
+                        padding: '10px 12px', textAlign: 'left',
+                        fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
+                      }}>Saldo</th>
+                      <th style={{
+                        padding: '10px 12px', textAlign: 'left',
+                        fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
+                      }}>Val. SI</th>
+                      <th style={{
+                        padding: '10px 12px', textAlign: 'left',
+                        fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
+                      }}>Real. SI</th>
+                      <th style={{
+                        padding: '10px 12px', textAlign: 'left',
+                        fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
+                      }}>Saldo SI</th>
+                      <th style={{
+                        padding: '10px 12px', textAlign: 'left',
+                        fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
+                      }}>Fornecedor</th>
+                      <th style={{
+                        padding: '10px 12px', textAlign: 'left',
+                        fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
+                      }}>
+                        Natureza
+                        <ColumnFilterDropdown
+                          column="Natureza"
+                          uniqueValues={NATUREZA_OPTIONS}
+                          selectedValues={colFilterNatureza}
+                          onChange={setColFilterNatureza}
+                        />
+                      </th>
+                      <th style={{
+                        padding: '10px 12px', textAlign: 'left',
+                        fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
+                      }}>
+                        Aditivo
+                        <ColumnFilterDropdown
+                          column="Aditivo"
+                          uniqueValues={['SIM', 'NÃO']}
+                          selectedValues={colFilterAditivo}
+                          onChange={setColFilterAditivo}
+                        />
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1536,6 +1698,9 @@ export default function ProjectsTrackingPage() {
                         onMouseEnter={e => e.currentTarget.style.background = '#EFF6FF'}
                         onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? '#fff' : '#FAFAFA'}
                       >
+                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                          <StatusDot updatedAt={item.updated_at} />
+                        </td>
                         <td style={{ padding: '10px 12px' }}>
                           <UheBadge uhe={item.uhe} />
                         </td>

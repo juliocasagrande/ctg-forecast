@@ -4,13 +4,17 @@ import api from '../utils/api.js';
 import { useToast } from '../components/ui/Toast.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import AlertBell from '../components/ui/AlertBell.jsx';
+import ColumnFilterDropdown from '../components/ui/ColumnFilterDropdown.jsx';
+import StatusDot from '../components/ui/StatusDot.jsx';
+import OpenTimeBadge from '../components/ui/OpenTimeBadge.jsx';
 
-/* ─── Constants ─────────────────────────────────────────────────────────────── */
+/* ─── Constants ────────────────────────────────────────────────────────────── */
 const AREAS = ['Confiabilidade', 'Elétrica', 'Mecânica'];
 
 const STATUS_OPTIONS = [
   { value: '0 - Not started yet',       color: '#94A3B8', bg: '#F1F5F9', text: '#475569' },
   { value: '1 - IA and PDs',            color: '#3B82F6', bg: '#EFF6FF', text: '#1D4ED8' },
+  { value: '10 - Cancelado',            color: '#EF4444', bg: '#FEE2E2', text: '#991B1B' },
   { value: '2 - Invitation letter',     color: '#8B5CF6', bg: '#F5F3FF', text: '#5B21B6' },
   { value: '3 - Proposal received',     color: '#F59E0B', bg: '#FEF3C7', text: '#92400E' },
   { value: '4 - Clarification',         color: '#F97316', bg: '#FFF7ED', text: '#9A3412' },
@@ -19,7 +23,6 @@ const STATUS_OPTIONS = [
   { value: '8 - Draft Contract',        color: '#22C55E', bg: '#DCFCE7', text: '#14532D' },
   { value: '9 - Contract signed',       color: '#16A34A', bg: '#BBF7D0', text: '#14532D' },
   { value: '91 - Hired 2025',           color: '#64748B', bg: '#F1F5F9', text: '#334155' },
-  { value: '10 - Cancelad',             color: '#EF4444', bg: '#FEE2E2', text: '#991B1B' },
 ];
 const STATUS_META = Object.fromEntries(STATUS_OPTIONS.map(s => [s.value, s]));
 
@@ -169,11 +172,18 @@ function StatusBarChart({ data, onFilter, activeFilter, height = 100 }) {
       {hoveredIdx !== null && visible[hoveredIdx] && createPortal(
         <div style={{ position: 'fixed', left: tooltipPos.x, top: tooltipPos.y + 14, transform: 'translateX(-50%)', pointerEvents: 'none', zIndex: 99999 }}>
           <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 12px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
-            <div style={{ fontWeight: 700, color: '#0050B3', marginBottom: 3 }}>
+            <div style={{ fontWeight: 700, color: '#0050B3', marginBottom: 5, fontSize: '0.78rem' }}>
               {visible[hoveredIdx].status}
             </div>
-            <div><span style={{ color: '#64748B' }}>IACs: </span><span style={{ fontWeight: 700 }}>{visible[hoveredIdx].count}</span></div>
-            <div style={{ fontSize: '0.62rem', color: '#94A3B8', marginTop: 3 }}>Clique para filtrar</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginBottom: 2 }}>
+              <span style={{ color: '#64748B' }}>IACs neste status:</span>
+              <span style={{ fontWeight: 700 }}>{visible[hoveredIdx].count}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+              <span style={{ color: '#64748B' }}>Participação:</span>
+              <span style={{ fontWeight: 700, color: '#0050B3' }}>{data.reduce((s,d)=>s+d.count,0) > 0 ? Math.round((visible[hoveredIdx].count / data.reduce((s,d)=>s+d.count,0)) * 100) : 0}%</span>
+            </div>
+            <div style={{ fontSize: '0.62rem', color: '#94A3B8', marginTop: 4, borderTop: '1px solid #F1F5F9', paddingTop: 3 }}>Clique para filtrar</div>
           </div>
         </div>,
         document.body
@@ -249,13 +259,18 @@ function PriorityDonutChart({ data, filterPriority, onFilterPriority }) {
       {hoveredLabel && createPortal(
         <div style={{ position: 'fixed', left: tooltipPos.x, top: tooltipPos.y + 14, transform: 'translateX(-50%)', pointerEvents: 'none', zIndex: 99999 }}>
           <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 12px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
-            <div style={{ fontWeight: 700, color: hoveredLabel.color, marginBottom: 4, fontSize: '0.78rem' }}>
+            <div style={{ fontWeight: 700, color: hoveredLabel.color, marginBottom: 5, fontSize: '0.78rem' }}>
               {hoveredLabel.label}
             </div>
-            <div><span style={{ color: '#64748B' }}>IACs: </span><span style={{ fontWeight: 700 }}>{hoveredLabel.value}</span></div>
-            <div style={{ fontSize: '0.62rem', color: '#94A3B8', marginTop: 3 }}>
-              {hoveredLabel.value === 1 ? '1 item' : `${hoveredLabel.value} itens`}
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginBottom: 2 }}>
+              <span style={{ color: '#64748B' }}>IACs:</span>
+              <span style={{ fontWeight: 700 }}>{hoveredLabel.value}</span>
             </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+              <span style={{ color: '#64748B' }}>Participação:</span>
+              <span style={{ fontWeight: 700, color: hoveredLabel.color }}>{total > 0 ? Math.round((hoveredLabel.value / total) * 100) : 0}%</span>
+            </div>
+            <div style={{ fontSize: '0.62rem', color: '#94A3B8', marginTop: 4, borderTop: '1px solid #F1F5F9', paddingTop: 3 }}>Clique para filtrar</div>
           </div>
         </div>,
         document.body
@@ -300,12 +315,16 @@ function PriorityChart({ data }) {
       {hoveredIdx !== null && data[hoveredIdx] && createPortal(
         <div style={{ position: 'fixed', left: tooltipPos.x, top: tooltipPos.y + 14, transform: 'translateX(-50%)', pointerEvents: 'none', zIndex: 99999 }}>
           <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 12px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
-            <div style={{ fontWeight: 700, color: priorityBarColors[data[hoveredIdx].label] || '#0b5cab', marginBottom: 3 }}>
+            <div style={{ fontWeight: 700, color: priorityBarColors[data[hoveredIdx].label] || '#0b5cab', marginBottom: 5, fontSize: '0.78rem' }}>
               {data[hoveredIdx].label}
             </div>
-            <div><span style={{ color: '#64748B' }}>IACs: </span><span style={{ fontWeight: 700 }}>{data[hoveredIdx].value}</span></div>
-            <div style={{ fontSize: '0.62rem', color: '#94A3B8', marginTop: 3 }}>
-              {data[hoveredIdx].value === 1 ? '1 item' : `${data[hoveredIdx].value} itens`}
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginBottom: 2 }}>
+              <span style={{ color: '#64748B' }}>IACs:</span>
+              <span style={{ fontWeight: 700 }}>{data[hoveredIdx].value}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+              <span style={{ color: '#64748B' }}>Participação:</span>
+              <span style={{ fontWeight: 700, color: priorityBarColors[data[hoveredIdx].label] || '#0b5cab' }}>{data.reduce((s,d)=>s+d.value,0) > 0 ? Math.round((data[hoveredIdx].value / data.reduce((s,d)=>s+d.value,0)) * 100) : 0}%</span>
             </div>
           </div>
         </div>,
@@ -786,6 +805,13 @@ export default function IACsPage() {
   const [importLoading, setImportLoading] = useState(false);
   const [importFile, setImportFile]     = useState(null);
 
+  // Column filters
+  const [colFilterArea, setColFilterArea] = useState([]);
+  const [colFilterType, setColFilterType] = useState([]);
+  const [colFilterPriority, setColFilterPriority] = useState([]);
+  const [colFilterStatus2, setColFilterStatus2] = useState([]);
+  const [colFilterApresentado, setColFilterApresentado] = useState([]);
+
   const fetchItems = async () => {
     setLoading(true);
     try { const r = await api.get('/lists/iacs'); setItems(r.data || []); }
@@ -881,6 +907,22 @@ export default function IACsPage() {
     if (activeTab !== 'Todos' && activeTab !== 'Meus IACs') data = data.filter(i => i.area === activeTab);
     if (filterStatus) data = data.filter(i => i.status_current === filterStatus);
     if (filterPriority) data = data.filter(i => i.priority === filterPriority);
+    // Column filters
+    if (colFilterArea.length > 0 && colFilterArea.length < AREAS.length) {
+      data = data.filter(i => colFilterArea.includes(i.area));
+    }
+    if (colFilterType.length > 0) {
+      data = data.filter(i => colFilterType.includes(i.type_line));
+    }
+    if (colFilterPriority.length > 0 && colFilterPriority.length < PRIORITY_OPTIONS.length) {
+      data = data.filter(i => colFilterPriority.includes(i.priority));
+    }
+    if (colFilterStatus2.length > 0) {
+      data = data.filter(i => colFilterStatus2.includes(i.status_current));
+    }
+    if (colFilterApresentado.length > 0) {
+      data = data.filter(i => colFilterApresentado.includes(i.apresentado_work_team));
+    }
     if (search.trim()) {
       const q = search.toLowerCase();
       data = data.filter(i =>
@@ -898,7 +940,7 @@ export default function IACsPage() {
       return (a.iac_code || '').localeCompare(b.iac_code || '');
     });
     return data;
-  }, [items, search, filterStatus, filterPriority, activeTab, showMyIACs, user]);
+  }, [items, search, filterStatus, filterPriority, activeTab, showMyIACs, user, colFilterArea, colFilterType, colFilterPriority, colFilterStatus2, colFilterApresentado]);
 
   const grouped = useMemo(() => {
     const map = {};
@@ -910,11 +952,10 @@ export default function IACsPage() {
     return map;
   }, [filtered]);
 
-  // Sort grouped keys alphabetically by status label (without code)
+  // Ordenar chaves conforme ordem definida em STATUS_OPTIONS
   const groupedKeys = useMemo(() =>
     STATUS_OPTIONS.map(s => s.value)
-      .filter(k => grouped[k]?.length > 0)
-      .sort((a, b) => getStatusLabel(a).localeCompare(getStatusLabel(b))),
+      .filter(k => grouped[k]?.length > 0),
   [grouped]);
 
   const tabs = ['Todos', ...AREAS, 'Meus IACs'];
@@ -1021,13 +1062,13 @@ export default function IACsPage() {
                 onClick={() => c.label !== 'Total' && setActiveTab(c.label === activeTab ? 'Todos' : c.label)}
                 style={{
                   background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10,
-                  borderTop: `3px solid ${c.color}`, padding: '5px 8px',
+                  borderTop: `3px solid ${c.color}`, padding: '8px 10px',
                   cursor: c.label !== 'Total' ? 'pointer' : 'default',
                   opacity: (activeTab !== 'Todos' && activeTab !== 'Meus IACs' && activeTab !== c.label) ? 0.5 : 1,
                   transition: 'all 0.15s',
                 }}
               >
-                <div style={{ fontSize: '0.52rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94A3B8' }}>{c.label}</div>
+                <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94A3B8' }}>{c.label}</div>
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: '2rem', fontWeight: 700, color: c.color, lineHeight: 1.1 }}>{c.value}</div>
               </div>
             ))}
@@ -1059,7 +1100,7 @@ export default function IACsPage() {
           </div>
           <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, borderTop: '3px solid #0b5cab', padding: '10px', flex: 1, overflowY: 'auto', minHeight: 140 }}>
             <div style={{ columnCount: 4, columnGap: 8 }}>
-              {statusBarData.filter(d => d.count > 0).sort((a, b) => getStatusLabel(a.status).localeCompare(getStatusLabel(b.status))).map((d, i) => {
+              {statusBarData.filter(d => d.count > 0).map((d, i) => {
                 const m = STATUS_META[d.status] || { color: '#94A3B8', bg: '#F1F5F9', text: '#475569' };
                 const isActive = filterStatus === d.status;
                 const statusLabel = getStatusLabel(d.status);
@@ -1160,12 +1201,82 @@ export default function IACsPage() {
               </div>
               <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
                 <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', fontFamily: 'var(--font-body)', minWidth: 1800 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', fontFamily: 'var(--font-body)', tableLayout: 'fixed', minWidth: 2000 }}>
+                    <colgroup>
+                      <col style={{ width: 40 }} />
+                      <col style={{ width: 140 }} />
+                      <col style={{ width: 90 }} />
+                      <col style={{ width: 110 }} />
+                      <col style={{ width: 90 }} />
+                      <col style={{ width: 60 }} />
+                      <col style={{ width: 90 }} />
+                      <col style={{ width: 220 }} />
+                      <col style={{ width: 180 }} />
+                      <col style={{ width: 130 }} />
+                      <col style={{ width: 130 }} />
+                      <col style={{ width: 110 }} />
+                      <col style={{ width: 80 }} />
+                      <col style={{ width: 110 }} />
+                      <col style={{ width: 100 }} />
+                      <col style={{ width: 110 }} />
+                      <col style={{ width: 90 }} />
+                      <col style={{ width: 100 }} />
+                    </colgroup>
                     <thead>
-                      <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                        {['IAC', 'Tipo', 'Área', 'Priority', 'No Priority', 'Abertura', 'When Open', 'Projeto', 'Solicitante', 'Team Leader', 'Chinese Staff', 'Ap. WT', 'Organizador', 'Supervisor', 'Eq. Avaliação', 'Prioridade', 'Validade', 'Continuidade'].map(h => (
-                          <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>{h}</th>
-                        ))}
+                      <tr style={{ background: '#F8FAFC', borderBottom: '2px solid #E2E8F0' }}>
+                        <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap', width: 40 }}>●</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>
+                          IAC
+                        </th>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>
+                          Tipo
+                          <ColumnFilterDropdown
+                            column="Tipo"
+                            uniqueValues={TYPE_OPTIONS}
+                            selectedValues={colFilterType}
+                            onChange={setColFilterType}
+                          />
+                        </th>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>
+                          Área
+                          <ColumnFilterDropdown
+                            column="Área"
+                            uniqueValues={AREAS}
+                            selectedValues={colFilterArea}
+                            onChange={setColFilterArea}
+                          />
+                        </th>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Abertura</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>META</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>When Open</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Projeto</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Comentários</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Solicitante</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Team Leader</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Chinese Staff</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>
+                          Ap. WT
+                          <ColumnFilterDropdown
+                            column="Apresentado WT"
+                            uniqueValues={SIM_NAO}
+                            selectedValues={colFilterApresentado}
+                            onChange={setColFilterApresentado}
+                          />
+                        </th>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Organizador</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Supervisor</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>
+                          Prioridade
+                          <ColumnFilterDropdown
+                            column="Prioridade"
+                            uniqueValues={PRIORITY_OPTIONS}
+                            selectedValues={colFilterPriority}
+                            onChange={setColFilterPriority}
+                          />
+                        </th>
+                        <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Qtde Priority</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Qtde No Priority</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Validade</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1176,13 +1287,17 @@ export default function IACsPage() {
                           onMouseEnter={e => e.currentTarget.style.background = '#EFF6FF'}
                           onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? '#fff' : '#FAFAFA'}
                         >
+                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                            <StatusDot updatedAt={item.updated_at} />
+                          </td>
                           <td style={{ padding: '10px 12px', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap' }}>{item.iac_code || '—'}</td>
                           <td style={{ padding: '10px 12px' }}><TypeBadge value={item.type_line} /></td>
                           <td style={{ padding: '10px 12px' }}><AreaBadge area={item.area} /></td>
-                          <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: '#0F172A' }}>{item.qty_pp_line_26_priority ?? '—'}</td>
-                          <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: '#0F172A' }}>{item.qty_pp_line_26_no_priority ?? '—'}</td>
                           <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                             {item.opening_date ? new Date(item.opening_date).toLocaleDateString('pt-BR') : '—'}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                            <OpenTimeBadge openingDate={item.opening_date} />
                           </td>
                           <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                             {item.when_open ? new Date(item.when_open).toLocaleDateString('pt-BR') : '—'}
@@ -1190,18 +1305,19 @@ export default function IACsPage() {
                           <td style={{ padding: '10px 12px', color: '#475569', maxWidth: 260 }}>
                             <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.project || '—'}</div>
                           </td>
+                          <td style={{ padding: '10px 12px', color: '#475569', maxWidth: 200, fontSize: '0.75rem' }}>
+                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.comments || '—'}</div>
+                          </td>
                           <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>{item.requester || '—'}</td>
                           <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>{item.team_leader || '—'}</td>
                           <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>{item.chinese_work_staff || '—'}</td>
                           <td style={{ padding: '10px 12px' }}><PillBadge value={item.apresentado_work_team} /></td>
                           <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>{item.organizer || '—'}</td>
                           <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>{item.supervisor || '—'}</td>
-                          <td style={{ padding: '10px 12px', color: '#475569', maxWidth: 160, fontSize: '0.75rem' }}>
-                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.evaluation_team || '—'}</div>
-                          </td>
                           <td style={{ padding: '10px 12px' }}><PriorityBadge value={item.priority} /></td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: '#0F172A' }}>{item.qty_pp_line_26_priority ?? '—'}</td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: '#0F172A' }}>{item.qty_pp_line_26_no_priority ?? '—'}</td>
                           <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>{item.validity || '—'}</td>
-                          <td style={{ padding: '10px 12px' }}><PillBadge value={item.continuidade} /></td>
                         </tr>
                       ))}
                     </tbody>

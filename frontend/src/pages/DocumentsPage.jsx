@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
 import { useToast } from '../components/ui/Toast.jsx';
+import ColumnFilterDropdown from '../components/ui/ColumnFilterDropdown.jsx';
 
 /* ─── Constants ──────────────────────────────────────────────────────────────── */
 const DOC_TYPES = [
@@ -616,6 +617,14 @@ export default function DocumentsPage() {
   const [expandedGroup, setExpandedGroup] = useState(null); // base_code
   const [expandedDoc, setExpandedDoc]   = useState(null);   // doc.id
 
+  // Column filters
+  const [colFilterCode, setColFilterCode] = useState([]);
+  const [colFilterPlant, setColFilterPlant] = useState([]);
+  const [colFilterResponsible, setColFilterResponsible] = useState([]);
+  const [colFilterDate, setColFilterDate] = useState([]);
+  const [colFilterSubject, setColFilterSubject] = useState([]);
+  const [colFilterStatus, setColFilterStatus] = useState([]);
+
   const SUPERIOR_ROLES = ['admin','gestor','planejador','coordenador'];
   const isSuperior = SUPERIOR_ROLES.includes(user?.role);
 
@@ -674,30 +683,85 @@ export default function DocumentsPage() {
     a.href = URL.createObjectURL(blob);
     a.download = `CTG_Documentacao_${CURRENT_YEAR}.html`;
     a.click(); URL.revokeObjectURL(a.href);
-    toast('Relatório exportado!', 'success');
+    toast('Relatório HTML exportado!', 'success');
+  };
+
+  const exportExcel = async () => {
+    try {
+      const token = localStorage.getItem('ctg_token');
+      const base = import.meta.env.VITE_API_URL || '/api';
+      const yearParam = yearFilter ? `?year=${yearFilter % 100}` : '';
+      const opts = { credentials: 'include' };
+      if (token) opts.headers = { Authorization: `Bearer ${token}` };
+      const res = await fetch(`${base}/export/documents${yearParam}`, opts);
+      if (!res.ok) throw new Error('Falha na exportação');
+      const blob = await res.blob();
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      const yearLabel = yearFilter || CURRENT_YEAR;
+      link.download = `CTG_Documentos_${yearLabel}.xlsx`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+      toast('Excel exportado com sucesso!', 'success');
+    } catch (err) {
+      console.error(err);
+      toast('Erro ao exportar Excel.', 'error');
+    }
   };
 
   const openNew  = () => { fetchNextSeq(); setDocModal({ open:true, doc:null }); };
   const openEdit = (doc) => setDocModal({ open:true, doc });
 
   // Filtro "Meus docs" — filtra onde o usuário é autor (consta em doc.authors)
-  const filtered = useMemo(() => docs.filter(d => {
+  const filtered = useMemo(() => {
+    let data = [...docs];
     if (myDocsOnly) {
       // "Meus" = SOMENTE sou o responsável pelo nome
-      if (!user?.name || !d.responsible) return false;
-      if (d.responsible.trim().toLowerCase() !== user.name.trim().toLowerCase()) return false;
+      data = data.filter(d => {
+        if (!user?.name || !d.responsible) return false;
+        return d.responsible.trim().toLowerCase() === user.name.trim().toLowerCase();
+      });
     }
-    if (statusFilter && d.status !== statusFilter) return false;
-    if (typeFilter   && d.type   !== typeFilter)   return false;
-    if (plantFilter  && d.plant  !== plantFilter)  return false;
+    if (statusFilter && data.some(d => d.status === statusFilter)) {
+      data = data.filter(d => d.status === statusFilter);
+    }
+    if (typeFilter) {
+      data = data.filter(d => d.type === typeFilter);
+    }
+    if (plantFilter) {
+      data = data.filter(d => d.plant === plantFilter);
+    }
+    // Column filters
+    if (colFilterCode.length > 0) {
+      data = data.filter(d => colFilterCode.includes(d.code));
+    }
+    if (colFilterPlant.length > 0) {
+      data = data.filter(d => colFilterPlant.includes(d.plant || '—'));
+    }
+    if (colFilterResponsible.length > 0) {
+      data = data.filter(d => colFilterResponsible.includes(d.responsible));
+    }
+    if (colFilterDate.length > 0) {
+      data = data.filter(d => colFilterDate.includes(d.date ? new Date(d.date).toLocaleDateString('pt-BR') : '—'));
+    }
+    if (colFilterSubject.length > 0) {
+      data = data.filter(d => colFilterSubject.includes(d.subject || '—'));
+    }
+    if (colFilterStatus.length > 0) {
+      data = data.filter(d => colFilterStatus.includes(d.status));
+    }
     const q = search.toLowerCase();
-    if (q) return (d.code||'').toLowerCase().includes(q)
-                || (d.responsible||'').toLowerCase().includes(q)
-                || (d.subject||'').toLowerCase().includes(q)
-                || (d.plant||'').toLowerCase().includes(q)
-                || (d.authors||[]).some(a => a.name.toLowerCase().includes(q));
-    return true;
-  }), [docs, statusFilter, typeFilter, plantFilter, search, myDocsOnly, user]);
+    if (q) {
+      data = data.filter(d =>
+        (d.code||'').toLowerCase().includes(q)
+        || (d.responsible||'').toLowerCase().includes(q)
+        || (d.subject||'').toLowerCase().includes(q)
+        || (d.plant||'').toLowerCase().includes(q)
+        || (d.authors||[]).some(a => a.name.toLowerCase().includes(q))
+      );
+    }
+    return data;
+  }, [docs, statusFilter, typeFilter, plantFilter, search, myDocsOnly, user, colFilterCode, colFilterPlant, colFilterResponsible, colFilterDate, colFilterSubject, colFilterStatus]);
 
   // Agrupar por base_code — normalizar: CTA-PRD-002-26-R0 → CTA-PRD-002-26
   const normalizeBaseCode = (doc) => {
@@ -817,6 +881,12 @@ export default function DocumentsPage() {
           <span style={{ fontSize:'0.72rem', color:'#94A3B8', whiteSpace:'nowrap', flexShrink:0 }}>{groups.length} grupos / {filtered.length} docs</span>
         </div>
 
+        <button onClick={exportExcel} style={{
+          display:'flex', alignItems:'center', gap:6, padding:'8px 14px',
+          border:'1.5px solid #15803D', borderRadius:8, background:'#F0FDF4',
+          fontSize:'0.8rem', fontWeight:600, cursor:'pointer', color:'#15803D', flexShrink:0,
+        }}>📥 Exportar Excel</button>
+
         <button onClick={exportHTML} style={{
           display:'flex', alignItems:'center', gap:6, padding:'8px 14px',
           border:'1.5px solid #CBD5E1', borderRadius:8, background:'#fff',
@@ -842,12 +912,72 @@ export default function DocumentsPage() {
           <table style={{ width:'100%', borderCollapse:'collapse' }}>
             <thead>
               <tr style={{ background:'#001F5B' }}>
-                <th style={TH}>Código</th>
-                <th style={TH}>Usina</th>
-                <th style={TH}>Responsável</th>
-                <th style={TH}>Data</th>
-                <th style={TH}>Título do Documento</th>
-                <th style={TH}>Status</th>
+                <th style={TH}>
+                  <div style={{ display:'flex', alignItems:'center' }}>
+                    Código
+                    <ColumnFilterDropdown
+                      column="Código"
+                      uniqueValues={[...new Set(docs.map(d => d.code).filter(Boolean))]}
+                      selectedValues={colFilterCode}
+                      onChange={setColFilterCode}
+                    />
+                  </div>
+                </th>
+                <th style={TH}>
+                  <div style={{ display:'flex', alignItems:'center' }}>
+                    Usina
+                    <ColumnFilterDropdown
+                      column="Usina"
+                      uniqueValues={[...new Set(docs.map(d => d.plant || '—').filter(Boolean))]}
+                      selectedValues={colFilterPlant}
+                      onChange={setColFilterPlant}
+                    />
+                  </div>
+                </th>
+                <th style={TH}>
+                  <div style={{ display:'flex', alignItems:'center' }}>
+                    Responsável
+                    <ColumnFilterDropdown
+                      column="Responsável"
+                      uniqueValues={[...new Set(docs.map(d => d.responsible).filter(Boolean))]}
+                      selectedValues={colFilterResponsible}
+                      onChange={setColFilterResponsible}
+                    />
+                  </div>
+                </th>
+                <th style={TH}>
+                  <div style={{ display:'flex', alignItems:'center' }}>
+                    Data
+                    <ColumnFilterDropdown
+                      column="Data"
+                      uniqueValues={[...new Set(docs.map(d => d.date ? new Date(d.date).toLocaleDateString('pt-BR') : '—').filter(Boolean))]}
+                      selectedValues={colFilterDate}
+                      onChange={setColFilterDate}
+                    />
+                  </div>
+                </th>
+                <th style={TH}>
+                  <div style={{ display:'flex', alignItems:'center' }}>
+                    Título do Documento
+                    <ColumnFilterDropdown
+                      column="Título"
+                      uniqueValues={[...new Set(docs.map(d => d.subject || '—').filter(Boolean))]}
+                      selectedValues={colFilterSubject}
+                      onChange={setColFilterSubject}
+                    />
+                  </div>
+                </th>
+                <th style={TH}>
+                  <div style={{ display:'flex', alignItems:'center' }}>
+                    Status
+                    <ColumnFilterDropdown
+                      column="Status"
+                      uniqueValues={STATUSES.map(s => s.value)}
+                      selectedValues={colFilterStatus}
+                      onChange={setColFilterStatus}
+                    />
+                  </div>
+                </th>
                 <th style={TH}>Ações</th>
               </tr>
             </thead>
