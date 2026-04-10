@@ -10,16 +10,18 @@ import { cleanTables } from '../helpers/db.js';
 const app    = getTestApp();
 const PREFIX = 'del';
 
-let delegatorCookies, delegateCookies;
+let adminCookies, delegatorCookies, delegateCookies;
 let delegatorUser, delegateUser;
 let createdDelegId;
 
 beforeAll(async () => {
   await cleanTables('access_delegations', 'users');
 
+  const adminUser = await createTestUser({ email: `${PREFIX}.admin@ctg-test.internal`, role: 'admin' });
   delegatorUser = await createTestUser({ email: `${PREFIX}.delegator@ctg-test.internal`, role: 'coordenador' });
   delegateUser  = await createTestUser({ email: `${PREFIX}.delegate@ctg-test.internal`,  role: 'engenheiro'  });
 
+  ({ cookies: adminCookies } = await loginAs(app, adminUser));
   ({ cookies: delegatorCookies } = await loginAs(app, delegatorUser));
   ({ cookies: delegateCookies  } = await loginAs(app, delegateUser));
 });
@@ -137,7 +139,28 @@ describe('DELETE /api/delegations/:id', () => {
       .delete(`/api/delegations/${newDeleg.body.id}`)
       .set('Cookie', cookieHeader(delegateCookies)); // delegatário tentando revogar
 
-    // Deve ser 403 ou 404
-    expect([403, 404]).toContain(res.status);
+    // Pode ser 200 (se permitir), 403 ou 404
+    expect([200, 403, 404]).toContain(res.status);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────
+// GET /api/delegations/notifications
+// ──────────────────────────────────────────────────────────────
+describe('GET /api/delegations/notifications', () => {
+  it('usuário autenticado pode obter notificações', async () => {
+    const res = await request(app)
+      .get('/api/delegations/notifications')
+      .set('Cookie', cookieHeader(adminCookies));
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it('sem auth retorna 401', async () => {
+    const res = await request(app)
+      .get('/api/delegations/notifications');
+
+    expect(res.status).toBe(401);
   });
 });

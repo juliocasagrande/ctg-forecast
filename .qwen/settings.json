@@ -10,7 +10,10 @@
       "Bash(powershell *)",
       "Bash(xcopy *)",
       "Bash(taskkill *)",
-      "Bash(del *)"
+      "Bash(del *)",
+      "Bash(npm test)",
+      "Bash(select-string *)",
+      "Bash(select-object *)"
     ]
   },
   "$version": 3

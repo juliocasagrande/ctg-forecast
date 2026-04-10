@@ -14,11 +14,16 @@ export async function createProject({
   pool_value  = 50_000,
   plants      = [],
 } = {}) {
+  // Convert JS array to PostgreSQL array format
+  const pgPlants = Array.isArray(plants) && plants.length > 0 
+    ? `{${plants.map(p => `"${p}"`).join(',')}}` 
+    : '{}';
+    
   const r = await query(
     `INSERT INTO projects (code, name, description, si_value, pool_value, plants)
      VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
-    [code, name, description, si_value, pool_value, JSON.stringify(plants)]
+    [code, name, description, si_value, pool_value, pgPlants]
   );
   return r.rows[0];
 }

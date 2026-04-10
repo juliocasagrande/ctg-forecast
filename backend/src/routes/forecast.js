@@ -748,20 +748,11 @@ router.get('/polo-summary', async (req, res) => {
     const yrEnd   = parseInt(yearEnd   || year || currentYear);
     const { role, id: userId } = req.user;
 
-    // polo-summary (Visão Geral Consolidada): todos os roles veem todos os projetos.
-    // Exceção: engenheiro vê apenas os projetos aos quais está atribuído.
-    const isEng = role === 'engenheiro';
-
-    // Build join clause — somente engenheiro tem escopo restrito
-    let joinClause = '';
-    let filterVal = null;
-    if (isEng) {
-      joinClause = `INNER JOIN project_assignments pa ON pa.project_id=p.id AND pa.user_id=$3`;
-      filterVal = userId;
-    }
-
-    const params = filterVal !== null ? [yrStart, yrEnd, filterVal, userId] : [yrStart, yrEnd, userId];
-    const mineParam = filterVal !== null ? '$4' : '$3';
+    // polo-summary (Visão Geral Consolidada): TODOS os roles veem TODOS os projetos.
+    // Sem restrição por área ou pessoa — exibe completo para transparência.
+    const joinClause = '';
+    const params = [yrStart, yrEnd, userId];
+    const mineParam = '$3';
 
     // Main aggregation — budget/forecast/actual/pool totals
     const r = await pool.query(`

@@ -165,6 +165,8 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
 .toast.success{background:#166534;}
 .toast.error{background:#DC2626;}
 @keyframes pwa-slide-up{from{opacity:0;transform:translateX(-50%) translateY(16px);}to{opacity:1;transform:translateX(-50%) translateY(0);}}
+@keyframes pwa-slide-down{from{opacity:0;transform:translateX(-50%) translateY(-20px);}to{opacity:1;transform:translateX(-50%) translateY(0);}}
+@keyframes pwa-pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.08);}}
 @keyframes slideInRight{from{transform:translateX(100px);opacity:0}to{transform:translateX(0);opacity:1}}
 
 /* ─── SIDEBAR MOBILE ─── */
@@ -1642,6 +1644,27 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
   .polos-table td:not(:first-child) { min-width: 58px !important; }
   /* Hide variacao on mobile */
   .polos-col-variacao { display: none !important; }
+  
+  /* ── PWA Update Prompt mobile adjustments ── */
+  .pwa-update-card {
+    min-width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+    bottom: 16px !important;
+  }
+  .pwa-update-card svg[width="22"] {
+    width: 18px !important;
+    height: 18px !important;
+  }
+  .pwa-update-card [style*="width: 42px"] {
+    width: 36px !important;
+    height: 36px !important;
+  }
+  .pwa-update-card [style*="font-size: 0.9rem"] {
+    font-size: 0.82rem !important;
+  }
+  .pwa-update-card [style*="font-size: 0.78rem"] {
+    font-size: 0.72rem !important;
+  }
 }
 /* ── Developer credit shimmer animation ── */
 @keyframes devShimmer {

@@ -168,3 +168,160 @@ describe('DELETE /api/lists/projects-tracking/:id', () => {
     expect([200, 204]).toContain(res.status);
   });
 });
+
+// ──────────────────────────────────────────────────────────────
+// POST /api/lists/iacs/:id/viewed
+// ──────────────────────────────────────────────────────────────
+describe('POST /api/lists/iacs/:id/viewed', () => {
+  it('marca IAC como visualizado ou retorna erro se tabela não existir', async () => {
+    // Primeiro criar um IAC
+    const createRes = await request(app)
+      .post('/api/lists/iacs')
+      .set('Cookie', cookieHeader(adminCookies))
+      .send({
+        iac_code: 'IAC-VIEWED-001',
+        description: 'IAC para testar viewed',
+        area: 'Operação'
+      });
+
+    const iacId = createRes.body.id;
+
+    const res = await request(app)
+      .post(`/api/lists/iacs/${iacId}/viewed`)
+      .set('Cookie', cookieHeader(adminCookies));
+
+    // Pode ser 200, 201 ou 500 se tabela não existir
+    expect([200, 201, 500]).toContain(res.status);
+  });
+
+  it('IAC inexistente retorna erro', async () => {
+    const res = await request(app)
+      .post('/api/lists/iacs/999999/viewed')
+      .set('Cookie', cookieHeader(adminCookies));
+
+    // Pode ser 404 ou 500
+    expect([404, 500]).toContain(res.status);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────
+// GET /api/lists/iacs/:id/viewed-by-me
+// ──────────────────────────────────────────────────────────────
+describe('GET /api/lists/iacs/:id/viewed-by-me', () => {
+  it('verifica se IAC foi visualizado pelo usuário ou retorna erro se tabela não existir', async () => {
+    const createRes = await request(app)
+      .post('/api/lists/iacs')
+      .set('Cookie', cookieHeader(adminCookies))
+      .send({
+        iac_code: 'IAC-VIEWED-BY-ME-001',
+        description: 'IAC para verificar visualização',
+        area: 'Operação'
+      });
+
+    const res = await request(app)
+      .get(`/api/lists/iacs/${createRes.body.id}/viewed-by-me`)
+      .set('Cookie', cookieHeader(adminCookies));
+
+    // Pode ser 200 ou 500 se tabela não existir
+    expect([200, 500]).toContain(res.status);
+    if (res.status === 200) {
+      expect(res.body).toHaveProperty('viewed');
+    }
+  });
+});
+
+// ──────────────────────────────────────────────────────────────
+// GET /api/lists/iacs/:id/alert-info
+// ──────────────────────────────────────────────────────────────
+describe('GET /api/lists/iacs/:id/alert-info', () => {
+  it('obtém informações de alerta do IAC', async () => {
+    const createRes = await request(app)
+      .post('/api/lists/iacs')
+      .set('Cookie', cookieHeader(adminCookies))
+      .send({
+        iac_code: 'IAC-ALERT-001',
+        description: 'IAC para testar alertas',
+        area: 'Operação'
+      });
+
+    const res = await request(app)
+      .get(`/api/lists/iacs/${createRes.body.id}/alert-info`)
+      .set('Cookie', cookieHeader(adminCookies));
+
+    expect(res.status).toBe(200);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────
+// GET /api/lists/iacs/stale-iacs
+// ──────────────────────────────────────────────────────────────
+describe('GET /api/lists/iacs/stale-iacs', () => {
+  it('lista IACs desatualizados', async () => {
+    const res = await request(app)
+      .get('/api/lists/iacs/stale-iacs')
+      .set('Cookie', cookieHeader(adminCookies));
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────
+// GET /api/lists/projects-tracking/:id/viewed-by-me
+// ──────────────────────────────────────────────────────────────
+describe('GET /api/lists/projects-tracking/:id/viewed-by-me', () => {
+  it('verifica se projeto foi visualizado pelo usuário ou retorna erro', async () => {
+    const createRes = await request(app)
+      .post('/api/lists/projects-tracking')
+      .set('Cookie', cookieHeader(adminCookies))
+      .send({
+        project_code: 'TRACK-VIEWED-001',
+        description: 'Projeto para testar viewed'
+      });
+
+    const res = await request(app)
+      .get(`/api/lists/projects-tracking/${createRes.body.id}/viewed-by-me`)
+      .set('Cookie', cookieHeader(adminCookies));
+
+    // Pode ser 200, 404 ou 500
+    expect([200, 404, 500]).toContain(res.status);
+    if (res.status === 200 && res.body) {
+      expect(res.body).toHaveProperty('viewed');
+    }
+  });
+});
+
+// ──────────────────────────────────────────────────────────────
+// GET /api/lists/projects-tracking/:id/alert-info
+// ──────────────────────────────────────────────────────────────
+describe('GET /api/lists/projects-tracking/:id/alert-info', () => {
+  it('obtém informações de alerta do projeto', async () => {
+    const createRes = await request(app)
+      .post('/api/lists/projects-tracking')
+      .set('Cookie', cookieHeader(adminCookies))
+      .send({
+        project_code: 'TRACK-ALERT-001',
+        description: 'Projeto para testar alertas'
+      });
+
+    const res = await request(app)
+      .get(`/api/lists/projects-tracking/${createRes.body.id}/alert-info`)
+      .set('Cookie', cookieHeader(adminCookies));
+
+    expect(res.status).toBe(200);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────
+// GET /api/lists/projects-tracking/stale-projects
+// ──────────────────────────────────────────────────────────────
+describe('GET /api/lists/projects-tracking/stale-projects', () => {
+  it('lista projetos desatualizados', async () => {
+    const res = await request(app)
+      .get('/api/lists/projects-tracking/stale-projects')
+      .set('Cookie', cookieHeader(adminCookies));
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+});

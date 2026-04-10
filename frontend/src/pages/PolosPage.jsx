@@ -168,7 +168,7 @@ export default function PolosPage({ period: externalPeriod, plantFilter = [] }) 
   const period = externalPeriod || { start: currentYear, end: currentYear };
   const [loading,   setLoading]   = useState(true);
   const [poloOpen,  setPoloOpen]  = useState(() => Object.fromEntries(POLOS.map(p => [p.id, true])));
-  const [plantOpen, setPlantOpen] = useState({});
+  const [plantOpen, setPlantOpen] = useState({}); // Todas as usinas começam colapsadas
   const navigate = useNavigate();
   const { role, isEngenheiro } = useRole();
   const C = useTypeColors();

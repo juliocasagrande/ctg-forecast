@@ -10,7 +10,7 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt', // Muda para 'prompt' para permitir controle manual do update
       manifest: {
         name: 'CTG.Engenharia',
         short_name: 'Engenharia',
@@ -31,6 +31,9 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
+        cleanupOutdatedCaches: true, // Limpa caches antigos automaticamente
+        skipWaiting: false, // Espera pelo reload do usuário
+        clientsClaim: false, // Não reclama imediatamente
         runtimeCaching: [
           {
             urlPattern: /^https?:\/\/.*\/api\/(auth\/me|settings)$/i,
@@ -48,7 +51,13 @@ export default defineConfig({
             options: { cacheName: 'google-fonts', expiration: { maxEntries: 10, maxAgeSeconds: 31536000 } }
           }
         ]
-      }
+      },
+      // Configuração para verificação periódica de updates
+      devOptions: {
+        enabled: false, // Desabilita PWA em desenvolvimento
+        type: 'module',
+        navigateFallback: '/',
+      },
     })
   ],
   server: {
