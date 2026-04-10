@@ -1701,60 +1701,52 @@ export default function ProjectsTrackingPage() {
                         <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                           <StatusDot updatedAt={item.updated_at} />
                         </td>
-                        <td style={{ padding: '10px 12px' }}>
+                        <td style={{ padding: '10px 12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           <UheBadge uhe={item.uhe} />
                         </td>
-                        <td style={{ padding: '10px 12px', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap' }}>
+                        <td style={{ padding: '10px 12px', fontWeight: 700, color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {item.pp_contrato || '—'}
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#475569', maxWidth: 240 }}>
-                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {item.projeto_atividade || '—'}
-                          </div>
+                        <td style={{ padding: '10px 12px', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {item.projeto_atividade || '—'}
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#475569', maxWidth: 160 }}>
-                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {item.projeto || '—'}
-                          </div>
+                        <td style={{ padding: '10px 12px', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {item.projeto || '—'}
                         </td>
-                        <td style={{ padding: '10px 12px' }}>
+                        <td style={{ padding: '10px 12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           <StatusBadge status={item.status} />
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+                        <td style={{ padding: '10px 12px', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                           {item.gestor || '—'}
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#64748B', maxWidth: 200, fontSize: '0.75rem' }}>
-                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {item.resumo || '—'}
-                          </div>
+                        <td style={{ padding: '10px 12px', color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+                          {item.resumo || '—'}
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+                        <td style={{ padding: '10px 12px', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                           {item.vencimento ? new Date(item.vencimento).toLocaleDateString('pt-BR') : (item.vencimento_txt || '—')}
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#0F172A', fontWeight: 600, whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+                        <td style={{ padding: '10px 12px', color: '#0F172A', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                           {fmtBRL(item.valor_contrato)}
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#475569', fontWeight: 500, whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+                        <td style={{ padding: '10px 12px', color: '#475569', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                           {fmtBRL(item.realizado_contrato)}
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#065F46', fontWeight: 600, whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+                        <td style={{ padding: '10px 12px', color: '#065F46', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                           {fmtBRL(item.saldo_contrato)}
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#0F172A', fontWeight: 600, whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+                        <td style={{ padding: '10px 12px', color: '#0F172A', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                           {fmtBRL(item.valor_si)}
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#475569', fontWeight: 500, whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+                        <td style={{ padding: '10px 12px', color: '#475569', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                           {fmtBRL(item.realizado_si)}
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#065F46', fontWeight: 600, whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+                        <td style={{ padding: '10px 12px', color: '#065F46', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                           {fmtBRL(item.saldo_si)}
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#475569', maxWidth: 140, fontSize: '0.75rem' }}>
-                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {item.fornecedor || '—'}
-                          </div>
+                        <td style={{ padding: '10px 12px', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+                          {item.fornecedor || '—'}
                         </td>
-                        <td style={{ padding: '10px 12px' }}>
+                        <td style={{ padding: '10px 12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           <NaturezaBadge value={item.natureza} />
                         </td>
                         <td style={{ padding: '10px 12px' }}>
