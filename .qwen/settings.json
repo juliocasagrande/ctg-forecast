@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(c:\\Users\\jlcasagrande\\OneDrive - CTG Brasil\\CTG Brasil\\02 - PYTHON\\forecast\\backend\\src\\routes/**)",
+      "Bash(npm run *)",
+      "Bash(findstr *)",
+      "Bash(timeout *)",
+      "Bash(curl *)",
+      "Bash(npx *)",
+      "Bash(powershell *)",
+      "Bash(xcopy *)",
+      "Bash(taskkill *)",
+      "Bash(del *)"
+    ]
+  },
+  "$version": 3
+}

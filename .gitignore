@@ -7,5 +7,7 @@ backend/public/
 backend/.env
 frontend/.env
 *.log
+*.bak
 .DS_Store
 README.txt
+QWEN.md

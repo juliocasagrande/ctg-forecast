@@ -11,40 +11,36 @@ import ProjectChat from './ProjectChat.jsx';
 import Modal from './ui/Modal.jsx';
 import { useToast } from './ui/Toast.jsx';
 import ChartTooltip from './ui/ChartTooltip.jsx';
+import ExportModal from './ProjectDetailExportModal.jsx';
+import { ConsolidatedYearTable, ConsolidatedYearCharts } from './ProjectDetailConsolidatedYearView.jsx';
+import ActivityPanel from './ProjectDetailActivityPanel.jsx';
 
 const fmt = formatBRLShort;
 
-const ROLE_LABELS  = { admin:'Administrador', gestor:'Gestor', engenheiro:'Engenheiro', planejador:'Planejador' };
-const ROLE_COLORS  = { admin:'#001F5B', gestor:'#0070B8', engenheiro:'#166534', planejador:'#7C3AED' };
+const ROLE_LABELS  = { admin:'Administrador', coordenador:'Coordenador', engenheiro:'Engenheiro', planejador:'Planejador' };
+const ROLE_COLORS  = { admin:'#001F5B', coordenador:'#0070B8', engenheiro:'#166534', planejador:'#7C3AED' };
 
 // Tabs available per role inside the Forecast section
 const FORECAST_TABS = {
   planejador: [
-    { id: 'Budget',              label: 'Budget'             },
-    { id: 'Forecast',            label: 'Forecast'           },
-    { id: 'Actual',              label: 'Realizado'          },
-    { id: 'Pool',                label: 'Pool'               },
-    { id: 'Meta',                label: 'Meta'               },
+    { id: 'Budget',   label: 'Budget'    },
+    { id: 'Forecast', label: 'Forecast'  },
+    { id: 'Actual',   label: 'Realizado' },
+    { id: 'Pool',     label: 'Pool'      },
+    { id: 'Meta',     label: 'Meta'      },
   ],
   engenheiro: [
     { id: 'Forecast', label: 'Forecast'  },
     { id: 'Actual',   label: 'Realizado' },
   ],
   coordenador: [
-    { id: 'Budget',              label: 'Budget'             },
-    { id: 'Forecast',            label: 'Forecast'           },
-    { id: 'Actual',              label: 'Realizado'          },
-    { id: 'Pool',                label: 'Pool'               },
-    { id: 'Meta',                label: 'Meta'               },
+    { id: 'Budget',   label: 'Budget'    },
+    { id: 'Forecast', label: 'Forecast'  },
+    { id: 'Actual',   label: 'Realizado' },
+    { id: 'Pool',     label: 'Pool'      },
+    { id: 'Meta',     label: 'Meta'      },
   ],
   gerente: [], // read-only, no wizard tabs
-  gestor: [
-    { id: 'Budget',              label: 'Budget'             },
-    { id: 'Forecast',            label: 'Forecast'           },
-    { id: 'Actual',              label: 'Realizado'          },
-    { id: 'Pool',                label: 'Pool'               },
-    { id: 'Meta',                label: 'Meta'               },
-  ],
 };
 
 function Avatar({ name, initials, role, size=32 }) {
@@ -68,7 +64,7 @@ function SIWarning({ projection, siValue }) {
   );
 }
 
-// ── Read-only table (gestor) ──────────────────────────────────────────────────
+// ── Read-only table (gerente) ────────────────────────────────────────────────
 function ReadOnlyTable({ entries, year, siValue, consolidatedActual, siProjection }) {
   const C = useTypeColors();
   const [tooltip, setTooltip] = useState(null); // { x, y, comments: [{user, type, text}] }
@@ -192,78 +188,6 @@ function ReadOnlyTable({ entries, year, siValue, consolidatedActual, siProjectio
   );
 }
 
-// ── Consolidated Year Table — summary view for past years ────────────────────
-function ConsolidatedYearTable({ yearConsData, year }) {
-  const C = useTypeColors();
-  // New simplified format: single value with category='Total', type='Actual'
-  const getTotal = () => {
-    const row = yearConsData.find(e => parseInt(e.year) === year && e.type === 'Actual' && e.category === 'Total');
-    if (row) return parseFloat(row.value) || 0;
-    // Fallback: sum old per-category format for backwards compatibility
-    const oldRows = yearConsData.filter(e => parseInt(e.year) === year && e.type === 'Actual');
-    return oldRows.reduce((s, e) => s + (parseFloat(e.value) || 0), 0);
-  };
-  const total = getTotal();
-  const f = v => v ? v.toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}) : '—';
-
-  if (!total) {
-    return (
-      <div style={{textAlign:'center',padding:'40px 20px',color:'var(--text-muted)',fontSize:'0.9rem'}}>
-        <p style={{marginBottom:8,fontSize:'1.1rem'}}>📦</p>
-        <p>Nenhum valor consolidado registrado para {year}.</p>
-        <p style={{fontSize:'0.8rem',marginTop:4}}>Acesse a aba <strong>Forecast</strong> → <strong>{year} consolidado</strong> para inserir o valor.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{
-      borderRadius:'var(--radius-md)',border:`2px solid ${C.actual}`,overflow:'hidden',maxWidth:400,
-    }}>
-      <div style={{
-        padding:'14px 20px',background:`linear-gradient(135deg, ${C.actual}EE, ${C.actual}BB)`,
-        color:'#fff',display:'flex',alignItems:'center',justifyContent:'space-between',
-      }}>
-        <span style={{fontWeight:700,fontSize:'0.95rem'}}>Realizado Consolidado — {year}</span>
-      </div>
-      <div style={{padding:'20px',background:C.actual+'12',textAlign:'center'}}>
-        <div style={{fontSize:'0.72rem',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:4}}>Valor Total Realizado</div>
-        <div style={{fontFamily:'var(--font-display)',fontSize:'1.8rem',color:C.actual,fontWeight:700}}>
-          R$ {f(total)}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Consolidated Year Charts — simplified for single Actual value ─────────────
-function ConsolidatedYearCharts({ yearConsData, year }) {
-  const C = useTypeColors();
-  const getTotal = () => {
-    const row = yearConsData.find(e => parseInt(e.year) === year && e.type === 'Actual' && e.category === 'Total');
-    if (row) return parseFloat(row.value) || 0;
-    const oldRows = yearConsData.filter(e => parseInt(e.year) === year && e.type === 'Actual');
-    return oldRows.reduce((s, e) => s + (parseFloat(e.value) || 0), 0);
-  };
-  const total = getTotal();
-
-  if (!total) {
-    return (
-      <div style={{textAlign:'center',padding:'40px 20px',color:'var(--text-muted)',fontSize:'0.9rem'}}>
-        Nenhum dado consolidado para {year}.
-      </div>
-    );
-  }
-
-  return (
-    <div style={{textAlign:'center',padding:'24px',background:'var(--bg-card)',borderRadius:'var(--radius-md)',border:'1px solid var(--border)'}}>
-      <div style={{fontSize:'0.72rem',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:6}}>Realizado Consolidado — {year}</div>
-      <div style={{fontFamily:'var(--font-display)',fontSize:'2rem',color:C.actual,fontWeight:700}}>
-        {formatBRL(total)}
-      </div>
-    </div>
-  );
-}
 
 // ── Consolidated Actual Panel ─────────────────────────────────────────────────
 function ConsolidatedActualPanel({ projectId, siValue, forecastTotal, actualTotal, siProjection }) {
@@ -336,49 +260,6 @@ function ConsolidatedActualPanel({ projectId, siValue, forecastTotal, actualTota
   );
 }
 
-// ── Activity Panel ────────────────────────────────────────────────────────────
-function ActivityPanel({ projectId }) {
-  const [activity, setActivity] = useState(null);
-  useEffect(()=>{
-    api.get(`/forecast/project/${projectId}/activity`).then(r=>setActivity(r.data)).catch(()=>{});
-  },[projectId]);
-  if (!activity) return null;
-
-  const roleMap = {};
-  const update = (r, action) => {
-    if (!roleMap[r.role] || new Date(r.last_at) > new Date(roleMap[r.role].last_at))
-      roleMap[r.role] = { ...r, action };
-  };
-  activity.forecast.forEach(r => update(r, 'Dados atualizados'));
-  activity.checkins.forEach(r => update(r, 'Check-in realizado'));
-  activity.consolidated.forEach(r => update(r, 'Realizado consolidado'));
-
-  const items = Object.values(roleMap);
-  if (!items.length) return null;
-
-  return (
-    <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:10,paddingTop:10,borderTop:'1px solid var(--border)'}}>
-      {items.map(e => {
-        const days = Math.floor((Date.now() - new Date(e.last_at)) / 86400000);
-        const fresh = days <= 30;
-        return (
-          <div key={e.role} style={{display:'flex',flexDirection:'column',gap:2,padding:'7px 11px',borderRadius:'var(--radius-md)',background: fresh ? '#F0FDF4' : '#FEF2F2',border:`1px solid ${fresh ? '#BBF7D0' : '#FECACA'}`,minWidth:120}}>
-            <div style={{display:'flex',alignItems:'center',gap:5}}>
-              <span style={{width:7,height:7,borderRadius:'50%',background: fresh ? '#16A34A' : '#DC2626',flexShrink:0}}/>
-              <span style={{fontSize:'0.65rem',fontWeight:700,color: fresh ? '#15803D' : '#991B1B',textTransform:'uppercase',letterSpacing:'0.06em'}}>{ROLE_LABELS[e.role]||e.role}</span>
-            </div>
-            <div style={{fontSize:'0.75rem',fontWeight:500,color:'var(--text-primary)'}}>{e.user_name}</div>
-            <div style={{fontSize:'0.65rem',color:'var(--text-muted)'}}>{e.action}</div>
-            <div style={{fontSize:'0.65rem',fontWeight:600,color: fresh ? '#15803D' : '#DC2626'}}>
-              {days===0?'Hoje':days===1?'Ontem':`Há ${days} dias`}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 // ── Year + Type tab bar ───────────────────────────────────────────────────────
 const MAIN_TABS = [
   {id:'forecast', label:'📋 Forecast'},
@@ -389,146 +270,13 @@ const MAIN_TABS = [
 ];
 
 
-// ── Export Modal — category + type selection ──────────────────────────────────
-const EXPORT_CATEGORIES = ['Viagens', 'Contratos', 'POs'];
-const EXPORT_TYPES_BY_ROLE = {
-  engenheiro:  ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'],
-  coordenador: ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'],
-  gestor:      ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'],
-  planejador:  ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'],
-  admin:       ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'],
-};
-const TYPE_LABELS = { Budget:'Budget', Forecast:'Forecast', Actual:'Realizado', Meta:'Meta', Pool:'Pool' };
-
-function ExportModal({ open, onClose, onConfirm, role, isEngenheiro }) {
-  const availableTypes = EXPORT_TYPES_BY_ROLE[role] || EXPORT_TYPES_BY_ROLE.gestor;
-  const [exportScope, setExportScope] = useState('projeto'); // 'projeto' | 'geral'
-  const [selCats,  setSelCats]  = useState([...EXPORT_CATEGORIES]);
-  const [selTypes, setSelTypes] = useState([...availableTypes]);
-
-  const toggle = (arr, setArr, val) =>
-    setArr(prev => prev.includes(val) ? prev.filter(x => x !== val) : [...prev, val]);
-
-  if (!open) return null;
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <span className="modal-title">📊 Exportar Excel</span>
-          <button className="btn btn-ghost btn-icon" onClick={onClose} style={{ color:'rgba(255,255,255,0.7)' }}>✕</button>
-        </div>
-        <div className="modal-body">
-          {/* Export scope selector */}
-          <div style={{ marginBottom:16 }}>
-            <div style={{ fontSize:'0.7rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--text-muted)', marginBottom:8 }}>
-              Tipo de exportação
-            </div>
-            <div style={{ display:'flex', gap:8 }}>
-              {[
-                { id:'projeto', label:'📄 Este projeto', desc:'Dados deste projeto apenas' },
-                { id:'geral',   label:'📊 Relatório Geral', desc: isEngenheiro ? 'Meus projetos (Jan/2026 – Dez/2031)' : 'Todos os projetos (Jan/2026 – Dez/2031)' },
-              ].map(opt => (
-                <label key={opt.id} style={{
-                  flex:1, padding:'10px 12px', borderRadius:'var(--radius-md)', cursor:'pointer',
-                  background: exportScope===opt.id ? 'var(--ctg-light)' : 'var(--bg-app)',
-                  border: `1.5px solid ${exportScope===opt.id ? 'var(--ctg-blue)' : 'var(--border-strong)'}`,
-                  userSelect:'none', transition:'all 0.15s',
-                }}>
-                  <input type="radio" name="scope" value={opt.id} checked={exportScope===opt.id}
-                    onChange={() => setExportScope(opt.id)} style={{ marginRight:6, accentColor:'var(--ctg-blue)' }} />
-                  <span style={{ fontSize:'0.83rem', fontWeight:600, color: exportScope===opt.id ? 'var(--ctg-navy)' : 'var(--text-secondary)' }}>{opt.label}</span>
-                  <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', marginTop:2, marginLeft:20 }}>{opt.desc}</div>
-                </label>
-              ))}
-            </div>
-          </div>
-          <p style={{ fontSize:'0.82rem', color:'var(--text-secondary)', marginBottom:16 }}>
-            {exportScope==='projeto'
-              ? 'Selecione as categorias e tipos de dados deste projeto.'
-              : 'Selecione os tipos de dados para o relatório geral.'}
-          </p>
-          {/* Show categories only for project export */}
-
-          {/* Categories — only for project export */}
-          {exportScope === 'projeto' && <div style={{ marginBottom:18 }}>
-            <div style={{ fontSize:'0.7rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--text-muted)', marginBottom:8 }}>
-              Categorias
-            </div>
-            <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-              {EXPORT_CATEGORIES.map(cat => (
-                <label key={cat} style={{
-                  display:'flex', alignItems:'center', gap:7, padding:'7px 14px',
-                  borderRadius:'var(--radius-md)', cursor:'pointer',
-                  background: selCats.includes(cat) ? 'var(--ctg-light)' : 'var(--bg-app)',
-                  border: `1.5px solid ${selCats.includes(cat) ? 'var(--ctg-blue)' : 'var(--border-strong)'}`,
-                  fontSize:'0.83rem', fontWeight: selCats.includes(cat) ? 600 : 400,
-                  color: selCats.includes(cat) ? 'var(--ctg-navy)' : 'var(--text-secondary)',
-                  transition:'all 0.15s', userSelect:'none',
-                }}>
-                  <input type="checkbox" checked={selCats.includes(cat)}
-                    onChange={() => toggle(EXPORT_CATEGORIES, setSelCats, cat)}
-                    style={{ accentColor:'var(--ctg-blue)', width:14, height:14 }} />
-                  {cat}
-                </label>
-              ))}
-            </div>
-          </div>}
-
-          {/* Types */}
-          <div>
-            <div style={{ fontSize:'0.7rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--text-muted)', marginBottom:8 }}>
-              Tipos de dados
-            </div>
-            <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-              {availableTypes.map(type => {
-                const theme = {
-                  Budget:   { bg:'var(--budget-bg)',   border:'var(--budget-border)',   text:'var(--budget-text)'   },
-                  Forecast: { bg:'var(--forecast-bg)', border:'var(--forecast-border)', text:'var(--forecast-text)' },
-                  Actual:   { bg:'var(--actual-bg)',   border:'var(--actual-border)',   text:'var(--actual-text)'   },
-                  Meta:     { bg:'#F5F3FF', border:'#DDD6FE', text:'#6D28D9' },
-                  Pool:     { bg:'#F0F9FF', border:'#BAE6FD', text:'#0369A1' },
-                }[type] || {};
-                const sel = selTypes.includes(type);
-                return (
-                  <label key={type} style={{
-                    display:'flex', alignItems:'center', gap:7, padding:'7px 14px',
-                    borderRadius:'var(--radius-md)', cursor:'pointer',
-                    background: sel ? theme.bg : 'var(--bg-app)',
-                    border: `1.5px solid ${sel ? theme.border : 'var(--border-strong)'}`,
-                    fontSize:'0.83rem', fontWeight: sel ? 600 : 400,
-                    color: sel ? theme.text : 'var(--text-secondary)',
-                    transition:'all 0.15s', userSelect:'none',
-                  }}>
-                    <input type="checkbox" checked={sel}
-                      onChange={() => toggle(availableTypes, setSelTypes, type)}
-                      style={{ accentColor: theme.text || 'var(--ctg-blue)', width:14, height:14 }} />
-                    {TYPE_LABELS[type] || type}
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-export"
-            disabled={selTypes.length === 0 || (exportScope==='projeto' && selCats.length === 0)}
-            onClick={() => { onConfirm(selCats, selTypes, exportScope); onClose(); }}>
-            📊 Exportar
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function ProjectDetail({ onEdit }) {
   const C = useTypeColors();
   const settings = useSettings();
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { isEngenheiro, isPlanejador, isGestor, isAdmin, canManage, isCoordenador } = useRole();
+  const { isEngenheiro, isPlanejador, isAdmin, canManage, isCoordenador } = useRole();
   const isGerente = user?.role === 'gerente';
 
   // Year config from settings
@@ -572,7 +320,7 @@ export default function ProjectDetail({ onEdit }) {
   useEffect(() => {
     if (forecastType) return;
     if (isPlanejador) setForecastType('Budget');
-    else if (isGestor) setForecastType('Budget');
+    else if (isCoordenador) setForecastType('Budget');
     else if (isEngenheiro) setForecastType('Forecast');
   }, [isPlanejador, isEngenheiro]);
 
@@ -858,15 +606,13 @@ export default function ProjectDetail({ onEdit }) {
   // Determine type tabs for current role
   const roleForecastTabs = isPlanejador
     ? FORECAST_TABS.planejador
-    : isGestor
-      ? FORECAST_TABS.gestor
-      : isCoordenador
-        ? FORECAST_TABS.coordenador
-        : isGerente
-          ? FORECAST_TABS.gerente
-          : isEngenheiro
-            ? FORECAST_TABS.engenheiro
-            : FORECAST_TABS.gestor;
+    : isCoordenador
+      ? FORECAST_TABS.coordenador
+      : isGerente
+        ? FORECAST_TABS.gerente
+        : isEngenheiro
+          ? FORECAST_TABS.engenheiro
+          : FORECAST_TABS.coordenador; // fallback: full access like coordenador
 
   return (
     <div>

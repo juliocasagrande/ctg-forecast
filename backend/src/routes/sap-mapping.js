@@ -75,7 +75,7 @@ router.get('/sap-mapping', async (req, res) => {
 });
 
 // PUT /api/settings/sap-mapping  — replace all rows
-router.put('/sap-mapping', requireRoleOrEmail(ALLOWED_EMAILS, 'admin', 'gestor', 'planejador'), async (req, res) => {
+router.put('/sap-mapping', requireRoleOrEmail(ALLOWED_EMAILS, 'admin', 'planejador'), async (req, res) => {
   const { mapping } = req.body;
   if (!Array.isArray(mapping)) return res.status(400).json({ error: 'Campo "mapping" deve ser um array.' });
 
@@ -143,7 +143,7 @@ router.get('/sap-keywords', async (req, res) => {
 });
 
 // PUT /api/settings/sap-keywords
-router.put('/sap-keywords', requireRoleOrEmail(ALLOWED_EMAILS, 'admin', 'gestor', 'planejador'), async (req, res) => {
+router.put('/sap-keywords', requireRoleOrEmail(ALLOWED_EMAILS, 'admin', 'planejador'), async (req, res) => {
   const { keywords } = req.body; // { Dispensado: [...], Viagens: [...] }
   if (!keywords || typeof keywords !== 'object') {
     return res.status(400).json({ error: 'Campo "keywords" deve ser um objeto { Dispensado: [], Viagens: [] }.' });

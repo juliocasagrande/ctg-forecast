@@ -48,7 +48,7 @@ export async function seedAdmin() {
         email VARCHAR(120) NOT NULL UNIQUE,
         password_hash TEXT NOT NULL,
         role VARCHAR(20) NOT NULL DEFAULT 'engenheiro'
-          CHECK (role IN ('admin','gestor','engenheiro')),
+          CHECK (role IN ('admin','coordenador','engenheiro','planejador','gerente')),
         active BOOLEAN DEFAULT true,
         avatar_initials VARCHAR(4),
         created_at TIMESTAMPTZ DEFAULT NOW(),

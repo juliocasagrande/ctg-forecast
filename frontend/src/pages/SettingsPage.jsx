@@ -163,16 +163,22 @@ function FeedbackList({ toast }) {
 const SECTIONS = [
   { id: 'alerts',    label: '🔔 Alertas',        icon: '🔔' },
   { id: 'documents', label: '📄 Documentos',     icon: '📄' },
+  { id: 'tracking',  label: '📋 Acompanhamento', icon: '📋' },
   { id: 'colors',    label: '🎨 Cores',           icon: '🎨' },
-  { id: 'period',    label: '📆 Período',         icon: '📆' },
+  { id: 'period',    label: '📆 Período e Ano Fiscal', icon: '📆' },
   { id: 'export',    label: '📊 Exportação',      icon: '📊' },
-  { id: 'fiscal',    label: '📅 Ano Fiscal',      icon: '📅' },
   { id: 'sap',       label: '🗂️ Mapeamento SAP',  icon: '🗂️' },
   { id: 'feedback',  label: '💡 Feedbacks',       icon: '💡' },
 ];
 
 const DEFAULTS = {
   alert_stale_days:      '30',
+  tracking_alert_enabled: 'true',
+  tracking_alert_interval_days: '30',
+  tracking_alert_roles:     'gerente,coordenador,engenheiro',
+  iac_alert_enabled:       'true',
+  iac_alert_interval_days:  '14',
+  iac_alert_roles:          'gerente,coordenador,engenheiro',
   doc_alert_enabled:         'true',
   doc_alert_interval_days:   '7',
   doc_alert_exclude_cancelled:'true',
@@ -421,6 +427,105 @@ export default function SettingsPage() {
           </>
         )}
 
+        {/* ── ACOMPANHAMENTO DE PROJETOS ── */}
+        {activeSection === 'tracking' && (
+          <>
+            <SectionCard
+              title="Alerta de acompanhamento de projetos"
+              description="Notifica quando projetos de acompanhamento não são atualizados há um período definido."
+            >
+              <Toggle
+                label="Habilitar alertas de acompanhamento"
+                description="Ativa o envio de lembretes para projetos sem atualização recente."
+                value={settings.tracking_alert_enabled === 'true'}
+                onChange={v => set('tracking_alert_enabled', v)}
+              />
+              <NumberInput
+                label="Intervalo de alerta"
+                description="Após quantos dias sem atualização o projeto aparece no sino de notificações."
+                value={settings.tracking_alert_interval_days}
+                onChange={v => set('tracking_alert_interval_days', v)}
+                min={1} max={365} unit="dias"
+              />
+              <div style={{ padding: '12px 0' }}>
+                <div className="settings-toggle-label">Cargos que recebem alertas</div>
+                <p className="settings-toggle-desc" style={{ marginBottom: 8 }}>
+                  Coordenadores veem apenas engenheiros da sua área. Gerentes veem todas as áreas. Engenheiros veem apenas os próprios.
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {['gerente', 'coordenador', 'engenheiro'].map(role => {
+                    const active = (settings.tracking_alert_roles || '').split(',').map(r => r.trim()).includes(role);
+                    return (
+                      <button key={role} type="button"
+                        onClick={() => {
+                          const cur = (settings.tracking_alert_roles || '').split(',').map(r => r.trim()).filter(Boolean);
+                          const next = active ? cur.filter(r => r !== role) : [...cur, role];
+                          set('tracking_alert_roles', next.join(','));
+                        }}
+                        style={{
+                          padding: '5px 14px', borderRadius: 20, fontSize: '0.78rem', cursor: 'pointer',
+                          border: `1.5px solid ${active ? '#0066B3' : '#E2E8F0'}`,
+                          background: active ? '#EFF6FF' : '#F8FAFC',
+                          color: active ? '#0066B3' : '#64748B',
+                          fontWeight: active ? 700 : 400,
+                        }}>
+                        {active ? '✓ ' : ''}{role}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              title="Alerta de IACs sem atualização"
+              description="Notifica quando IACs não são atualizados pelo Team Leader há um período definido."
+            >
+              <Toggle
+                label="Habilitar alertas de IACs"
+                description="Ativa o envio de lembretes para IACs sem atualização recente."
+                value={settings.iac_alert_enabled === 'true'}
+                onChange={v => set('iac_alert_enabled', v)}
+              />
+              <NumberInput
+                label="Intervalo de alerta"
+                description="Após quantos dias sem atualização o IAC aparece no sino de notificações."
+                value={settings.iac_alert_interval_days}
+                onChange={v => set('iac_alert_interval_days', v)}
+                min={1} max={365} unit="dias"
+              />
+              <div style={{ padding: '12px 0' }}>
+                <div className="settings-toggle-label">Cargos que recebem alertas</div>
+                <p className="settings-toggle-desc" style={{ marginBottom: 8 }}>
+                  Coordenadores veem apenas engenheiros da sua área. Gerentes veem todas as áreas. Engenheiros veem apenas os próprios.
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {['gerente', 'coordenador', 'engenheiro'].map(role => {
+                    const active = (settings.iac_alert_roles || '').split(',').map(r => r.trim()).includes(role);
+                    return (
+                      <button key={role} type="button"
+                        onClick={() => {
+                          const cur = (settings.iac_alert_roles || '').split(',').map(r => r.trim()).filter(Boolean);
+                          const next = active ? cur.filter(r => r !== role) : [...cur, role];
+                          set('iac_alert_roles', next.join(','));
+                        }}
+                        style={{
+                          padding: '5px 14px', borderRadius: 20, fontSize: '0.78rem', cursor: 'pointer',
+                          border: `1.5px solid ${active ? '#0066B3' : '#E2E8F0'}`,
+                          background: active ? '#EFF6FF' : '#F8FAFC',
+                          color: active ? '#0066B3' : '#64748B',
+                          fontWeight: active ? 700 : 400,
+                        }}>
+                        {active ? '✓ ' : ''}{role}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </SectionCard>
+          </>
+        )}
+
         {/* ── DOCUMENTOS ── */}
         {activeSection === 'documents' && (
           <>
@@ -600,6 +705,19 @@ export default function SettingsPage() {
             >
               <CloseYearPanel settings={settings} toast={toast} />
             </SectionCard>
+
+            <SectionCard
+              title="Ano Fiscal"
+              description="Define o mês de início do ano fiscal para cálculos e relatórios."
+            >
+              <SelectInput
+                label="Mês de início do ano fiscal"
+                description="Impacta filtros de período, totais anuais e geração de relatórios."
+                value={settings.fiscal_year_start}
+                onChange={v => set('fiscal_year_start', v)}
+                options={MONTHS_PT.map((m, i) => ({ value: String(i + 1), label: m }))}
+              />
+            </SectionCard>
           </>
         )}
 
@@ -620,22 +738,6 @@ export default function SettingsPage() {
               description="Adiciona a linha de Pool no Excel exportado de projetos e relatório do planejador."
               value={settings.export_include_pool === 'true'}
               onChange={v => set('export_include_pool', v)}
-            />
-          </SectionCard>
-        )}
-
-        {/* ── ANO FISCAL ── */}
-        {activeSection === 'fiscal' && (
-          <SectionCard
-            title="Configuração do ano fiscal"
-            description="Define o mês de início do ano fiscal para cálculos e relatórios."
-          >
-            <SelectInput
-              label="Mês de início do ano fiscal"
-              description="Impacta filtros de período, totais anuais e geração de relatórios."
-              value={settings.fiscal_year_start}
-              onChange={v => set('fiscal_year_start', v)}
-              options={MONTHS_PT.map((m, i) => ({ value: String(i + 1), label: m }))}
             />
           </SectionCard>
         )}

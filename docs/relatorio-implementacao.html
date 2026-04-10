@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório de Implementação - CTG Engenharia</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f5f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .meta-info {
+            background: #f8f9fa;
+            padding: 20px 40px;
+            border-bottom: 3px solid #667eea;
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+
+        .meta-item {
+            margin: 5px 0;
+        }
+
+        .meta-item strong {
+            color: #667eea;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section-title {
+            font-size: 1.8em;
+            color: #667eea;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+            display: flex;
+            align-items: center;
+        }
+
+        .section-title .icon {
+            margin-right: 15px;
+            font-size: 1.2em;
+        }
+
+        .subsection {
+            margin: 25px 0;
+        }
+
+        .subsection-title {
+            font-size: 1.4em;
+            color: #764ba2;
+            margin-bottom: 15px;
+        }
+
+        .step {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .step-number {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 30px;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .step-title {
+            font-weight: 600;
+            font-size: 1.1em;
+            margin-bottom: 10px;
+        }
+
+        code {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.95em;
+        }
+
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 15px 0;
+            line-height: 1.5;
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+            color: inherit;
+        }
+
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .warning-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .success-box {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+
+        table th, table td {
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
+
+        table th {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+        }
+
+        table tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        ul, ol {
+            margin-left: 30px;
+            margin: 15px 0 15px 30px;
+        }
+
+        li {
+            margin: 8px 0;
+        }
+
+        .footer {
+            background: #2d2d2d;
+            color: white;
+            text-align: center;
+            padding: 20px;
+            font-size: 0.9em;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .badge-required {
+            background: #dc3545;
+            color: white;
+        }
+
+        .badge-optional {
+            background: #6c757d;
+            color: white;
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+            .container {
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📋 Relatório de Implementação</h1>
+            <p>CTG Engenharia - Guia de Deploy em VM Segregada</p>
+        </div>
+
+        <div class="meta-info">
+            <div class="meta-item">
+                <strong>Projeto:</strong> CTG Engenharia
+            </div>
+            <div class="meta-item">
+                <strong>Versão:</strong> 2.0.0
+            </div>
+            <div class="meta-item">
+                <strong>Data:</strong> 07 de Abril de 2026
+            </div>
+            <div class="meta-item">
+                <strong>Status:</strong> Pronto para Deploy
+            </div>
+        </div>
+
+        <div class="content">
+            <!-- Sumário -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="icon">📑</span>
+                    Sumário
+                </h2>
+                <ol>
+                    <li><a href="#visao-geral">Visão Geral do Projeto</a></li>
+                    <li><a href="#requisitos">Requisitos do Sistema</a></li>
+                    <li><a href="#metodo1">Método 1: Instalação Direta (Node.js + PostgreSQL)</a></li>
+                    <li><a href="#metodo2">Método 2: Deploy com Docker</a></li>
+                    <li><a href="#banco-dados">Configuração do Banco de Dados</a></li>
+                    <li><a href="#variaveis-ambiente">Variáveis de Ambiente</a></li>
+                    <li><a href="#portas">Portas e Rede</a></li>
+                    <li><a href="#execucao">Execução da Aplicação</a></li>
+                    <li><a href="#troubleshooting">Troubleshooting</a></li>
+                </ol>
+            </div>
+
+            <!-- Visão Geral -->
+            <div class="section" id="visao-geral">
+                <h2 class="section-title">
+                    <span class="icon">🎯</span>
+                    1. Visão Geral do Projeto
+                </h2>
+                <p>O sistema <strong>CTG Engenharia</strong> é uma aplicação full-stack composta por:</p>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Componente</th>
+                            <th>Tecnologia</th>
+                            <th>Versão</th>
+                            <th>Descrição</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Backend</strong></td>
+                            <td>Node.js + Express</td>
+                            <td>2.0.0</td>
+                            <td>API RESTful com autenticação JWT</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Frontend</strong></td>
+                            <td>React + Vite</td>
+                            <td>2.0.0</td>
+                            <td>Interface web com PWA</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Banco de Dados</strong></td>
+                            <td>PostgreSQL</td>
+                            <td>14+</td>
+                            <td>Armazenamento persistente</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="info-box">
+                    <strong>ℹ️ Nota:</strong> A aplicação pode ser deployada de duas formas: instalação direta (Node.js + PostgreSQL) ou via Docker containers.
+                </div>
+            </div>
+
+            <!-- Requisitos -->
+            <div class="section" id="requisitos">
+                <h2 class="section-title">
+                    <span class="icon">⚙️</span>
+                    2. Requisitos do Sistema
+                </h2>
+
+                <div class="subsection">
+                    <h3 class="subsection-title">2.1. Método 1: Instalação Direta</h3>
+                    
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Software</th>
+                                <th>Versão</th>
+                                <th>Obrigatório</th>
+                                <th>Download</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Node.js</td>
+                                <td>v22 (LTS)</td>
+                                <td><span class="badge badge-required">OBRIGATÓRIO</span></td>
+                                <td><a href="https://nodejs.org" target="_blank">https://nodejs.org</a></td>
+                            </tr>
+                            <tr>
+                                <td>PostgreSQL</td>
+                                <td>14+</td>
+                                <td><span class="badge badge-required">OBRIGATÓRIO</span></td>
+                                <td><a href="https://www.postgresql.org/download/" target="_blank">https://www.postgresql.org/download/</a></td>
+                            </tr>
+                            <tr>
+                                <td>npm</td>
+                                <td>Vem com Node.js</td>
+                                <td><span class="badge badge-required">OBRIGATÓRIO</span></td>
+                                <td>Incluso no Node.js</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="subsection">
+                    <h3 class="subsection-title">2.2. Método 2: Docker</h3>
+                    
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Software</th>
+                                <th>Versão</th>
+                                <th>Obrigatório</th>
+                                <th>Download</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Docker Engine</td>
+                                <td>20.10+</td>
+                                <td><span class="badge badge-required">OBRIGATÓRIO</span></td>
+                                <td><a href="https://docs.docker.com/engine/install/" target="_blank">https://docs.docker.com/engine/install/</a></td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div class="success-box">
+                        <strong>✅ Vantagem:</strong> Com Docker, não é necessário instalar Node.js ou PostgreSQL separadamente. A aplicação sobe completa via containers.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Método 1: Instalação Direta -->
+            <div class="section" id="metodo1">
+                <h2 class="section-title">
+                    <span class="icon">🔧</span>
+                    3. Método 1: Instalação Direta (Node.js + PostgreSQL)
+                </h2>
+
+                <div class="step">
+                    <div class="step-title">
+                        <span class="step-number">1</span>
+                        Instalar Node.js v22 (LTS)
+                    </div>
+                    <p>Acesse <a href="https://nodejs.org" target="_blank">https://nodejs.org</a> e baixe a versão LTS (v22).</p>
+                    <pre><code># Verificar a instalação
+node --version
+# Deve retornar: v22.x.x
+
+npm --version
+# Deve retornar: 10.x.x ou superior</code></pre>
+                </div>
+
+                <div class="step">
+                    <div class="step-title">
+                        <span class="step-number">2</span>
+                        Instalar PostgreSQL 14+
+                    </div>
+                    <p>Instale o PostgreSQL seguindo as instruções oficiais para seu sistema operacional.</p>
+                    <pre><code># Verificar a instalação
+psql --version
+# Deve retornar: psql (PostgreSQL) 14.x ou superior</code></pre>
+                </div>
+
+                <div class="step">
+                    <div class="step-title">
+                        <span class="step-number">3</span>
+                        Configurar o Banco de Dados
+                    </div>
+                    <p>Crie um banco de dados para a aplicação:</p>
+                    <pre><code># Acessar o PostgreSQL
+sudo -u postgres psql
+
+-- Criar banco de dados
+CREATE DATABASE ctg_engenharia;
+
+-- Criar usuário (opcional)
+CREATE USER ctg_user WITH PASSWORD 'sua_senha_segura';
+GRANT ALL PRIVILEGES ON DATABASE ctg_engenharia TO ctg_user;
+
+-- Sair
+\q</code></pre>
+                </div>
+
+                <div class="step">
+                    <div class="step-title">
+                        <span class="step-number">4</span>
+                        Instalar Dependências do Backend
+                    </div>
+                    <pre><code># Navegar para a pasta do backend
+cd backend
+
+# Instalar todas as dependências
+npm install</code></pre>
+                    <p><strong>Dependências principais:</strong></p>
+                    <ul>
+                        <li>express (framework web)</li>
+                        <li>pg (driver PostgreSQL)</li>
+                        <li>jsonwebtoken (autenticação JWT)</li>
+                        <li>bcrypt (criptografia de senhas)</li>
+                        <li>helmet (segurança)</li>
+                        <li>cors (política de origem cruzada)</li>
+                        <li>multer (upload de arquivos)</li>
+                        <li>exceljs (manipulação de Excel)</li>
+                    </ul>
+                </div>
+
+                <div class="step">
+                    <div class="step-title">
+                        <span class="step-number">5</span>
+                        Instalar Dependências do Frontend
+                    </div>
+                    <pre><code># Navegar para a pasta do frontend
+cd frontend
+
+# Instalar todas as dependências
+npm install</code></pre>
+                    <p><strong>Dependências principais:</strong></p>
+                    <ul>
+                        <li>react + react-dom (UI framework)</li>
+                        <li>vite (build tool)</li>
+                        <li>axios (cliente HTTP)</li>
+                        <li>react-router-dom (roteamento)</li>
+                        <li>recharts (gráficos)</li>
+                        <li>zustand (gerenciamento de estado)</li>
+                    </ul>
+                </div>
+
+                <div class="step">
+                    <div class="step-title">
+                        <span class="step-number">6</span>
+                        Configurar Variáveis de Ambiente
+                    </div>
+                    <p>Crie um arquivo <code>.env</code> na pasta <code>backend</code> com o seguinte conteúdo:</p>
+                    <pre><code># backend/.env
+DATABASE_URL=postgresql://ctg_user:sua_senha@localhost:5432/ctg_engenharia
+PORT=3001
+NODE_ENV=production
+JWT_SECRET=seu_segredo_jwt_aleatorio_e_longo_aqui
+
+# Seed (opcional — valores padrão se não definir)
+ADMIN_NAME=Administrador CTG
+ADMIN_EMAIL=admin@ctgbrasil.com
+ADMIN_PASS=ctg@2026</code></pre>
+                    <div class="warning-box">
+                        <strong>⚠️ Importante:</strong> Altere o <code>JWT_SECRET</code> para um valor aleatório e longo. Não use o valor de exemplo em produção!
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-title">
+                        <span class="step-number">7</span>
+                        Build do Frontend
+                    </div>
+                    <pre><code># Navegar para a pasta do frontend
+cd frontend
+
+# Gerar build de produção
+npm run build
+
+# Copiar o build para o backend (se necessário)
+cp -r dist ../backend/public</code></pre>
+                </div>
+            </div>
+
+            <!-- Método 2: Docker -->
+            <div class="section" id="metodo2">
+                <h2 class="section-title">
+                    <span class="icon">🐳</span>
+                    4. Método 2: Deploy com Docker
+                </h2>
+
+                <div class="info-box">
+                    <strong>ℹ️ Nota:</strong> Este método é mais simples e recomendado para ambientes de produção, pois isola completamente a aplicação.
+                </div>
+
+                <div class="step">
+                    <div class="step-title">
+                        <span class="step-number">1</span>
+                        Instalar Docker Engine
+                    </div>
+                    <p>Siga as instruções oficiais em <a href="https://docs.docker.com/engine/install/" target="_blank">https://docs.docker.com/engine/install/</a></p>
+                    <pre><code># Verificar a instalação
+docker --version
+# Deve retornar: Docker version 20.10.x ou superior</code></pre>
+                </div>
+
+                <div class="step">
+                    <div class="step-title">
+                        <span class="step-number">2</span>
+                        Configurar Arquivo .env
+                    </div>
+                    <p>Crie o arquivo <code>.env</code> na raiz do projeto com as variáveis necessárias (veja seção 6).</p>
+                </div>
+
+                <div class="step">
+                    <div class="step-title">
+                        <span class="step-number">3</span>
+                        Subir a Aplicação
+                    </div>
+                    <pre><code># Navegar para a pasta raiz do projeto
+cd forecast
+
+# Build e execução (se houver docker-compose.yml)
+docker-compose up -d
+
+# OU usando o Dockerfile diretamente
+docker build -t ctg-engenharia .
+docker run -d -p 8080:8080 --env-file .env ctg-engenharia</code></pre>
+                    <div class="success-box">
+                        <strong>✅ Pronto!</strong> A aplicação subirá completa com todos os serviços necessários.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Banco de Dados -->
+            <div class="section" id="banco-dados">
+                <h2 class="section-title">
+                    <span class="icon">🗄️</span>
+                    5. Configuração do Banco de Dados
+                </h2>
+
+                <div class="subsection">
+                    <h3 class="subsection-title">5.1. Opções de Hospedagem</h3>
+                    
+                    <p><strong>Opção A: PostgreSQL Local</strong></p>
+                    <ul>
+                        <li>Instale PostgreSQL diretamente na VM</li>
+                        <li>Use a connection string: <code>postgresql://usuario:senha@localhost:5432/nome_db</code></li>
+                    </ul>
+
+                    <p><strong>Opção B: Azure Database for PostgreSQL</strong></p>
+                    <ul>
+                        <li>Solicite ao time a <code>DATABASE_URL</code> do banco hospedado na Azure</li>
+                        <li>Exemplo: <code>postgresql://usuario@servidor:senha@servidor.postgres.database.azure.com:5432/ctg_db</code></li>
+                    </ul>
+
+                    <div class="warning-box">
+                        <strong>⚠️ Atenção:</strong> Se o banco estiver na Azure, é necessário garantir que a VM tenha acesso à porta 5432 do servidor PostgreSQL na Azure.
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <h3 class="subsection-title">5.2. Testar Conexão com o Banco</h3>
+                    <pre><code># Testar conexão local
+psql -U ctg_user -d ctg_engenharia
+
+# Testar conexão remota (Azure)
+psql "postgresql://usuario@servidor:senha@servidor.postgres.database.azure.com:5432/ctg_db"</code></pre>
+                </div>
+            </div>
+
+            <!-- Variáveis de Ambiente -->
+            <div class="section" id="variaveis-ambiente">
+                <h2 class="section-title">
+                    <span class="icon">🔐</span>
+                    6. Variáveis de Ambiente
+                </h2>
+
+                <div class="subsection">
+                    <h3 class="subsection-title">6.1. Backend (.env)</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Variável</th>
+                                <th>Descrição</th>
+                                <th>Exemplo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>DATABASE_URL</code></td>
+                                <td>String de conexão com o PostgreSQL</td>
+                                <td><code>postgresql://user:pass@host:5432/db</code></td>
+                            </tr>
+                            <tr>
+                                <td><code>PORT</code></td>
+                                <td>Porta do servidor backend</td>
+                                <td><code>3001</code></td>
+                            </tr>
+                            <tr>
+                                <td><code>NODE_ENV</code></td>
+                                <td>Ambiente (development/production)</td>
+                                <td><code>production</code></td>
+                            </tr>
+                            <tr>
+                                <td><code>JWT_SECRET</code></td>
+                                <td>Chave secreta para tokens JWT</td>
+                                <td><code>valor_aleatorio_longo</code></td>
+                            </tr>
+                            <tr>
+                                <td><code>ADMIN_NAME</code></td>
+                                <td>Nome do admin (seed inicial)</td>
+                                <td><code>Administrador CTG</code></td>
+                            </tr>
+                            <tr>
+                                <td><code>ADMIN_EMAIL</code></td>
+                                <td>Email do admin (seed inicial)</td>
+                                <td><code>admin@ctgbrasil.com</code></td>
+                            </tr>
+                            <tr>
+                                <td><code>ADMIN_PASS</code></td>
+                                <td>Senha do admin (seed inicial)</td>
+                                <td><code>ctg@2026</code></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="subsection">
+                    <h3 class="subsection-title">6.2. Frontend (.env)</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Variável</th>
+                                <th>Descrição</th>
+                                <th>Exemplo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>VITE_API_URL</code></td>
+                                <td>URL base da API backend</td>
+                                <td><code>http://localhost:3001/api</code></td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div class="warning-box">
+                        <strong>⚠️ Importante:</strong> Em produção, altere <code>VITE_API_URL</code> para o endereço real do servidor (ex: <code>https://api.ctgbrasil.com/api</code>).
+                    </div>
+                </div>
+            </div>
+
+            <!-- Portas -->
+            <div class="section" id="portas">
+                <h2 class="section-title">
+                    <span class="icon">🌐</span>
+                    7. Portas e Rede
+                </h2>
+
+                <p>As seguintes portas devem estar abertas na VM:</p>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Porta</th>
+                            <th>Serviço</th>
+                            <th>Protocolo</th>
+                            <th>Uso</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>8080</strong></td>
+                            <td>Aplicação Web</td>
+                            <td>TCP</td>
+                            <td>Acesso à interface web</td>
+                        </tr>
+                        <tr>
+                            <td><strong>5432</strong></td>
+                            <td>PostgreSQL</td>
+                            <td>TCP</td>
+                            <td>Conexão com banco de dados</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="subsection">
+                    <h3 class="subsection-title">7.1. Configurar Firewall (Linux)</h3>
+                    <pre><code># Usando UFW (Ubuntu/Debian)
+sudo ufw allow 8080/tcp
+sudo ufw allow 5432/tcp
+sudo ufw reload
+
+# Verificar status
+sudo ufw status</code></pre>
+
+                    <pre><code># Usando firewalld (CentOS/RHEL)
+sudo firewall-cmd --permanent --add-port=8080/tcp
+sudo firewall-cmd --permanent --add-port=5432/tcp
+sudo firewall-cmd --reload
+
+# Verificar status
+sudo firewall-cmd --list-all</code></pre>
+                </div>
+
+                <div class="info-box">
+                    <strong>ℹ️ Nota:</strong> Se estiver usando Azure VM, configure também o Network Security Group (NSG) para permitir tráfego nessas portas.
+                </div>
+            </div>
+
+            <!-- Execução -->
+            <div class="section" id="execucao">
+                <h2 class="section-title">
+                    <span class="icon">🚀</span>
+                    8. Execução da Aplicação
+                </h2>
+
+                <div class="subsection">
+                    <h3 class="subsection-title">8.1. Iniciar Backend</h3>
+                    <pre><code>cd backend
+
+# Modo produção
+npm start
+
+# Modo desenvolvimento (com hot-reload)
+npm run dev</code></pre>
+                    <p>O backend iniciará em <code>http://localhost:3001</code></p>
+                </div>
+
+                <div class="subsection">
+                    <h3 class="subsection-title">8.2. Iniciar Frontend</h3>
+                    <pre><code>cd frontend
+
+# Modo desenvolvimento
+npm run dev
+
+# Build para produção e preview
+npm run build
+npm run preview</code></pre>
+                    <p>O frontend ficará disponível em <code>http://localhost:5173</code> (dev) ou <code>http://localhost:4173</code> (preview)</p>
+                </div>
+
+                <div class="subsection">
+                    <h3 class="subsection-title">8.3. Acesso Final</h3>
+                    <div class="success-box">
+                        <strong>✅ Aplicação disponível em:</strong>
+                        <ul>
+                            <li><strong>Frontend:</strong> <code>http://SEU_IP:8080</code></li>
+                            <li><strong>Backend API:</strong> <code>http://SEU_IP:3001/api</code></li>
+                            <li><strong>Login Admin:</strong> Use as credenciais definidas no <code>.env</code></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Troubleshooting -->
+            <div class="section" id="troubleshooting">
+                <h2 class="section-title">
+                    <span class="icon">🔍</span>
+                    9. Troubleshooting
+                </h2>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Problema</th>
+                            <th>Causa Provável</th>
+                            <th>Solução</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Erro de conexão com banco</td>
+                            <td><code>DATABASE_URL</code> incorreta</td>
+                            <td>Verificar credenciais e conectividade</td>
+                        </tr>
+                        <tr>
+                            <td>Porta já em uso</td>
+                            <td>Outro processo usando a porta</td>
+                            <td><code>lsof -i :3001</code> e matar o processo</td>
+                        </tr>
+                        <tr>
+                            <td>Erro de CORS</td>
+                            <td>Origem não permitida</td>
+                            <td>Configurar CORS no backend</td>
+                        </tr>
+                        <tr>
+                            <td>JWT inválido</td>
+                            <td><code>JWT_SECRET</code> alterado</td>
+                            <td>Manter o mesmo secret ou relogin</td>
+                        </tr>
+                        <tr>
+                            <td>Dependências não instaladas</td>
+                            <td><code>npm install</code> não rodado</td>
+                            <td>Executar em backend e frontend</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="subsection">
+                    <h3 class="subsection-title">9.1. Comandos Úteis</h3>
+                    <pre><code># Ver logs do backend
+tail -f backend/logs/app.log
+
+# Ver processos Node
+ps aux | grep node
+
+# Verificar portas em uso
+netstat -tulpn | grep LISTEN
+
+# Testar API
+curl http://localhost:3001/api/health</code></pre>
+                </div>
+            </div>
+
+            <!-- Checklist Final -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="icon">✅</span>
+                    Checklist Pré-Deploy
+                </h2>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>Status</th>
+                            <th>Responsável</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>VM provisionada e acessível</td>
+                            <td>☐</td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td>Node.js v22 instalado</td>
+                            <td>☐</td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td>PostgreSQL 14+ instalado/acessível</td>
+                            <td>☐</td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td>DATABASE_URL configurada</td>
+                            <td>☐</td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td>Portas 8080 e 5432 abertas</td>
+                            <td>☐</td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td>Arquivo .env configurado</td>
+                            <td>☐</td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td>JWT_SECRET gerado (aleatório)</td>
+                            <td>☐</td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td>Dependências instaladas (npm install)</td>
+                            <td>☐</td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td>Frontend buildado</td>
+                            <td>☐</td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td>Backend iniciado e acessível</td>
+                            <td>☐</td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td>Frontend iniciado e acessível</td>
+                            <td>☐</td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td>Teste de login admin</td>
+                            <td>☐</td>
+                            <td></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Contato -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="icon">📞</span>
+                    Suporte e Contato
+                </h2>
+
+                <div class="info-box">
+                    <p><strong>Dúvidas durante a implementação?</strong></p>
+                    <p>Entre em contato com a equipe de desenvolvimento para esclarecimentos sobre:</p>
+                    <ul>
+                        <li>Acesso ao banco de dados (DATABASE_URL)</li>
+                        <li>Configuração do arquivo .env</li>
+                        <li>Chave JWT_SECRET</li>
+                        <li>Arquivos da aplicação</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p><strong>CTG Engenharia</strong> - Relatório de Implementação</p>
+            <p>Versão 2.0.0 | Abril de 2026</p>
+            <p style="margin-top: 10px; opacity: 0.7;">Documento confidencial para uso interno</p>
+        </div>
+    </div>
+</body>
+</html>

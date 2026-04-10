@@ -6,7 +6,6 @@ import PasswordInput, { getPasswordStrength } from '../ui/PasswordInput.jsx';
 
 const ROLE_LABELS = {
   admin:       'Administrador',
-  gestor:      'Gestor (legado)',
   coordenador: 'Coordenador',
   engenheiro:  'Engenheiro',
   planejador:  'Planejador',
@@ -14,7 +13,6 @@ const ROLE_LABELS = {
 };
 const ROLE_COLORS = {
   admin:       '#001F5B',
-  gestor:      '#0070B8',
   coordenador: '#0070B8',
   engenheiro:  '#166534',
   planejador:  '#7C3AED',
@@ -166,7 +164,7 @@ export default function AdminPanel() {
 
   const stats = {
     total:        users.length,
-    coordenadores: users.filter(u => u.role === 'coordenador' || u.role === 'gestor').length,
+    coordenadores: users.filter(u => u.role === 'coordenador').length,
     engenheiros:  users.filter(u => u.role === 'engenheiro').length,
     planejadores: users.filter(u => u.role === 'planejador').length,
     gerentes:     users.filter(u => u.role === 'gerente').length,

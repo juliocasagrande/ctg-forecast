@@ -7,7 +7,6 @@ import DelegationPanel from './DelegationPanel.jsx';
 
 const ROLE_LABELS = {
   admin:       'Administrador',
-  gestor:      'Gestor',
   engenheiro:  'Engenheiro',
   coordenador: 'Coordenador',
   planejador:  'Planejador',
@@ -26,7 +25,6 @@ export default function Profile() {
   const initials = name.split(' ').slice(0,2).map(w=>w[0]?.toUpperCase()||'').join('');
   const roleColor = {
     admin:       '#001F5B',
-    gestor:      '#0070B8',
     engenheiro:  '#166534',
     coordenador: '#0C5A9E',
     planejador:  '#5B21B6',

@@ -92,7 +92,6 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
 
   const roleLabel = {
     admin:       'Administrador',
-    gestor:      'Gestor',
     coordenador: 'Coordenador',
     engenheiro:  'Engenheiro',
     planejador:  'Planejador',
@@ -127,7 +126,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
         {/* Logo */}
         <div className="sidebar-logo">
           <div className="brand">CTG<span>.</span>Engenharia</div>
-          <div className="subtitle">FUNÇÃO — {roleLabel}{areaLabel ? ` · ${areaLabel}` : ''}</div>
+          <div className="subtitle">{roleLabel}{areaLabel ? ` · ${areaLabel}` : ''}</div>
         </div>
 
         <div className="sidebar-nav">
@@ -176,20 +175,21 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
             {navItem('/report', IC.report, 'Relatório HTML')}
 
             {/* ── DIVISOR ───────────────────────────────────────── */}
+            <div style={{ margin: '10px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
+
+            {/* ── SEÇÃO 2: Lists ────────────────────────────────── */}
+            <div className="nav-section-label" style={{color:"rgba(255,255,255,0.75)"}}>
+              Lists
+            </div>
+            {navItem('/lists/projects-tracking', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>, 'Acomp. de Projetos')}
+            {navItem('/lists/iacs', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd"/></svg>, 'IACs 2026')}
+
+            {/* ── DIVISOR ───────────────────────────────────────── */}
             {(canManageSidebar || isGerente || user?.email === 'julio.casagrande@ctgbr.com.br') && (
               <div style={{ margin: '10px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
             )}
 
-            {/* ── SEÇÃO 2: Acompanhamento ───────────────────────── */}
-            {(canManageSidebar || isGerente || user?.email === 'julio.casagrande@ctgbr.com.br') && <>
-              <div className="nav-section-label" style={{color:"rgba(255,255,255,0.75)"}}>
-                Acompanhamento
-              </div>
-              {navItem('/monthly-report', IC.monthly, 'Relatório Mensal')}
-            </>}
-
             {/* ── SEÇÃO 3: Pessoas ──────────────────────────────── */}
-            <div style={{ margin: '10px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
             <div className="nav-section-label" style={{color:"rgba(255,255,255,0.75)"}}>
               Gestão de Pessoas e Documentos
             </div>

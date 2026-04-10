@@ -17,9 +17,10 @@ import ReportPage from './pages/ReportPage.jsx';
 import TutorialPage from './pages/TutorialPage.jsx';
 import FeedbackPage from './pages/FeedbackPage.jsx';
 import FeedbackInbox from './pages/FeedbackInbox.jsx';
-import MonthlyReportPage from './pages/MonthlyReportPage.jsx';
 import VacationsPage from './pages/VacationsPage.jsx';
 import DocumentsPage from './pages/DocumentsPage.jsx';
+import IACsPage from './pages/IACsPage.jsx';
+import ProjectsTrackingPage from './pages/ProjectsTrackingPage.jsx';
 import AdminPanel from './components/admin/AdminPanel.jsx';
 import AlertBell from './components/ui/AlertBell.jsx';
 import api from './utils/api.js';
@@ -391,19 +392,6 @@ function RequireRole({ roles, children }) {
   return children;
 }
 
-function RequireMonthlyReport({ children }) {
-  const { user } = useAuth();
-  const allowed =
-    user?.role === 'admin' ||
-    user?.role === 'gestor' ||
-    user?.role === 'coordenador' ||
-    user?.role === 'gerente' ||
-    user?.role === 'planejador' ||
-    user?.email === 'julio.casagrande@ctgbr.com.br';
-  if (!allowed) return <Navigate to="/" replace />;
-  return children;
-}
-
 function MobileBottomNav({ onLogout, isPlanejador, unreadCount = 0 }) {
   const location = useLocation();
   const isActive = (path) => location.pathname === path ||
@@ -503,7 +491,7 @@ function PlanejadorExportModal({ open, onClose }) {
             padding:'8px 12px', background:'var(--bg-app)', borderRadius:'var(--radius-sm)',
             borderLeft:'3px solid var(--ctg-blue)' }}>
             ℹ Engenheiros verão apenas seus próprios projetos.
-            Planejadores e gestores verão todos os projetos.
+            Planejadores verão todos os projetos.
           </p>
 
           <div style={{ fontSize:'0.7rem', fontWeight:700, textTransform:'uppercase',
@@ -689,9 +677,10 @@ function getPageMeta(pathname) {
   if (pathname === '/tutorial') return { title: 'Tutorial', sub: 'Como utilizar o sistema' };
   if (pathname === '/feedback') return { title: 'Sugestões e Feedback', sub: 'Envie sua contribuição' };
   if (pathname === '/feedback/inbox') return { title: 'Inbox de Feedback', sub: 'Mensagens dos usuários do sistema' };
-  if (pathname === '/monthly-report') return { title: 'Relatório de Acompanhamento Mensal', sub: null };
   if (pathname === '/vacations') return { title: 'Controle de Férias', sub: null };
   if (pathname === '/documents') return { title: 'Controle de Documentos', sub: null };
+  if (pathname === '/lists/iacs') return { title: 'IACs 2026'};
+  if (pathname === '/lists/projects-tracking') return { title: 'Acompanhamento de Projetos', sub: 'Relatório mensal — contratos em andamento' };
   if (pathname.startsWith('/projects/')) return { title: 'Projetos', sub: null };
   return { title: 'CTG.Engenharia', sub: null };
 }
@@ -780,6 +769,136 @@ export default function App() {
           {/* Desktop: full controls — always same height, pill always visible */}
           <div className="header-controls-desktop">
             <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+
+              {/* ── Botões da página de acompanhamento ── */}
+              {location.pathname === '/lists/projects-tracking' && (() => {
+                const canImport = ['coordenador', 'planejador', 'admin'].includes(user?.role) ||
+                  user?.email === 'julio.casagrande@ctgbr.com.br';
+                return (
+                  <>
+                    <button onClick={() => {
+                      window.dispatchEvent(new CustomEvent('new-project'));
+                    }} style={{
+                      display: 'flex', alignItems: 'center', gap: 7,
+                      padding: '8px 18px', borderRadius: 10, border: 'none',
+                      background: 'linear-gradient(135deg, #001F5B, #0b5cab)',
+                      color: '#fff', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                      boxShadow: '0 2px 8px rgba(11,92,171,0.25)',
+                      marginRight: 8, whiteSpace: 'nowrap',
+                    }}>
+                      <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                        <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd"/>
+                      </svg>
+                      Novo Projeto
+                    </button>
+                    {canImport && (
+                      <button onClick={() => {
+                        window.dispatchEvent(new CustomEvent('import-projects'));
+                      }} style={{
+                        display: 'flex', alignItems: 'center', gap: 7,
+                        padding: '8px 14px', borderRadius: 10, border: '1.5px solid #0b5cab',
+                        background: '#fff',
+                        color: '#0b5cab', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                        marginRight: 8, whiteSpace: 'nowrap',
+                      }}>
+                        <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                          <path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"/>
+                        </svg>
+                        Importar
+                      </button>
+                    )}
+                    <button onClick={() => {
+                      window._exportProjectsTracking?.();
+                    }} style={{
+                      display: 'flex', alignItems: 'center', gap: 7,
+                      padding: '8px 14px', borderRadius: 10, border: '1.5px solid #10B981',
+                      background: '#fff',
+                      color: '#059669', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                      marginRight: 8, whiteSpace: 'nowrap',
+                    }}>
+                      <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                        <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm7-13a1 1 0 011 1v4.586l1.707-1.707a1 1 0 111.414 1.414l-3.414 3.414a1 1 0 01-1.414 0l-3.414-3.414a1 1 0 111.414-1.414L9 9.586V5a1 1 0 011-1z" clipRule="evenodd"/>
+                      </svg>
+                      Exportar
+                    </button>
+                    {canImport && (
+                      <button onClick={() => {
+                        window.dispatchEvent(new CustomEvent('generate-html-report'));
+                      }} style={{
+                        display: 'flex', alignItems: 'center', gap: 7,
+                        padding: '8px 14px', borderRadius: 10, border: '1.5px solid #F59E0B',
+                        background: '#fff',
+                        color: '#92400E', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                        marginRight: 8, whiteSpace: 'nowrap',
+                      }}>
+                        <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                          <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd"/>
+                        </svg>
+                        Relatório HTML
+                      </button>
+                    )}
+                  </>
+                );
+              })()}
+
+              {/* ── Botões da página de IACs ── */}
+              {location.pathname === '/lists/iacs' && (() => {
+                const canImport = ['gestor', 'coordenador', 'planejador', 'admin'].includes(user?.role) ||
+                  user?.email === 'julio.casagrande@ctgbr.com.br';
+                const isEngenheiro = user?.role === 'engenheiro' && user?.email !== 'julio.casagrande@ctgbr.com.br';
+                return (
+                  <>
+                    {!isEngenheiro && (
+                      <button onClick={() => {
+                        window.dispatchEvent(new CustomEvent('new-iac'));
+                      }} style={{
+                        display: 'flex', alignItems: 'center', gap: 7,
+                        padding: '8px 18px', borderRadius: 10, border: 'none',
+                        background: 'linear-gradient(135deg, #001F5B, #0b5cab)',
+                        color: '#fff', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                        boxShadow: '0 2px 8px rgba(11,92,171,0.25)',
+                        marginRight: 8, whiteSpace: 'nowrap',
+                      }}>
+                        <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                          <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd"/>
+                        </svg>
+                        Novo IAC
+                      </button>
+                    )}
+                    {canImport && !isEngenheiro && (
+                      <button onClick={() => {
+                        window.dispatchEvent(new CustomEvent('import-iacs'));
+                      }} style={{
+                        display: 'flex', alignItems: 'center', gap: 7,
+                        padding: '8px 14px', borderRadius: 10, border: '1.5px solid #0b5cab',
+                        background: '#fff',
+                        color: '#0b5cab', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                        marginRight: 8, whiteSpace: 'nowrap',
+                      }}>
+                        <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                          <path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"/>
+                        </svg>
+                        Importar
+                      </button>
+                    )}
+                    <button onClick={() => {
+                      window._exportIACs?.();
+                    }} style={{
+                      display: 'flex', alignItems: 'center', gap: 7,
+                      padding: '8px 14px', borderRadius: 10, border: '1.5px solid #10B981',
+                      background: '#fff',
+                      color: '#059669', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                      marginRight: 8, whiteSpace: 'nowrap',
+                    }}>
+                      <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                        <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm7-13a1 1 0 011 1v4.586l1.707-1.707a1 1 0 111.414 1.414l-3.414 3.414a1 1 0 01-1.414 0l-3.414-3.414a1 1 0 111.414-1.414L9 9.586V5a1 1 0 011-1z" clipRule="evenodd"/>
+                      </svg>
+                      Exportar
+                    </button>
+                  </>
+                );
+              })()}
+
               <AlertBell />
 
               {/* ── Pill de filtros — sempre renderizado para altura consistente ── */}
@@ -858,6 +977,40 @@ export default function App() {
 
           {/* Mobile: bell + filter button only */}
           <div className="header-controls-mobile">
+            {/* Botão Novo Projeto (apenas na página de acompanhamento) */}
+            {location.pathname === '/lists/projects-tracking' && (
+              <button onClick={() => {
+                window.dispatchEvent(new CustomEvent('new-project'));
+              }} style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                padding: '7px 14px', borderRadius: 8, border: 'none',
+                background: 'linear-gradient(135deg, #001F5B, #0b5cab)',
+                color: '#fff', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}>
+                <svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
+                  <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd"/>
+                </svg>
+                Novo Projeto
+              </button>
+            )}
+            {/* Botão Novo IAC (apenas na página de IACs, não para engenheiros, exceto julio.casagrande) */}
+            {location.pathname === '/lists/iacs' && (user?.role !== 'engenheiro' || user?.email === 'julio.casagrande@ctgbr.com.br') && (
+              <button onClick={() => {
+                window.dispatchEvent(new CustomEvent('new-iac'));
+              }} style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                padding: '7px 14px', borderRadius: 8, border: 'none',
+                background: 'linear-gradient(135deg, #001F5B, #0b5cab)',
+                color: '#fff', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}>
+                <svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
+                  <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd"/>
+                </svg>
+                Novo IAC
+              </button>
+            )}
             <AlertBell />
             {showControls && (
               <button
@@ -929,13 +1082,10 @@ export default function App() {
             <Route path="/tutorial" element={<RequireAuth><TutorialPage /></RequireAuth>} />
             <Route path="/feedback" element={<RequireAuth><FeedbackPage /></RequireAuth>} />
             <Route path="/feedback/inbox" element={<RequireAuth><FeedbackInbox /></RequireAuth>} />
-            <Route path="/monthly-report" element={
-              <RequireAuth>
-                <RequireMonthlyReport><MonthlyReportPage /></RequireMonthlyReport>
-              </RequireAuth>
-            } />
             <Route path="/vacations" element={<RequireAuth><VacationsPage areaFilter={areaFilter} year={vacYear} onYearChange={setVacYear} /></RequireAuth>} />
             <Route path="/documents" element={<RequireAuth><DocumentsPage /></RequireAuth>} />
+            <Route path="/lists/iacs" element={<RequireAuth><IACsPage /></RequireAuth>} />
+            <Route path="/lists/projects-tracking" element={<RequireAuth><ProjectsTrackingPage /></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

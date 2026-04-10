@@ -815,6 +815,7 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
   transition: all var(--transition);
   white-space: nowrap;
   flex-shrink: 0;
+  min-width: 0;
 }
 .settings-nav-btn:hover { background: var(--bg-app); color: var(--text-primary); }
 .settings-nav-btn.active {
@@ -823,7 +824,14 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
   font-weight: 700;
 }
 .settings-nav-icon { font-size: 1.1rem; line-height: 1; }
-.settings-nav-label { font-size: 0.72rem; }
+.settings-nav-label {
+  font-size: 0.72rem;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+  line-height: 1.2;
+}
 
 /* ── Section card ── */
 .settings-section {

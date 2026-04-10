@@ -134,8 +134,8 @@ router.get('/:id', requireProjectAccess, async (req, res) => {
   } catch (err) { safeError(res, err); }
 });
 
-// POST /api/projects — gestor/admin only
-router.post('/', requireRole('admin', 'gestor', 'coordenador', 'planejador'), async (req, res) => {
+// POST /api/projects — admin/coordenador/planejador
+router.post('/', requireRole('admin', 'coordenador', 'planejador'), async (req, res) => {
   try {
     const { code, name, description, si_value, pool_value, plants, engineer_ids } = req.body;
     const r = await pool.query(
@@ -160,8 +160,8 @@ router.post('/', requireRole('admin', 'gestor', 'coordenador', 'planejador'), as
   }
 });
 
-// PUT /api/projects/:id — gestor/admin
-router.put('/:id', requireRole('admin', 'gestor', 'coordenador', 'planejador'), async (req, res) => {
+// PUT /api/projects/:id — admin/coordenador/planejador
+router.put('/:id', requireRole('admin', 'coordenador', 'planejador'), async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -189,8 +189,8 @@ router.put('/:id', requireRole('admin', 'gestor', 'coordenador', 'planejador'), 
   } finally { client.release(); }
 });
 
-// DELETE /api/projects/:id — gestor/planejador/admin, requires project name confirmation
-router.delete('/:id', requireRole('admin', 'gestor', 'coordenador', 'planejador'), async (req, res) => {
+// DELETE /api/projects/:id — admin/coordenador/planejador, requires project name confirmation
+router.delete('/:id', requireRole('admin', 'coordenador', 'planejador'), async (req, res) => {
   try {
     const { confirmName } = req.body || {};
     // Fetch project to validate name
@@ -222,7 +222,7 @@ router.get('/:id/engineers', requireProjectAccess, async (req, res) => {
 });
 
 // POST /api/projects/:id/engineers — assign engineer
-router.post('/:id/engineers', requireRole('admin', 'gestor', 'coordenador', 'planejador'), async (req, res) => {
+router.post('/:id/engineers', requireRole('admin', 'coordenador', 'planejador'), async (req, res) => {
   try {
     const { user_id } = req.body;
     await pool.query(
@@ -234,7 +234,7 @@ router.post('/:id/engineers', requireRole('admin', 'gestor', 'coordenador', 'pla
 });
 
 // DELETE /api/projects/:id/engineers/:userId — remove assignment
-router.delete('/:id/engineers/:userId', requireRole('admin', 'gestor', 'coordenador', 'planejador'), async (req, res) => {
+router.delete('/:id/engineers/:userId', requireRole('admin', 'coordenador', 'planejador'), async (req, res) => {
   try {
     await pool.query(
       'DELETE FROM project_assignments WHERE project_id=$1 AND user_id=$2',

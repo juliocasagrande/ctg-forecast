@@ -24,8 +24,8 @@ router.get('/', async (req, res) => {
   } catch (err) { safeError(res, err); }
 });
 
-// PUT update settings — planejador, gestor, admin only
-router.put('/', requireRole('admin', 'gestor', 'planejador'), async (req, res) => {
+// PUT update settings — planejador, admin only
+router.put('/', requireRole('admin', 'planejador'), async (req, res) => {
   const { id: userId } = req.user;
   const settings = req.body; // { key: value, ... }
   try {

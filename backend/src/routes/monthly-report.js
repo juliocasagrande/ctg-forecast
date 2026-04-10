@@ -3,6 +3,7 @@ import multer  from 'multer';
 import { Readable } from 'stream';
 import ExcelJS from 'exceljs';
 import { requireAuth } from '../middleware/auth.js';
+import { pool } from '../db/schema.js';
 
 const router = express.Router();
 
@@ -13,7 +14,6 @@ function requireMonthlyReportAccess(req, res, next) {
   const { role, email } = req.user;
   const allowed =
     role === 'admin' ||
-    role === 'gestor' ||
     role === 'planejador' ||
     role === 'coordenador' ||
     role === 'gerente' ||
@@ -91,7 +91,7 @@ router.post(
         PROJ:                 'projeto/atividade',
         PROJRES:              'projeto',
         FORN:                 'fornecedor',
-        GEST:                 'gestor',
+        GEST:                 'pp/contrato',
         PP:                   'pp/contrato',
         VENC:                 'vencimento',
         VAL_CONTR:            'valor contrato',
@@ -583,5 +583,313 @@ tr.due-2 td:first-child{border-left:6px solid #ef4444;}tr.due-6 td:first-child{b
 </script>
 </body></html>`;
 }
+
+// ── GET /api/monthly-report/generate-from-db — generate HTML from database ────
+router.get(
+  '/generate-from-db',
+  requireMonthlyReportAccess,
+  async (req, res) => {
+    try {
+      const { mes, ano } = req.query;
+      if (!mes || !ano) {
+        return res.status(400).json({ error: 'Mês e ano são obrigatórios.' });
+      }
+
+      // Fetch data from lists_projects_tracking
+      const { rows } = await pool.query(`
+        SELECT
+          uhe,
+          area,
+          projeto_atividade as proj,
+          projeto as projres,
+          fornecedor as forn,
+          gestor,
+          pp_contrato as pp,
+          vencimento as venc,
+          valor_contrato as val,
+          realizado_contrato as real,
+          saldo_contrato as saldo,
+          valor_si as si,
+          realizado_si as realsi,
+          saldo_si as saldo_si,
+          resumo,
+          natureza as nat,
+          empresa,
+          reajustes,
+          aditivos,
+          aditivo_em_andamento,
+          cronograma
+        FROM lists_projects_tracking
+        ORDER BY uhe, area
+      `);
+
+      if (!rows.length) {
+        return res.status(400).json({ error: 'Nenhum dado encontrado no banco.' });
+      }
+
+      // Helpers (same as Excel version)
+      function fmtDateBR(d) {
+        if (!d) return '-';
+        const date = new Date(d);
+        if (isNaN(date)) return '-';
+        const dd = String(date.getDate()).padStart(2, '0');
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        return `${dd}/${mm}/${date.getFullYear()}`;
+      }
+
+      function moneyToFloat(v) {
+        if (v === null || v === undefined) return null;
+        if (typeof v === 'number') return v;
+        const s = String(v).replace('R$', '').replace(/\s/g, '')
+          .replace(/\./g, '').replace(',', '.');
+        const n = parseFloat(s);
+        return isNaN(n) ? null : n;
+      }
+
+      function fmtBRL(v) {
+        const n = moneyToFloat(v);
+        if (n === null) return '-';
+        return 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+
+      function moneyOrRaw(v) {
+        if (!v || v === '-') return '-';
+        const s = String(v);
+        if (/[a-zA-Z+;|]/.test(s) || s.includes('  ')) return s;
+        const n = moneyToFloat(s);
+        return n !== null ? fmtBRL(n) : s;
+      }
+
+      function badgeAditivo(v) {
+        const s = (v || '-').toUpperCase().replace(/Ã/g, 'A');
+        if (s === 'SIM') return "<span class='badge info'>SIM</span>";
+        if (['NAO', 'NÃO', 'N'].includes(s)) return "<span class='badge success'>NÃO</span>";
+        return v || '-';
+      }
+
+      function mdToHtml(text) {
+        if (!text || text === '-') return '-';
+        let s = String(text);
+        s = s.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        s = s.replace(/((?:[ \t]*\|[^\n]+\|[ \t]*(?:\n|$))+)/g, (block) => {
+          const lines = block.split('\n').map(l => l.trim()).filter(l => l.startsWith('|') && l.endsWith('|'));
+          if (!lines.length) return block;
+          const dataLines = lines.filter(l => !/^\|[-:\s|]+\|$/.test(l));
+          if (!dataLines.length) return block;
+          const r = dataLines.map((line, i) => {
+            const cells = line.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+            const tag = i === 0 ? 'th' : 'td';
+            return `<tr>${cells.map(c => `<${tag}>${c}</${tag}>`).join('')}</tr>`;
+          });
+          return `<table>${r.join('')}</table>\n`;
+        });
+        s = s.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+        s = s.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+        s = s.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+        s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
+        s = s.replace(/((?:^[ \t]*[-*] .+(?:\n|$))+)/gm, (block) => {
+          const items = block.trim().split('\n').map(l => `<li>${l.replace(/^[ \t]*[-*] /, '').trim()}</li>`).join('');
+          return `<ul>${items}</ul>\n`;
+        });
+        s = s.replace(/((?:^[ \t]*\d+\. .+(?:\n|$))+)/gm, (block) => {
+          const items = block.trim().split('\n').map(l => `<li>${l.replace(/^[ \t]*\d+\. /, '').trim()}</li>`).join('');
+          return `<ol>${items}</ol>\n`;
+        });
+        const blocks = s.split(/\n{2,}/);
+        s = blocks.map(b => {
+          b = b.trim();
+          if (!b) return '';
+          if (/^<(h[1-6]|ul|ol|table|tr|li|div|p)[\s>]/.test(b)) return b;
+          return `<p>${b.replace(/\n/g, '<br>')}</p>`;
+        }).filter(Boolean).join('\n');
+        return s;
+      }
+
+      function areaClass(area) {
+        const a = (area || '').toLowerCase();
+        if (a.includes('elétr') || a.includes('eletr')) return 'el';
+        if (a.includes('mecân') || a.includes('mecan')) return 'mec';
+        if (a.includes('confiab')) return 'con';
+        if (a.includes('civil')) return 'civil';
+        if (a.includes('automa')) return 'auto';
+        return '';
+      }
+
+      function saldoClass(siVal, siSaldo) {
+        const sv = moneyToFloat(siVal) ?? 0;
+        const ss = moneyToFloat(siSaldo) ?? 0;
+        if (sv <= 0) return '';
+        if (ss < 0.1 * sv) return 'warn';
+        if (ss < 0.3 * sv) return 'warn2';
+        return '';
+      }
+
+      // Parse dates and prepare data rows
+      const dataRows = rows.map(r => ({
+        UHE: r.uhe || '-',
+        AREA: r.area || '-',
+        PROJ: r.proj || '-',
+        PROJRES: r.projres || '-',
+        FORN: r.forn || '-',
+        GEST: r.gestor || '-',
+        PP: r.pp || '-',
+        VENC: r.venc ? new Date(r.venc) : null,
+        VAL: r.val ?? '-',
+        REAL: r.real ?? '-',
+        SALDO: r.saldo ?? '-',
+        SI: r.si ?? '-',
+        REALSI: r.realsi ?? '-',
+        SALDO_SI: r.saldo_si ?? '-',
+        RESUMO: r.resumo || '-',
+        NAT: r.nat || '-',
+        EMPRESA: r.empresa || '-',
+        REAJUSTES: r.reajustes || '-',
+        ADITIVOS: r.aditivos || '-',
+        ADITIVO_EM_ANDAMENTO: r.aditivo_em_andamento || '-',
+        CRONOGRAMA: r.cronograma || '-',
+      }));
+
+      // Filter rows with financial data
+      const rowsWithData = dataRows.filter(r => {
+        const vals = [r.VAL, r.REAL, r.SALDO, r.SI, r.REALSI, r.SALDO_SI];
+        return vals.some(v => v && v !== '-' && v !== '0' && v !== 'R$ 0,00');
+      });
+      const finalRows = rowsWithData.length > 0 ? rowsWithData : dataRows;
+
+      // Next 12 months
+      const today = new Date();
+      const lim12m = new Date(today); lim12m.setDate(lim12m.getDate() + 365);
+      const lim4m = new Date(today); lim4m.setDate(lim4m.getDate() + 120);
+      const lim6m = new Date(today); lim6m.setDate(lim6m.getDate() + 180);
+
+      function dueClass(d) {
+        if (!d) return '';
+        if (d < lim4m) return 'due-2';
+        if (d < lim6m) return 'due-6';
+        if (d < lim12m) return 'due-12';
+        return '';
+      }
+
+      const prox12 = finalRows.filter(r => r.VENC && r.VENC < lim12m).sort((a, b) => a.VENC - b.VENC);
+
+      // Grouping
+      const UHE_ORDER = ['Jurumirim','Salto Grande','Rosana','Canoas 1','Canoas 2','Garibaldi','Ilha Solteira','Jupiá'];
+      const grouped = {};
+      for (const r of finalRows) {
+        grouped[r.UHE] = grouped[r.UHE] || {};
+        grouped[r.UHE][r.AREA] = grouped[r.UHE][r.AREA] || [];
+        grouped[r.UHE][r.AREA].push(r);
+      }
+
+      const orderMap = Object.fromEntries(UHE_ORDER.map((u, i) => [u, i]));
+      const uheKeys = Object.keys(grouped).sort((a, b) => {
+        const ia = orderMap[a] ?? 9999, ib = orderMap[b] ?? 9999;
+        return ia !== ib ? ia - ib : a.localeCompare(b);
+      });
+
+      const uheOptions = [...new Set(finalRows.map(r => r.UHE).filter(u => u !== '-'))].sort().map(u => `<option value='${u}'>${u}</option>`).join('\n');
+      const areaOptions = [...new Set(finalRows.map(r => r.AREA).filter(a => a !== '-'))].sort().map(a => `<option value='${a}'>${a}</option>`).join('\n');
+
+      const table12 = prox12.map(r => `
+        <tr class='${dueClass(r.VENC)}' data-kind='row12' data-uhe='${r.UHE}' data-area='${r.AREA}'>
+          <td>${r.PP}</td><td>${r.FORN}</td><td>${r.GEST}</td>
+          <td>${fmtDateBR(r.VENC)}</td><td>${badgeAditivo(r.ADITIVO_EM_ANDAMENTO)}</td>
+        </tr>`).join('\n');
+
+      // Build sections
+      const sections = [];
+      for (let ui = 0; ui < uheKeys.length; ui++) {
+        const uhe = uheKeys[ui];
+        sections.push(`<section data-kind='uheBlock' data-uhe='${uhe}'>`);
+        sections.push(`<h2 class='section-title' data-uhe-key='${uhe}'>${ui + 1} — ${uhe}</h2>`);
+        const areaKeys = Object.keys(grouped[uhe]);
+        for (let ai = 0; ai < areaKeys.length; ai++) {
+          const area = areaKeys[ai];
+          const aRows = grouped[uhe][area];
+          sections.push(`<section data-kind='areaBlock' data-uhe='${uhe}' data-area='${area}'>`);
+          sections.push(`<h3 class='section-title'>${ui + 1}.${ai + 1} — ${area}</h3>`);
+          sections.push("<div class='grid'>");
+          for (const row of aRows) {
+            const cls = areaClass(row.AREA);
+            const siCls = saldoClass(row.SI, row.SALDO_SI);
+            const cor = { el:'#0ea5e9', mec:'#f59e0b', con:'#10b981', civil:'#ef4444', auto:'#8b5cf6' }[cls] || '#0b5cab';
+            sections.push(`
+<div class='card ${cls}' data-kind="card" data-uhe="${row.UHE}" data-area="${row.AREA}">
+  <div class='meta'>
+    <span class='pill'><i class='fas fa-landmark'></i> ${row.UHE}</span>
+    <span class='pill'><i class='fas fa-tags'></i> ${row.AREA}</span>
+    <span class='pill'><i class='fas fa-file-contract'></i> ${row.PP}</span>
+    <span class='pill'><i class='fas fa-user-tie'></i> ${row.GEST}</span>
+    <span class='pill'><i class='fas fa-industry'></i> ${row.FORN}</span>
+    <span class='pill'><i class='fas fa-tag'></i> ${row.NAT}</span>
+  </div>
+  <h3>${row.PROJ}</h3>
+  <p>${row.PROJRES}</p>
+  <div class='subcard' style="border:1.5px solid ${cor}55;margin-bottom:.5rem;">
+    <div class='kv' style="grid-template-columns:160px 1fr;">
+      <div class='k'><i class='fas fa-calendar-alt'></i> Vencimento</div>
+      <div class='v'>${fmtDateBR(row.VENC)}</div>
+    </div>
+  </div>
+  <div class="cards-4" style="--c1:26fr;--c2:26fr;--c3:24fr;--c4:24fr;">
+    <div class='subcard' style="border:1.5px solid ${cor}55;">
+      <div class='subcard-header'>Contrato</div>
+      <div class='kv'>
+        <div class='k'><i class='fas fa-dollar-sign'></i> Valor</div><div class='v'>${moneyOrRaw(row.VAL)}</div>
+        <div class='k'><i class='fas fa-check-circle'></i> Realizado</div><div class='v'>${moneyOrRaw(row.REAL)}</div>
+        <div class='k'><i class='fas fa-balance-scale'></i> Saldo</div><div class='v'>${moneyOrRaw(row.SALDO)}</div>
+      </div>
+    </div>
+    <div class='subcard' style="border:1.5px solid ${cor}55;">
+      <div class='subcard-header'>SI</div>
+      <div class='kv'>
+        <div class='k'><i class='fas fa-wallet'></i> Valor</div><div class='v'>${moneyOrRaw(row.SI)}</div>
+        <div class='k'><i class='fas fa-check-circle'></i> Realizado</div><div class='v'>${moneyOrRaw(row.REALSI)}</div>
+        <div class='k'><i class='fas fa-balance-scale'></i> Saldo</div><div class='v ${siCls}'>${moneyOrRaw(row.SALDO_SI)}</div>
+      </div>
+    </div>
+    <div class='subcard' style="border:1.5px solid ${cor}55;">
+      <div class='subcard-header'>Reajustes</div>
+      <div class='md-content'>${row.REAJUSTES}</div>
+    </div>
+    <div class='subcard' style="border:1.5px solid ${cor}55;">
+      <div class='subcard-header'>Aditivos</div>
+      <div class='kv'><div class='v'>${badgeAditivo(row.ADITIVOS)}</div></div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:30fr 50fr;gap:16px;margin-top:.75rem;">
+    <div class='subcard' style="border:1.5px solid ${cor}55;">
+      <div class='subcard-header'><i class='fas fa-calendar'></i> Cronograma</div>
+      <div class='md-content'>${mdToHtml(row.CRONOGRAMA)}</div>
+    </div>
+    <div class='subcard' style="border:1.5px solid ${cor}55;">
+      <div class='subcard-header'><i class='fas fa-tasks'></i> Resumo das Atividades</div>
+      <div class='md-content'>${mdToHtml(row.RESUMO)}</div>
+    </div>
+  </div>
+</div>`);
+          }
+          sections.push('</div></section>');
+        }
+        sections.push('</section>');
+      }
+
+      const monthNames = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+      const mesAno = `${monthNames[parseInt(mes) - 1] || mes} de ${ano}`;
+
+      const html = buildHTML({ mesAno, uheOptions, areaOptions, table12, sections: sections.join('\n') });
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="Relatorio_Acompanhamento_${mes}_${ano}.html"`);
+      res.send(html);
+
+    } catch (err) {
+      console.error('[monthly-report] Erro ao gerar do banco:', err);
+      const msg = process.env.NODE_ENV === 'production' ? 'Erro interno do servidor.' : err.message;
+      res.status(500).json({ error: msg });
+    }
+  }
+);
 
 export default router;

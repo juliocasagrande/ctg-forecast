@@ -12,7 +12,7 @@ function safeError(res, err) {
   res.status(500).json({ error: err.message });
 }
 
-const SUPERIOR_ROLES = ['gestor', 'planejador', 'coordenador', 'admin'];
+const SUPERIOR_ROLES = ['planejador', 'coordenador', 'admin'];
 
 // Verifica se o usuário é autor do documento
 async function isDocAuthor(docId, userId) {

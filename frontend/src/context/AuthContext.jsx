@@ -65,20 +65,19 @@ export function useRole() {
   const role = user?.role;
 
   const isAdmin       = role === 'admin';
-  const isGestor      = role === 'gestor';       // legado — mantido para compatibilidade
   const isCoordenador = role === 'coordenador';
   const isEngenheiro  = role === 'engenheiro';
   const isPlanejador  = role === 'planejador';
   const isGerente     = role === 'gerente';
 
   // Pode ver tudo (sem restrição de área ou projeto)
-  const canViewAll = isAdmin || isGestor || isCoordenador || isPlanejador || isGerente;
+  const canViewAll = isAdmin || isCoordenador || isPlanejador || isGerente;
 
   // Pode editar (gerente é view-only)
   const canEdit = !isGerente && role !== undefined;
 
   // Pode gerenciar projetos (criar, editar, excluir)
-  const canManage = isAdmin || isGestor || isCoordenador || isPlanejador;
+  const canManage = isAdmin || isCoordenador || isPlanejador;
 
   // Restrição de área: coordenador e engenheiro têm área definida
   const userArea = user?.area || null;
@@ -87,7 +86,6 @@ export function useRole() {
   return {
     role,
     isAdmin,
-    isGestor,
     isCoordenador,
     isEngenheiro,
     isPlanejador,

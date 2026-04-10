@@ -51,14 +51,14 @@ router.get('/members', async (req, res) => {
 
   let query, params;
 
-  if (role === 'admin' || role === 'gestor' || role === 'planejador' || role === 'gerente') {
+  if (role === 'admin' || role === 'planejador' || role === 'gerente') {
     // Admin/Gestor/Planejador/Gerente: vê todos os colaboradores
     query = `
       SELECT u.id, u.name, u.avatar_initials, u.role,
              COALESCE(u.area, 'eletrica') AS area
       FROM users u
       WHERE u.active = true
-        AND u.role IN ('engenheiro','coordenador','gerente','gestor','planejador')
+        AND u.role IN ('engenheiro','coordenador','gerente','planejador')
         ${area ? "AND COALESCE(u.area, 'eletrica') = $1" : ''}
       ORDER BY u.name
     `;
@@ -117,7 +117,7 @@ router.post('/', async (req, res) => {
   // Coordenador não pode criar/editar férias de gerentes/diretores
   if (role === 'coordenador') {
     const targetUser = await pool.query('SELECT role FROM users WHERE id=$1', [user_id]);
-    if (targetUser.rows.length && ['gerente', 'gestor', 'admin'].includes(targetUser.rows[0].role)) {
+    if (targetUser.rows.length && ['gerente', 'admin'].includes(targetUser.rows[0].role)) {
       return res.status(403).json({ error: 'Coordenadores não podem alterar férias de gerentes ou diretores' });
     }
   }
@@ -153,14 +153,14 @@ router.post('/', async (req, res) => {
 
   let overlapQuery;
   let overlapParams;
-  if (['gerente', 'gestor', 'coordenador'].includes(uRole)) {
+  if (['gerente', 'coordenador'].includes(uRole)) {
     // Gerentes/coordenadores: verificar sobreposição com outros gerentes/coordenadores
     overlapQuery = `
       SELECT vp.user_id, u.name AS user_name
       FROM vacation_periods vp
       JOIN users u ON u.id = vp.user_id
       WHERE vp.user_id != $1
-        AND u.role IN ('gerente', 'gestor', 'coordenador')
+        AND u.role IN ('gerente', 'coordenador')
         AND vp.year = $2
         AND vp.start_date <= $3
         AND vp.end_date >= $4
@@ -256,7 +256,7 @@ router.put('/:id', async (req, res) => {
 
 /* ────────────────────────────────────────────────
  * DELETE /api/vacations/:id
- * Remove período (gestor/admin: qualquer; engenheiro: só o próprio)
+ * Remove período (admin: qualquer; engenheiro: só o próprio)
  * ──────────────────────────────────────────────── */
 router.delete('/:id', async (req, res) => {
   const { role, id: requesterId } = req.user;

@@ -3,7 +3,7 @@ import api from '../utils/api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
 function Avatar({ name, initials, role, size = 32 }) {
-  const colors = { admin: '#001F5B', gestor: '#0070B8', engenheiro: '#166534' };
+  const colors = { admin: '#001F5B', coordenador: '#0070B8', engenheiro: '#166534' };
   return (
     <div style={{
       width: size, height: size, borderRadius: '50%',
@@ -18,7 +18,7 @@ function Avatar({ name, initials, role, size = 32 }) {
 }
 
 function roleBadge(role) {
-  const map = { admin: ['Admin', '#001F5B'], gestor: ['Gestor', '#0070B8'], engenheiro: ['Eng.', '#166534'] };
+  const map = { admin: ['Admin', '#001F5B'], coordenador: ['Coord.', '#0070B8'], engenheiro: ['Eng.', '#166534'] };
   const [label, color] = map[role] || ['', '#888'];
   return <span style={{ fontSize: '0.62rem', background: color + '18', color, fontWeight: 700, padding: '1px 6px', borderRadius: 10 }}>{label}</span>;
 }

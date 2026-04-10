@@ -377,11 +377,10 @@ router.get('/project/:projectId', requireProjectAccess, async (req, res) => {
     const ALLOWED_TYPES = {
       engenheiro:  ['Budget','Forecast','Actual','Meta','Pool'],
       coordenador: ['Budget','Forecast','Actual','Meta','Pool'],
-      gestor:      ['Budget','Forecast','Actual','Meta','Pool'],
       planejador:  ['Budget','Forecast','Actual','Meta','Pool'],
       admin:       ['Budget','Forecast','Actual','Meta','Pool'],
     };
-    const allowedTypes = ALLOWED_TYPES[role] || ALLOWED_TYPES.gestor;
+    const allowedTypes = ALLOWED_TYPES[role] || ALLOWED_TYPES.admin;
     const activeTypes  = selTypes ? selTypes.filter(t => allowedTypes.includes(t)) : allowedTypes;
     const activeCats   = selCategories || ['Viagens','Contratos','POs'];
 
@@ -456,14 +455,13 @@ router.get('/project/:projectId', requireProjectAccess, async (req, res) => {
 // ── Planejador export: all projects × months, with type selection ─────────────
 router.get('/planejador', async (req, res) => {
   const { role, id: userId } = req.user;
-  if (!['admin','gestor','coordenador','planejador','engenheiro'].includes(role))
+  if (!['admin','coordenador','planejador','engenheiro'].includes(role))
     return res.status(403).json({ error: 'Sem permissão' });
 
   // Role-based type whitelist
   const ALLOWED = {
     engenheiro:  ['Budget','Forecast','Actual'],
     coordenador: ['Budget','Forecast','Actual','Meta','Pool'],
-    gestor:      ['Budget','Forecast','Actual','Meta','Pool'],
     planejador:  ['Budget','Forecast','Actual','Meta','Pool'],
     admin:       ['Budget','Forecast','Actual','Meta','Pool'],
   };
@@ -758,6 +756,183 @@ router.get('/planejador', async (req, res) => {
     res.end();
   } catch (err) {
     console.error('Planejador export error:', err);
+    safeError(res, err);
+  }
+});
+
+/* ══════════════════════════════════════════════════════
+ * PROJECTS TRACKING EXPORT
+ * ══════════════════════════════════════════════════════ */
+router.get('/projects-tracking', requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT * FROM lists_projects_tracking
+      ORDER BY area ASC, status, pp_contrato ASC
+    `);
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Projetos');
+
+    const headers = [
+      'Área', 'UHE', 'PP/Contrato', 'Projeto/Atividade', 'Projeto', 'Status',
+      'Gestor', 'Empresa', 'Vencimento', 'Cronograma', 'Aditivos', 'Reajustes',
+      'Valor Contrato', 'Realizado Contrato', 'Saldo Contrato',
+      'Valor SI', 'Realizado SI', 'Saldo SI',
+      'Fornecedor', 'Natureza', 'Aditivo em Andamento', 'Resumo'
+    ];
+    const keys = [
+      'area', 'uhe', 'pp_contrato', 'projeto_atividade', 'projeto', 'status',
+      'gestor', 'empresa', 'vencimento', 'cronograma', 'aditivos', 'reajustes',
+      'valor_contrato', 'realizado_contrato', 'saldo_contrato',
+      'valor_si', 'realizado_si', 'saldo_si',
+      'fornecedor', 'natureza', 'aditivo_em_andamento', 'resumo'
+    ];
+
+    // Header row
+    headers.forEach((h, i) => {
+      const cell = ws.getCell(1, i + 1);
+      cell.value = h;
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '001F5B' } };
+      cell.font = { color: { argb: 'FFFFFF' }, bold: true, size: 10 };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'D1D5DB' } },
+        bottom: { style: 'thin', color: { argb: 'D1D5DB' } },
+        left: { style: 'thin', color: { argb: 'D1D5DB' } },
+        right: { style: 'thin', color: { argb: 'D1D5DB' } }
+      };
+    });
+
+    // Data rows
+    const parseNum = (v) => {
+      if (v === null || v === undefined) return 0;
+      if (typeof v === 'number') return v;
+      const s = String(v).replace(/[^\d.,]/g, '');
+      // If no comma, it's a plain number (e.g., "2903969.35" from JS toString)
+      if (!s.includes(',')) return parseFloat(s) || 0;
+      // Brazilian format: remove thousand-separator dots, swap comma→dot
+      return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
+    };
+
+    r.rows.forEach((row, rowIdx) => {
+      keys.forEach((key, colIdx) => {
+        const cell = ws.getCell(rowIdx + 2, colIdx + 1);
+        let val = row[key];
+        // Format currency columns
+        if (['valor_contrato', 'realizado_contrato', 'saldo_contrato',
+             'valor_si', 'realizado_si', 'saldo_si'].includes(key)) {
+          val = parseNum(val);
+          cell.numFmt = '#,##0.00';
+        }
+        // Format date
+        if (key === 'vencimento' && val) {
+          val = new Date(val).toLocaleDateString('pt-BR');
+        }
+        cell.value = val;
+        cell.alignment = { vertical: 'middle', wrapText: true };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'E2E8F0' } },
+          bottom: { style: 'thin', color: { argb: 'E2E8F0' } },
+          left: { style: 'thin', color: { argb: 'E2E8F0' } },
+          right: { style: 'thin', color: { argb: 'E2E8F0' } }
+        };
+      });
+    });
+
+    // Column widths
+    const widths = [12, 16, 12, 35, 14, 18, 20, 18, 12, 16, 16, 14,
+                     16, 18, 14, 10, 14, 12, 22, 14, 16, 35];
+    widths.forEach((w, i) => ws.getColumn(i + 1).width = w);
+
+    // Freeze header row
+    ws.views = [{ state: 'frozen', ySplit: 1 }];
+
+    const filename = `CTG_Acompanhamento_Projetos_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('Projects tracking export error:', err);
+    safeError(res, err);
+  }
+});
+
+/* ══════════════════════════════════════════════════════
+ * IACS EXPORT
+ * ══════════════════════════════════════════════════════ */
+router.get('/iacs', requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT * FROM lists_iacs
+      ORDER BY area ASC, status_current, iac_code ASC
+    `);
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('IACs');
+
+    const headers = [
+      'IAC Code', 'Tipo', 'Área', 'Qtty PP Line 26 Priority', 'Qtty PP Line 26 Non-Priority',
+      'Opening Date', 'When Open', 'Projeto', 'Comentários', 'Solicitante',
+      'Team Leader', 'Chinese Work Staff', 'Status Atual', 'Apresentado Work Team',
+      'Organizador', 'Supervisor', 'Equipe de Avaliação', 'Prioridade', 'Validade', 'Continuidade'
+    ];
+    const keys = [
+      'iac_code', 'type_line', 'area', 'qty_pp_line_26_priority', 'qty_pp_line_26_no_priority',
+      'opening_date', 'when_open', 'project', 'comments', 'requester',
+      'team_leader', 'chinese_work_staff', 'status_current', 'apresentado_work_team',
+      'organizer', 'supervisor', 'evaluation_team', 'priority', 'validity', 'continuidade'
+    ];
+
+    // Header row
+    headers.forEach((h, i) => {
+      const cell = ws.getCell(1, i + 1);
+      cell.value = h;
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '001F5B' } };
+      cell.font = { color: { argb: 'FFFFFF' }, bold: true, size: 10 };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'D1D5DB' } },
+        bottom: { style: 'thin', color: { argb: 'D1D5DB' } },
+        left: { style: 'thin', color: { argb: 'D1D5DB' } },
+        right: { style: 'thin', color: { argb: 'D1D5DB' } }
+      };
+    });
+
+    // Data rows
+    r.rows.forEach((row, rowIdx) => {
+      keys.forEach((key, colIdx) => {
+        const cell = ws.getCell(rowIdx + 2, colIdx + 1);
+        let val = row[key];
+        // Format date
+        if (['opening_date', 'when_open'].includes(key) && val) {
+          val = new Date(val).toLocaleDateString('pt-BR');
+        }
+        cell.value = val;
+        cell.alignment = { vertical: 'middle', wrapText: true };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'E2E8F0' } },
+          bottom: { style: 'thin', color: { argb: 'E2E8F0' } },
+          left: { style: 'thin', color: { argb: 'E2E8F0' } },
+          right: { style: 'thin', color: { argb: 'E2E8F0' } }
+        };
+      });
+    });
+
+    // Column widths
+    const widths = [16, 14, 16, 24, 26, 16, 12, 35, 35, 20, 16, 18, 22, 20, 16, 16, 24, 14, 12, 14];
+    widths.forEach((w, i) => ws.getColumn(i + 1).width = w);
+
+    // Freeze header row
+    ws.views = [{ state: 'frozen', ySplit: 1 }];
+
+    const filename = `CTG_IACs_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('IACs export error:', err);
     safeError(res, err);
   }
 });

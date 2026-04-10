@@ -63,7 +63,7 @@ router.post('/:id/reject', requireRole('admin'), async (req, res) => {
 });
 
 
-router.get('/', requireRole('admin', 'gestor', 'planejador'), async (req, res) => {
+router.get('/', requireRole('admin', 'planejador'), async (req, res) => {
   try {
     const r = await pool.query(`
       SELECT u.id, u.name, u.email, u.role, u.area, u.active, u.avatar_initials, u.created_at,
@@ -78,12 +78,12 @@ router.get('/', requireRole('admin', 'gestor', 'planejador'), async (req, res) =
 });
 
 // GET /api/users/engineers — lista para atribuição em projetos
-// - admin, gestor, planejador: todos os usuários ativos
+// - admin, planejador: todos os usuários ativos
 // - coordenador: apenas engenheiros da sua área
 router.get('/engineers', requireAuth, async (req, res) => {
   try {
     const { role, area } = req.user;
-    if (!['admin', 'gestor', 'planejador', 'coordenador'].includes(role))
+    if (!['admin', 'planejador', 'coordenador'].includes(role))
       return res.status(403).json({ error: 'Acesso não autorizado' });
 
     if (role === 'coordenador') {
@@ -105,7 +105,7 @@ router.get('/engineers', requireAuth, async (req, res) => {
       return res.json(r.rows);
     }
 
-    // admin e gestor: todos os engenheiros
+    // admin e: todos os engenheiros
     const r = await pool.query(
       `SELECT id, name, email, area, avatar_initials FROM users
        WHERE role='engenheiro' AND active=true ORDER BY name`

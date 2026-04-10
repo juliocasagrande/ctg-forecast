@@ -16,7 +16,7 @@ const COOKIE_OPTIONS = {
 };
 
 // Hierarquia de roles para elevação por delegação
-const ROLE_RANK = { engenheiro: 1, coordenador: 2, planejador: 3, gerente: 3, gestor: 4, admin: 5 };
+const ROLE_RANK = { engenheiro: 1, coordenador: 2, planejador: 3, gerente: 3, admin: 5 };
 
 export function signToken(payload) {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
@@ -122,7 +122,7 @@ export function denyGerente(req, res, next) {
 
 /**
  * Controle de acesso a projetos por role:
- * - admin, gestor, planejador: acesso total
+ * - admin, planejador: acesso total
  * - coordenador: projetos com engenheiros da sua área
  * - gerente: acesso de leitura
  * - engenheiro: projetos designados a ele ou via delegação ativa
@@ -131,8 +131,8 @@ export function denyGerente(req, res, next) {
 export async function requireProjectAccess(req, res, next) {
   const { role, id: userId, area: userArea, _delegatorIds = [] } = req.user;
 
-  // Admin, gestor, planejador, gerente: acesso total
-  if (['admin', 'gestor', 'planejador', 'gerente'].includes(role)) return next();
+  // Admin, planejador, gerente: acesso total
+  if (['admin', 'planejador', 'gerente'].includes(role)) return next();
 
   const { pool } = await import('../db/schema.js');
   const projectId = req.params.projectId || req.params.id;

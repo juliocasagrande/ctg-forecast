@@ -13,6 +13,8 @@ function timeAgo(daysAgo) {
 
 export default function AlertBell() {
   const [alerts, setAlerts] = useState(null);
+  const [stalePT, setStalePT] = useState([]);
+  const [staleIACs, setStaleIACs] = useState([]);
   const [open, setOpen] = useState(false);
   const [dismissing, setDismissing] = useState(new Set());
   const ref = useRef(null);
@@ -22,9 +24,11 @@ export default function AlertBell() {
 
   const fetchAlerts = useCallback(async () => {
     try {
-      const [alertsR, delegR] = await Promise.all([
+      const [alertsR, delegR, staleR, staleIACsR] = await Promise.all([
         api.get('/forecast/alerts'),
         api.get('/delegations/notifications'),
+        api.get('/lists/projects-tracking/stale-projects').catch(() => ({ data: [] })),
+        api.get('/lists/iacs/stale-iacs').catch(() => ({ data: [] })),
       ]);
       const data = alertsR.data;
       // Inject delegation_received into alerts object
@@ -33,7 +37,13 @@ export default function AlertBell() {
         count: delegations.length,
         delegations,
       };
-      data.total = (data.total || 0) + delegations.length + (data.doc_unpublished?.count || 0);
+      // Add tracking stale projects count
+      const staleProjects = staleR.data || [];
+      setStalePT(staleProjects);
+      // Add stale IACs count
+      const staleIACs = staleIACsR.data || [];
+      setStaleIACs(staleIACs);
+      data.total = (data.total || 0) + delegations.length + (data.doc_unpublished?.count || 0) + staleProjects.length + staleIACs.length;
       setAlerts(data);
       if ('setAppBadge' in navigator) {
         const count = data?.total ?? 0;
@@ -289,6 +299,40 @@ export default function AlertBell() {
                   </Section>
                 )}
 
+                {/* Acompanhamento de Projetos sem atualização */}
+                {stalePT.length > 0 && (
+                  <Section icon={<TrackIcon />} title="Projetos sem atualização" count={stalePT.length} color="#EF4444">
+                    {stalePT.map(p => (
+                      <AlertRow
+                        key={p.id}
+                        onClick={() => { navigate('/lists/projects-tracking'); setOpen(false); }}
+                        label={p.projeto || p.pp_contrato}
+                        sub={`${p.pp_contrato} · ${p.area} · ${p.gestor || '—'}`}
+                        accent="#EF4444"
+                        onDismiss={() => dismiss('stale_tracking', p.id)}
+                        dismissing={isDismissing('stale_tracking', p.id)}
+                      />
+                    ))}
+                  </Section>
+                )}
+
+                {/* IACs sem atualização */}
+                {staleIACs.length > 0 && (
+                  <Section icon={<IACIcon />} title="IACs sem atualização" count={staleIACs.length} color="#F97316">
+                    {staleIACs.map(iac => (
+                      <AlertRow
+                        key={iac.id}
+                        onClick={() => { navigate('/lists/iacs'); setOpen(false); }}
+                        label={iac.project || iac.iac_code}
+                        sub={`${iac.iac_code} · ${iac.area} · ${iac.team_leader || '—'}`}
+                        accent="#F97316"
+                        onDismiss={() => dismiss('stale_iacs', iac.id)}
+                        dismissing={isDismissing('stale_iacs', iac.id)}
+                      />
+                    ))}
+                  </Section>
+                )}
+
                 {/* Delegações recebidas ativas */}
                 {alerts.delegation_received?.count > 0 && (
                   <Section icon={<DelegIcon />} title="Delegações recebidas" count={alerts.delegation_received.count} color="#0891B2">
@@ -413,3 +457,5 @@ const WarningIcon = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="
 const VacIcon     = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd"/></svg>;
 const DelegIcon   = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/></svg>;
 const DocIcon     = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd"/></svg>;
+const TrackIcon   = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 3a2 2 0 00-2 2v1a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v1a2 2 0 002 2h2a2 2 0 002-2v-1a2 2 0 00-2-2H5zM13 3a2 2 0 00-2 2v1a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2h-2zM13 11a2 2 0 00-2 2v1a2 2 0 002 2h2a2 2 0 002-2v-1a2 2 0 00-2-2h-2z" clipRule="evenodd"/></svg>;
+const IACIcon     = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/></svg>;

@@ -119,12 +119,15 @@ function getClientIp(req) {
  * RATE LIMITERS (AZURE-SAFE)
  * ────────────────────────────────────────────────────────────── */
 
+const skipInTest = () => process.env.NODE_ENV === 'test';
+
 export const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: getClientIp,
+  skip: skipInTest,
   message: {
     error: 'Muitas tentativas de login. Tente novamente em 15 minutos.'
   }
@@ -136,6 +139,7 @@ export const registerLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: getClientIp,
+  skip: skipInTest,
   message: {
     error: 'Muitas solicitações de cadastro. Tente novamente mais tarde.'
   }
@@ -147,7 +151,7 @@ export const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: getClientIp,
-  skip: (req) => req.method === 'OPTIONS',
+  skip: (req) => req.method === 'OPTIONS' || skipInTest(),
   message: {
     error: 'Limite de requisições excedido. Aguarde um momento.'
   }
@@ -160,6 +164,7 @@ export const heavyOpLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: getClientIp,
+  skip: skipInTest,
   message: {
     error: 'Muitas operações pesadas. Aguarde alguns minutos.'
   }

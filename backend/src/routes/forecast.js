@@ -58,7 +58,7 @@ router.post('/project/:projectId/bulk', requireProjectAccess, async (req, res) =
       if (role === 'engenheiro' && !ENGENHEIRO_TYPES.includes(e.type)) continue;
       if (role === 'coordenador' && !['Budget','Forecast','Actual','Meta','Pool'].includes(e.type)) continue;
       if (role === 'planejador'  && !PLANEJADOR_TYPES.includes(e.type)) continue;
-      // gestor, coordenador e admin can edit all types
+      // coordenador e admin can edit all types
       if (!VALID_CATS.includes(e.category) || !VALID_TYPES.includes(e.type)) continue;
       const month = parseInt(e.month);
       const year = parseInt(e.year);
@@ -103,7 +103,7 @@ router.put('/project/:projectId', requireProjectAccess, async (req, res) => {
     if (role === 'gerente') return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
     if (role === 'planejador' && !PLANEJADOR_TYPES.includes(type))
       return res.status(403).json({ error: 'Planejadores só podem editar Budget, Forecast, Realizado, Meta e Pool' });
-    // gestor, coordenador e admin can edit all types
+    // coordenador e admin can edit all types
     if (!VALID_CATS.includes(category))
       return res.status(400).json({ error: 'Categoria inválida' });
     const m = parseInt(month), y = parseInt(year);
@@ -329,7 +329,7 @@ router.get('/project/:projectId/actual-consolidated', requireProjectAccess, asyn
 
 router.post('/project/:projectId/actual-consolidated', requireProjectAccess, async (req, res) => {
   const { role, id: userId } = req.user;
-  if (!['gestor','coordenador','planejador','admin'].includes(role))
+  if (!['coordenador','planejador','admin'].includes(role))
     return res.status(403).json({ error: 'Sem permissão' });
   try {
     const { value, comment } = req.body;
@@ -394,7 +394,7 @@ router.put('/notes/:noteId', async (req, res) => {
     const noteR = await pool.query('SELECT * FROM project_notes WHERE id=$1', [req.params.noteId]);
     if (!noteR.rows.length) return res.status(404).json({ error: 'Nota não encontrada' });
     const note = noteR.rows[0];
-    if (note.user_id !== userId && !['gestor','planejador','admin'].includes(role))
+    if (note.user_id !== userId && !['planejador','admin'].includes(role))
       return res.status(403).json({ error: 'Sem permissão' });
     const r = await pool.query(
       `UPDATE project_notes SET content=$1, note_date=$2, updated_at=NOW() WHERE id=$3 RETURNING *`,
@@ -410,7 +410,7 @@ router.delete('/notes/:noteId', async (req, res) => {
     const noteR = await pool.query('SELECT * FROM project_notes WHERE id=$1', [req.params.noteId]);
     if (!noteR.rows.length) return res.status(404).json({ error: 'Nota não encontrada' });
     const note = noteR.rows[0];
-    if (note.user_id !== userId && !['gestor','planejador','admin'].includes(role))
+    if (note.user_id !== userId && !['planejador','admin'].includes(role))
       return res.status(403).json({ error: 'Sem permissão' });
     await pool.query('DELETE FROM project_notes WHERE id=$1', [req.params.noteId]);
     res.json({ ok: true });
@@ -424,7 +424,7 @@ router.get('/alerts', async (req, res) => {
     const now = new Date();
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth() + 1; // 1-12
-    const isManager = ['gestor','planejador','admin'].includes(role);
+    const isManager = ['planejador','admin'].includes(role);
 
     // Load configurable thresholds
     const cfgRes = await pool.query(
@@ -852,7 +852,7 @@ router.post('/project/:projectId/year-consolidated', requireProjectAccess, async
     return res.status(403).json({ error: 'Engenheiros só podem editar Forecast e Realizado consolidado' });
   if (role === 'gerente')
     return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
-  if (!['gestor', 'planejador', 'admin', 'engenheiro', 'coordenador'].includes(role))
+  if (!['planejador', 'admin', 'engenheiro', 'coordenador'].includes(role))
     return res.status(403).json({ error: 'Sem permissão para editar valores consolidados' });
   try {
     const r = await pool.query(`
@@ -874,7 +874,7 @@ router.post('/project/:projectId/year-consolidated/bulk', requireProjectAccess, 
   const ENGENHEIRO_CONS_TYPES = ['Forecast', 'Actual'];
   if (role === 'gerente')
     return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
-  if (!['gestor', 'planejador', 'admin', 'engenheiro', 'coordenador'].includes(role))
+  if (!['planejador', 'admin', 'engenheiro', 'coordenador'].includes(role))
     return res.status(403).json({ error: 'Sem permissão para editar valores consolidados' });
   const client = await pool.connect();
   try {
@@ -900,7 +900,7 @@ router.post('/project/:projectId/year-consolidated/bulk', requireProjectAccess, 
 });
 
 // ── Close Year: auto-consolidate monthly entries into year_consolidated ───────
-router.post('/close-year', requireRole('gestor', 'planejador', 'admin'), async (req, res) => {
+router.post('/close-year', requireRole('planejador', 'admin'), async (req, res) => {
   const { year } = req.body;
   const { id: userId } = req.user;
   if (!year) return res.status(400).json({ error: 'Ano obrigatório' });

@@ -9,7 +9,10 @@ export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production'
     ? { rejectUnauthorized: process.env.PG_REJECT_UNAUTHORIZED !== 'false' }
-    : false
+    : false,
+  max: 20,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 10_000
 });
 
 /* ─────────────────────────────────────────────
@@ -77,9 +80,10 @@ export async function initDB() {
     `);
 
     await client.query(`
+      UPDATE users SET role = 'coordenador' WHERE role = 'gestor';
       ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
       ALTER TABLE users ADD CONSTRAINT users_role_check
-        CHECK (role IN ('admin','gestor','coordenador','engenheiro','planejador','gerente'));
+        CHECK (role IN ('admin','coordenador','engenheiro','planejador','gerente'));
     `);
 
     /* ───────── PROJECTS ───────── */
@@ -218,8 +222,10 @@ export async function initDB() {
         ('doc_alert_exclude_cancelled','true'),
         ('doc_alert_exclude_published','true'),
         ('doc_alert_roles','engenheiro,coordenador,planejador'),
-        ('doc_alert_areas','')
-      ON CONFLICT (KEY) DO NOTHING;
+        ('doc_alert_areas',''),
+        ('tracking_alert_interval_days','30'),
+        ('tracking_alert_enabled','true')
+      ON CONFLICT (key) DO NOTHING;
     `);
 
     /* ───────── YEAR CONSOLIDATED ───────── */
@@ -362,6 +368,133 @@ export async function initDB() {
       ALTER TABLE vacation_periods DROP CONSTRAINT IF EXISTS vacation_periods_area_check;
       ALTER TABLE vacation_periods ADD CONSTRAINT vacation_periods_area_check
         CHECK (area IN ('eletrica','mecanica','confiabilidade','coordenacao','modernizacao'));
+    `);
+
+    /* ───────── LISTS: IACs ───────── */
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS lists_iacs (
+        id                          SERIAL PRIMARY KEY,
+        iac_code                    VARCHAR(50),
+        type_line                   VARCHAR(30) DEFAULT 'New',
+        area                        VARCHAR(30) NOT NULL DEFAULT 'Elétrica',
+        qty_pp_line_26_priority     INTEGER,
+        qty_pp_line_26_no_priority  INTEGER,
+        opening_date                DATE,
+        when_open                   DATE,
+        project                     TEXT,
+        comments                    TEXT,
+        requester                   VARCHAR(120),
+        team_leader                 VARCHAR(120),
+        chinese_work_staff          VARCHAR(120),
+        status_current              VARCHAR(50) DEFAULT '0 - Not started yet',
+        apresentado_work_team       VARCHAR(10) DEFAULT 'Não',
+        organizer                   VARCHAR(120),
+        supervisor                  VARCHAR(120),
+        evaluation_team             TEXT,
+        priority                    VARCHAR(20) DEFAULT 'Non Priority',
+        validity                    VARCHAR(20) DEFAULT 'Dez/2027',
+        continuidade                VARCHAR(10) DEFAULT 'Sim',
+        created_at                  TIMESTAMPTZ DEFAULT NOW(),
+        updated_at                  TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // Add UNIQUE constraint on iac_code for upsert operations
+    // First remove duplicate IACs keeping only the most recent one
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'idx_iac_code_unique'
+        ) THEN
+          -- Remove duplicates: keep the one with the highest id (most recent)
+          DELETE FROM lists_iacs a
+          USING lists_iacs b
+          WHERE a.id < b.id
+            AND a.iac_code = b.iac_code
+            AND a.iac_code IS NOT NULL
+            AND a.iac_code != '';
+
+          -- Add the UNIQUE constraint
+          ALTER TABLE lists_iacs ADD CONSTRAINT idx_iac_code_unique UNIQUE (iac_code);
+        END IF;
+      END $$;
+    `);
+
+    /* ───────── LISTS: PROJECTS TRACKING ───────── */
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS lists_projects_tracking (
+        id                    SERIAL PRIMARY KEY,
+        area                  VARCHAR(30) NOT NULL DEFAULT 'Elétrica',
+        uhe                   VARCHAR(60) DEFAULT 'Geral',
+        pp_contrato           VARCHAR(30),
+        projeto_atividade     TEXT,
+        projeto               VARCHAR(200),
+        status                VARCHAR(50) DEFAULT 'Em andamento',
+        gestor                VARCHAR(120),
+        resumo                TEXT,
+        empresa               TEXT,
+        vencimento            DATE,
+        vencimento_txt        VARCHAR(60),
+        cronograma            TEXT,
+        aditivos              TEXT,
+        reajustes             TEXT,
+        valor_contrato        VARCHAR(60),
+        realizado_contrato    VARCHAR(60),
+        saldo_contrato        VARCHAR(60),
+        valor_si              VARCHAR(60),
+        realizado_si          VARCHAR(60),
+        saldo_si              VARCHAR(60),
+        fornecedor            VARCHAR(200),
+        natureza              VARCHAR(30) DEFAULT 'OPEX',
+        aditivo_em_andamento  VARCHAR(10) DEFAULT 'NÃO',
+        created_at            TIMESTAMPTZ DEFAULT NOW(),
+        updated_at            TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // Remove duplicates and create UNIQUE index on pp_contrato
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'idx_pt_pp_contrato'
+        ) THEN
+          -- Remove duplicates: keep the one with the highest id (most recent)
+          DELETE FROM lists_projects_tracking a
+          USING lists_projects_tracking b
+          WHERE a.id < b.id
+            AND a.pp_contrato = b.pp_contrato
+            AND a.pp_contrato IS NOT NULL
+            AND a.pp_contrato != '';
+
+          -- Create the UNIQUE index
+          CREATE UNIQUE INDEX idx_pt_pp_contrato
+            ON lists_projects_tracking(pp_contrato);
+        END IF;
+      END $$;
+    `);
+
+    /* ───────── PROJECTS TRACKING: LAST VIEWED (per user) ───────── */
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS lists_pt_last_viewed (
+        id                    SERIAL PRIMARY KEY,
+        tracking_id           INTEGER REFERENCES lists_projects_tracking(id) ON DELETE CASCADE,
+        user_id               INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        viewed_at             TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(tracking_id, user_id)
+      );
+    `);
+
+    /* ───────── IACs: LAST VIEWED (per user) ───────── */
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS lists_iacs_last_viewed (
+        id                    SERIAL PRIMARY KEY,
+        iac_id                INTEGER REFERENCES lists_iacs(id) ON DELETE CASCADE,
+        user_id               INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        viewed_at             TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(iac_id, user_id)
+      );
     `);
 
     console.log('✅ Migrations OK');
