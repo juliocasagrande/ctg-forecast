@@ -1749,7 +1749,7 @@ export default function ProjectsTrackingPage() {
                         <td style={{ padding: '10px 12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           <NaturezaBadge value={item.natureza} />
                         </td>
-                        <td style={{ padding: '10px 12px' }}>
+                        <td style={{ padding: '10px 12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           <span style={{
                             fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: 6,
                             background: item.aditivo_em_andamento === 'SIM' ? '#D1FAE5' : '#F1F5F9',
