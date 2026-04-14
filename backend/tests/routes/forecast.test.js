@@ -41,9 +41,9 @@ afterAll(async () => {
 describe('POST /api/forecast/project/:id/bulk', () => {
   it('engenheiro insere/atualiza entradas de previsão', async () => {
     const entries = [
-      { category: 'CAPEX', type: 'PREVISTO', year: YEAR, month: 1, value: 10000 },
-      { category: 'CAPEX', type: 'PREVISTO', year: YEAR, month: 2, value: 15000 },
-      { category: 'OPEX',  type: 'PREVISTO', year: YEAR, month: 1, value: 5000  },
+      { category: 'Viagens', type: 'Forecast', year: YEAR, month: 1, value: 10000 },
+      { category: 'Viagens', type: 'Forecast', year: YEAR, month: 2, value: 15000 },
+      { category: 'Contratos', type: 'Forecast', year: YEAR, month: 1, value: 5000 },
     ];
 
     const res = await request(app)
@@ -61,7 +61,7 @@ describe('POST /api/forecast/project/:id/bulk', () => {
     const res = await request(app)
       .post(`/api/forecast/project/${project.id}/bulk`)
       .set('Cookie', cookieHeader(cookies))
-      .send({ entries: [{ category: 'CAPEX', type: 'PREVISTO', year: YEAR, month: 1, value: 1 }] });
+      .send({ entries: [{ category: 'Viagens', type: 'Forecast', year: YEAR, month: 1, value: 1 }] });
 
     expect(res.status).toBe(403);
   });

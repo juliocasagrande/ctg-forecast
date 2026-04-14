@@ -13,7 +13,11 @@
       "Bash(del *)",
       "Bash(npm test)",
       "Bash(select-string *)",
-      "Bash(select-object *)"
+      "Bash(select-object *)",
+      "Bash(node *)",
+      "Bash(true)",
+      "Bash(dir *)",
+      "Bash(python *)"
     ]
   },
   "$version": 3

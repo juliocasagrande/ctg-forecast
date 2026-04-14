@@ -812,6 +812,59 @@ export default function IACsPage() {
   const [colFilterStatus2, setColFilterStatus2] = useState([]);
   const [colFilterApresentado, setColFilterApresentado] = useState([]);
 
+  // Data filtered by main filters (before column filters) — used to compute unique values for column filter dropdowns
+  const preFiltered = useMemo(() => {
+    let data = [...items];
+    if (showMyIACs) {
+      const myName = user?.name?.toLowerCase();
+      data = data.filter(i =>
+        (i.requester && i.requester.toLowerCase().includes(myName)) ||
+        (i.team_leader && i.team_leader.toLowerCase().includes(myName)) ||
+        (i.organizer && i.organizer.toLowerCase().includes(myName)) ||
+        (i.supervisor && i.supervisor.toLowerCase().includes(myName))
+      );
+    }
+    if (activeTab !== 'Todos' && activeTab !== 'Meus IACs') data = data.filter(i => i.area === activeTab);
+    if (filterStatus) data = data.filter(i => i.status_current === filterStatus);
+    if (filterPriority) data = data.filter(i => i.priority === filterPriority);
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      data = data.filter(i =>
+        (i.iac_code || '').toLowerCase().includes(q) ||
+        (i.project || '').toLowerCase().includes(q) ||
+        (i.requester || '').toLowerCase().includes(q) ||
+        (i.team_leader || '').toLowerCase().includes(q)
+      );
+    }
+    return data;
+  }, [items, search, filterStatus, filterPriority, activeTab, showMyIACs, user]);
+
+  // Unique values for column filters — only show values that exist in current data
+  const colFilterAreaValues = useMemo(() => {
+    const values = [...new Set(preFiltered.map(i => i.area).filter(Boolean))];
+    return values.sort();
+  }, [preFiltered]);
+
+  const colFilterTypeValues = useMemo(() => {
+    const values = [...new Set(preFiltered.map(i => i.type_line).filter(Boolean))];
+    return values.sort();
+  }, [preFiltered]);
+
+  const colFilterPriorityValues = useMemo(() => {
+    const values = [...new Set(preFiltered.map(i => i.priority).filter(Boolean))];
+    return values.sort();
+  }, [preFiltered]);
+
+  const colFilterStatus2Values = useMemo(() => {
+    const values = [...new Set(preFiltered.map(i => i.status_current).filter(Boolean))];
+    return values.sort();
+  }, [preFiltered]);
+
+  const colFilterApresentadoValues = useMemo(() => {
+    const values = [...new Set(preFiltered.map(i => i.apresentado_work_team).filter(Boolean))];
+    return values.sort();
+  }, [preFiltered]);
+
   const fetchItems = async () => {
     setLoading(true);
     try { const r = await api.get('/lists/iacs'); setItems(r.data || []); }
@@ -952,11 +1005,10 @@ export default function IACsPage() {
     return map;
   }, [filtered]);
 
-  // Ordenar chaves conforme ordem definida em STATUS_OPTIONS
+  // Ordenar chaves conforme ordem definida em STATUS_OPTIONS (always show all statuses)
   const groupedKeys = useMemo(() =>
-    STATUS_OPTIONS.map(s => s.value)
-      .filter(k => grouped[k]?.length > 0),
-  [grouped]);
+    STATUS_OPTIONS.map(s => s.value),
+  []);
 
   const tabs = ['Todos', ...AREAS, 'Meus IACs'];
   const counts = useMemo(() => {
@@ -1100,7 +1152,8 @@ export default function IACsPage() {
           </div>
           <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, borderTop: '3px solid #0b5cab', padding: '10px', flex: 1, overflowY: 'auto', minHeight: 140 }}>
             {(() => {
-              const visibleData = statusBarData.filter(d => d.count > 0);
+              // Always show all statuses from STATUS_OPTIONS (even with count 0)
+              const visibleData = statusBarData;
               const maxCount = Math.max(...visibleData.map(d => d.count), 1);
               return (
                 <div style={{ columnCount: 4, columnGap: 8 }}>
@@ -1214,12 +1267,16 @@ export default function IACsPage() {
         </div>
       ) : (
         <div>
-          {groupedKeys.map(statusKey => (
+          {groupedKeys.map(statusKey => {
+            const items = grouped[statusKey] || [];
+            // Skip empty status sections to avoid showing empty tables
+            if (items.length === 0) return null;
+            return (
             <div key={statusKey} style={{ marginBottom: 28 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                 <StatusBadge status={statusKey} />
                 <span style={{ fontSize: '0.75rem', color: '#94A3B8', fontWeight: 600 }}>
-                  {grouped[statusKey].length} {grouped[statusKey].length === 1 ? 'item' : 'itens'}
+                  {items.length} {items.length === 1 ? 'item' : 'itens'}
                 </span>
               </div>
               <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
@@ -1241,8 +1298,9 @@ export default function IACsPage() {
                       <col style={{ width: 80 }} />
                       <col style={{ width: 110 }} />
                       <col style={{ width: 100 }} />
-                      <col style={{ width: 110 }} />
-                      <col style={{ width: 90 }} />
+                      <col style={{ width: 120 }} />
+                      <col style={{ width: 130 }} />
+                      <col style={{ width: 140 }} />
                       <col style={{ width: 100 }} />
                     </colgroup>
                     <thead>
@@ -1255,7 +1313,7 @@ export default function IACsPage() {
                           Tipo
                           <ColumnFilterDropdown
                             column="Tipo"
-                            uniqueValues={TYPE_OPTIONS}
+                            uniqueValues={colFilterTypeValues}
                             selectedValues={colFilterType}
                             onChange={setColFilterType}
                           />
@@ -1264,7 +1322,7 @@ export default function IACsPage() {
                           Área
                           <ColumnFilterDropdown
                             column="Área"
-                            uniqueValues={AREAS}
+                            uniqueValues={colFilterAreaValues}
                             selectedValues={colFilterArea}
                             onChange={setColFilterArea}
                           />
@@ -1281,7 +1339,7 @@ export default function IACsPage() {
                           Ap. WT
                           <ColumnFilterDropdown
                             column="Apresentado WT"
-                            uniqueValues={SIM_NAO}
+                            uniqueValues={colFilterApresentadoValues}
                             selectedValues={colFilterApresentado}
                             onChange={setColFilterApresentado}
                           />
@@ -1292,7 +1350,7 @@ export default function IACsPage() {
                           Prioridade
                           <ColumnFilterDropdown
                             column="Prioridade"
-                            uniqueValues={PRIORITY_OPTIONS}
+                            uniqueValues={colFilterPriorityValues}
                             selectedValues={colFilterPriority}
                             onChange={setColFilterPriority}
                           />
@@ -1348,7 +1406,8 @@ export default function IACsPage() {
                 </div>
               </div>
             </div>
-          ))}
+          );
+          })}
         </div>
       )}
 

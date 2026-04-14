@@ -41,8 +41,8 @@ export async function assignEngineer(projectId, userId, assignedBy = null) {
 /** Cria uma entrada de previsão */
 export async function createForecastEntry({
   project_id,
-  category   = 'CAPEX',
-  type       = 'PREVISTO',
+  category   = 'Viagens',
+  type       = 'Forecast',
   year       = new Date().getFullYear(),
   month      = 1,
   value      = 10_000,

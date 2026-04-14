@@ -399,24 +399,38 @@ export async function initDB() {
       );
     `);
 
-    // Add UNIQUE constraint on iac_code for upsert operations
-    // First remove duplicate IACs keeping only the most recent one
+    // Drop UNIQUE constraint on iac_code and add unique_key column
+    await client.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'idx_iac_code_unique'
+        ) THEN
+          ALTER TABLE lists_iacs DROP CONSTRAINT idx_iac_code_unique;
+        END IF;
+      END $$;
+    `);
+
+    // Add unique_key column and create UNIQUE index on it
+    // unique_key = iac_code + first 40 chars of project (to handle duplicate IAC codes with different projects)
+    await client.query(`
+      ALTER TABLE lists_iacs ADD COLUMN IF NOT EXISTS unique_key VARCHAR(100);
+    `);
+
     await client.query(`
       DO $$
       BEGIN
         IF NOT EXISTS (
-          SELECT 1 FROM pg_constraint WHERE conname = 'idx_iac_code_unique'
+          SELECT 1 FROM pg_indexes WHERE indexname = 'idx_iac_unique_key'
         ) THEN
-          -- Remove duplicates: keep the one with the highest id (most recent)
-          DELETE FROM lists_iacs a
-          USING lists_iacs b
-          WHERE a.id < b.id
-            AND a.iac_code = b.iac_code
-            AND a.iac_code IS NOT NULL
-            AND a.iac_code != '';
+          -- Generate unique_key for existing rows
+          UPDATE lists_iacs
+          SET unique_key = iac_code || '|' || COALESCE(SUBSTRING(project FROM 1 FOR 40), '')
+          WHERE unique_key IS NULL;
 
-          -- Add the UNIQUE constraint
-          ALTER TABLE lists_iacs ADD CONSTRAINT idx_iac_code_unique UNIQUE (iac_code);
+          -- Create the UNIQUE index
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_iac_unique_key
+            ON lists_iacs(unique_key);
         END IF;
       END $$;
     `);
@@ -448,29 +462,44 @@ export async function initDB() {
         fornecedor            VARCHAR(200),
         natureza              VARCHAR(30) DEFAULT 'OPEX',
         aditivo_em_andamento  VARCHAR(10) DEFAULT 'NÃO',
+        unique_key            VARCHAR(100),
         created_at            TIMESTAMPTZ DEFAULT NOW(),
         updated_at            TIMESTAMPTZ DEFAULT NOW()
       );
     `);
 
-    // Remove duplicates and create UNIQUE index on pp_contrato
+    // Drop old UNIQUE constraint on pp_contrato (allow duplicate PP codes for temporary processes)
+    await client.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM pg_indexes WHERE indexname = 'idx_pt_pp_contrato'
+        ) THEN
+          DROP INDEX IF EXISTS idx_pt_pp_contrato;
+        END IF;
+      END $$;
+    `);
+
+    // Add unique_key column and create UNIQUE index on it
+    // unique_key = pp_contrato + first 30 chars of projeto_atividade (to handle duplicate PP codes)
+    await client.query(`
+      ALTER TABLE lists_projects_tracking ADD COLUMN IF NOT EXISTS unique_key VARCHAR(100);
+    `);
+    
     await client.query(`
       DO $$
       BEGIN
         IF NOT EXISTS (
-          SELECT 1 FROM pg_constraint WHERE conname = 'idx_pt_pp_contrato'
+          SELECT 1 FROM pg_indexes WHERE indexname = 'idx_pt_unique_key'
         ) THEN
-          -- Remove duplicates: keep the one with the highest id (most recent)
-          DELETE FROM lists_projects_tracking a
-          USING lists_projects_tracking b
-          WHERE a.id < b.id
-            AND a.pp_contrato = b.pp_contrato
-            AND a.pp_contrato IS NOT NULL
-            AND a.pp_contrato != '';
+          -- Generate unique_key for existing rows that don't have it
+          UPDATE lists_projects_tracking
+          SET unique_key = pp_contrato || '|' || COALESCE(SUBSTRING(projeto_atividade FROM 1 FOR 40), '')
+          WHERE unique_key IS NULL;
 
           -- Create the UNIQUE index
-          CREATE UNIQUE INDEX idx_pt_pp_contrato
-            ON lists_projects_tracking(pp_contrato);
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_pt_unique_key
+            ON lists_projects_tracking(unique_key);
         END IF;
       END $$;
     `);

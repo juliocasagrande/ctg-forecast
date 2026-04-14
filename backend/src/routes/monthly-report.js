@@ -159,8 +159,31 @@ router.post(
       function moneyToFloat(v) {
         if (v === null || v === undefined) return null;
         if (typeof v === 'number') return v;
-        const s = String(v).replace('R$', '').replace(/\s/g, '')
-          .replace(/\./g, '').replace(',', '.');
+        const s = String(v).replace('R$', '').replace(/\s/g, '').trim();
+        if (!s) return null;
+
+        // Brazilian format: has comma as decimal separator
+        if (s.includes(',')) {
+          const normalized = s.replace(/\./g, '').replace(',', '.');
+          const n = parseFloat(normalized);
+          return isNaN(n) ? null : n;
+        }
+
+        // No comma — check if it's American decimal or thousand separators
+        if (s.includes('.')) {
+          const parts = s.split('.');
+          // "1234567.89" → American decimal (dot followed by ≤2 digits)
+          if (parts.length === 2 && parts[1].length <= 2) {
+            const n = parseFloat(s);
+            return isNaN(n) ? null : n;
+          }
+          // "1.234.567" → thousand separators
+          const normalized = s.replace(/\./g, '');
+          const n = parseFloat(normalized);
+          return isNaN(n) ? null : n;
+        }
+
+        // Plain integer string
         const n = parseFloat(s);
         return isNaN(n) ? null : n;
       }
@@ -640,8 +663,31 @@ router.get(
       function moneyToFloat(v) {
         if (v === null || v === undefined) return null;
         if (typeof v === 'number') return v;
-        const s = String(v).replace('R$', '').replace(/\s/g, '')
-          .replace(/\./g, '').replace(',', '.');
+        const s = String(v).replace('R$', '').replace(/\s/g, '').trim();
+        if (!s) return null;
+
+        // Brazilian format: has comma as decimal separator
+        if (s.includes(',')) {
+          const normalized = s.replace(/\./g, '').replace(',', '.');
+          const n = parseFloat(normalized);
+          return isNaN(n) ? null : n;
+        }
+
+        // No comma — check if it's American decimal or thousand separators
+        if (s.includes('.')) {
+          const parts = s.split('.');
+          // "1234567.89" → American decimal (dot followed by ≤2 digits)
+          if (parts.length === 2 && parts[1].length <= 2) {
+            const n = parseFloat(s);
+            return isNaN(n) ? null : n;
+          }
+          // "1.234.567" → thousand separators
+          const normalized = s.replace(/\./g, '');
+          const n = parseFloat(normalized);
+          return isNaN(n) ? null : n;
+        }
+
+        // Plain integer string
         const n = parseFloat(s);
         return isNaN(n) ? null : n;
       }

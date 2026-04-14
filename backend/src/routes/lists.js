@@ -527,19 +527,19 @@ router.post('/projects-tracking/import', upload.single('file'), async (req, res)
 
       const parseVal = (v) => {
         if (v === null || v === undefined) return null;
-        // If already a number, return directly (ExcelJS returns numeric cells as JS numbers)
-        if (typeof v === 'number') return v;
+        // If already a number, return rounded to 2 decimal places (ExcelJS returns numeric cells as JS numbers)
+        if (typeof v === 'number') return Math.round(v * 100) / 100;
         // String parsing for Brazilian format: "2.903.969,35"
         const s = String(v).replace(/[^\d.,]/g, '');
         // If no comma, it might be a plain number string like "2903969.35"
         if (!s.includes(',')) {
           const n = parseFloat(s);
-          return isNaN(n) ? null : n;
+          return isNaN(n) ? null : Math.round(n * 100) / 100;
         }
         // Has comma → Brazilian format: remove thousand-separator dots, then swap comma→dot
         const normalized = s.replace(/\./g, '').replace(',', '.');
         const n = parseFloat(normalized);
-        return isNaN(n) ? null : n;
+        return isNaN(n) ? null : Math.round(n * 100) / 100;
       };
 
       const parseDate = (v) => {
@@ -574,11 +574,16 @@ router.post('/projects-tracking/import', upload.single('file'), async (req, res)
         return s.length > max ? s.slice(0, max) : s;
       };
 
+      const projetoAtividade = getCell(colMap.projeto_atividade);
+      // Generate unique_key: pp_contrato + first 40 chars of projeto_atividade
+      // This allows multiple processes with the same pp_contrato (temporary codes)
+      const uniqueKey = pp + '|' + (projetoAtividade ? projetoAtividade.substring(0, 40) : '');
+
       const data = {
         area: truncate(getCell(colMap.area) || 'Elétrica', 30),
         uhe: truncate(getCell(colMap.uhe) || 'Geral', 60),
         pp_contrato: truncate(pp, 30),
-        projeto_atividade: getCell(colMap.projeto_atividade),
+        projeto_atividade: projetoAtividade,
         projeto: truncate(getCell(colMap.projeto), 200),
         status: truncate(getCell(colMap.status) || 'Em andamento', 50),
         gestor: truncate(getCell(colMap.gestor), 120),
@@ -597,16 +602,17 @@ router.post('/projects-tracking/import', upload.single('file'), async (req, res)
         fornecedor: truncate(getCell(colMap.fornecedor), 200),
         natureza: truncate(getCell(colMap.natureza) || 'OPEX', 30),
         aditivo_em_andamento: truncate(getCell(colMap.aditivo_em_andamento) || 'NÃO', 10),
+        unique_key: uniqueKey.substring(0, 100),
       };
 
-      // Upsert: INSERT with ON CONFLICT handles both new and existing rows atomically
+      // Upsert: INSERT with ON CONFLICT on unique_key (not pp_contrato)
       const r = await client.query(`
         INSERT INTO lists_projects_tracking (
           area, uhe, pp_contrato, projeto_atividade, projeto, status, gestor, resumo, empresa,
           vencimento, cronograma, aditivos, reajustes, valor_contrato, realizado_contrato, saldo_contrato,
-          valor_si, realizado_si, saldo_si, fornecedor, natureza, aditivo_em_andamento
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
-        ON CONFLICT (pp_contrato) DO UPDATE SET
+          valor_si, realizado_si, saldo_si, fornecedor, natureza, aditivo_em_andamento, unique_key
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+        ON CONFLICT (unique_key) DO UPDATE SET
           area=EXCLUDED.area, uhe=EXCLUDED.uhe, projeto_atividade=EXCLUDED.projeto_atividade,
           projeto=EXCLUDED.projeto, status=EXCLUDED.status, gestor=EXCLUDED.gestor,
           resumo=EXCLUDED.resumo, empresa=EXCLUDED.empresa, vencimento=EXCLUDED.vencimento,
@@ -622,7 +628,7 @@ router.post('/projects-tracking/import', upload.single('file'), async (req, res)
         data.resumo, data.empresa, data.vencimento, data.cronograma, data.aditivos, data.reajustes,
         data.valor_contrato, data.realizado_contrato, data.saldo_contrato,
         data.valor_si, data.realizado_si, data.saldo_si, data.fornecedor, data.natureza,
-        data.aditivo_em_andamento,
+        data.aditivo_em_andamento, data.unique_key,
       ]);
       if (r.rows[0].inserted) inserted++; else updated++;
     }
@@ -669,7 +675,7 @@ router.post('/iacs/import', upload.single('file'), async (req, res) => {
     };
 
     const colMap = {
-      iac_code: findCol(['Title', 'iac_code', 'iac code', 'codigo', 'código']),
+      iac_code: findCol(['IAC', 'Title', 'iac_code', 'iac code', 'codigo', 'código']),
       type_line: findCol(['Type-line', 'type_line', 'type line', 'tipo']),
       area: findCol(['Área', 'Area', 'area']),
       qty_pp_line_26_priority: findCol(['Qtty PP Line 26 Priority', 'qty_pp_line_26_priority', 'qty priority']),
@@ -701,11 +707,34 @@ router.post('/iacs/import', upload.single('file'), async (req, res) => {
         if (colIdx < 0 || colIdx >= headers.length) return null;
         const cellValue = row.getCell(colIdx + 1).value;
         if (cellValue === null || cellValue === undefined) return null;
-        if (cellValue instanceof Date) return cellValue.toISOString().slice(0, 10);
+        // Handle Date objects directly
+        if (cellValue instanceof Date) {
+          if (isNaN(cellValue.getTime())) return null;
+          return cellValue.toISOString().slice(0, 10);
+        }
+        // Handle numeric cells - check if it's an Excel date serial number
         if (typeof cellValue === 'number') {
-          const excelEpoch = new Date(1899, 11, 30);
-          const jsDate = new Date(excelEpoch.getTime() + cellValue * 86400000);
-          if (!isNaN(jsDate.getTime())) return jsDate.toISOString().slice(0, 10);
+          // Excel date serial numbers are typically between 1 and ~47000 (years 1900-2028)
+          // But IAC codes or other numeric IDs can be much larger
+          if (cellValue > 0 && cellValue < 60000) {
+            const excelEpoch = new Date(1899, 11, 30);
+            const jsDate = new Date(excelEpoch.getTime() + cellValue * 86400000);
+            if (!isNaN(jsDate.getTime()) && jsDate.getFullYear() >= 1900 && jsDate.getFullYear() <= 2030) {
+              return jsDate.toISOString().slice(0, 10);
+            }
+          }
+          // Not a date — return as string
+          return String(cellValue).trim();
+        }
+        // Handle rich text cells (ExcelJS object format)
+        if (typeof cellValue === 'object' && cellValue.richText) {
+          return cellValue.richText.map(r => r.text || '').join('').trim() || null;
+        }
+        // Handle formula results
+        if (typeof cellValue === 'object' && cellValue.result !== undefined) {
+          const result = cellValue.result;
+          if (result === null || result === undefined) return null;
+          return String(result).trim();
         }
         return cellValue.toString().trim();
       };
@@ -774,10 +803,21 @@ router.post('/iacs/import', upload.single('file'), async (req, res) => {
 
       const parseNum = (v) => {
         if (!v || v === '') return null;
-        if (typeof v === 'number') return v;
+        if (typeof v === 'number') {
+          // Excel date serial numbers are typically > 30000 (dates after 1982)
+          // Quantities in YYMMDD format like 19000101 should be rejected
+          // But normal quantities up to ~1000000 are valid
+          if (v > 100000 && v < 100000000) {
+            // Likely a date in YYYYMMDD or YYMMDD format, not a quantity
+            return null;
+          }
+          return v;
+        }
         const s = String(v).replace(/[^\d.,]/g, '');
         if (!s.includes(',')) {
           const n = parseFloat(s);
+          // Reject dates in YYYYMMDD format (> 100000 and < 100000000)
+          if (n > 100000 && n < 100000000) return null;
           return isNaN(n) ? null : n;
         }
         const normalized = s.replace(/\./g, '').replace(',', '.');
@@ -791,6 +831,10 @@ router.post('/iacs/import', upload.single('file'), async (req, res) => {
         return s.length > max ? s.slice(0, max) : s;
       };
 
+      const project = getCell(colMap.project);
+      // Generate unique_key: iac_code + first 40 chars of project
+      const uniqueKey = iacCode + '|' + (project ? project.substring(0, 40) : '');
+
       const data = {
         iac_code: truncate(iacCode, 50),
         type_line: truncate(getCell(colMap.type_line) || 'New', 50),
@@ -799,7 +843,7 @@ router.post('/iacs/import', upload.single('file'), async (req, res) => {
         qty_pp_line_26_no_priority: parseNum(getCell(colMap.qty_pp_line_26_no_priority)),
         opening_date: parseDate(getCell(colMap.opening_date)),
         when_open: parseDate(getCell(colMap.when_open)),
-        project: getCell(colMap.project),
+        project: project,
         comments: getCell(colMap.comments),
         requester: truncate(getCell(colMap.requester), 120),
         team_leader: truncate(getCell(colMap.team_leader), 120),
@@ -812,6 +856,7 @@ router.post('/iacs/import', upload.single('file'), async (req, res) => {
         priority: truncate(getCell(colMap.priority) || 'Non Priority', 50),
         validity: truncate(getCell(colMap.validity) || 'Dez/2027', 20),
         continuidade: truncate(getCell(colMap.continuidade) || 'Sim', 10),
+        unique_key: uniqueKey.substring(0, 100),
       };
 
       const r = await client.query(`
@@ -822,9 +867,9 @@ router.post('/iacs/import', upload.single('file'), async (req, res) => {
           comments, requester, team_leader, chinese_work_staff,
           status_current, apresentado_work_team,
           organizer, supervisor, evaluation_team,
-          priority, validity, continuidade
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
-        ON CONFLICT (iac_code) DO UPDATE SET
+          priority, validity, continuidade, unique_key
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+        ON CONFLICT (unique_key) DO UPDATE SET
           type_line=EXCLUDED.type_line, area=EXCLUDED.area,
           qty_pp_line_26_priority=EXCLUDED.qty_pp_line_26_priority,
           qty_pp_line_26_no_priority=EXCLUDED.qty_pp_line_26_no_priority,
@@ -846,7 +891,7 @@ router.post('/iacs/import', upload.single('file'), async (req, res) => {
         data.comments, data.requester, data.team_leader, data.chinese_work_staff,
         data.status_current, data.apresentado_work_team,
         data.organizer, data.supervisor, data.evaluation_team,
-        data.priority, data.validity, data.continuidade,
+        data.priority, data.validity, data.continuidade, data.unique_key,
       ]);
       if (r.rows[0].inserted) inserted++; else updated++;
     }
@@ -890,7 +935,7 @@ router.post('/iacs/import/preview', upload.single('file'), async (req, res) => {
     };
 
     const colMap = {
-      iac_code: findCol(['Title', 'iac_code', 'iac code', 'codigo', 'código']),
+      iac_code: findCol(['IAC', 'Title', 'iac_code', 'iac code', 'codigo', 'código']),
       type_line: findCol(['Type-line', 'type_line', 'type line', 'tipo']),
       area: findCol(['Área', 'Area', 'area']),
       qty_pp_line_26_priority: findCol(['Qtty PP Line 26 Priority', 'qty_pp_line_26_priority', 'qty priority']),
@@ -924,17 +969,44 @@ router.post('/iacs/import/preview', upload.single('file'), async (req, res) => {
         if (colIdx < 0 || colIdx >= headers.length) return null;
         const cellValue = row.getCell(colIdx + 1).value;
         if (cellValue === null || cellValue === undefined) return null;
-        if (cellValue instanceof Date) return cellValue.toISOString().slice(0, 10);
+        // Handle Date objects directly
+        if (cellValue instanceof Date) {
+          if (isNaN(cellValue.getTime())) return null;
+          return cellValue.toISOString().slice(0, 10);
+        }
+        // Handle numeric cells - check if it's an Excel date serial number
         if (typeof cellValue === 'number') {
-          const excelEpoch = new Date(1899, 11, 30);
-          const jsDate = new Date(excelEpoch.getTime() + cellValue * 86400000);
-          if (!isNaN(jsDate.getTime())) return jsDate.toISOString().slice(0, 10);
+          // Excel date serial numbers are typically between 1 and ~47000 (years 1900-2028)
+          // But IAC codes or other numeric IDs can be much larger
+          if (cellValue > 0 && cellValue < 60000) {
+            const excelEpoch = new Date(1899, 11, 30);
+            const jsDate = new Date(excelEpoch.getTime() + cellValue * 86400000);
+            if (!isNaN(jsDate.getTime()) && jsDate.getFullYear() >= 1900 && jsDate.getFullYear() <= 2030) {
+              return jsDate.toISOString().slice(0, 10);
+            }
+          }
+          // Not a date — return as string
+          return String(cellValue).trim();
+        }
+        // Handle rich text cells (ExcelJS object format)
+        if (typeof cellValue === 'object' && cellValue.richText) {
+          return cellValue.richText.map(r => r.text || '').join('').trim() || null;
+        }
+        // Handle formula results
+        if (typeof cellValue === 'object' && cellValue.result !== undefined) {
+          const result = cellValue.result;
+          if (result === null || result === undefined) return null;
+          return String(result).trim();
         }
         return cellValue.toString().trim();
       };
 
       const iacCode = getCell(colMap.iac_code);
+
       if (!iacCode || iacCode === '') { skipped++; continue; }
+
+      const project = getCell(colMap.project);
+      const uniqueKey = iacCode + '|' + (project ? project.substring(0, 40) : '');
 
       const area = getCell(colMap.area) || 'Elétrica';
       const status = getCell(colMap.status_current) || '0 - Not started yet';
@@ -956,29 +1028,35 @@ router.post('/iacs/import/preview', upload.single('file'), async (req, res) => {
       }
     }
 
-    // Check existing IACs
-    const allIacCodes = new Set();
+    // Check existing IACs by unique_key
+    const allUniqueKeys = new Set();
     for (let rowIdx = 2; rowIdx <= ws.rowCount; rowIdx++) {
       const row = ws.getRow(rowIdx);
       const getCell = (colIdx) => (colIdx >= 0 ? (row.getCell(colIdx + 1).value || '').toString().trim() : null);
       const iacCode = getCell(colMap.iac_code);
-      if (iacCode && iacCode !== '') allIacCodes.add(iacCode);
+      const project = getCell(colMap.project);
+      if (iacCode && iacCode !== '') {
+        const uk = iacCode + '|' + (project ? project.substring(0, 40) : '');
+        allUniqueKeys.add(uk.substring(0, 100));
+      }
     }
-    const iacCodesArray = [...allIacCodes];
+    const uniqueKeysArray = [...allUniqueKeys];
     const existingRows = [];
-    for (let i = 0; i < iacCodesArray.length; i += 10000) {
-      const batch = iacCodesArray.slice(i, i + 10000);
-      const r = await pool.query('SELECT iac_code FROM lists_iacs WHERE iac_code = ANY($1)', [batch]);
+    for (let i = 0; i < uniqueKeysArray.length; i += 10000) {
+      const batch = uniqueKeysArray.slice(i, i + 10000);
+      const r = await pool.query('SELECT unique_key FROM lists_iacs WHERE unique_key = ANY($1)', [batch]);
       existingRows.push(...r.rows);
     }
-    const existingSet = new Set(existingRows.map(r => r.iac_code));
+    const existingSet = new Set(existingRows.map(r => r.unique_key));
     let newCount = 0, updateCount = 0;
     for (let rowIdx = 2; rowIdx <= ws.rowCount; rowIdx++) {
       const row = ws.getRow(rowIdx);
       const getCell = (colIdx) => (colIdx >= 0 ? (row.getCell(colIdx + 1).value || '').toString().trim() : null);
       const iacCode = getCell(colMap.iac_code);
       if (!iacCode || iacCode === '') continue;
-      if (existingSet.has(iacCode)) updateCount++; else newCount++;
+      const project = getCell(colMap.project);
+      const uk = iacCode + '|' + (project ? project.substring(0, 40) : '');
+      if (existingSet.has(uk.substring(0, 100))) updateCount++; else newCount++;
     }
 
     res.json({
@@ -1065,15 +1143,15 @@ router.post('/projects-tracking/import/preview', upload.single('file'), async (r
 
       const parseVal = (v) => {
         if (v === null || v === undefined) return null;
-        if (typeof v === 'number') return v;
+        if (typeof v === 'number') return Math.round(v * 100) / 100;
         const s = String(v).replace(/[^\d.,]/g, '');
         if (!s.includes(',')) {
           const n = parseFloat(s);
-          return isNaN(n) ? null : n;
+          return isNaN(n) ? null : Math.round(n * 100) / 100;
         }
         const normalized = s.replace(/\./g, '').replace(',', '.');
         const n = parseFloat(normalized);
-        return isNaN(n) ? null : n;
+        return isNaN(n) ? null : Math.round(n * 100) / 100;
       };
 
       const area = getCell(colMap.area) || 'Elétrica';
@@ -1098,30 +1176,36 @@ router.post('/projects-tracking/import/preview', upload.single('file'), async (r
       }
     }
 
-    // First pass: collect ALL PPs, then query existing ones
-    const allPPs = new Set();
+    // First pass: collect ALL unique_keys, then query existing ones
+    const allUniqueKeys = new Set();
     for (let rowIdx = 2; rowIdx <= ws.rowCount; rowIdx++) {
       const row = ws.getRow(rowIdx);
       const getCell = (colIdx) => (colIdx >= 0 ? (row.getCell(colIdx + 1).value || '').toString().trim() : null);
       const pp = getCell(colMap.pp_contrato);
-      if (pp) allPPs.add(pp);
+      const projetoAtividade = getCell(colMap.projeto_atividade);
+      if (pp) {
+        const uk = pp + '|' + (projetoAtividade ? projetoAtividade.substring(0, 40) : '');
+        allUniqueKeys.add(uk.substring(0, 100));
+      }
     }
-    const ppsArray = [...allPPs];
+    const uniqueKeysArray = [...allUniqueKeys];
     // Query in batches of 10000 (PostgreSQL ANY() limit)
     const existingRows = [];
-    for (let i = 0; i < ppsArray.length; i += 10000) {
-      const batch = ppsArray.slice(i, i + 10000);
-      const r = await pool.query('SELECT pp_contrato FROM lists_projects_tracking WHERE pp_contrato = ANY($1)', [batch]);
+    for (let i = 0; i < uniqueKeysArray.length; i += 10000) {
+      const batch = uniqueKeysArray.slice(i, i + 10000);
+      const r = await pool.query('SELECT unique_key FROM lists_projects_tracking WHERE unique_key = ANY($1)', [batch]);
       existingRows.push(...r.rows);
     }
-    const existingSet = new Set(existingRows.map(r => r.pp_contrato));
+    const existingSet = new Set(existingRows.map(r => r.unique_key));
     let newCount = 0, updateCount = 0;
     for (let rowIdx = 2; rowIdx <= ws.rowCount; rowIdx++) {
       const row = ws.getRow(rowIdx);
       const getCell = (colIdx) => (colIdx >= 0 ? (row.getCell(colIdx + 1).value || '').toString().trim() : null);
       const pp = getCell(colMap.pp_contrato);
       if (!pp) continue;
-      if (existingSet.has(pp)) updateCount++; else newCount++;
+      const projetoAtividade = getCell(colMap.projeto_atividade);
+      const uk = pp + '|' + (projetoAtividade ? projetoAtividade.substring(0, 40) : '');
+      if (existingSet.has(uk.substring(0, 100))) updateCount++; else newCount++;
     }
 
     res.json({

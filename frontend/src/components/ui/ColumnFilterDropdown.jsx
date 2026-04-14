@@ -33,7 +33,8 @@ export default function ColumnFilterDropdown({
   }, [selectedValues]);
 
   // Calculate position when opening
-  const handleOpen = useCallback(() => {
+  const handleOpen = useCallback((e) => {
+    e.stopPropagation();
     if (btnRef.current) {
       const rect = btnRef.current.getBoundingClientRect();
       setDropdownPos({
@@ -50,24 +51,44 @@ export default function ColumnFilterDropdown({
     setSearch('');
   }, []);
 
+  const handleCloseWithApply = useCallback(() => {
+    onChange(tempSelected);
+    setOpen(false);
+    setSearch('');
+  }, [tempSelected, onChange]);
+
   // Close on outside click
   useEffect(() => {
     if (!open) return;
     const handleClickOutside = (e) => {
-      if (btnRef.current && !btnRef.current.contains(e.target)) {
-        handleClose();
+      // Don't close if click is inside the dropdown portal
+      const dropdownElement = document.querySelector('[data-column-filter-dropdown]');
+      if (dropdownElement && dropdownElement.contains(e.target)) {
+        return;
       }
+      // Don't close if click is on the button
+      if (btnRef.current && btnRef.current.contains(e.target)) {
+        return;
+      }
+      // Apply filter when closing via outside click
+      handleCloseWithApply();
     };
     const handleEscape = (e) => {
-      if (e.key === 'Escape') handleClose();
+      if (e.key === 'Escape') {
+        handleCloseWithApply();
+      }
     };
-    document.addEventListener('mousedown', handleClickOutside);
+    // Use setTimeout to avoid catching the click that opened the dropdown
+    const timer = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+    }, 0);
     document.addEventListener('keydown', handleEscape);
     return () => {
+      clearTimeout(timer);
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleEscape);
     };
-  }, [open, handleClose]);
+  }, [open, handleCloseWithApply]);
 
   const allValues = uniqueValues.filter(v =>
     v.toLowerCase().includes(search.toLowerCase())
@@ -88,13 +109,15 @@ export default function ColumnFilterDropdown({
 
   const applyFilter = () => {
     onChange(tempSelected);
-    handleClose();
+    setOpen(false);
+    setSearch('');
   };
 
   const clearFilter = () => {
     setTempSelected([]);
     onChange([]);
-    handleClose();
+    setOpen(false);
+    setSearch('');
   };
 
   const hasActiveFilter = selectedValues.length > 0 && selectedValues.length < uniqueValues.length;
@@ -144,6 +167,7 @@ export default function ColumnFilterDropdown({
 
       {open && createPortal(
         <div
+          data-column-filter-dropdown
           style={{
             position: 'fixed',
             top: dropdownPos?.top || 0,

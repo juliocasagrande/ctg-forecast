@@ -106,11 +106,41 @@ function fmtBRL(v) {
 }
 
 function parseNum(v) {
-  if (!v) return 0;
-  if (typeof v === 'number') return v;
-  const s = String(v).replace(/[^\d.,]/g, '');
-  const normalized = s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s;
-  return parseFloat(normalized) || 0;
+  if (!v && v !== 0) return 0;
+  if (typeof v === 'number') return isNaN(v) ? 0 : v;
+  
+  const raw = String(v).trim();
+  if (!raw) return 0;
+
+  // Detect negative sign
+  const isNegative = raw.startsWith('-') || raw.includes('(');
+  const s = raw.replace(/^[+-]/, '').replace(/[^\d.,]/g, '');
+  if (!s) return 0;
+
+  // Brazilian format: has comma as decimal separator
+  if (s.includes(',')) {
+    const normalized = s.replace(/\./g, '').replace(',', '.');
+    const result = parseFloat(normalized);
+    return (isNegative ? -1 : 1) * (isNaN(result) ? 0 : result);
+  }
+
+  // No comma — check if dot is decimal or thousand separator
+  if (s.includes('.')) {
+    const parts = s.split('.');
+    // "1234567.89" → dot is decimal (followed by ≤2 digits)
+    if (parts.length === 2 && parts[1].length <= 2) {
+      const result = parseFloat(s);
+      return (isNegative ? -1 : 1) * (isNaN(result) ? 0 : result);
+    }
+    // "1.234.567" → dots are thousand separators
+    const normalized = s.replace(/\./g, '');
+    const result = parseFloat(normalized);
+    return (isNegative ? -1 : 1) * (isNaN(result) ? 0 : result);
+  }
+
+  // Plain integer string: "117334" → 117334
+  const result = parseFloat(s);
+  return (isNegative ? -1 : 1) * (isNaN(result) ? 0 : result);
 }
 
 function getAreaColor(area) {
@@ -414,26 +444,24 @@ function ProjectModal({ item, onClose, onSave, onDelete, isNew, saving, deleting
   const [lastEdited, setLastEdited] = useState(null);
   const toast = useToast().toast;
   const { user } = useAuth();
-  const [lastAutoCalc, setLastAutoCalc] = useState('');
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
 
-  // Auto-calculate saldo when valor or realized changes
-  const calcKey = `${form.valor_contrato}|${form.realizado_contrato}|${form.valor_si}|${form.realizado_si}`;
-  useEffect(() => {
-    if (calcKey === lastAutoCalc) return;
-    const vc = parseNum(form.valor_contrato);
-    const rc = parseNum(form.realizado_contrato);
-    const vs = parseNum(form.valor_si);
-    const rs = parseNum(form.realizado_si);
-    const newSaldoC = vc > 0 || rc > 0 ? (vc - rc).toFixed(2) : '';
-    const newSaldoSI = vs > 0 || rs > 0 ? (vs - rs).toFixed(2) : '';
-    setLastAutoCalc(calcKey);
-    setForm(prev => ({
-      ...prev,
-      saldo_contrato: newSaldoC,
-      saldo_si: newSaldoSI,
-    }));
-  }, [calcKey]);
+  // Auto-calculate saldo when valor or realized changes (only on blur)
+  const calcSaldo = useCallback(() => {
+    setForm(prev => {
+      const vc = parseNum(prev.valor_contrato);
+      const rc = parseNum(prev.realizado_contrato);
+      const vs = parseNum(prev.valor_si);
+      const rs = parseNum(prev.realizado_si);
+      const newSaldoC = vc > 0 || rc > 0 ? (vc - rc).toFixed(2) : '';
+      const newSaldoSI = vs > 0 || rs > 0 ? (vs - rs).toFixed(2) : '';
+      return {
+        ...prev,
+        saldo_contrato: newSaldoC,
+        saldo_si: newSaldoSI,
+      };
+    });
+  }, []);
 
   // Fetch last viewed and last edited info
   useEffect(() => {
@@ -598,23 +626,57 @@ function ProjectModal({ item, onClose, onSave, onDelete, isNew, saving, deleting
             {[
               { key: 'valor_contrato', label: 'Valor Contrato' },
               { key: 'realizado_contrato', label: 'Realizado Contrato' },
-              { key: 'saldo_contrato', label: 'Saldo Contrato' },
+              { key: 'saldo_contrato', label: 'Saldo Contrato', readOnly: true },
               { key: 'valor_si', label: 'Valor SI' },
               { key: 'realizado_si', label: 'Realizado SI' },
-              { key: 'saldo_si', label: 'Saldo SI' },
-            ].map(f => (
-              <Field key={f.key} label={f.label}>
-                <input
-                  value={form[f.key] ? fmtBRL(parseNum(form[f.key])) : ''}
-                  onChange={e => {
-                    const raw = e.target.value.replace(/[^\d.,]/g, '');
-                    set(f.key, raw);
-                  }}
-                  placeholder="R$ 0,00"
-                  style={fS}
-                />
-              </Field>
-            ))}
+              { key: 'saldo_si', label: 'Saldo SI', readOnly: true },
+            ].map(f => {
+              // Check if saldo is negative for styling
+              const isNegativeSaldo = f.readOnly && parseNum(form[f.key]) < 0;
+
+              return (
+                <Field key={f.key} label={f.label}>
+                  <input
+                    value={form[f.key] || ''}
+                    onChange={e => {
+                      if (!f.readOnly) set(f.key, e.target.value);
+                    }}
+                    onBlur={e => {
+                      if (f.readOnly) return;
+                      // Format on blur: convert to plain number for storage
+                      const raw = e.target.value.replace(/[^\d.,]/g, '');
+                      if (raw) {
+                        const num = parseNum(raw);
+                        if (num > 0) {
+                          set(f.key, num.toFixed(2));
+                        } else {
+                          set(f.key, '');
+                        }
+                      } else {
+                        set(f.key, '');
+                      }
+                      // Recalculate saldo after any financial field loses focus
+                      calcSaldo();
+                    }}
+                    onFocus={e => {
+                      if (!f.readOnly) e.target.select();
+                    }}
+                    placeholder={f.readOnly ? 'Calculado automaticamente' : 'Ex: 2903969.35 ou 2.903.969,35'}
+                    style={{
+                      ...fS,
+                      ...(f.readOnly
+                        ? {
+                            background: '#F8FAFC',
+                            color: isNegativeSaldo ? '#DC2626' : '#64748B',
+                            fontWeight: isNegativeSaldo ? 700 : 400,
+                          }
+                        : {}),
+                    }}
+                    readOnly={f.readOnly}
+                  />
+                </Field>
+              );
+            })}
           </div>
 
           <Field label="Resumo">
@@ -1156,6 +1218,58 @@ export default function ProjectsTrackingPage() {
     }
   };
 
+  // Data filtered by main filters (before column filters) — used to compute unique values for column filter dropdowns
+  const preFiltered = useMemo(() => {
+    let data = [...items];
+    if (showMyContracts) {
+      const myName = user?.name?.toLowerCase();
+      data = data.filter(i => i.gestor && i.gestor.toLowerCase().includes(myName));
+    }
+    if (activeTab !== 'Todos' && activeTab !== 'Meus Contratos' && AREAS.includes(activeTab)) {
+      data = data.filter(i => i.area === activeTab);
+    }
+    if (filterUHE) data = data.filter(i => i.uhe === filterUHE);
+    if (filterStatus) data = data.filter(i => i.status === filterStatus);
+    if (filterNatureza) data = data.filter(i => i.natureza === filterNatureza);
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      data = data.filter(i =>
+        (i.pp_contrato || '').toLowerCase().includes(q) ||
+        (i.projeto_atividade || '').toLowerCase().includes(q) ||
+        (i.projeto || '').toLowerCase().includes(q) ||
+        (i.gestor || '').toLowerCase().includes(q) ||
+        (i.fornecedor || '').toLowerCase().includes(q)
+      );
+    }
+    return data;
+  }, [items, search, filterStatus, filterNatureza, filterUHE, activeTab, showMyContracts, user]);
+
+  // Unique values for column filters — only show values that exist in current data
+  const colFilterUHEValues = useMemo(() => {
+    const values = [...new Set(preFiltered.map(i => i.uhe).filter(Boolean))];
+    return values.sort();
+  }, [preFiltered]);
+
+  const colFilterStatusValues = useMemo(() => {
+    const values = [...new Set(preFiltered.map(i => i.status).filter(Boolean))];
+    return values.sort();
+  }, [preFiltered]);
+
+  const colFilterGestorValues = useMemo(() => {
+    const values = [...new Set(preFiltered.map(i => i.gestor).filter(Boolean))];
+    return values.sort();
+  }, [preFiltered]);
+
+  const colFilterNaturezaValues = useMemo(() => {
+    const values = [...new Set(preFiltered.map(i => i.natureza).filter(Boolean))];
+    return values.sort();
+  }, [preFiltered]);
+
+  const colFilterAditivoValues = useMemo(() => {
+    const values = [...new Set(preFiltered.map(i => (i.aditivo_em_andamento || 'NÃO')).filter(Boolean))];
+    return values.sort();
+  }, [preFiltered]);
+
   const filtered = useMemo(() => {
     let data = [...items];
     if (showMyContracts) {
@@ -1324,9 +1438,24 @@ export default function ProjectsTrackingPage() {
   }, [items, user]);
 
   // Computed values for summary cards (based on filtered data)
-  const totalContrato = useMemo(() =>
-    filtered.reduce((acc, i) => (acc + (parseNum(i.valor_contrato) || 0)), 0),
-  [filtered]);
+  const totalContrato = useMemo(() => {
+    const total = filtered.reduce((acc, i) => {
+      const val = parseNum(i.valor_contrato) || 0;
+      // Log suspicious values (> 100 million BRL)
+      if (val > 100000000) {
+        console.warn('[ProjectsTracking] Suspicious valor_contrato value:', {
+          id: i.id,
+          pp_contrato: i.pp_contrato,
+          raw: i.valor_contrato,
+          parsed: val,
+          typeof: typeof i.valor_contrato,
+        });
+      }
+      return acc + val;
+    }, 0);
+    console.log('[ProjectsTracking] totalContrato:', total, 'from', filtered.length, 'items');
+    return total;
+  }, [filtered]);
 
   const totalSaldo = useMemo(() =>
     filtered.reduce((acc, i) => (acc + (parseNum(i.saldo_contrato) || 0)), 0),
@@ -1568,7 +1697,7 @@ export default function ProjectsTrackingPage() {
                         UHE
                         <ColumnFilterDropdown
                           column="UHE"
-                          uniqueValues={UHE_LIST}
+                          uniqueValues={colFilterUHEValues}
                           selectedValues={colFilterUHE}
                           onChange={setColFilterUHE}
                         />
@@ -1596,7 +1725,7 @@ export default function ProjectsTrackingPage() {
                         Status
                         <ColumnFilterDropdown
                           column="Status"
-                          uniqueValues={STATUS_OPTIONS.map(s => s.value)}
+                          uniqueValues={colFilterStatusValues}
                           selectedValues={colFilterStatus}
                           onChange={setColFilterStatus}
                         />
@@ -1609,7 +1738,7 @@ export default function ProjectsTrackingPage() {
                         Gestor
                         <ColumnFilterDropdown
                           column="Gestor"
-                          uniqueValues={[...new Set(items.map(i => i.gestor).filter(Boolean))]}
+                          uniqueValues={colFilterGestorValues}
                           selectedValues={colFilterGestor}
                           onChange={setColFilterGestor}
                         />
@@ -1667,7 +1796,7 @@ export default function ProjectsTrackingPage() {
                         Natureza
                         <ColumnFilterDropdown
                           column="Natureza"
-                          uniqueValues={NATUREZA_OPTIONS}
+                          uniqueValues={colFilterNaturezaValues}
                           selectedValues={colFilterNatureza}
                           onChange={setColFilterNatureza}
                         />
@@ -1680,7 +1809,7 @@ export default function ProjectsTrackingPage() {
                         Aditivo
                         <ColumnFilterDropdown
                           column="Aditivo"
-                          uniqueValues={['SIM', 'NÃO']}
+                          uniqueValues={colFilterAditivoValues}
                           selectedValues={colFilterAditivo}
                           onChange={setColFilterAditivo}
                         />
@@ -1731,7 +1860,7 @@ export default function ProjectsTrackingPage() {
                         <td style={{ padding: '10px 12px', color: '#475569', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                           {fmtBRL(item.realizado_contrato)}
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#065F46', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+                        <td style={{ padding: '10px 12px', color: parseNum(item.saldo_contrato) < 0 ? '#DC2626' : '#065F46', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                           {fmtBRL(item.saldo_contrato)}
                         </td>
                         <td style={{ padding: '10px 12px', color: '#0F172A', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
@@ -1740,7 +1869,7 @@ export default function ProjectsTrackingPage() {
                         <td style={{ padding: '10px 12px', color: '#475569', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                           {fmtBRL(item.realizado_si)}
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#065F46', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+                        <td style={{ padding: '10px 12px', color: parseNum(item.saldo_si) < 0 ? '#DC2626' : '#065F46', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                           {fmtBRL(item.saldo_si)}
                         </td>
                         <td style={{ padding: '10px 12px', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
