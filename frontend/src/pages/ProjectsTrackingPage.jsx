@@ -1437,37 +1437,36 @@ export default function ProjectsTrackingPage() {
     return m;
   }, [items, user]);
 
+  // Helper: calculate saldo dynamically
+  // Saldo = valor - realizado (realizado defaults to 0 if empty/null)
+  const getSaldoContrato = useCallback((item) => {
+    const vc = parseNum(item.valor_contrato);
+    const rc = parseNum(item.realizado_contrato);
+    return vc - rc;
+  }, []);
+
+  const getSaldoSI = useCallback((item) => {
+    const vs = parseNum(item.valor_si);
+    const rs = parseNum(item.realizado_si);
+    return vs - rs;
+  }, []);
+
   // Computed values for summary cards (based on filtered data)
-  const totalContrato = useMemo(() => {
-    const total = filtered.reduce((acc, i) => {
-      const val = parseNum(i.valor_contrato) || 0;
-      // Log suspicious values (> 100 million BRL)
-      if (val > 100000000) {
-        console.warn('[ProjectsTracking] Suspicious valor_contrato value:', {
-          id: i.id,
-          pp_contrato: i.pp_contrato,
-          raw: i.valor_contrato,
-          parsed: val,
-          typeof: typeof i.valor_contrato,
-        });
-      }
-      return acc + val;
-    }, 0);
-    console.log('[ProjectsTracking] totalContrato:', total, 'from', filtered.length, 'items');
-    return total;
-  }, [filtered]);
+  const totalContrato = useMemo(() =>
+    filtered.reduce((acc, i) => acc + (parseNum(i.valor_contrato) || 0), 0),
+  [filtered]);
 
   const totalSaldo = useMemo(() =>
-    filtered.reduce((acc, i) => (acc + (parseNum(i.saldo_contrato) || 0)), 0),
-  [filtered]);
+    filtered.reduce((acc, i) => acc + getSaldoContrato(i), 0),
+  [filtered, getSaldoContrato]);
 
   const totalSI = useMemo(() =>
     filtered.reduce((acc, i) => (acc + (parseNum(i.valor_si) || 0)), 0),
   [filtered]);
 
   const totalSISaldo = useMemo(() =>
-    filtered.reduce((acc, i) => (acc + (parseNum(i.saldo_si) || 0)), 0),
-  [filtered]);
+    filtered.reduce((acc, i) => acc + getSaldoSI(i), 0),
+  [filtered, getSaldoSI]);
 
   // UHE chart data
   const uheData = useMemo(() => {
@@ -1476,13 +1475,13 @@ export default function ProjectsTrackingPage() {
       const uhe = item.uhe || 'Geral';
       if (!map[uhe]) map[uhe] = { uhe, valor_contrato: 0, saldo_contrato: 0, valor_si: 0, saldo_si: 0, count: 0 };
       map[uhe].valor_contrato += parseNum(item.valor_contrato) || 0;
-      map[uhe].saldo_contrato += parseNum(item.saldo_contrato) || 0;
+      map[uhe].saldo_contrato += getSaldoContrato(item);
       map[uhe].valor_si += parseNum(item.valor_si) || 0;
-      map[uhe].saldo_si += parseNum(item.saldo_si) || 0;
+      map[uhe].saldo_si += getSaldoSI(item);
       map[uhe].count += 1;
     }
     return Object.values(map).sort((a, b) => b.valor_contrato - a.valor_contrato);
-  }, [filtered]);
+  }, [filtered, getSaldoContrato, getSaldoSI]);
 
   // When switching to "Meus Contratos" tab, set showMyContracts
   const handleTabClick = (tab) => {
@@ -1860,8 +1859,8 @@ export default function ProjectsTrackingPage() {
                         <td style={{ padding: '10px 12px', color: '#475569', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                           {fmtBRL(item.realizado_contrato)}
                         </td>
-                        <td style={{ padding: '10px 12px', color: parseNum(item.saldo_contrato) < 0 ? '#DC2626' : '#065F46', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
-                          {fmtBRL(item.saldo_contrato)}
+                        <td style={{ padding: '10px 12px', color: getSaldoContrato(item) < 0 ? '#DC2626' : '#065F46', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+                          {fmtBRL(getSaldoContrato(item))}
                         </td>
                         <td style={{ padding: '10px 12px', color: '#0F172A', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                           {fmtBRL(item.valor_si)}
@@ -1869,8 +1868,8 @@ export default function ProjectsTrackingPage() {
                         <td style={{ padding: '10px 12px', color: '#475569', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                           {fmtBRL(item.realizado_si)}
                         </td>
-                        <td style={{ padding: '10px 12px', color: parseNum(item.saldo_si) < 0 ? '#DC2626' : '#065F46', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
-                          {fmtBRL(item.saldo_si)}
+                        <td style={{ padding: '10px 12px', color: getSaldoSI(item) < 0 ? '#DC2626' : '#065F46', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+                          {fmtBRL(getSaldoSI(item))}
                         </td>
                         <td style={{ padding: '10px 12px', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                           {item.fornecedor || '—'}
