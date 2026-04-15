@@ -90,32 +90,43 @@ function StatCard({ label, value, sub, color = '#0066B3' }) {
 }
 
 /* ─── Charts ─────────────────────────────────────────────────────────────────── */
-function HBarChart({ data, title }) {
+function HBarChart({ data, title, activeFilter, onFilter }) {
   const max = Math.max(...data.map(d => d.value), 1);
   const visible = data.filter(d => d.value > 0);
+  const clickable = !!onFilter;
   return (
     <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:10, padding:'14px 16px', flex:1, minWidth:0 }}>
       <div style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#94A3B8', marginBottom:10 }}>{title}</div>
       {visible.length === 0 ? <div style={{ fontSize:'0.78rem', color:'#CBD5E1', textAlign:'center', padding:'16px 0' }}>Sem dados</div>
         : <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
-            {visible.map((d,i) => (
-              <div key={i} style={{ display:'flex', alignItems:'center', gap:8 }}>
-                <div style={{ fontSize:'0.68rem', color:'#475569', width:34, textAlign:'right', flexShrink:0, fontWeight:600 }}>{d.label}</div>
-                <div style={{ flex:1, background:'#F1F5F9', borderRadius:4, height:14, overflow:'hidden' }}>
-                  <div style={{ width:`${(d.value/max)*100}%`, height:'100%', background:d.color||'#0066B3', borderRadius:4 }} />
+            {visible.map((d,i) => {
+              const isActive = activeFilter === d.filterKey;
+              return (
+                <div key={i}
+                  onClick={() => clickable && onFilter(isActive ? '' : d.filterKey)}
+                  style={{ display:'flex', alignItems:'center', gap:8, cursor: clickable ? 'pointer' : 'default',
+                    opacity: activeFilter && !isActive ? 0.45 : 1, transition:'opacity 0.15s',
+                    borderRadius:4, padding:'2px 0',
+                  }}
+                >
+                  <div style={{ fontSize:'0.68rem', color: isActive ? '#001F5B' : '#475569', width:34, textAlign:'right', flexShrink:0, fontWeight: isActive ? 700 : 600 }}>{d.label}</div>
+                  <div style={{ flex:1, background:'#F1F5F9', borderRadius:4, height:14, overflow:'hidden' }}>
+                    <div style={{ width:`${(d.value/max)*100}%`, height:'100%', background:d.color||'#0066B3', borderRadius:4 }} />
+                  </div>
+                  <div style={{ fontSize:'0.68rem', fontWeight:700, color:'#1E293B', width:20, flexShrink:0 }}>{d.value}</div>
                 </div>
-                <div style={{ fontSize:'0.68rem', fontWeight:700, color:'#1E293B', width:20, flexShrink:0 }}>{d.value}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>}
     </div>
   );
 }
-function DonutChart({ data, title }) {
+function DonutChart({ data, title, activeFilter, onFilter }) {
   const total = data.reduce((s,d) => s+d.value, 0);
   const r=32, cx=45, cy=45, circ=2*Math.PI*r;
   let off=0;
   const slices = data.filter(d=>d.value>0).map(d => { const dash=(d.value/total)*circ; const s={...d,dash,offset:off}; off+=dash; return s; });
+  const clickable = !!onFilter;
   return (
     <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:10, padding:'14px 16px', flex:1, minWidth:0 }}>
       <div style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#94A3B8', marginBottom:10 }}>{title}</div>
@@ -123,17 +134,35 @@ function DonutChart({ data, title }) {
         : <div style={{ display:'flex', alignItems:'center', gap:12 }}>
             <svg width={90} height={90} viewBox="0 0 90 90" style={{ flexShrink:0 }}>
               <circle cx={cx} cy={cy} r={r} fill="none" stroke="#F1F5F9" strokeWidth={14}/>
-              {slices.map((s,i) => <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={s.color} strokeWidth={14} strokeDasharray={`${s.dash} ${circ-s.dash}`} strokeDashoffset={-s.offset+circ/4}/>)}
+              {slices.map((s,i) => {
+                const isActive = activeFilter === s.filterKey;
+                return (
+                  <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={s.color} strokeWidth={14}
+                    strokeDasharray={`${s.dash} ${circ-s.dash}`} strokeDashoffset={-s.offset+circ/4}
+                    opacity={activeFilter && !isActive ? 0.3 : 1}
+                    style={{ cursor: clickable ? 'pointer' : 'default', transition:'opacity 0.15s' }}
+                    onClick={() => clickable && onFilter(isActive ? '' : s.filterKey)}
+                  />
+                );
+              })}
               <text x={cx} y={cy+1} textAnchor="middle" dominantBaseline="middle" style={{ fontSize:'0.8rem', fontWeight:700, fill:'#1E293B' }}>{total}</text>
             </svg>
             <div style={{ display:'flex', flexDirection:'column', gap:5, flex:1, minWidth:0 }}>
-              {slices.map((s,i) => (
-                <div key={i} style={{ display:'flex', alignItems:'center', gap:5 }}>
-                  <span style={{ width:8, height:8, borderRadius:'50%', background:s.color, flexShrink:0 }}/>
-                  <span style={{ fontSize:'0.68rem', color:'#475569', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.label}</span>
-                  <span style={{ fontSize:'0.68rem', fontWeight:700, color:'#1E293B', flexShrink:0 }}>{s.value}</span>
-                </div>
-              ))}
+              {slices.map((s,i) => {
+                const isActive = activeFilter === s.filterKey;
+                return (
+                  <div key={i}
+                    onClick={() => clickable && onFilter(isActive ? '' : s.filterKey)}
+                    style={{ display:'flex', alignItems:'center', gap:5, cursor: clickable ? 'pointer' : 'default',
+                      opacity: activeFilter && !isActive ? 0.4 : 1, transition:'opacity 0.15s',
+                    }}
+                  >
+                    <span style={{ width:8, height:8, borderRadius:'50%', background:s.color, flexShrink:0 }}/>
+                    <span style={{ fontSize:'0.68rem', color:'#475569', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontWeight: isActive ? 700 : 400 }}>{s.label}</span>
+                    <span style={{ fontSize:'0.68rem', fontWeight:700, color:'#1E293B', flexShrink:0 }}>{s.value}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>}
     </div>
@@ -179,6 +208,9 @@ function StatusModal({ open, onClose, onSaved, doc }) {
     finally { setSaving(false); }
   };
 
+  // Check if there are changes to save
+  const hasChanges = status !== doc?.status || (status === 'Publicado' && link !== (doc?.document_link || ''));
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth:440, width:'92vw' }} onClick={e => e.stopPropagation()}>
@@ -219,7 +251,7 @@ function StatusModal({ open, onClose, onSaved, doc }) {
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving || status === doc?.status}>
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving || !hasChanges}>
             {saving ? 'Salvando...' : '💾 Confirmar'}
           </button>
         </div>
@@ -511,9 +543,10 @@ const PLANT_BLUES = [
   '#97DDF7','#BFECFA','#D6F4FF','#E8F8FF',
 ];
 
-function VBarChart({ data, title }) {
+function VBarChart({ data, title, activeFilter, onFilter }) {
   const max = Math.max(...data.map(d => d.value), 1);
   const visible = data.filter(d => d.value > 0);
+  const clickable = !!onFilter;
   // Altura da barra área: 100px fixo, sem scroll — barras se adaptam à largura disponível
   return (
     <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:10, padding:'14px 16px', flex:1, minWidth:0, width:'100%' }}>
@@ -521,24 +554,35 @@ function VBarChart({ data, title }) {
       {visible.length === 0
         ? <div style={{ fontSize:'0.78rem', color:'#CBD5E1', textAlign:'center', padding:'16px 0' }}>Sem dados</div>
         : <div style={{ display:'flex', alignItems:'flex-end', gap:4, height:120, overflow:'hidden' }}>
-            {visible.map((d,i) => (
-              <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:0, minWidth:0 }}>
-                <div style={{ fontSize:'0.75rem', fontWeight:700, color:'#1E293B', marginBottom:3 }}>{d.value}</div>
-                <div style={{
-                  width:'100%',
-                  height:`${Math.max((d.value/max)*80,6)}px`,
-                  background: PLANT_BLUES[i % PLANT_BLUES.length],
-                  borderRadius:'4px 4px 0 0',
-                  transition:'height 0.4s ease',
-                  minHeight:6,
-                }}/>
-                <div style={{
-                  fontSize:'0.72rem', fontWeight:600, color:'#334155', textAlign:'center',
-                  width:'100%', marginTop:5, lineHeight:1,
-                  letterSpacing:'0.02em',
-                }}>{d.label}</div>
-              </div>
-            ))}
+            {visible.map((d,i) => {
+              const isActive = activeFilter === d.filterKey;
+              return (
+                <div key={i} 
+                  onClick={() => clickable && onFilter(isActive ? '' : d.filterKey)}
+                  style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:0, minWidth:0,
+                    cursor: clickable ? 'pointer' : 'default',
+                    opacity: activeFilter && !isActive ? 0.4 : 1,
+                    transition:'opacity 0.15s',
+                  }}
+                >
+                  <div style={{ fontSize:'0.75rem', fontWeight:700, color: isActive ? '#001F5B' : '#1E293B', marginBottom:3 }}>{d.value}</div>
+                  <div style={{
+                    width:'100%',
+                    height:`${Math.max((d.value/max)*80,6)}px`,
+                    background: isActive ? (d.color||PLANT_BLUES[i % PLANT_BLUES.length]) : PLANT_BLUES[i % PLANT_BLUES.length],
+                    borderRadius:'4px 4px 0 0',
+                    transition:'height 0.4s ease',
+                    minHeight:6,
+                    opacity: activeFilter && !isActive ? 0.5 : 1,
+                  }}/>
+                  <div style={{
+                    fontSize:'0.72rem', fontWeight: isActive ? 700 : 600, color: isActive ? '#001F5B' : '#334155', textAlign:'center',
+                    width:'100%', marginTop:5, lineHeight:1,
+                    letterSpacing:'0.02em',
+                  }}>{d.label}</div>
+                </div>
+              );
+            })}
           </div>
       }
     </div>
@@ -624,6 +668,11 @@ export default function DocumentsPage() {
   const [colFilterDate, setColFilterDate] = useState([]);
   const [colFilterSubject, setColFilterSubject] = useState([]);
   const [colFilterStatus, setColFilterStatus] = useState([]);
+
+  // Chart click filters
+  const [chartTypeFilter, setChartTypeFilter] = useState('');
+  const [chartStatusFilter, setChartStatusFilter] = useState('');
+  const [chartPlantFilter, setChartPlantFilter] = useState('');
 
   const SUPERIOR_ROLES = ['admin','gestor','planejador','coordenador'];
   const isSuperior = SUPERIOR_ROLES.includes(user?.role);
@@ -731,6 +780,16 @@ export default function DocumentsPage() {
     if (plantFilter) {
       data = data.filter(d => d.plant === plantFilter);
     }
+    // Chart click filters
+    if (chartTypeFilter) {
+      data = data.filter(d => d.type === chartTypeFilter);
+    }
+    if (chartStatusFilter) {
+      data = data.filter(d => d.status === chartStatusFilter);
+    }
+    if (chartPlantFilter) {
+      data = data.filter(d => d.plant === chartPlantFilter);
+    }
     // Column filters
     if (colFilterCode.length > 0) {
       data = data.filter(d => colFilterCode.includes(d.code));
@@ -761,7 +820,7 @@ export default function DocumentsPage() {
       );
     }
     return data;
-  }, [docs, statusFilter, typeFilter, plantFilter, search, myDocsOnly, user, colFilterCode, colFilterPlant, colFilterResponsible, colFilterDate, colFilterSubject, colFilterStatus]);
+  }, [docs, statusFilter, typeFilter, plantFilter, search, myDocsOnly, user, colFilterCode, colFilterPlant, colFilterResponsible, colFilterDate, colFilterSubject, colFilterStatus, chartTypeFilter, chartStatusFilter, chartPlantFilter]);
 
   // Agrupar por base_code — normalizar: CTA-PRD-002-26-R0 → CTA-PRD-002-26
   const normalizeBaseCode = (doc) => {
@@ -803,9 +862,9 @@ export default function DocumentsPage() {
 
   /* Charts */
   const TYPE_COLORS = ['#0066B3','#0891B2','#10B981','#8B5CF6','#F59E0B','#EF4444','#6366F1','#EC4899','#14B8A6'];
-  const typeChartData   = DOC_TYPES.map((t,i) => ({ label:t.value, value:docs.filter(d=>d.type===t.value).length, color:TYPE_COLORS[i%TYPE_COLORS.length] }));
-  const statusChartData = STATUSES.map(s => ({ label:s.value, value:docs.filter(d=>d.status===s.value).length, color:s.color }));
-  const plantChartData  = ALL_PLANTS.map(p => ({ label: PLANT_SIGLAS[p] || p, fullName: p, value:docs.filter(d=>d.plant===p).length, color:'#0066B3' })).filter(d=>d.value>0);
+  const typeChartData   = DOC_TYPES.map((t,i) => ({ label:t.value, value:docs.filter(d=>d.type===t.value).length, color:TYPE_COLORS[i%TYPE_COLORS.length], filterKey: t.value }));
+  const statusChartData = STATUSES.map(s => ({ label:s.value, value:docs.filter(d=>d.status===s.value).length, color:s.color, filterKey: s.value }));
+  const plantChartData  = ALL_PLANTS.map(p => ({ label: PLANT_SIGLAS[p] || p, fullName: p, value:docs.filter(d=>d.plant===p).length, color:'#0066B3', filterKey: p })).filter(d=>d.value>0);
   const years = [...new Set(docs.map(d=>2000+d.year))].sort((a,b)=>b-a);
   const plantsUsed = ALL_PLANTS.filter(p => docs.some(d => d.plant === p));
 
@@ -823,10 +882,52 @@ export default function DocumentsPage() {
       </div>
 
       {/* Charts */}
-      <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'stretch' }}>
-        <div style={{ flex:'1 1 180px', minWidth:160, display:'flex' }}><HBarChart  title="Documentos por Tipo"    data={typeChartData}/></div>
-        <div style={{ flex:'2 1 320px', minWidth:220, display:'flex' }}><VBarChart  title="Documentos por Usina"   data={plantChartData}/></div>
-        <div style={{ flex:'1 1 180px', minWidth:160, display:'flex' }}><DonutChart title="Status dos Documentos"  data={statusChartData}/></div>
+      <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'stretch', position:'relative' }}>
+        <div style={{ flex:'1 1 180px', minWidth:160, display:'flex' }}>
+          <HBarChart  
+            title="Documentos por Tipo"    
+            data={typeChartData}
+            activeFilter={chartTypeFilter}
+            onFilter={(key) => {
+              setChartTypeFilter(key);
+              // Clear other chart filters
+              if (key) {
+                setChartStatusFilter('');
+                setChartPlantFilter('');
+              }
+            }}
+          />
+        </div>
+        <div style={{ flex:'2 1 320px', minWidth:220, display:'flex' }}>
+          <VBarChart  
+            title="Documentos por Usina"   
+            data={plantChartData}
+            activeFilter={chartPlantFilter}
+            onFilter={(key) => {
+              setChartPlantFilter(key);
+              // Clear other chart filters
+              if (key) {
+                setChartTypeFilter('');
+                setChartStatusFilter('');
+              }
+            }}
+          />
+        </div>
+        <div style={{ flex:'1 1 180px', minWidth:160, display:'flex' }}>
+          <DonutChart 
+            title="Status dos Documentos"  
+            data={statusChartData}
+            activeFilter={chartStatusFilter}
+            onFilter={(key) => {
+              setChartStatusFilter(key);
+              // Clear other chart filters
+              if (key) {
+                setChartTypeFilter('');
+                setChartPlantFilter('');
+              }
+            }}
+          />
+        </div>
       </div>
 
       {/* Filter bar */}

@@ -515,9 +515,23 @@ function ImportPreviewModal({ preview, onClose, onConfirm, loading }) {
   );
 }
 
+/* ─── Date helper ────────────────────────────────────────────────────────────── */
+function toDateInput(val) {
+  if (!val) return '';
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return '';
+  return d.toISOString().slice(0, 10);
+}
+
 /* ─── IAC Modal ──────────────────────────────────────────────────────────────── */
 function IACModal({ item, onClose, onSave, onDelete, isNew, saving, deleting, allUsers, allRequesters, allChineseStaff, allOrganizers, allSupervisors }) {
-  const [form, setForm] = useState(item ? { ...item } : { ...EMPTY_IAC });
+  const initForm = (src) => src
+    ? { ...src, opening_date: toDateInput(src.opening_date), when_open: toDateInput(src.when_open) }
+    : { ...EMPTY_IAC };
+  const [form, setForm] = useState(() => initForm(item));
+
+  useEffect(() => { setForm(initForm(item)); }, [item]);
   const [checkedIn, setCheckedIn] = useState(false);
   const [lastEdited, setLastEdited] = useState(null);
   const toast = useToast().toast;

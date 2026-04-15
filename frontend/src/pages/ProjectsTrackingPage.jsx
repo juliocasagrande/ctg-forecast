@@ -437,9 +437,21 @@ const inputStyle = {
 const selectStyle = { ...inputStyle, cursor: 'pointer' };
 const textareaStyle = { ...inputStyle, resize: 'vertical', minHeight: 72, fontFamily: 'inherit', lineHeight: 1.5 };
 
+/* ─── Date helper ───────────────────────────────────────────────────────────── */
+function toDateInput(val) {
+  if (!val) return '';
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return '';
+  return d.toISOString().slice(0, 10);
+}
+
 /* ─── Project Modal (restyled to match DocumentsPage) ───────────────────────── */
 function ProjectModal({ item, onClose, onSave, onDelete, isNew, saving, deleting, allUsers }) {
-  const [form, setForm] = useState(item ? { ...item } : { ...EMPTY_PROJECT });
+  const initForm = (src) => src ? { ...src, vencimento: toDateInput(src.vencimento) } : { ...EMPTY_PROJECT };
+  const [form, setForm] = useState(() => initForm(item));
+
+  useEffect(() => { setForm(initForm(item)); }, [item]);
   const [checkedIn, setCheckedIn] = useState(false);
   const [lastEdited, setLastEdited] = useState(null);
   const toast = useToast().toast;

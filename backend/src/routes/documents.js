@@ -264,7 +264,7 @@ router.put('/:id', async (req, res) => {
 // ─── PATCH /:id/status — alterar só o status ─────────────────────────────────
 router.patch('/:id/status', async (req, res) => {
   const id = parseInt(req.params.id);
-  const { status } = req.body;
+  const { status, document_link } = req.body;
   const userId = req.user.id;
 
   const validStatuses = ['Em elaboração', 'Para aprovação', 'Publicado', 'Cancelado'];
@@ -276,8 +276,8 @@ router.patch('/:id/status', async (req, res) => {
 
   try {
     const r = await pool.query(
-      'UPDATE documents SET status=$1, updated_by=$2, updated_at=NOW() WHERE id=$3 RETURNING *',
-      [status, userId, id]
+      'UPDATE documents SET status=$1, document_link=$2, updated_by=$3, updated_at=NOW() WHERE id=$4 RETURNING *',
+      [status, document_link || null, userId, id]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Documento não encontrado' });
     res.json(r.rows[0]);
