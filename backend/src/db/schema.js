@@ -23,6 +23,7 @@ async function ensureAdminUser(client) {
     const email = process.env.ADMIN_EMAIL;
     const password = process.env.ADMIN_PASS;
     const name = process.env.ADMIN_NAME || 'Administrador';
+    const forceReset = process.env.FORCE_ADMIN_RESET === 'true';
 
     if (!email || !password) {
       console.warn('⚠️ ADMIN não configurado');
@@ -34,17 +35,21 @@ async function ensureAdminUser(client) {
       [email]
     );
 
-    if (existing.rows.length > 0) return;
+    if (existing.rows.length > 0 && !forceReset) return;
 
     const hash = await bcrypt.hash(password, 10);
 
     await client.query(
       `INSERT INTO users (name, email, password_hash, role, active)
-       VALUES ($1, $2, $3, 'admin', true)`,
+       VALUES ($1, $2, $3, 'admin', true)
+       ON CONFLICT (email) DO UPDATE SET
+         password_hash = EXCLUDED.password_hash,
+         active = true,
+         updated_at = NOW()`,
       [name, email, hash]
     );
 
-    console.log('✅ Admin criado');
+    console.log(existing.rows.length > 0 ? '✅ Admin resetado' : '✅ Admin criado');
   } catch (err) {
     console.warn('⚠️ Erro ao criar admin:', err.message);
   }
@@ -279,6 +284,14 @@ export async function initDB() {
         email VARCHAR(120),
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
+    `);
+
+    await client.query(`
+      ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id);
+      ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS ip_address VARCHAR(60);
+      ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS user_agent TEXT;
+      ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS success BOOLEAN;
+      ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS detail TEXT;
     `);
 
     /* ───────── DELEGATIONS / ALERTS ───────── */

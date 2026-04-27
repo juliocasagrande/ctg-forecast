@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Read(c:\\Users\\jlcasagrande\\OneDrive - CTG Brasil\\CTG Brasil\\02 - PYTHON\\forecast\\backend\\src\\routes/**)"
-    ]
-  }
-}
