@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(git -C \"C:\\\\Users\\\\jlcasagrande\\\\OneDrive - CTG Brasil\\\\CTG Br\\\\02 - PYTHON\\\\forecast\" diff HEAD -- \"backend/tests/routes/documents.test.js\" \"backend/tests/routes/messages.test.js\" \"backend/tests/routes/vacations.test.js\")",
-      "Bash(git -C \"C:\\\\Users\\\\jlcasagrande\\\\OneDrive - CTG Brasil\\\\CTG Br\\\\02 - PYTHON\\\\forecast\" show HEAD:docs/MANUAL_USUARIO.md)"
+      "Bash(git -C \"C:\\\\Users\\\\jlcasagrande\\\\OneDrive - CTG Brasil\\\\CTG Br\\\\02 - PYTHON\\\\forecast\" show HEAD:docs/MANUAL_USUARIO.md)",
+      "Bash(npm install *)",
+      "Bash(node generate-icons.mjs)"
     ]
   }
 }
