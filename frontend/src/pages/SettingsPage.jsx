@@ -161,18 +161,20 @@ function FeedbackList({ toast }) {
 }
 
 const SECTIONS = [
-  { id: 'alerts',    label: '🔔 Alertas',        icon: '🔔' },
-  { id: 'documents', label: '📄 Documentos',     icon: '📄' },
-  { id: 'tracking',  label: '📋 Acompanhamento', icon: '📋' },
-  { id: 'colors',    label: '🎨 Cores',           icon: '🎨' },
-  { id: 'period',    label: '📆 Período e Ano Fiscal', icon: '📆' },
-  { id: 'export',    label: '📊 Exportação',      icon: '📊' },
-  { id: 'sap',       label: '🗂️ Mapeamento SAP',  icon: '🗂️' },
-  { id: 'feedback',  label: '💡 Feedbacks',       icon: '💡' },
+  { id: 'alerts',      label: '🔔 Alertas',             icon: '🔔' },
+  { id: 'documents',   label: '📄 Documentos',           icon: '📄' },
+  { id: 'tracking',    label: '📋 Acompanhamento',       icon: '📋' },
+  { id: 'colors',      label: '🎨 Cores',                icon: '🎨' },
+  { id: 'period',      label: '📆 Período e Ano Fiscal', icon: '📆' },
+  { id: 'export',      label: '📊 Exportação',           icon: '📊' },
+  { id: 'permissions', label: '🔐 Permissões',           icon: '🔐' },
+  { id: 'sap',         label: '🗂️ Mapeamento SAP',       icon: '🗂️' },
+  { id: 'feedback',    label: '💡 Feedbacks',            icon: '💡' },
 ];
 
 const DEFAULTS = {
   alert_stale_days:      '30',
+  forecast_permissions:  '{"planejador":{"Budget":"edit","Forecast":"edit","Actual":"edit","Pool":"edit","Meta":"edit"},"coordenador":{"Budget":"edit","Forecast":"edit","Actual":"edit","Pool":"edit","Meta":"edit"},"engenheiro":{"Budget":"none","Forecast":"edit","Actual":"edit","Pool":"none","Meta":"none"},"gerente":{"Budget":"none","Forecast":"none","Actual":"none","Pool":"none","Meta":"none"}}',
   tracking_alert_enabled: 'true',
   tracking_alert_interval_days: '30',
   tracking_alert_roles:     'gerente,coordenador,engenheiro',
@@ -313,6 +315,110 @@ function SelectInput({ label, description, value, onChange, options }) {
   );
 }
 
+const PERM_TYPES = ['Budget', 'Forecast', 'Actual', 'Pool', 'Meta'];
+const PERM_TYPE_LABELS = { Budget: 'Budget', Forecast: 'Forecast', Actual: 'Realizado', Pool: 'Pool', Meta: 'Meta' };
+const PERM_ROLES = ['planejador', 'coordenador', 'engenheiro', 'gerente'];
+const PERM_ROLE_LABELS = { planejador: 'Planejador', coordenador: 'Coordenador', engenheiro: 'Engenheiro', gerente: 'Gerente' };
+
+const PERM_OPTS = [
+  { value: 'none', label: '—',       title: 'Sem acesso' },
+  { value: 'view', label: '👁 Ver',  title: 'Somente visualização' },
+  { value: 'edit', label: '✏ Editar', title: 'Visualizar e editar' },
+];
+
+function PermCell({ current, onChange }) {
+  return (
+    <div style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1.5px solid var(--border-strong)' }}>
+      {PERM_OPTS.map(opt => {
+        const active = current === opt.value;
+        const colors = {
+          none: { bg: '#F1F5F9', color: '#94A3B8', activeBg: '#E2E8F0', activeColor: '#475569' },
+          view: { bg: '#EFF6FF', color: '#93C5FD', activeBg: '#DBEAFE', activeColor: '#1D4ED8' },
+          edit: { bg: '#F0FDF4', color: '#86EFAC', activeBg: '#DCFCE7', activeColor: '#15803D' },
+        }[opt.value];
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            title={opt.title}
+            onClick={() => onChange(opt.value)}
+            style={{
+              padding: '5px 10px',
+              border: 'none',
+              borderRight: opt.value !== 'edit' ? '1px solid var(--border)' : 'none',
+              cursor: 'pointer',
+              background: active ? colors.activeBg : 'var(--bg-card)',
+              color: active ? colors.activeColor : 'var(--text-muted)',
+              fontWeight: active ? 700 : 400,
+              fontSize: '0.73rem',
+              fontFamily: 'var(--font-body)',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.12s',
+            }}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function PermissionsMatrix({ value, onChange }) {
+  let perms = {};
+  try { perms = JSON.parse(value || '{}'); } catch {}
+
+  const setVal = (role, type, val) => {
+    const next = { ...perms, [role]: { ...(perms[role] || {}), [type]: val } };
+    onChange(JSON.stringify(next));
+  };
+
+  const thStyle = { padding: '10px 14px', borderBottom: '2px solid var(--border-strong)', fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', textAlign: 'center' };
+  const tdStyle = { padding: '10px 14px', borderBottom: '1px solid var(--border)', textAlign: 'center' };
+
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+        <thead>
+          <tr style={{ background: 'var(--bg-app)' }}>
+            <th style={{ ...thStyle, textAlign: 'left' }}>Cargo</th>
+            {PERM_TYPES.map(t => (
+              <th key={t} style={thStyle}>{PERM_TYPE_LABELS[t]}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {PERM_ROLES.map((role, i) => (
+            <tr key={role} style={{ background: i % 2 === 0 ? 'var(--bg-card)' : 'var(--bg-app)' }}>
+              <td style={{ ...tdStyle, textAlign: 'left', fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)', minWidth: 110 }}>
+                {PERM_ROLE_LABELS[role]}
+              </td>
+              {PERM_TYPES.map(type => {
+                const cur = (perms[role] || {})[type] || 'none';
+                return (
+                  <td key={type} style={tdStyle}>
+                    <PermCell current={cur} onChange={v => setVal(role, type, v)} />
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={{ display: 'flex', gap: 16, marginTop: 14, flexWrap: 'wrap' }}>
+        {PERM_OPTS.map(opt => (
+          <span key={opt.value} style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+            <strong>{opt.label}</strong> — {opt.title}
+          </span>
+        ))}
+      </div>
+      <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.6 }}>
+        Administradores sempre têm acesso completo independentemente destas configurações.
+      </p>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const [settings, setSettings] = useState({ ...DEFAULTS });
   const [loading,  setLoading]  = useState(true);
@@ -327,6 +433,7 @@ export default function SettingsPage() {
     ['admin', 'gestor', 'planejador'].includes(user.role) ||
     ALLOWED_SAP_EMAILS.includes(user.email)
   );
+  const canEdit = user && (['admin', 'planejador'].includes(user.role) || ALLOWED_SAP_EMAILS.includes(user.email));
 
   useEffect(() => {
     api.get('/settings').then(r => {
@@ -742,6 +849,19 @@ export default function SettingsPage() {
           </SectionCard>
         )}
 
+        {/* ── PERMISSÕES ── */}
+        {activeSection === 'permissions' && (
+          <SectionCard
+            title="Permissões por cargo no ForecastWizard"
+            description="Define quais tipos de dados cada cargo pode visualizar e editar no ForecastWizard de cada projeto."
+          >
+            <PermissionsMatrix
+              value={settings.forecast_permissions}
+              onChange={v => set('forecast_permissions', v)}
+            />
+          </SectionCard>
+        )}
+
         {/* ── FEEDBACKS ── */}
         {activeSection === 'feedback' && (
           <FeedbackList toast={toast} />
@@ -752,20 +872,22 @@ export default function SettingsPage() {
         )}
       </div>
 
-      {/* Sticky save bar */}
-      <div className={`settings-save-bar ${dirty ? 'visible' : ''}`}>
-        <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-          Você tem alterações não salvas
-        </span>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => { setSettings({ ...DEFAULTS }); setDirty(false); }}>
-            Descartar
-          </button>
-          <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>
-            {saving ? 'Salvando...' : '💾 Salvar'}
-          </button>
+      {/* Sticky save bar — only visible to authorized users */}
+      {canEdit && (
+        <div className={`settings-save-bar ${dirty ? 'visible' : ''}`}>
+          <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+            Você tem alterações não salvas
+          </span>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => { setSettings({ ...DEFAULTS }); setDirty(false); }}>
+              Descartar
+            </button>
+            <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>
+              {saving ? 'Salvando...' : '💾 Salvar'}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

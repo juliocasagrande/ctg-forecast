@@ -563,8 +563,11 @@ export default function ProjectDetail({ onEdit }) {
     catch { toast('Erro', 'error'); }
   };
   const handleCheckin = async () => {
-    try { await api.post(`/forecast/project/${id}/checkin`); toast('Check-in registrado', 'success'); }
-    catch { toast('Erro ao registrar check-in', 'error'); }
+    try {
+      await api.post(`/forecast/project/${id}/checkin`);
+      toast('Check-in registrado', 'success');
+      fetchProject();
+    } catch { toast('Erro ao registrar check-in', 'error'); }
   };
   const handleExport = async (categories = null, types = null, scope = 'projeto') => {
     try {
@@ -603,16 +606,32 @@ export default function ProjectDetail({ onEdit }) {
   const unassignedEngineers = allEngineers.filter(e => !engineers.find(a => a.id === e.id));
   const mainTabsWithBadge   = MAIN_TABS.map(t => t.id==='chat' && unreadCount>0 ? {...t, label:`💬 Chat (${unreadCount})`} : t);
 
-  // Determine type tabs for current role
-  const roleForecastTabs = isPlanejador
-    ? FORECAST_TABS.planejador
-    : isCoordenador
-      ? FORECAST_TABS.coordenador
-      : isGerente
-        ? FORECAST_TABS.gerente
-        : isEngenheiro
-          ? FORECAST_TABS.engenheiro
-          : FORECAST_TABS.coordenador; // fallback: full access like coordenador
+  // Determine type tabs for current role — dynamic from settings, with hardcoded fallback
+  const TYPE_LABEL_MAP = { Budget: 'Budget', Forecast: 'Forecast', Actual: 'Realizado', Pool: 'Pool', Meta: 'Meta' };
+  const ALL_TYPES = ['Budget', 'Forecast', 'Actual', 'Pool', 'Meta'];
+  let dynPerms = null;
+  try { if (settings.forecast_permissions) dynPerms = JSON.parse(settings.forecast_permissions); } catch {}
+
+  const getTabsForRole = (role) => {
+    if (dynPerms) {
+      const rp = dynPerms[role] || {};
+      const visible = ALL_TYPES.filter(id => rp[id] === 'view' || rp[id] === 'edit');
+      return visible.map(id => ({ id, label: TYPE_LABEL_MAP[id] || id }));
+    }
+    return FORECAST_TABS[role] || FORECAST_TABS.coordenador;
+  };
+
+  const getReadOnlyTypesForRole = (role) => {
+    if (dynPerms) {
+      const rp = dynPerms[role] || {};
+      return ALL_TYPES.filter(id => rp[id] === 'view');
+    }
+    return [];
+  };
+
+  const activeRole = isPlanejador ? 'planejador' : isCoordenador ? 'coordenador' : isGerente ? 'gerente' : isEngenheiro ? 'engenheiro' : 'coordenador';
+  const roleForecastTabs = getTabsForRole(activeRole);
+  const readOnlyTypes    = getReadOnlyTypesForRole(activeRole);
 
   return (
     <div>
@@ -730,6 +749,7 @@ export default function ProjectDetail({ onEdit }) {
               onSaved={fetchProject}
               editType={forecastType}
               availableTypes={roleForecastTabs.map(t => t.id)}
+              readOnlyTypes={readOnlyTypes}
               siValue={project.si_value}
               consolidatedActual={consolidated.value}
               siProjection={siProjection}

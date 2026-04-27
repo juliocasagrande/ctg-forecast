@@ -780,7 +780,7 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
   display: flex;
   flex-direction: column;
   gap: 0;
-  max-width: 720px;
+  max-width: 900px;
   margin: 0 auto;
   padding-bottom: 80px; /* space for save bar */
 }
@@ -805,7 +805,7 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
   flex-direction: column;
   align-items: center;
   gap: 3px;
-  padding: 8px 14px;
+  padding: 8px 10px;
   border: none;
   border-radius: var(--radius-md);
   background: transparent;

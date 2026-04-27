@@ -14,6 +14,8 @@ const DEFAULTS = {
   export_include_meta:   'true',
   export_include_pool:   'true',
   fiscal_year_start:     '1',
+  forecast_permissions:  '{"planejador":{"Budget":"edit","Forecast":"edit","Actual":"edit","Pool":"edit","Meta":"edit"},"coordenador":{"Budget":"edit","Forecast":"edit","Actual":"edit","Pool":"edit","Meta":"edit"},"engenheiro":{"Budget":"none","Forecast":"edit","Actual":"edit","Pool":"none","Meta":"none"},"gerente":{"Budget":"none","Forecast":"none","Actual":"none","Pool":"none","Meta":"none"}}',
+  user_name_mappings:    '[]',
 };
 
 const SettingsContext = createContext(DEFAULTS);

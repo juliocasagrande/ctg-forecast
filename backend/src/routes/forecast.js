@@ -255,7 +255,7 @@ router.get('/dashboard', async (req, res) => {
           FROM (SELECT year, SUM(value) AS val FROM year_consolidated WHERE project_id = p.id AND type = 'Actual' AND value > 0 AND year BETWEEN $1 AND $2 GROUP BY year) yc_a
           FULL OUTER JOIN (SELECT year, SUM(value) AS val FROM year_consolidated WHERE project_id = p.id AND type = 'Forecast' AND value > 0 AND year BETWEEN $1 AND $2 GROUP BY year) yc_f USING (year)
         ), 0) AS act_forecast,
-        MAX(combined.updated_at) AS last_forecast_update,
+        GREATEST(MAX(combined.updated_at), p.updated_at) AS last_forecast_update,
         eng_agg.engineers, eng_agg.engineer_initials
       FROM projects p ${joinClause}
       LEFT JOIN (
@@ -282,7 +282,7 @@ router.get('/dashboard', async (req, res) => {
         JOIN users u ON u.id = pa.user_id AND u.role = 'engenheiro'
         GROUP BY pa.project_id
       ) eng_agg ON eng_agg.project_id = p.id
-      GROUP BY p.id, eng_agg.engineers, eng_agg.engineer_initials
+      GROUP BY p.id, p.updated_at, eng_agg.engineers, eng_agg.engineer_initials
       ORDER BY p.code
     `, params);
     res.json(r.rows);
@@ -356,10 +356,16 @@ router.post('/project/:projectId/checkin', requireProjectAccess, async (req, res
       `INSERT INTO project_checkins (project_id,user_id,checked_at) VALUES ($1,$2,NOW()) RETURNING *`,
       [req.params.projectId, userId]
     );
-    await pool.query(
-      `INSERT INTO project_activity_log (project_id,user_id,role,action,acted_at) VALUES ($1,$2,$3,'checkin',NOW())`,
-      [req.params.projectId, userId, role]
-    );
+    await Promise.all([
+      pool.query(
+        `UPDATE projects SET updated_at = NOW() WHERE id = $1`,
+        [req.params.projectId]
+      ),
+      pool.query(
+        `INSERT INTO project_activity_log (project_id,user_id,role,action,acted_at) VALUES ($1,$2,$3,'checkin',NOW())`,
+        [req.params.projectId, userId, role]
+      ),
+    ]);
     res.json(r.rows[0]);
   } catch (err) { safeError(res, err); }
 });
@@ -456,9 +462,10 @@ router.get('/alerts', async (req, res) => {
     const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1;
     const prevYear  = currentMonth === 1 ? currentYear - 1 : currentYear;
 
-    // Load user's dismissed alerts
+    // Load user's dismissed alerts — only current month (dismissals expire at month boundary)
     const dismissedRes = await pool.query(
-      'SELECT alert_type, alert_key FROM alert_dismissals WHERE user_id=$1',
+      `SELECT alert_type, alert_key FROM alert_dismissals
+       WHERE user_id=$1 AND dismissed_at >= date_trunc('month', CURRENT_DATE)`,
       [userId]
     );
     const dismissed = new Set(dismissedRes.rows.map(r => `${r.alert_type}|${r.alert_key}`));
@@ -731,9 +738,9 @@ router.post('/alerts/dismiss', async (req, res) => {
     const { alert_type, alert_key } = req.body;
     if (!alert_type || !alert_key) return res.status(400).json({ error: 'alert_type e alert_key obrigatórios' });
     await pool.query(`
-      INSERT INTO alert_dismissals (user_id, alert_type, alert_key)
-      VALUES ($1, $2, $3)
-      ON CONFLICT (user_id, alert_type, alert_key) DO NOTHING
+      INSERT INTO alert_dismissals (user_id, alert_type, alert_key, dismissed_at)
+      VALUES ($1, $2, $3, NOW())
+      ON CONFLICT (user_id, alert_type, alert_key) DO UPDATE SET dismissed_at = NOW()
     `, [req.user.id, alert_type, String(alert_key)]);
     res.json({ success: true });
   } catch (err) { safeError(res, err); }

@@ -40,7 +40,7 @@ function fmtNum(v) {
 }
 
 // ── Month input row ───────────────────────────────────────────────────────────
-function MonthRow({ month, year, value, comment, onChange, refValue, refLabel, theme, otherComments, lockedByActual, activeType }) {
+function MonthRow({ month, year, value, comment, onChange, refValue, refLabel, theme, otherComments, lockedByActual, activeType, viewOnly }) {
   const [localVal, setLocalVal] = useState(fmtInput(value));
   const [localCmt, setLocalCmt] = useState(comment);
   const didMount = useRef(false);
@@ -76,6 +76,15 @@ function MonthRow({ month, year, value, comment, onChange, refValue, refLabel, t
             <span style={{ fontSize:'0.72rem', color:'#64748B', fontStyle:'italic' }}>
               🔒 Mês já realizado — Forecast bloqueado
             </span>
+          </div>
+        ) : viewOnly ? (
+          <div style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 10px', background:'#F8FAFC', borderRadius:'var(--radius-sm)', border:'1.5px solid #E2E8F0', gridColumn:'span 2' }}>
+            <span style={{ fontSize:'0.72rem', color:'#94A3B8' }}>👁</span>
+            <span style={{ fontFamily:'var(--font-body)', fontVariantNumeric:'tabular-nums', fontSize:'0.9rem', color:value>0?theme.text:'#94A3B8', fontWeight:value>0?600:400 }}>
+              {value>0 ? formatBRL(value) : '—'}
+            </span>
+            {comment && <span style={{ fontSize:'0.78rem', color:'var(--text-secondary)', marginLeft:4, fontStyle:'italic' }}>"{comment}"</span>}
+            {refValue != null && refValue > 0 && <span style={{ marginLeft:'auto', fontSize:'0.6rem', color:'var(--text-muted)' }}>{refLabel}: {formatBRL(refValue)}</span>}
           </div>
         ) : (
           <>
@@ -200,7 +209,7 @@ function BtnImportSAP({ onClick }) {
 // ── Main ForecastWizard ───────────────────────────────────────────────────────
 export default function ForecastWizard({
   projectId, entries, year, onYearChange, onSaved,
-  editType = 'Forecast', availableTypes,
+  editType = 'Forecast', availableTypes, readOnlyTypes = [],
   siValue = 0, consolidatedActual = 0, siProjection = 0, yearConfig,
 }) {
   const C = useTypeColors();
@@ -219,6 +228,7 @@ export default function ForecastWizard({
   const isConsolidatedYear = consolidatedYears.includes(parseInt(year));
 
   const [activeType, setActiveType] = useState(types.includes(editType) ? editType : types[0]);
+  const isActiveReadOnly = readOnlyTypes.includes(activeType);
   const [step,       setStep]       = useState(0);
   const [localData,  setLocalData]  = useState({});
   const [consData,   setConsData]   = useState({});
@@ -376,7 +386,7 @@ export default function ForecastWizard({
     setSaving(true);
     try {
       const bulk = [];
-      types.forEach(type => CATEGORIES.forEach(cat => {
+      types.filter(t => !readOnlyTypes.includes(t)).forEach(type => CATEGORIES.forEach(cat => {
         for (let m=1; m<=12; m++) bulk.push({ category:cat, type, year:parseInt(year), month:m, value:getValue(type,cat,m), comment:getComment(type,cat,m) });
       }));
       await api.post(`/forecast/project/${projectId}/bulk`, { entries: bulk });
@@ -447,8 +457,8 @@ export default function ForecastWizard({
               <div style={{ fontSize:'0.56rem', fontWeight:700, color:'rgba(255,255,255,0.55)', textTransform:'uppercase', letterSpacing:'0.08em' }}>Realizado</div>
               <div style={{ fontFamily:'var(--font-display)', fontSize:'1rem', color:'#fff', fontWeight:600 }}>{formatBRL(consGetVal('Actual'))}</div>
             </div>
-            {isGerente
-              ? <span style={{fontSize:'0.72rem',color:'rgba(255,255,255,0.5)',fontStyle:'italic',padding:'8px 12px'}}>Somente leitura</span>
+            {(isGerente || isActiveReadOnly)
+              ? <span style={{fontSize:'0.72rem',color:'rgba(255,255,255,0.5)',fontStyle:'italic',padding:'8px 12px'}}>👁 Somente leitura</span>
               : <button onClick={activeSave} disabled={saving} style={{ padding:'8px 22px', border:'none', cursor:saving?'wait':'pointer', background:saved?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.12)', color:'#fff', fontWeight:700, fontSize:'0.82rem', fontFamily:'var(--font-body)', borderRadius:'var(--radius-sm)', whiteSpace:'nowrap', transition:'background 0.15s' }}
                 onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.28)'}
                 onMouseLeave={e=>e.currentTarget.style.background=saved?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.12)'}
@@ -635,6 +645,7 @@ export default function ForecastWizard({
               otherComments={getOtherComments(activeType,cat,month)}
               lockedByActual={lastActualMonth > 0 && month <= lastActualMonth}
               activeType={activeType}
+              viewOnly={isActiveReadOnly}
             />
           ))}
         </div>
@@ -716,7 +727,10 @@ export default function ForecastWizard({
         </div>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <button onClick={()=>setStep(3)} style={{ padding:'9px 20px', borderRadius:'var(--radius-sm)', border:`1.5px solid ${theme.border}`, background:'transparent', cursor:'pointer', color:theme.text, fontWeight:600, fontSize:'0.85rem', fontFamily:'var(--font-body)' }}>← Voltar</button>
-          <button onClick={handleSave} disabled={saving} style={{ padding:'12px 32px', borderRadius:'var(--radius-sm)', border:'none', background:theme.color, cursor:saving?'wait':'pointer', color:'#fff', fontWeight:700, fontSize:'0.95rem', fontFamily:'var(--font-body)' }}>{saving?'Salvando...':saved?`✓ ${theme.label} Salvo!`:`💾 Salvar ${theme.label}`}</button>
+          {isActiveReadOnly
+            ? <span style={{ fontSize:'0.82rem', color:theme.text, fontStyle:'italic', padding:'12px 0' }}>👁 Somente leitura</span>
+            : <button onClick={handleSave} disabled={saving} style={{ padding:'12px 32px', borderRadius:'var(--radius-sm)', border:'none', background:theme.color, cursor:saving?'wait':'pointer', color:'#fff', fontWeight:700, fontSize:'0.95rem', fontFamily:'var(--font-body)' }}>{saving?'Salvando...':saved?`✓ ${theme.label} Salvo!`:`💾 Salvar ${theme.label}`}</button>
+          }
         </div>
       </div>
     </WrapperWithTypeBar>

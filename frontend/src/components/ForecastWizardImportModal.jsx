@@ -356,7 +356,8 @@ export default function ImportActualModal({ open, onClose, onApply, currentYear,
               {/* Months table */}
               <div style={{ border:'1.5px solid #e2e8f0', borderRadius:12, overflow:'hidden', marginBottom:16 }}>
                 {/* Table header */}
-                <div style={{ display:'grid', gridTemplateColumns:'140px 1fr 1fr 1fr 36px', background:'#f1f5f9', borderBottom:'2px solid #e2e8f0', padding:'7px 14px', gap:0 }}>
+                <div style={{ display:'grid', gridTemplateColumns:'56px 140px 1fr 1fr 1fr 36px', background:'#f1f5f9', borderBottom:'2px solid #e2e8f0', padding:'7px 14px', gap:0 }}>
+                  <span style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', color:'#64748b' }}>Ano</span>
                   <span style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', color:'#64748b' }}>Mês</span>
                   <span style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', color:CAT_STYLE.Contratos.color, textAlign:'right', paddingRight:16 }}>📄 Contratos</span>
                   <span style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', color:CAT_STYLE.Viagens.color, textAlign:'right', paddingRight:16 }}>✈️ Viagens</span>
@@ -380,11 +381,13 @@ export default function ImportActualModal({ open, onClose, onApply, currentYear,
                         {/* Row */}
                         <div
                           onClick={() => toggleExpand(monthKey)}
-                          style={{ display:'grid', gridTemplateColumns:'140px 1fr 1fr 1fr 36px', alignItems:'center', gap:0, padding:'9px 14px', background: isExp ? '#f8fafc' : rowIdx%2===0 ? '#fff' : '#fafafa', cursor:'pointer', transition:'background 0.1s' }}
+                          style={{ display:'grid', gridTemplateColumns:'56px 140px 1fr 1fr 1fr 36px', alignItems:'center', gap:0, padding:'9px 14px', background: isExp ? '#f8fafc' : rowIdx%2===0 ? '#fff' : '#fafafa', cursor:'pointer', transition:'background 0.1s' }}
                           onMouseEnter={e => { if (!isExp) e.currentTarget.style.background='#f0f7ff'; }}
                           onMouseLeave={e => { e.currentTarget.style.background = isExp ? '#f8fafc' : rowIdx%2===0 ? '#fff' : '#fafafa'; }}
                         >
-                        {/* Month label com checkbox de mês inteiro */}
+                          {/* Ano */}
+                          <div style={{ fontSize:'0.82rem', fontWeight:700, color:'#475569' }}>{m.year}</div>
+                          {/* Month label com checkbox de mês inteiro */}
                           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                             <input
                               type="checkbox"
@@ -401,7 +404,6 @@ export default function ImportActualModal({ open, onClose, onApply, currentYear,
                               style={{ width:13, height:13, cursor:'pointer', flexShrink:0, accentColor:'#1d4ed8' }}
                             />
                             <span style={{ fontWeight:700, fontSize:'0.88rem', color:'var(--text-primary)' }}>{MONTHS_FULL[m.month-1]}</span>
-                            {!isCurrentYear && <span style={{ fontSize:'0.6rem', background:'#fef3c7', color:'#92400e', padding:'1px 5px', borderRadius:4, fontWeight:700 }}>{m.year}</span>}
                           </div>
                           {/* Contratos */}
                           <div style={{ textAlign:'right', paddingRight:16 }}>

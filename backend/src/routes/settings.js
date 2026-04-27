@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { pool } from '../db/schema.js';
-import { requireAuth, requireRole } from '../middleware/auth.js';
+import { requireAuth } from '../middleware/auth.js';
+
+const SETTINGS_ALLOWED_EMAILS = ['julio.casagrande@ctgbr.com.br'];
 
 const router = Router();
 
@@ -12,6 +14,13 @@ function safeError(res, err) {
   }
   res.status(500).json({ error: err.message });
 }
+
+function requireSettingsWrite(req, res, next) {
+  const { role, email } = req.user;
+  if (['admin', 'planejador'].includes(role) || SETTINGS_ALLOWED_EMAILS.includes(email)) return next();
+  return res.status(403).json({ error: 'Acesso não autorizado' });
+}
+
 router.use(requireAuth);
 
 // GET all settings — any authenticated user can read
@@ -24,8 +33,8 @@ router.get('/', async (req, res) => {
   } catch (err) { safeError(res, err); }
 });
 
-// PUT update settings — planejador, admin only
-router.put('/', requireRole('admin', 'planejador'), async (req, res) => {
+// PUT update settings — admin, planejador, or allowed email
+router.put('/', requireSettingsWrite, async (req, res) => {
   const { id: userId } = req.user;
   const settings = req.body; // { key: value, ... }
   try {
