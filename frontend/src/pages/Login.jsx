@@ -284,11 +284,11 @@ export default function Login() {
           textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
           userSelect: 'none',
         }}>
-          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
             Desenvolvido por
           </span>
           <span style={{
-            fontSize: '0.99rem', fontWeight: 700, letterSpacing: '0.02em',
+            fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.02em',
             background: 'linear-gradient(90deg, #1a56db, #0ea5e9, #1d4ed8, #0ea5e9, #1a56db)',
             backgroundSize: '300% auto',
             WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',

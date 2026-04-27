@@ -24,3 +24,8 @@ ctg@2026
 
 # senha azure
 ctg2026
+
+# comando para rodar enquanto não tiver com autenticação básica habilitada
+az webapp config container set --name ctg-engineering --resource-group ctg-engineering-group --container-registry-url https://ghcr.io --container-registry-user SEU_USUARIO_GITHUB --container-registry-password SEU_TOKEN_CR_PAT --container-image-name ghcr.io/SEU_USUARIO_GITHUB/ctg-engineering:latest
+
+az webapp restart --name ctg-engineering --resource-group ctg-engineering-group
