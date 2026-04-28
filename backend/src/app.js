@@ -32,6 +32,7 @@ import delegationsRouter from './routes/delegations.js';
 import vacationsRouter   from './routes/vacations.js';
 import monthlyReportRouter from './routes/monthly-report.js';
 import listsRouter       from './routes/lists.js';
+import chatRouter        from './routes/chat.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -97,6 +98,7 @@ export function createApp({ disableRateLimit = false } = {}) {
   app.use('/api/delegations', delegationsRouter);
   app.use('/api/vacations',   vacationsRouter);
   app.use('/api/lists',       listsRouter);
+  app.use('/api/chat',        chatRouter);
 
   if (disableRateLimit) {
     app.use('/api/export',         exportRouter);

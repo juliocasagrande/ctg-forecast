@@ -67,7 +67,7 @@ router.get('/', async (req, res) => {
     `;
     const params = [];
     if (year) { q += ' WHERE d.year = $1'; params.push(parseInt(year)); }
-    q += ' GROUP BY d.id, u.name, u2.name ORDER BY d.base_code ASC NULLS LAST, d.sequence_number ASC, d.revision ASC NULLS FIRST';
+    q += ' GROUP BY d.id, u.name, u2.name ORDER BY d.year ASC, d.sequence_number ASC, d.base_code ASC NULLS LAST, d.revision ASC NULLS FIRST';
     res.json((await pool.query(q, params)).rows);
   } catch (err) { safeError(res, err); }
 });
@@ -282,6 +282,64 @@ router.patch('/:id/status', async (req, res) => {
     if (!r.rows.length) return res.status(404).json({ error: 'Documento não encontrado' });
     res.json(r.rows[0]);
   } catch (err) { safeError(res, err); }
+});
+
+// ─── POST /import-bulk  — importação em massa via .docx ────────────────────
+router.post('/import-bulk', async (req, res) => {
+  const { documents } = req.body;
+  if (!Array.isArray(documents) || documents.length === 0)
+    return res.status(400).json({ error: 'Nenhum documento enviado' });
+
+  const client = await pool.connect();
+  const result = { created: 0, updated: 0, skipped: 0, errors: 0 };
+
+  try {
+    await client.query('BEGIN');
+    for (const doc of documents) {
+      try {
+        const existing = await client.query(
+          'SELECT id FROM documents WHERE code = $1',
+          [doc.code]
+        );
+        if (existing.rows.length > 0) {
+          await client.query(
+            `UPDATE documents SET
+              plant = COALESCE($1, plant),
+              responsible = COALESCE($2, responsible),
+              date = COALESCE($3, date),
+              subject = COALESCE($4, subject),
+              status = COALESCE($5, status),
+              updated_by = $6,
+              updated_at = NOW()
+             WHERE code = $7`,
+            [doc.plant || null, doc.responsible || null, doc.date || null, doc.subject || null, doc.status || null, req.user.id, doc.code]
+          );
+          result.updated++;
+        } else {
+          const baseCode = doc.base_code || doc.code.replace(/-R\d+$/, '');
+          await client.query(
+            `INSERT INTO documents
+              (type, area, sequence_number, year, revision, code, base_code, plant, responsible, date, subject, status, created_by, updated_by, created_at, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13,NOW(),NOW())`,
+            [doc.type, doc.area, doc.sequence_number, doc.year, doc.revision ?? null, doc.code, baseCode,
+             doc.plant || null, doc.responsible || null, doc.date || null, doc.subject || null,
+             doc.status || 'Em elaboração', req.user.id]
+          );
+          result.created++;
+        }
+      } catch (err) {
+        console.error('Erro ao importar doc:', doc.code, err.message);
+        result.errors++;
+      }
+    }
+    await client.query('COMMIT');
+    res.json(result);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    safeError(res, err);
+  } finally {
+    client.release();
+  }
 });
 
 export default router;

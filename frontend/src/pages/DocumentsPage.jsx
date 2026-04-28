@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
 import { useToast } from '../components/ui/Toast.jsx';
 import ColumnFilterDropdown from '../components/ui/ColumnFilterDropdown.jsx';
+import * as mammoth from 'mammoth';
 
 /* ─── Constants ──────────────────────────────────────────────────────────────── */
 const DOC_TYPES = [
@@ -635,6 +636,338 @@ function generateHTMLReport(docs, stats, year) {
 </div></body></html>`;
 }
 
+/* ─── User resolution helpers ────────────────────────────────────────────────── */
+function _normName(str) {
+  return (str || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+const _ALIASES = {
+  'fabricio issao niiyama':       'fabricio niiyama',
+  'juliano nicolielo torres':     'juliano torres',
+  'rodrigo hernandes alves':      'rodrigo hernandes',
+  'leonardo seiji watanabe':      'leonardo watanabe',
+  'helio henrique dias':          'helio dias',
+  'yuri moura santos':            'yuri moura',
+  'ricardo passalacqua':          'ricardo passalaqua',
+  'maurilio faria morais':        'maurilio faria',
+  'julio lima casagrande':        'julio casagrande',
+  'leonardo lino leoncini':       'leonardo leoncini',
+  'jean rafael mendes':           'jean mendes',
+  'marcos hiroshi kadota':        'marcos kadota',
+  'victor henrique pedraci':      'victor pedraci',
+  'hallyson izidoro dos santos':  'hallyson izidoro',
+  'itamar rodrigo barros':        'itamar barros',
+  'marcel chuma cerbantes':       'marcel cerbantes',
+  'roberto cabral lara':          'roberto lara',
+  'everton nascimento da silva':  'everton nascimento',
+  'tadayuki juliano takamiya':    'juliano takamiya',
+  'alexsson procopio dos santos': 'alexsson santos',
+};
+function _resolveUser(name, allUsers) {
+  const norm = _normName(name);
+  if (!norm) return null;
+  let u = allUsers.find(x => _normName(x.name) === norm);
+  if (u) return u;
+  const alias = _ALIASES[norm];
+  if (alias) u = allUsers.find(x => _normName(x.name) === alias);
+  return u || null;
+}
+
+/* ─── ImportDocxModal — importar NUMERAÇÃO DE DOCUMENTOS .docx ──────────────── */
+function ImportDocxModal({ open, onClose, onImported, allUsers }) {
+  const { toast } = useToast();
+  const inputRef  = useRef(null);
+  const [file, setFile]             = useState(null);
+  const [parsing, setParsing]       = useState(false);
+  const [preview, setPreview]       = useState([]);
+  const [unresolvedNames, setUnresolvedNames] = useState([]);
+  const [userMappings, setUserMappings]       = useState({});
+  const [importing, setImporting]   = useState(false);
+  const [result, setResult]         = useState(null);
+
+  useEffect(() => {
+    if (!open) { setFile(null); setPreview([]); setResult(null); setUnresolvedNames([]); setUserMappings({}); }
+  }, [open]);
+
+  if (!open) return null;
+
+  const parseCode = (raw) => {
+    if (!raw) return null;
+    const m = raw.trim().match(/^([A-Z]{2,5})-([A-Z]{2,4})-(\d+)-(\d+)(?:-R(\d+))?$/);
+    if (!m) return null;
+    return {
+      type: m[1], area: m[2],
+      sequence_number: parseInt(m[3], 10),
+      year: parseInt(m[4], 10),
+      revision: m[5] !== undefined ? parseInt(m[5], 10) : null,
+      code: raw.trim(),
+    };
+  };
+
+  const parseIsoDate = (raw) => {
+    if (!raw) return null;
+    const parts = raw.split('/');
+    if (parts.length === 3) {
+      const [d, mo, y] = parts;
+      const fullY = y.length === 2 ? `20${y}` : y;
+      return `${fullY}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}`;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    return null;
+  };
+
+  const handleFile = async (f) => {
+    if (!f) return;
+    setFile(f);
+    setParsing(true);
+    setPreview([]); setResult(null); setUnresolvedNames([]); setUserMappings({});
+    try {
+      const buf = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload  = () => res(r.result);
+        r.onerror = rej;
+        r.readAsArrayBuffer(f);
+      });
+      const { value: html } = await mammoth.convertToHtml({ arrayBuffer: buf });
+      if (!html) { toast('Não foi possível ler o arquivo .docx.', 'error'); setParsing(false); return; }
+
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const rows = [];
+
+      doc.querySelectorAll('table').forEach(table => {
+        const trs = [...table.querySelectorAll('tr')];
+        if (trs.length < 2) return;
+
+        // Detect column indices from header row
+        const headerCells = [...trs[0].querySelectorAll('th, td')]
+          .map(c => _normName(c.textContent));
+
+        const colIdx = {
+          code:        headerCells.findIndex(h => /^cod|^n[°º]/.test(h) || h.includes('codigo') || h.includes('documento')),
+          responsible: headerCells.findIndex(h => /respons/.test(h)),
+          date:        headerCells.findIndex(h => h === 'data' || h.startsWith('data ')),
+          subject:     headerCells.findIndex(h => /assunto|titulo|descri/.test(h)),
+          plant:       headerCells.findIndex(h => /usina|planta/.test(h)),
+          status:      headerCells.findIndex(h => /status|situac/.test(h)),
+        };
+
+        // Fallback to positional mapping if headers not found
+        const useHeaders = Object.values(colIdx).some(v => v >= 0);
+
+        trs.forEach((tr, ti) => {
+          if (ti === 0) return; // skip header
+          const cells = [...tr.querySelectorAll('td')].map(td => td.textContent.trim());
+          if (cells.length < 2) return;
+
+          const get = (key, fallback) => {
+            const idx = colIdx[key];
+            return (useHeaders && idx >= 0 && cells[idx]) ? cells[idx] : (cells[fallback] || '');
+          };
+
+          // Find code — try detected column first, then scan all cells
+          let codeRaw = get('code', 0);
+          let parsed  = parseCode(codeRaw);
+          if (!parsed) {
+            for (const c of cells) { parsed = parseCode(c); if (parsed) { codeRaw = c; break; } }
+          }
+          if (!parsed) return;
+
+          const responsible = get('responsible', 1);
+          const rawDate     = get('date', 2);
+          const subject     = get('subject', 3);
+          const plant       = get('plant', -1);
+          const statusRaw   = get('status', -1).toLowerCase();
+
+          let status = 'Em elaboração';
+          if (/publicad/.test(statusRaw))           status = 'Publicado';
+          else if (/aprova/.test(statusRaw))         status = 'Para aprovação';
+          else if (/cancelad/.test(statusRaw))       status = 'Cancelado';
+
+          rows.push({
+            ...parsed,
+            _originalResponsible: responsible,
+            responsible,
+            date: parseIsoDate(rawDate) || new Date().toISOString().slice(0, 10),
+            subject,
+            plant: plant || null,
+            status,
+          });
+        });
+      });
+
+      if (rows.length === 0) { toast('Nenhuma linha válida encontrada no documento.', 'error'); setParsing(false); return; }
+
+      // Resolve responsible names against system users
+      const resolved = rows.map(row => {
+        const u = _resolveUser(row._originalResponsible, allUsers || []);
+        return { ...row, _resolved: !!u, responsible: u ? u.name : row._originalResponsible };
+      });
+
+      const unresolved = [...new Set(resolved.filter(r => !r._resolved && r._originalResponsible).map(r => r._originalResponsible))];
+      setPreview(resolved);
+      setUnresolvedNames(unresolved);
+    } catch (err) {
+      console.error(err);
+      toast('Erro ao processar o arquivo.', 'error');
+    } finally { setParsing(false); }
+  };
+
+  const handleImport = async () => {
+    if (preview.length === 0) return;
+    setImporting(true);
+    try {
+      const documents = preview.map(r => {
+        let { responsible } = r;
+        if (!r._resolved && userMappings[r._originalResponsible]) {
+          const uid = userMappings[r._originalResponsible];
+          const u = (allUsers || []).find(x => x.id === uid);
+          if (u) responsible = u.name;
+        }
+        return {
+          type: r.type, area: r.area, sequence_number: r.sequence_number,
+          year: r.year, revision: r.revision, code: r.code,
+          plant: r.plant || null, responsible, date: r.date,
+          subject: r.subject, status: r.status,
+        };
+      });
+      const res = await api.post('/documents/import-bulk', { documents });
+      setResult(res.data);
+      toast(`Importação concluída: ${res.data.created} criados, ${res.data.updated} atualizados.`, 'success');
+      onImported();
+    } catch (err) {
+      toast(err.response?.data?.error || 'Erro ao importar.', 'error');
+    } finally { setImporting(false); }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 780, width: '95vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header" style={{ flexShrink: 0 }}>
+          <span className="modal-title">📥 Importar Numeração (.docx)</span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.7)', fontSize: '1.1rem' }}>✕</button>
+        </div>
+        <div className="modal-body" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+          {/* Instruções */}
+          <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 8, padding: '10px 14px', fontSize: '0.8rem', color: '#1D4ED8', lineHeight: 1.6 }}>
+            ℹ️ Selecione o arquivo <strong>NUMERAÇÃO DE DOCUMENTOS .docx</strong>. Colunas detectadas automaticamente por cabeçalho. Responsáveis são correlacionados com os usuários do sistema.
+          </div>
+
+          {/* Drop zone */}
+          {!file && (
+            <div
+              onClick={() => inputRef.current?.click()}
+              style={{ border: '2px dashed #CBD5E1', borderRadius: 10, padding: '32px 20px', textAlign: 'center', cursor: 'pointer', color: '#94A3B8', transition: 'border-color 0.15s' }}
+              onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = '#0066B3'; }}
+              onDragLeave={e => { e.currentTarget.style.borderColor = '#CBD5E1'; }}
+              onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = '#CBD5E1'; handleFile(e.dataTransfer.files[0]); }}
+            >
+              <div style={{ fontSize: '2rem', marginBottom: 8 }}>📄</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#475569' }}>Clique ou arraste o arquivo .docx aqui</div>
+              <div style={{ fontSize: '0.75rem', marginTop: 4 }}>Apenas arquivos .docx são suportados</div>
+              <input ref={inputRef} type="file" accept=".docx" style={{ display: 'none' }} onChange={e => handleFile(e.target.files[0])}/>
+            </div>
+          )}
+
+          {/* Parsing */}
+          {parsing && (
+            <div style={{ textAlign: 'center', padding: '24px 0', color: '#64748B' }}>
+              <div className="spinner" style={{ margin: '0 auto 10px' }}/> Processando arquivo...
+            </div>
+          )}
+
+          {/* Unresolved users — seleção manual */}
+          {preview.length > 0 && !result && unresolvedNames.length > 0 && (
+            <div>
+              <div style={{ background: '#FEF3C7', border: '1px solid #F59E0B', borderRadius: 8, padding: '10px 14px', marginBottom: 10 }}>
+                <div style={{ fontSize: '0.82rem', color: '#92400E', fontWeight: 700 }}>
+                  ⚠️ {unresolvedNames.length} responsável(is) não encontrado(s) — selecione manualmente:
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {unresolvedNames.map(name => (
+                  <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#FFFBEB', borderRadius: 8, border: '1px solid #FDE68A' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#92400E' }}>{name}</span>
+                      <span style={{ fontSize: '0.68rem', color: '#B45309', marginLeft: 6 }}>
+                        ({preview.filter(r => r._originalResponsible === name).length} doc{preview.filter(r => r._originalResponsible === name).length !== 1 ? 's' : ''})
+                      </span>
+                    </div>
+                    <select
+                      value={userMappings[name] || ''}
+                      onChange={e => setUserMappings(prev => ({ ...prev, [name]: e.target.value ? parseInt(e.target.value) : null }))}
+                      style={{ padding: '6px 10px', border: '1.5px solid #E2E8F0', borderRadius: 6, fontSize: '0.8rem', fontFamily: 'var(--font-body)', color: '#1E293B', background: '#fff', flexShrink: 0, minWidth: 200 }}
+                    >
+                      <option value="">— Não associar —</option>
+                      {(allUsers || []).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Preview table */}
+          {preview.length > 0 && !result && (
+            <div>
+              <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748B', marginBottom: 8 }}>
+                {preview.length} registros encontrados —
+                <span style={{ color: '#10B981', marginLeft: 6 }}>✓ {preview.filter(r => r._resolved).length} correlacionados</span>
+                {unresolvedNames.length > 0 && <span style={{ color: '#F59E0B', marginLeft: 6 }}>⚠ {unresolvedNames.length} sem correlação</span>}
+              </div>
+              <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: 8, maxHeight: 260, overflowY: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                  <thead>
+                    <tr style={{ background: '#001F5B', position: 'sticky', top: 0 }}>
+                      {['Código', 'Responsável', 'Data', 'Assunto', 'Status'].map(h => (
+                        <th key={h} style={{ padding: '8px 10px', textAlign: 'left', color: '#fff', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.map((r, i) => (
+                      <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#F8FAFC', borderBottom: '1px solid #F1F5F9' }}>
+                        <td style={{ padding: '7px 10px', fontFamily: 'monospace', fontWeight: 700, color: '#001F5B', whiteSpace: 'nowrap' }}>{r.code}</td>
+                        <td style={{ padding: '7px 10px', color: r._resolved ? '#065F46' : '#92400E' }}>
+                          {r.responsible || '—'}
+                          {r._resolved && <span style={{ marginLeft: 4, fontSize: '0.65rem', color: '#10B981' }}>✓</span>}
+                        </td>
+                        <td style={{ padding: '7px 10px', whiteSpace: 'nowrap' }}>{r.date ? new Date(r.date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</td>
+                        <td style={{ padding: '7px 10px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.subject}</td>
+                        <td style={{ padding: '7px 10px', whiteSpace: 'nowrap', fontSize: '0.7rem', color: '#64748B' }}>{r.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Resultado */}
+          {result && (
+            <div style={{ background: '#D1FAE5', border: '1px solid #6EE7B7', borderRadius: 8, padding: '14px 16px' }}>
+              <div style={{ fontWeight: 700, color: '#065F46', marginBottom: 6 }}>✅ Importação concluída</div>
+              <div style={{ fontSize: '0.82rem', color: '#064E3B', display: 'flex', gap: 16 }}>
+                <span>✨ <strong>{result.created}</strong> criados</span>
+                <span>🔄 <strong>{result.updated}</strong> atualizados</span>
+                {result.errors > 0 && <span style={{ color: '#991B1B' }}>⚠️ <strong>{result.errors}</strong> erros</span>}
+              </div>
+            </div>
+          )}
+
+        </div>
+        <div className="modal-footer" style={{ flexShrink: 0 }}>
+          <button className="btn btn-secondary" onClick={onClose}>Fechar</button>
+          {preview.length > 0 && !result && (
+            <button className="btn btn-primary" onClick={handleImport} disabled={importing}>
+              {importing ? 'Importando...' : `📥 Importar ${preview.length} documentos`}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main Page ──────────────────────────────────────────────────────────────── */
 export default function DocumentsPage() {
   const { user }    = useAuth();
@@ -660,6 +993,7 @@ export default function DocumentsPage() {
   const [plantFilter, setPlantFilter]   = useState('');
   const [expandedGroup, setExpandedGroup] = useState(null); // base_code
   const [expandedDoc, setExpandedDoc]   = useState(null);   // doc.id
+  const [importDocxModal, setImportDocxModal] = useState(false);
 
   // Column filters
   const [colFilterCode, setColFilterCode] = useState([]);
@@ -725,7 +1059,7 @@ export default function DocumentsPage() {
     try { const r = await api.get(`/documents/next-sequence?year=${CURRENT_YEAR_SHORT}`); setNextSeq(r.data.next); } catch {}
   };
 
-  const exportHTML = () => {
+  const exportHTML = useCallback(() => {
     const html = generateHTMLReport(docs, stats, CURRENT_YEAR);
     const blob = new Blob([html], { type:'text/html;charset=utf-8' });
     const a = document.createElement('a');
@@ -733,9 +1067,9 @@ export default function DocumentsPage() {
     a.download = `CTG_Documentacao_${CURRENT_YEAR}.html`;
     a.click(); URL.revokeObjectURL(a.href);
     toast('Relatório HTML exportado!', 'success');
-  };
+  }, [docs, stats, toast]);
 
-  const exportExcel = async () => {
+  const exportExcel = useCallback(async () => {
     try {
       const token = localStorage.getItem('ctg_token');
       const base = import.meta.env.VITE_API_URL || '/api';
@@ -756,7 +1090,19 @@ export default function DocumentsPage() {
       console.error(err);
       toast('Erro ao exportar Excel.', 'error');
     }
-  };
+  }, [yearFilter, toast]);
+
+  useEffect(() => {
+    window._exportDocumentsExcel = exportExcel;
+    window._exportDocumentsHTML  = exportHTML;
+    const onImport = () => setImportDocxModal(true);
+    window.addEventListener('import-documents-docx', onImport);
+    return () => {
+      delete window._exportDocumentsExcel;
+      delete window._exportDocumentsHTML;
+      window.removeEventListener('import-documents-docx', onImport);
+    };
+  }, [exportExcel, exportHTML]);
 
   const openNew  = () => { fetchNextSeq(); setDocModal({ open:true, doc:null }); };
   const openEdit = (doc) => setDocModal({ open:true, doc });
@@ -981,22 +1327,10 @@ export default function DocumentsPage() {
           <Div/>
           <span style={{ fontSize:'0.72rem', color:'#94A3B8', whiteSpace:'nowrap', flexShrink:0 }}>{groups.length} grupos / {filtered.length} docs</span>
         </div>
-
-        <button onClick={exportExcel} style={{
-          display:'flex', alignItems:'center', gap:6, padding:'8px 14px',
-          border:'1.5px solid #15803D', borderRadius:8, background:'#F0FDF4',
-          fontSize:'0.8rem', fontWeight:600, cursor:'pointer', color:'#15803D', flexShrink:0,
-        }}>📥 Exportar Excel</button>
-
-        <button onClick={exportHTML} style={{
-          display:'flex', alignItems:'center', gap:6, padding:'8px 14px',
-          border:'1.5px solid #CBD5E1', borderRadius:8, background:'#fff',
-          fontSize:'0.8rem', fontWeight:600, cursor:'pointer', color:'#475569', flexShrink:0,
-        }}>📊 Exportar HTML</button>
       </div>
 
       {/* Tabela agrupada */}
-      <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:10, overflow:'hidden' }}>
+      <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:10, overflow:'hidden', maxHeight:'calc(100vh - 460px)', minHeight:200, overflowY:'auto' }}>
         {loading ? (
           <div style={{ padding:48, textAlign:'center', color:'#94A3B8' }}>
             <div className="spinner" style={{ margin:'0 auto 12px' }}/>Carregando documentos...
@@ -1011,7 +1345,7 @@ export default function DocumentsPage() {
           </div>
         ) : (
           <table style={{ width:'100%', borderCollapse:'collapse' }}>
-            <thead>
+            <thead style={{ position:'sticky', top:0, zIndex:2 }}>
               <tr style={{ background:'#001F5B' }}>
                 <th style={TH}>
                   <div style={{ display:'flex', alignItems:'center' }}>
@@ -1234,6 +1568,12 @@ export default function DocumentsPage() {
         doc={revModal.doc}
         allUsers={allUsers}
       />
+      <ImportDocxModal
+        open={importDocxModal}
+        onClose={() => setImportDocxModal(false)}
+        onImported={fetchDocs}
+        allUsers={allUsers}
+      />
     </div>
   );
 }
@@ -1243,7 +1583,7 @@ function DocDetail({ doc, isAuthor }) {
   return (
     <div style={{ display:'flex', gap:20, flexWrap:'wrap' }}>
       <div style={{ flex:1, minWidth:200 }}>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))', gap:8 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))', gap:'10px 24px' }}>
           {doc.plant    && <InfoItem label="Usina"    value={doc.plant}/>}
           <InfoItem label="Tipo" value={`${doc.type} — ${TYPE_META[doc.type]?.label||''}`}/>
           <InfoItem label="Área" value={`${doc.area} — ${AREAS.find(a=>a.value===doc.area)?.label||doc.area}`}/>

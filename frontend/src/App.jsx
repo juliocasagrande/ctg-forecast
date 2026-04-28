@@ -23,6 +23,7 @@ import IACsPage from './pages/IACsPage.jsx';
 import ProjectsTrackingPage from './pages/ProjectsTrackingPage.jsx';
 import AdminPanel from './components/admin/AdminPanel.jsx';
 import AlertBell from './components/ui/AlertBell.jsx';
+import ChatBadge from './components/ui/ChatBadge.jsx';
 import api from './utils/api.js';
 
 // ── Error Boundary ──────────────────────────────────────────────────────────
@@ -899,6 +900,60 @@ export default function App() {
                 );
               })()}
 
+              {/* ── Botões da página de Documentos ── */}
+              {location.pathname === '/documents' && (() => {
+                const canManage = ['admin', 'gestor', 'coordenador', 'planejador'].includes(user?.role) ||
+                  user?.email === 'julio.casagrande@ctgbr.com.br';
+                return (
+                  <>
+                    {canManage && (
+                      <button onClick={() => {
+                        window.dispatchEvent(new CustomEvent('import-documents-docx'));
+                      }} style={{
+                        display: 'flex', alignItems: 'center', gap: 7,
+                        padding: '8px 14px', borderRadius: 10, border: '1.5px solid #0b5cab',
+                        background: '#fff',
+                        color: '#0b5cab', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                        marginRight: 8, whiteSpace: 'nowrap',
+                      }}>
+                        <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                          <path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"/>
+                        </svg>
+                        Importar
+                      </button>
+                    )}
+                    <button onClick={() => {
+                      window._exportDocumentsExcel?.();
+                    }} style={{
+                      display: 'flex', alignItems: 'center', gap: 7,
+                      padding: '8px 14px', borderRadius: 10, border: '1.5px solid #10B981',
+                      background: '#fff',
+                      color: '#059669', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                      marginRight: 8, whiteSpace: 'nowrap',
+                    }}>
+                      <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                        <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm7-13a1 1 0 011 1v4.586l1.707-1.707a1 1 0 111.414 1.414l-3.414 3.414a1 1 0 01-1.414 0l-3.414-3.414a1 1 0 111.414-1.414L9 9.586V5a1 1 0 011-1z" clipRule="evenodd"/>
+                      </svg>
+                      Exportar Excel
+                    </button>
+                    <button onClick={() => {
+                      window._exportDocumentsHTML?.();
+                    }} style={{
+                      display: 'flex', alignItems: 'center', gap: 7,
+                      padding: '8px 14px', borderRadius: 10, border: '1.5px solid #CBD5E1',
+                      background: '#fff',
+                      color: '#475569', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                      marginRight: 8, whiteSpace: 'nowrap',
+                    }}>
+                      <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                        <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd"/>
+                      </svg>
+                      Exportar HTML
+                    </button>
+                  </>
+                );
+              })()}
+
               <AlertBell />
 
               {/* ── Pill de filtros — sempre renderizado para altura consistente ── */}
@@ -1104,6 +1159,9 @@ export default function App() {
         open={planjExportModal}
         onClose={() => setPlanjExportModal(false)}
       />
+
+      {/* Chat assistant badge — visible in all authenticated pages */}
+      {!isAdmin && <ChatBadge />}
 
       {/* Mobile bottom navigation — hidden on desktop via CSS */}
       {!isAdmin && (

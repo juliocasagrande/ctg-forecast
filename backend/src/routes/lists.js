@@ -582,6 +582,10 @@ router.post('/projects-tracking/import', upload.single('file'), async (req, res)
       // This allows multiple processes with the same pp_contrato (temporary codes)
       const uniqueKey = pp + '|' + (projetoAtividade ? projetoAtividade.substring(0, 40) : '');
 
+      const gestorRaw = getCell(colMap.gestor) || '';
+      const gestorUserId = resolveUserId(gestorRaw, userNameMap);
+      const gestorName = resolveUserName(gestorRaw, userNameMap, usersResult.rows) || truncate(gestorRaw, 120);
+
       const data = {
         area: truncate(getCell(colMap.area) || 'Elétrica', 30),
         uhe: truncate(getCell(colMap.uhe) || 'Geral', 60),
@@ -589,8 +593,8 @@ router.post('/projects-tracking/import', upload.single('file'), async (req, res)
         projeto_atividade: projetoAtividade,
         projeto: truncate(getCell(colMap.projeto), 200),
         status: truncate(getCell(colMap.status) || 'Em andamento', 50),
-        gestor: truncate(getCell(colMap.gestor), 120),
-        gestor_user_id: resolveUserId(getCell(colMap.gestor) || '', userNameMap),
+        gestor: gestorName,
+        gestor_user_id: gestorUserId,
         resumo: getCell(colMap.resumo),
         empresa: getCell(colMap.empresa),
         vencimento: parseDate(getCell(colMap.vencimento)),
@@ -694,6 +698,12 @@ function resolveUserId(spreadsheetName, userNameMap) {
   const alias = PERSON_ALIASES[norm];
   if (alias && userNameMap[alias] != null) return userNameMap[alias];
   return null;
+}
+
+function resolveUserName(spreadsheetName, userNameMap, users) {
+  const userId = resolveUserId(spreadsheetName, userNameMap);
+  if (!userId) return null;
+  return users.find(u => u.id === userId)?.name || null;
 }
 
 router.post('/iacs/import', upload.single('file'), async (req, res) => {
@@ -886,6 +896,10 @@ router.post('/iacs/import', upload.single('file'), async (req, res) => {
       // Generate unique_key: iac_code + first 40 chars of project
       const uniqueKey = iacCode + '|' + (project ? project.substring(0, 40) : '');
 
+      const tlRaw = getCell(colMap.team_leader) || '';
+      const tlUserId = resolveUserId(tlRaw, userNameMap);
+      const tlName = resolveUserName(tlRaw, userNameMap, usersResult.rows) || truncate(tlRaw, 120);
+
       const data = {
         iac_code: truncate(iacCode, 50),
         type_line: truncate(getCell(colMap.type_line) || 'New', 50),
@@ -897,8 +911,8 @@ router.post('/iacs/import', upload.single('file'), async (req, res) => {
         project: project,
         comments: getCell(colMap.comments),
         requester: truncate(getCell(colMap.requester), 120),
-        team_leader: truncate(getCell(colMap.team_leader), 120),
-        team_leader_user_id: resolveUserId(getCell(colMap.team_leader) || '', userNameMap),
+        team_leader: tlName,
+        team_leader_user_id: tlUserId,
         chinese_work_staff: truncate(getCell(colMap.chinese_work_staff), 120),
         status_current: truncate(getCell(colMap.status_current) || '0 - Not started yet', 50),
         apresentado_work_team: truncate(getCell(colMap.apresentado_work_team) || 'Não', 10),
