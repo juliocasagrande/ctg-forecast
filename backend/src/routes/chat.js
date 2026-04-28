@@ -1,111 +1,312 @@
 import { Router } from 'express';
+import { pool } from '../db/schema.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
 router.use(requireAuth);
 
-const SYSTEM_PROMPT = `Você é a Assistente CTG, assistente virtual do sistema CTG.Engenharia da CTG Brasil — empresa de geração de energia elétrica. Responda sempre em português brasileiro, de forma concisa e objetiva. Se não souber a resposta, diga claramente.
+const SUPERIOR_ROLES = ['gestor', 'planejador', 'coordenador', 'admin'];
+
+// ─── Sistema de rotação de chaves Groq ───────────────────────────────
+const apiKeys = process.env.GROQ_API_KEYS 
+  ? process.env.GROQ_API_KEYS.split(',').map(k => k.trim()).filter(Boolean)
+  : process.env.GROQ_API_KEY 
+    ? [process.env.GROQ_API_KEY]
+    : [];
+let currentKeyIndex = 0;
+
+function getNextApiKey() {
+  if (apiKeys.length === 0) return null;
+  const key = apiKeys[currentKeyIndex];
+  currentKeyIndex = (currentKeyIndex + 1) % apiKeys.length;
+  return key;
+}
+
+async function fetchWithKeyRotation(url, options) {
+  let lastError = null;
+  
+  // Tentar todas as chaves disponíveis
+  for (let triedKeys = 0; triedKeys < apiKeys.length; triedKeys++) {
+    const key = getNextApiKey();
+    if (!key) throw new Error('Nenhuma chave de API configurada');
+    
+    const opts = {
+      ...options,
+      headers: {
+        ...options.headers,
+        'Authorization': `Bearer ${key}`,
+      },
+    };
+    
+    try {
+      const res = await fetch(url, opts);
+      if (res.status === 429) {
+        // Rate limit atingido, tenta próxima chave
+        lastError = { status: 429, message: 'Rate limit' };
+        continue;
+      }
+      return res;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  
+  // Todas as chaves falharam
+  const err = new Error('Todas as chaves de API atingiram o limite ou falharam');
+  err.status = lastError?.status || 500;
+  throw err;
+}
+
+// ─── Helpers: buscar dados respeitando permissões ───────────────────────────────
+
+// Busca projetos que o usuário tem permissão para ver
+async function getAllowedProjects(userId, role, area) {
+  // Superiores veem todos os projetos
+  if (['admin', 'gestor', 'planejador'].includes(role)) {
+    const r = await pool.query(`
+      SELECT p.id, p.code, p.name, p.plants, p.si_value, p.pool_value
+      FROM projects p
+      ORDER BY p.code
+    `);
+    return r.rows;
+  }
+
+  // Coordenador: projetos com engenheiros da sua área
+  if (role === 'coordenador') {
+    const r = await pool.query(`
+      SELECT DISTINCT p.id, p.code, p.name, p.plants, p.si_value, p.pool_value
+      FROM projects p
+      INNER JOIN project_assignments pa ON pa.project_id = p.id
+      INNER JOIN users u ON u.id = pa.user_id AND u.role = 'engenheiro' AND u.area = $1
+      ORDER BY p.code
+    `, [area || '']);
+    return r.rows;
+  }
+
+  // Engenheiro: projetos atribuídos + delegados
+  const r = await pool.query(`
+    SELECT DISTINCT p.id, p.code, p.name, p.plants, p.si_value, p.pool_value
+    FROM projects p
+    LEFT JOIN project_assignments pa ON pa.project_id = p.id AND pa.user_id = $1
+    LEFT JOIN access_delegations d ON d.delegate_id = $1 AND d.active = true AND CURRENT_DATE BETWEEN d.start_date AND d.end_date
+    LEFT JOIN project_assignments pa2 ON pa2.project_id = p.id AND pa2.user_id = d.delegator_id
+    WHERE pa.user_id = $1 OR pa2.user_id IS NOT NULL
+    ORDER BY p.code
+  `, [userId]);
+  return r.rows;
+}
+
+// Helper: formatar como Real brasileiro (R$ XXX.XXX,XX)
+function formatBRL(value) {
+  const num = parseFloat(value) || 0;
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(num);
+}
+
+// Busca forecasts reais agrupados por projeto e ano
+async function getProjectsForecast(projectIds) {
+  if (!projectIds.length) return {};
+  const r = await pool.query(`
+    SELECT project_id, year, month, type, COALESCE(value, 0) as value
+    FROM forecast_entries
+    WHERE project_id = ANY($1) AND type = 'Forecast'
+    ORDER BY project_id, year, month
+  `, [projectIds]);
+  
+  // Agrupar por projeto e ano
+  const forecast = {};
+  for (const row of r.rows) {
+    if (!forecast[row.project_id]) forecast[row.project_id] = {};
+    if (!forecast[row.project_id][row.year]) forecast[row.project_id][row.year] = { total: 0, byMonth: {} };
+    const val = parseFloat(row.value) || 0;
+    forecast[row.project_id][row.year].total += val;
+    if (!forecast[row.project_id][row.year].byMonth[row.month]) forecast[row.project_id][row.year].byMonth[row.month] = 0;
+    forecast[row.project_id][row.year].byMonth[row.month] += val;
+  }
+  return forecast;
+}
+
+// Busca dados de tracking (SI, Contrato, Realizado, Saldo) dos projetos
+// Vincula pelo código do projeto (projects.code = lists_projects_tracking.pp_contrato)
+async function getProjectsTrackingInfo(projectCodes) {
+  if (!projectCodes.length) return {};
+  const r = await pool.query(`
+    SELECT 
+      p.id as project_id,
+      p.code as project_code,
+      COALESCE(t.valor_si, '0') as valor_si,
+      COALESCE(t.realizado_si, '0') as realizado_si,
+      COALESCE(t.saldo_si, '0') as saldo_si,
+      COALESCE(t.valor_contrato, '0') as valor_contrato,
+      COALESCE(t.realizado_contrato, '0') as realizado_contrato,
+      COALESCE(t.saldo_contrato, '0') as saldo_contrato
+    FROM projects p
+    LEFT JOIN lists_projects_tracking t ON t.pp_contrato = p.code
+    WHERE p.code = ANY($1::text[])
+  `, [projectCodes]);
+  
+  const tracking = {};
+  for (const row of r.rows) {
+    const valorSI = parseFloat(row.valor_si) || 0;
+    const realizadoSI = parseFloat(row.realizado_si) || 0;
+    const saldoSI = parseFloat(row.saldo_si) || 0;
+    const valorContrato = parseFloat(row.valor_contrato) || 0;
+    const realizadoContrato = parseFloat(row.realizado_contrato) || 0;
+    const saldoContrato = parseFloat(row.saldo_contrato) || 0;
+    
+    const pctRealizadoSI = valorSI > 0 ? ((realizadoSI / valorSI) * 100).toFixed(1) : '0.0';
+    const pctSaldoSI = valorSI > 0 ? ((saldoSI / valorSI) * 100).toFixed(1) : '0.0';
+    const pctRealizadoContrato = valorContrato > 0 ? ((realizadoContrato / valorContrato) * 100).toFixed(1) : '0.0';
+    const pctSaldoContrato = valorContrato > 0 ? ((saldoContrato / valorContrato) * 100).toFixed(1) : '0.0';
+    
+    tracking[row.project_id] = {
+      si: { total: valorSI, realizado: realizadoSI, saldo: saldoSI, pctRealizado: pctRealizadoSI, pctSaldo: pctSaldoSI },
+      contrato: { total: valorContrato, realizado: realizadoContrato, saldo: saldoContrato, pctRealizado: pctRealizadoContrato, pctSaldo: pctSaldoContrato }
+    };
+  }
+  return tracking;
+}
+
+// Busca resumo dos projetos do usuário (para contexto do chat)
+async function getProjectsSummary(userId, role, area) {
+  const projects = await getAllowedProjects(userId, role, area);
+  if (projects.length === 0) return 'Nenhum projeto atribuído no momento.';
+
+  // Buscar forecasts reais
+  const projectIds = projects.map(p => p.id);
+  const forecasts = await getProjectsForecast(projectIds);
+
+  const lines = projects.map(p => {
+    const plants = Array.isArray(p.plants) ? p.plants.join(', ') : (p.plants || '—');
+    let line = `• ${p.code} — ${p.name}\n  Usina(s): ${plants}`;
+    
+    // SI e Pool
+    if (p.si_value || p.pool_value) {
+      line += `\n  SI: ${formatBRL(p.si_value)} | Pool: ${formatBRL(p.pool_value)}`;
+    }
+    
+    // Forecasts por ano
+    if (forecasts[p.id]) {
+      const years = Object.keys(forecasts[p.id]).sort();
+      line += '\n  📅 Forecasts:';
+      years.forEach(year => {
+        const yData = forecasts[p.id][year];
+        const months = Object.keys(yData.byMonth).sort((a,b) => a-b);
+        const monthsStr = months.map(m => `M${m}: ${formatBRL(yData.byMonth[m])}`).join(', ');
+        line += `\n    ${year}: ${formatBRL(yData.total)} (${monthsStr})`;
+      });
+    }
+    
+    return line;
+  });
+  return lines.join('\n\n');
+}
+
+// ─── SYSTEM_PROMPT restrito ─────────────────────────────────────────────────────
+const SYSTEM_PROMPT = `Você é a Assistente CTG, assistente virtual **apenas informativo** do sistema CTG.Engenharia da CTG Brasil.
+
+## REGRAS OBRIGATÓRIAS
+1. **ESCOPO RESTRITO**: Você SÓ pode fornecer informações sobre:
+   - O sistema CTG.Engenharia (funcionalidades, módulos, como usar)
+   - Projetos que o usuário tem permissão para acessar
+   - Dados e relatórios desse projetos
+2. **FORA DO ESCOPO**: Se perguntarem sobre outros assuntos (receitas, notícias, cultura geral, outras empresas, etc.), responda SEMPRE:
+   "Desculpe, sou um assistente exclusivo para informações sobre o sistema CTG.Engenharia e seus projetos. Não posso fornecer informações sobre outros assuntos."
+3. **APENAS INFORMATIVO**: Você NUNCA deve:
+   - Executar ações (criar, editar, excluir projetos ou dados)
+   - Sugerir que pode executar ações
+   - Pedir confirmação para executar ações
+   - Apenas informe e explique como o usuário pode fazer algo.
+4. **PERMISSÕES**: Você só verá dados que o usuário tem permissão para ver. Nunca invente dados que não estejam no contexto fornecido.
+5. **IDIOMA**: Responda sempre em português brasileiro, de forma concisa, objetiva e profissional.
+6. **FORMATAÇÃO**: Use Markdown para formatar respostas. Mantenha a formatação limpa e legível.
+7. **PROIBIÇÃO DE CÁLCULOS INVENTADOS**: NUNCA invente, estime ou calcule valores que não estejam explicitamente fornecidos no contexto. Se o contexto diz "Forecast: 2026: Total 5000 (M1: 500, M2: 500, ...)", use APENAS esses valores. NUNCA multiplique valores mensais por 12 ou qualquer outro número. Se não houver dados de forecast para um ano específico, diga "Dados de forecast não disponíveis para este ano" em vez de inventar.
 
 ## Sistema CTG.Engenharia — Visão Geral
-Plataforma web de gestão de engenharia de manutenção que integra: forecast financeiro de projetos, controle de IACs (processos de contratação), acompanhamento de contratos, gestão de documentos técnicos, controle de férias e relatórios gerenciais.
+Plataforma web de gestão de engenharia de manutenção que integra: forecast financeiro de projetos, controle de IACs, acompanhamento de contratos, gestão de documentos técnicos, controle de férias e relatórios.
 
-## Usinas Gerenciadas
+## Usinas
 PCH Palmeiras, PCH Retiro, UHE Canoas 1, UHE Canoas 2, UHE Capivara, UHE Chavantes, UHE Garibaldi, UHE Ilha Solteira, UHE Jupiá, UHE Jurumirim, UHE Rosana, UHE Salto, UHE Salto Grande, UHE Taquaruçu.
 
 ## Perfis de Acesso
-- **Admin**: Acesso completo, gerencia usuários
-- **Planejador**: Gerencia projetos, configura o sistema
-- **Coordenador**: Visualiza dados da equipe e projetos da área
-- **Gerente/Gestor**: Visualiza dados consolidados por área e usina
-- **Engenheiro**: Visualiza apenas seus próprios projetos
+- **Admin/Planejador**: Acesso completo a todos os projetos
+- **Coordenador**: Projetos da sua área (engenheiros subordinados)
+- **Gestor**: Dados consolidados por área e usina
+- **Engenheiro**: Apenas seus próprios projetos atribuídos
 
-## Módulos do Sistema
-
-### Dashboard (Página Inicial)
-KPIs: Budget, Forecast, Realizado, SI Total. Gráficos: Curva S (evolução mensal com budget/forecast/meta/pool), gráfico contextual por perfil (gerente→usina, coordenador→engenheiro, engenheiro→projeto). Tabela de projetos com % execução. Filtros por período (ano inicial/final), usina e projeto.
-
+## Módulos Principais
 ### Projetos
-Três visualizações: lista de projetos, por usina, por engenheiro. Clique em um projeto para editar. Abas do projeto:
-- **Visão Geral**: informações básicas, status, engenheiros, usinas
-- **Forecast**: Wizard de previsão mensal, importar/exportar Excel, gráficos
-- **Mapeamento SAP**: integração SAP, códigos Budget/Forecast/Actual/Meta/Pool
-- **Atividades**: registro e histórico de atividades, comentários
-- **Chat**: comunicação integrada da equipe do projeto
-- **Delegação**: permissões de acesso e responsabilidades
+Lista de projetos, visualização por usina/engenheiro. Abas: Visão Geral, Forecast (Wizard mensal), Mapeamento SAP, Atividades, Chat da equipe, Delegação.
+### Dashboard
+KPIs (Budget, Forecast, Realizado, SI), Curva S, gráficos contextuais por perfil.
+### Polos
+Visão consolidada: Polo → Usina → Projeto. Budget, Pool, Actual, Forecast.
+### IACs
+Investment Authorization Committee. Status (0-10), tipos (New, Transfer, Waiver), importação/exportação Excel.
+### Acompanhamento
+Contratos em andamento, valores, cronograma, importação/exportação, relatório HTML.
+### Documentos
+Tipos: ATA, CTA, RT, EP, ET, ROP, MC, ROG, RFH. Controle de revisões. Status: Em elaboração, Para aprovação, Publicado, Cancelado.
+### Férias
+Controle por área (Elétrica, Mecânica, Confiabilidade). Timeline, KPIs, tabelas.
 
-### Polos (Visão Consolidada)
-Estrutura hierárquica: Polo (Rio) → Usina → Projeto. Colunas: Budget, Pool, Actual, Forecast, ACT+Forecast, Variação Forecast. Clique nos níveis para expandir.
-
-### Controle de Férias
-Selecione ano e área (Elétrica, Mecânica, Confiabilidade). KPIs: total colaboradores, férias marcadas, períodos no ADP, total de dias. Timeline gráfica com barras por colaborador e linha do dia atual. Tabelas separadas: Coordenação & Gerência / por área. Três períodos por pessoa com datas, dias e status ADP.
-
-### IACs (Investment Authorization Committee — Instrução de Avaliação e Contratação)
-IACs documentam solicitações de investimento em equipamentos, serviços e obras.
-**Status**: 0-Not started yet, 1-IA and PDs, 2-Invitation letter, 3-Proposal received, 4-Clarification, 5-Negotiation, 6-ER/DM Review/Approval, 8-Draft Contract, 9-Contract signed, 91-Hired 2025, 10-Cancelado.
-**Tipos**: New, Transfer, Waiver, Hired 2025.
-**Campos principais**: código IAC, área, projeto, datas de abertura, quantidades (Priority/No Priority), status, prioridade, validade, continuidade, responsáveis (Solicitante, Team Leader, Chinese Work Staff, Organizador, Supervisor), equipe de avaliação, comentários.
-**Ações**: Novo IAC (gestores/coordenadores), editar, check-in, importar Excel, exportar Excel.
-Filtros: busca por código/projeto/responsável, status, prioridade, área, "Meus IACs".
-
-### Acompanhamento de Projetos (Projects Tracking)
-Controla contratos e projetos em andamento com valores e cronograma.
-**Status**: Em andamento, Em fase de encerramento, Encerrado, Paralisado, Capitalizado Parcialmente, Capitalizado Integralmente.
-**Campos**: área, usina, PP/Contrato, projeto/atividade, gestor, empresa/fornecedor, natureza (CAPEX/OPEX/Guarda-chuva), valor contrato, realizado, saldo, valor SI, realizado SI, saldo SI, vencimento, cronograma, aditivos, reajustes.
-**Ações**: novo, editar, check-in, importar Excel, exportar Excel, gerar relatório mensal HTML.
-
-### Controle de Documentos
-**Tipos**: ATA (Atas), CTA (Cartas), RT (Relatório Técnico), EP (Ensaios Preditivos), ET (Especificação Técnica), ROP (Rel. Ocorrências e Perturbações), MC (Memorial de Cálculo), ROG (Rel. Ocorrência Grave e Indisponibilidade), RFH (Relatório de Falha Humana).
-**Áreas**: ENG (Eng. de Manutenção), PRD (Produção), COP (Coordenação Operação).
-**Status**: Em elaboração, Para aprovação, Publicado, Cancelado.
-Código gerado automaticamente no formato: TIPO-ÁREA-NNN-AA[-RN]. Controle de revisões. Importação de planilha Word (.docx).
-
-### Feedback e Sugestões
-Qualquer usuário pode enviar sugestões ou reportar problemas. Administradores gerenciam a caixa de entrada.
-
-## Exportação e Relatórios
-Excel disponível em: Dashboard, Projetos, IACs, Acompanhamento de Projetos, Férias, Documentos. Relatório mensal HTML em Acompanhamento de Projetos. Botões de exportar ficam na barra de título de cada página.
-
-## Funcionalidades Gerais
-- **AlertBell**: sino no header com alertas de projetos/IACs não atualizados há muito tempo
-- **PWA**: sistema instalável como app, notifica quando há nova versão disponível
-- **Check-in**: em IACs e acompanhamento, registra que o usuário revisou o item
-- **Responsivo**: funciona em mobile com menu inferior e filtros em bottom sheet
-- **Forecast Wizard**: interface guiada para inserir previsões mensais projeto a projeto
-
-## Legenda de Cores
-Forecast: Budget=verde, Forecast=azul, Realizado=azul escuro, Meta=roxo, Pool=ciano.
-Status projetos: Em andamento=azul, Encerramento=amarelo, Encerrado=cinza, Paralisado=vermelho.
-IAC prioridade: Priority=amarelo, Non Priority=cinza, Hired=verde.
-
-## Dicas de Uso
-- Mantenha forecasts atualizados regularmente
-- Use filtros por coluna em páginas com muitos dados
-- Use check-in para controlar o que já foi revisado
-- O sistema alerta conflitos de férias na mesma área
-- Saldos negativos em acompanhamento são destacados em vermelho
-- Ao importar IACs ou projetos do Excel, nomes de responsáveis são correlacionados automaticamente com usuários do sistema`;
+## Funcionalidades
+- AlertBell: alertas de projetos/IACs desatualizados
+- PWA: instalável, notificações de versão
+- Check-in: registrar revisão de itens
+- Forecast Wizard: previsões mensais guiadas
+- Exportação Excel em todas as páginas
+- Importação Excel para IACs, Projetos e Documentos`;
 
 router.post('/', async (req, res) => {
-  const GROQ_API_KEY = process.env.GROQ_API_KEY;
-  if (!GROQ_API_KEY)
-    return res.status(503).json({ error: 'Chat não configurado. Adicione GROQ_API_KEY ao .env do servidor.' });
+  if (apiKeys.length === 0)
+    return res.status(503).json({ error: 'Chat não configurado. Adicione GROQ_API_KEY ou GROQ_API_KEYS ao .env do servidor.' });
 
   const { messages } = req.body;
   if (!Array.isArray(messages) || messages.length === 0)
     return res.status(400).json({ error: 'Mensagens inválidas' });
 
   try {
-    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    // Buscar dados que o usuário tem permissão para ver
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    const userArea = req.user.area;
+    const userName = req.user.name;
+
+    const [projectsSummary, projectsCount] = await Promise.all([
+      getProjectsSummary(userId, userRole, userArea),
+      pool.query('SELECT COUNT(*) FROM projects').then(r => parseInt(r.rows[0].count)),
+    ]);
+
+    // Montar contexto com dados reais
+    const userContext = `
+## DADOS DO USUÁRIO
+- Nome: ${userName}
+- Cargo: ${userRole}
+- Área: ${userArea || 'N/A'}
+
+## PROJETOS QUE VOCÊ PODE VER (${userRole === 'engenheiro' ? 'apenas seus projetos atribuídos' : userRole === 'coordenador' ? 'projetos da sua área' : 'todos os projetos'})
+Total de projetos no sistema: ${projectsCount}
+Seus projetos:
+${projectsSummary}
+
+## INSTRUÇÕES PARA RESPOSTA
+- Use APENAS os dados acima para responder sobre projetos.
+- Se perguntarem sobre um projeto específico, verifique se ele está na lista acima.
+- Se não estiver na lista, informe que o usuário não tem permissão para ver esse projeto.
+- Seja conciso e use os dados reais fornecidos.
+`.trim();
+
+    const groqRes = await fetchWithKeyRotation('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         model: 'llama-3.1-8b-instant',
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
-          ...messages.slice(-12).map(({ role, content }) => ({ role, content })),
+          { role: 'system', content: userContext },
+          ...messages.slice(-10).map(({ role, content }) => ({ role, content })),
         ],
         max_tokens: 1024,
         temperature: 0.7,
@@ -119,7 +320,8 @@ router.post('/', async (req, res) => {
     res.json({ content: data.choices[0].message.content });
   } catch (err) {
     console.error('[CHAT ERROR]', err.message);
-    res.status(500).json({ error: 'Erro ao processar mensagem' });
+    const status = err.status || 500;
+    res.status(status).json({ error: 'Erro ao processar mensagem' });
   }
 });
 

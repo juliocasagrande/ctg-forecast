@@ -1,13 +1,37 @@
 import { useState, useRef, useEffect } from 'react';
+import Markdown from 'react-markdown';
+import { useAuth } from '../../context/AuthContext.jsx';
 import api from '../../utils/api.js';
 
-const SUGGESTIONS = [
-  'Como usar o Forecast Wizard?',
-  'Tipos de documentos ENG',
-  'Status dos projetos',
-  'Como exportar para Excel?',
-  'Controle de férias',
-];
+function getSuggestions(role) {
+  const roleLower = (role || '').toLowerCase();
+  if (['admin', 'planejador'].includes(roleLower)) {
+    return [
+      'Todos os projetos ativos',
+      'Status geral dos projetos',
+      'Como exportar relatórios?',
+      'Gerenciar usuários',
+      'Controle de IACs',
+    ];
+  }
+  if (roleLower === 'coordenador') {
+    return [
+      'Projetos da minha equipe',
+      'Desempenho dos engenheiros',
+      'Relatórios da área',
+      'Como delegar acesso?',
+      'Status dos projetos',
+    ];
+  }
+  // Engenheiro e outros
+  return [
+    'Meus projetos atribuídos',
+    'Como atualizar meu forecast?',
+    'Status do meu projeto',
+    'Como usar o Forecast Wizard?',
+    'Minhas férias',
+  ];
+}
 
 const TYPING_DOTS = (
   <span style={{ display: 'inline-flex', gap: 3, padding: '0 4px' }}>
@@ -24,6 +48,8 @@ const TYPING_DOTS = (
 );
 
 export default function ChatBadge() {
+  const { user } = useAuth();
+  const SUGGESTIONS = getSuggestions(user?.role);
   const [open, setOpen]       = useState(false);
   const [messages, setMessages] = useState([]);
   const [input, setInput]     = useState('');
@@ -76,7 +102,7 @@ export default function ChatBadge() {
       {open && (
         <div style={{
           position: 'absolute', bottom: 68, right: 0,
-          width: 370, maxHeight: 540,
+          width: 600, maxHeight: 700,
           background: '#fff', borderRadius: 16,
           boxShadow: '0 12px 48px rgba(0,31,91,0.25)',
           border: '1px solid #E2E8F0',
@@ -146,16 +172,25 @@ export default function ChatBadge() {
             )}
 
             {messages.map((m, i) => (
-              <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start', width: m.role === 'user' ? 'auto' : '100%' }}>
                 <div style={{
-                  maxWidth: '82%', padding: '9px 13px',
+                  maxWidth: m.role === 'user' ? '85%' : '100%',
+                  width: m.role === 'user' ? 'auto' : '100%',
+                  padding: '10px 14px',
                   borderRadius: m.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
                   background: m.role === 'user' ? '#001F5B' : '#F1F5F9',
                   color: m.role === 'user' ? '#fff' : '#1E293B',
-                  fontSize: '0.8rem', lineHeight: 1.55,
-                  whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                  fontSize: '0.8rem', lineHeight: 1.6,
+                  wordBreak: 'break-word',
+                  overflowX: 'auto',
                 }}>
-                  {m.content}
+                  {m.role === 'user' ? (
+                    m.content
+                  ) : (
+                    <div style={{ width: '100%', overflowX: 'auto' }} className="markdown-content">
+                      <Markdown>{m.content}</Markdown>
+                    </div>
+                  )}
                 </div>
                 {m.time && (
                   <div style={{
@@ -243,6 +278,77 @@ export default function ChatBadge() {
         @keyframes dotPulse {
           0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
           40%           { opacity: 1; transform: scale(1); }
+        }
+        .markdown-content h1, .markdown-content h2, .markdown-content h3 {
+          margin: 8px 0 4px 0;
+          line-height: 1.2;
+        }
+        .markdown-content h1 { font-size: 1rem; }
+        .markdown-content h2 { font-size: 0.9rem; }
+        .markdown-content h3 { font-size: 0.85rem; }
+        .markdown-content p { margin: 4px 0; }
+        .markdown-content ul, .markdown-content ol {
+          margin: 4px 0;
+          padding-left: 16px;
+        }
+        .markdown-content li { margin: 2px 0; }
+        .markdown-content code {
+          background: rgba(0, 0, 0, 0.08);
+          padding: 1px 4px;
+          border-radius: 3px;
+          font-size: 0.75rem;
+        }
+        .markdown-content pre {
+          background: #1E293B;
+          color: #E2E8F0;
+          padding: 8px 12px;
+          border-radius: 6px;
+          overflow-x: auto;
+          font-size: 0.75rem;
+          line-height: 1.4;
+          margin: 6px 0;
+        }
+        .markdown-content pre code {
+          background: none;
+          padding: 0;
+          color: inherit;
+        }
+         .markdown-content table {
+          border-collapse: collapse;
+          width: 100%;
+          margin: 6px 0;
+          font-size: 0.75rem;
+          overflow-x: auto;
+        }
+        .markdown-content {
+          width: 100%;
+          overflow-x: auto;
+        }
+        .markdown-content th, .markdown-content td {
+          border: 1px solid #CBD5E1;
+          padding: 4px 8px;
+          text-align: left;
+        }
+        .markdown-content th {
+          background: #F1F5F9;
+          font-weight: 600;
+        }
+        .markdown-content a {
+          color: #0066B3;
+          text-decoration: none;
+        }
+        .markdown-content a:hover {
+          text-decoration: underline;
+        }
+        .markdown-content blockquote {
+          border-left: 3px solid #0066B3;
+          padding-left: 8px;
+          margin: 6px 0;
+          color: #64748B;
+        }
+        .markdown-content strong {
+          font-weight: 700;
+          color: inherit;
         }
       `}</style>
     </div>
