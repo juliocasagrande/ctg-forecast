@@ -12,7 +12,7 @@ function safeError(res, err) {
   res.status(500).json({ error: err.message });
 }
 
-const SUPERIOR_ROLES = ['planejador', 'coordenador', 'admin'];
+const SUPERIOR_ROLES = ['gestor', 'planejador', 'coordenador', 'admin'];
 
 // Verifica se o usuário é autor do documento
 async function isDocAuthor(docId, userId) {
@@ -23,10 +23,37 @@ async function isDocAuthor(docId, userId) {
   return r.rows.length > 0;
 }
 
-// Verifica se pode editar (autor ou superior)
-async function canEdit(docId, userId, role) {
+// Verifica se o usuário é o responsável pelo documento (por nome)
+async function isResponsible(docId, userName) {
+  if (!userName) return false;
+  const r = await pool.query(
+    'SELECT 1 FROM documents WHERE id=$1 AND LOWER(responsible)=LOWER($2)',
+    [docId, userName]
+  );
+  return r.rows.length > 0;
+}
+
+// Verifica se o usuário tem delegação ativa do responsável do documento
+async function hasActiveDelegationForDoc(docId, userId) {
+  const r = await pool.query(`
+    SELECT 1 FROM access_delegations d
+    JOIN documents doc ON LOWER(doc.responsible) = LOWER(u.name)
+    JOIN users u ON u.id = d.delegator_id
+    WHERE d.delegate_id = $1
+      AND d.active = true
+      AND CURRENT_DATE BETWEEN d.start_date AND d.end_date
+      AND doc.id = $2
+  `, [userId, docId]);
+  return r.rows.length > 0;
+}
+
+// Verifica se pode editar (autor, responsável, delegação ativa ou superior)
+async function canEdit(docId, userId, role, userName) {
   if (SUPERIOR_ROLES.includes(role)) return true;
-  return isDocAuthor(docId, userId);
+  if (await isDocAuthor(docId, userId)) return true;
+  if (await isResponsible(docId, userName)) return true;
+  if (await hasActiveDelegationForDoc(docId, userId)) return true;
+  return false;
 }
 
 // Helper: buscar autores de um documento
@@ -171,7 +198,7 @@ router.post('/:id/revision', async (req, res) => {
     const o = orig.rows[0];
 
     // Verificar permissão
-    if (!(await canEdit(origId, userId, req.user.role)))
+    if (!(await canEdit(origId, userId, req.user.role, req.user.name)))
       return res.status(403).json({ error: 'Sem permissão para criar revisão' });
 
     // Calcular próxima revisão
@@ -224,8 +251,8 @@ router.put('/:id', async (req, res) => {
   const { plant, responsible, date, subject, status, document_link, notes, author_ids } = req.body;
   const userId = req.user.id;
 
-  if (!(await canEdit(id, userId, req.user.role)))
-    return res.status(403).json({ error: 'Sem permissão para editar este documento' });
+    if (!(await canEdit(id, userId, req.user.role, req.user.name)))
+      return res.status(403).json({ error: 'Sem permissão para editar este documento' });
 
   const client = await pool.connect();
   try {
@@ -271,8 +298,8 @@ router.patch('/:id/status', async (req, res) => {
   if (!validStatuses.includes(status))
     return res.status(400).json({ error: 'Status inválido' });
 
-  if (!(await canEdit(id, userId, req.user.role)))
-    return res.status(403).json({ error: 'Sem permissão' });
+    if (!(await canEdit(id, userId, req.user.role, req.user.name)))
+      return res.status(403).json({ error: 'Sem permissão' });
 
   try {
     const r = await pool.query(
