@@ -588,9 +588,17 @@ function ProjectModal({ item, onClose, onSave, onDelete, isNew, saving, deleting
             </div>
           </Field>
           <Field label="Gestor">
-            <select value={form.gestor || ''} onChange={e => set('gestor', e.target.value)} style={fS}>
+            <select
+              value={form.gestor_user_id || ''}
+              onChange={e => {
+                const uid = e.target.value ? parseInt(e.target.value) : null;
+                const u = allUsers.find(x => x.id === uid);
+                setForm(prev => ({ ...prev, gestor_user_id: uid || null, gestor: u?.name || '' }));
+              }}
+              style={fS}
+            >
               <option value="">— Selecionar —</option>
-              {allUsers.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
+              {allUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
           </Field>
 
@@ -1048,6 +1056,7 @@ function ImportPreviewModal({ preview, onClose, onConfirm, loading }) {
               </div>
             </div>
           )}
+
         </div>
 
         <div className="modal-footer" style={{ flexShrink: 0 }}>
@@ -1234,8 +1243,12 @@ export default function ProjectsTrackingPage() {
   const preFiltered = useMemo(() => {
     let data = [...items];
     if (showMyContracts) {
+      const myId = user?.id;
       const myName = user?.name?.toLowerCase();
-      data = data.filter(i => i.gestor && i.gestor.toLowerCase().includes(myName));
+      data = data.filter(i =>
+        (myId && i.gestor_user_id === myId) ||
+        (i.gestor_user_id == null && i.gestor && i.gestor.toLowerCase().includes(myName))
+      );
     }
     if (activeTab !== 'Todos' && activeTab !== 'Meus Contratos' && AREAS.includes(activeTab)) {
       data = data.filter(i => i.area === activeTab);
@@ -1285,8 +1298,12 @@ export default function ProjectsTrackingPage() {
   const filtered = useMemo(() => {
     let data = [...items];
     if (showMyContracts) {
+      const myId = user?.id;
       const myName = user?.name?.toLowerCase();
-      data = data.filter(i => i.gestor && i.gestor.toLowerCase().includes(myName));
+      data = data.filter(i =>
+        (myId && i.gestor_user_id === myId) ||
+        (i.gestor_user_id == null && i.gestor && i.gestor.toLowerCase().includes(myName))
+      );
     }
     // Only filter by area if it's a real area tab (not "Meus Contratos")
     if (activeTab !== 'Todos' && activeTab !== 'Meus Contratos' && AREAS.includes(activeTab)) {
@@ -1439,9 +1456,13 @@ export default function ProjectsTrackingPage() {
   const tabs = ['Todos', 'Meus Contratos', ...AREAS];
   const counts = useMemo(() => {
     const m = { Todos: items.length };
-    if (user?.name) {
-      const myName = user.name.toLowerCase();
-      m['Meus Contratos'] = items.filter(i => i.gestor && i.gestor.toLowerCase().includes(myName)).length;
+    if (user?.id || user?.name) {
+      const myId = user.id;
+      const myName = user.name?.toLowerCase();
+      m['Meus Contratos'] = items.filter(i =>
+        (myId && i.gestor_user_id === myId) ||
+        (i.gestor_user_id == null && myName && i.gestor && i.gestor.toLowerCase().includes(myName))
+      ).length;
     } else {
       m['Meus Contratos'] = 0;
     }

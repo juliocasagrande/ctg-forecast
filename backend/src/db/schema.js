@@ -539,6 +539,12 @@ export async function initDB() {
       );
     `);
 
+    /* ───────── USER FK RELATIONS: team_leader / gestor ───────── */
+    await client.query(`
+      ALTER TABLE lists_iacs ADD COLUMN IF NOT EXISTS team_leader_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE lists_projects_tracking ADD COLUMN IF NOT EXISTS gestor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+    `);
+
     console.log('✅ Migrations OK');
 
     await ensureAdminUser(client);

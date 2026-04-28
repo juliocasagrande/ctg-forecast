@@ -5,7 +5,9 @@
       "Bash(git -C \"C:\\\\Users\\\\jlcasagrande\\\\OneDrive - CTG Brasil\\\\CTG Br\\\\02 - PYTHON\\\\forecast\" show HEAD:docs/MANUAL_USUARIO.md)",
       "Bash(npm install *)",
       "Bash(node generate-icons.mjs)",
-      "PowerShell(az webapp show --name ctg-engineering --query resourceGroup --output tsv 2>&1)"
+      "PowerShell(az webapp show --name ctg-engineering --query resourceGroup --output tsv 2>&1)",
+      "Bash(node -e \"const s = 'Júlio Lima Casagrande'; const norm = s.normalize\\('NFD'\\).replace\\(/[̀-ͯ]/g,''\\).toLowerCase\\(\\).trim\\(\\); console.log\\(norm\\);\")",
+      "Bash(node -e ' *)"
     ]
   }
 }

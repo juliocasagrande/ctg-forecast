@@ -54,7 +54,7 @@ router.post('/iacs', async (req, res) => {
       iac_code, type_line, area,
       qty_pp_line_26_priority, qty_pp_line_26_no_priority,
       opening_date, when_open, project,
-      comments, requester, team_leader, chinese_work_staff,
+      comments, requester, team_leader, team_leader_user_id, chinese_work_staff,
       status_current, apresentado_work_team,
       organizer, supervisor, evaluation_team,
       priority, validity, continuidade,
@@ -65,18 +65,18 @@ router.post('/iacs', async (req, res) => {
         iac_code, type_line, area,
         qty_pp_line_26_priority, qty_pp_line_26_no_priority,
         opening_date, when_open, project,
-        comments, requester, team_leader, chinese_work_staff,
+        comments, requester, team_leader, team_leader_user_id, chinese_work_staff,
         status_current, apresentado_work_team,
         organizer, supervisor, evaluation_team,
         priority, validity, continuidade
       ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21
       ) RETURNING *
     `, [
       iac_code || null, type_line || 'New', area || 'Elétrica',
       qty_pp_line_26_priority || null, qty_pp_line_26_no_priority || null,
       opening_date || null, when_open || null, project || null,
-      comments || null, requester || null, team_leader || null, chinese_work_staff || null,
+      comments || null, requester || null, team_leader || null, team_leader_user_id || null, chinese_work_staff || null,
       status_current || '0 - Not started yet', apresentado_work_team || 'Não',
       organizer || null, supervisor || null, evaluation_team || null,
       priority || 'Non Priority', validity || 'Dez/2027', continuidade || 'Sim',
@@ -93,7 +93,7 @@ router.put('/iacs/:id', async (req, res) => {
       iac_code, type_line, area,
       qty_pp_line_26_priority, qty_pp_line_26_no_priority,
       opening_date, when_open, project,
-      comments, requester, team_leader, chinese_work_staff,
+      comments, requester, team_leader, team_leader_user_id, chinese_work_staff,
       status_current, apresentado_work_team,
       organizer, supervisor, evaluation_team,
       priority, validity, continuidade,
@@ -104,18 +104,18 @@ router.put('/iacs/:id', async (req, res) => {
         iac_code=$1, type_line=$2, area=$3,
         qty_pp_line_26_priority=$4, qty_pp_line_26_no_priority=$5,
         opening_date=$6, when_open=$7, project=$8,
-        comments=$9, requester=$10, team_leader=$11, chinese_work_staff=$12,
-        status_current=$13, apresentado_work_team=$14,
-        organizer=$15, supervisor=$16, evaluation_team=$17,
-        priority=$18, validity=$19, continuidade=$20,
+        comments=$9, requester=$10, team_leader=$11, team_leader_user_id=$12, chinese_work_staff=$13,
+        status_current=$14, apresentado_work_team=$15,
+        organizer=$16, supervisor=$17, evaluation_team=$18,
+        priority=$19, validity=$20, continuidade=$21,
         updated_at=NOW()
-      WHERE id=$21
+      WHERE id=$22
       RETURNING *
     `, [
       iac_code || null, type_line || 'New', area || 'Elétrica',
       qty_pp_line_26_priority || null, qty_pp_line_26_no_priority || null,
       opening_date || null, when_open || null, project || null,
-      comments || null, requester || null, team_leader || null, chinese_work_staff || null,
+      comments || null, requester || null, team_leader || null, team_leader_user_id || null, chinese_work_staff || null,
       status_current || '0 - Not started yet', apresentado_work_team || 'Não',
       organizer || null, supervisor || null, evaluation_team || null,
       priority || 'Non Priority', validity || 'Dez/2027', continuidade || 'Sim',
@@ -204,7 +204,7 @@ router.post('/projects-tracking', async (req, res) => {
   try {
     const {
       area, uhe, pp_contrato, projeto_atividade, projeto,
-      status, gestor, resumo, empresa, vencimento, vencimento_txt,
+      status, gestor, gestor_user_id, resumo, empresa, vencimento, vencimento_txt,
       cronograma, aditivos, reajustes,
       valor_contrato, realizado_contrato, saldo_contrato,
       valor_si, realizado_si, saldo_si,
@@ -214,19 +214,19 @@ router.post('/projects-tracking', async (req, res) => {
     const r = await pool.query(`
       INSERT INTO lists_projects_tracking (
         area, uhe, pp_contrato, projeto_atividade, projeto,
-        status, gestor, resumo, empresa, vencimento, vencimento_txt,
+        status, gestor, gestor_user_id, resumo, empresa, vencimento, vencimento_txt,
         cronograma, aditivos, reajustes,
         valor_contrato, realizado_contrato, saldo_contrato,
         valor_si, realizado_si, saldo_si,
         fornecedor, natureza, aditivo_em_andamento
       ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
-        $15,$16,$17,$18,$19,$20,$21,$22,$23
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
+        $16,$17,$18,$19,$20,$21,$22,$23,$24
       ) RETURNING *
     `, [
       area || 'Elétrica', uhe || 'Geral', pp_contrato || null,
       projeto_atividade || null, projeto || null,
-      status || 'Em andamento', gestor || null, resumo || null,
+      status || 'Em andamento', gestor || null, gestor_user_id || null, resumo || null,
       empresa || null,
       vencimento || null, vencimento_txt || null,
       cronograma || null, aditivos || null, reajustes || null,
@@ -244,7 +244,7 @@ router.put('/projects-tracking/:id', async (req, res) => {
     const { id } = req.params;
     const {
       area, uhe, pp_contrato, projeto_atividade, projeto,
-      status, gestor, resumo, empresa, vencimento, vencimento_txt,
+      status, gestor, gestor_user_id, resumo, empresa, vencimento, vencimento_txt,
       cronograma, aditivos, reajustes,
       valor_contrato, realizado_contrato, saldo_contrato,
       valor_si, realizado_si, saldo_si,
@@ -254,19 +254,19 @@ router.put('/projects-tracking/:id', async (req, res) => {
     const r = await pool.query(`
       UPDATE lists_projects_tracking SET
         area=$1, uhe=$2, pp_contrato=$3, projeto_atividade=$4, projeto=$5,
-        status=$6, gestor=$7, resumo=$8, empresa=$9,
-        vencimento=$10, vencimento_txt=$11,
-        cronograma=$12, aditivos=$13, reajustes=$14,
-        valor_contrato=$15, realizado_contrato=$16, saldo_contrato=$17,
-        valor_si=$18, realizado_si=$19, saldo_si=$20,
-        fornecedor=$21, natureza=$22, aditivo_em_andamento=$23,
+        status=$6, gestor=$7, gestor_user_id=$8, resumo=$9, empresa=$10,
+        vencimento=$11, vencimento_txt=$12,
+        cronograma=$13, aditivos=$14, reajustes=$15,
+        valor_contrato=$16, realizado_contrato=$17, saldo_contrato=$18,
+        valor_si=$19, realizado_si=$20, saldo_si=$21,
+        fornecedor=$22, natureza=$23, aditivo_em_andamento=$24,
         updated_at=NOW()
-      WHERE id=$24
+      WHERE id=$25
       RETURNING *
     `, [
       area || 'Elétrica', uhe || 'Geral', pp_contrato || null,
       projeto_atividade || null, projeto || null,
-      status || 'Em andamento', gestor || null, resumo || null,
+      status || 'Em andamento', gestor || null, gestor_user_id || null, resumo || null,
       empresa || null,
       vencimento || null, vencimento_txt || null,
       cronograma || null, aditivos || null, reajustes || null,
@@ -370,10 +370,10 @@ router.get('/projects-tracking/stale-projects', async (req, res) => {
         SELECT id, pp_contrato, projeto, area, gestor, updated_at
         FROM lists_projects_tracking
         WHERE updated_at < NOW() - ($1::text || ' days')::interval
-          AND LOWER(gestor) = LOWER($2)
+          AND (gestor_user_id = $2 OR (gestor_user_id IS NULL AND LOWER(gestor) LIKE '%' || LOWER($3) || '%'))
         ORDER BY updated_at ASC
       `;
-      params = [String(intervalDays), user.name];
+      params = [String(intervalDays), user.id, user.name];
     } else if (user.role === 'coordenador') {
       // Coordenadores see only projects from their area
       query = `
@@ -429,10 +429,10 @@ router.get('/iacs/stale-iacs', async (req, res) => {
         SELECT id, iac_code, project, area, team_leader, updated_at
         FROM lists_iacs
         WHERE updated_at < NOW() - ($1::text || ' days')::interval
-          AND LOWER(team_leader) = LOWER($2)
+          AND (team_leader_user_id = $2 OR (team_leader_user_id IS NULL AND LOWER(team_leader) LIKE '%' || LOWER($3) || '%'))
         ORDER BY updated_at ASC
       `;
-      params = [String(intervalDays), user.name];
+      params = [String(intervalDays), user.id, user.name];
     } else if (user.role === 'coordenador') {
       // Coordenadores see only IACs from their area
       query = `
@@ -464,6 +464,9 @@ router.post('/projects-tracking/import', upload.single('file'), async (req, res)
   const client = await pool.connect();
   try {
     if (!req.file) return res.status(400).json({ error: 'Arquivo não enviado' });
+
+    const usersResult = await pool.query('SELECT id, name FROM users WHERE active = true');
+    const userNameMap = buildUserNameMap(usersResult.rows);
 
     await client.query('BEGIN');
 
@@ -587,6 +590,7 @@ router.post('/projects-tracking/import', upload.single('file'), async (req, res)
         projeto: truncate(getCell(colMap.projeto), 200),
         status: truncate(getCell(colMap.status) || 'Em andamento', 50),
         gestor: truncate(getCell(colMap.gestor), 120),
+        gestor_user_id: resolveUserId(getCell(colMap.gestor) || '', userNameMap),
         resumo: getCell(colMap.resumo),
         empresa: getCell(colMap.empresa),
         vencimento: parseDate(getCell(colMap.vencimento)),
@@ -608,13 +612,14 @@ router.post('/projects-tracking/import', upload.single('file'), async (req, res)
       // Upsert: INSERT with ON CONFLICT on unique_key (not pp_contrato)
       const r = await client.query(`
         INSERT INTO lists_projects_tracking (
-          area, uhe, pp_contrato, projeto_atividade, projeto, status, gestor, resumo, empresa,
+          area, uhe, pp_contrato, projeto_atividade, projeto, status, gestor, gestor_user_id, resumo, empresa,
           vencimento, cronograma, aditivos, reajustes, valor_contrato, realizado_contrato, saldo_contrato,
           valor_si, realizado_si, saldo_si, fornecedor, natureza, aditivo_em_andamento, unique_key
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
         ON CONFLICT (unique_key) DO UPDATE SET
           area=EXCLUDED.area, uhe=EXCLUDED.uhe, projeto_atividade=EXCLUDED.projeto_atividade,
           projeto=EXCLUDED.projeto, status=EXCLUDED.status, gestor=EXCLUDED.gestor,
+          gestor_user_id=EXCLUDED.gestor_user_id,
           resumo=EXCLUDED.resumo, empresa=EXCLUDED.empresa, vencimento=EXCLUDED.vencimento,
           cronograma=EXCLUDED.cronograma, aditivos=EXCLUDED.aditivos, reajustes=EXCLUDED.reajustes,
           valor_contrato=EXCLUDED.valor_contrato, realizado_contrato=EXCLUDED.realizado_contrato,
@@ -624,7 +629,7 @@ router.post('/projects-tracking/import', upload.single('file'), async (req, res)
           aditivo_em_andamento=EXCLUDED.aditivo_em_andamento, updated_at=NOW()
         RETURNING (xmax = 0) AS inserted
       `, [
-        data.area, data.uhe, data.pp_contrato, data.projeto_atividade, data.projeto, data.status, data.gestor,
+        data.area, data.uhe, data.pp_contrato, data.projeto_atividade, data.projeto, data.status, data.gestor, data.gestor_user_id,
         data.resumo, data.empresa, data.vencimento, data.cronograma, data.aditivos, data.reajustes,
         data.valor_contrato, data.realizado_contrato, data.saldo_contrato,
         data.valor_si, data.realizado_si, data.saldo_si, data.fornecedor, data.natureza,
@@ -648,10 +653,56 @@ router.post('/projects-tracking/import', upload.single('file'), async (req, res)
  * ══════════════════════════════════════════════════════ */
 
 // POST /api/lists/iacs/import
+function normalizeName(str) {
+  return (str || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+
+// Maps normalized spreadsheet names → normalized system user names (where they differ)
+const PERSON_ALIASES = {
+  'fabricio issao niiyama':       'fabricio niiyama',
+  'juliano nicolielo torres':     'juliano torres',
+  'rodrigo hernandes alves':      'rodrigo hernandes',
+  'leonardo seiji watanabe':      'leonardo watanabe',
+  'helio henrique dias':          'helio dias',
+  'yuri moura santos':            'yuri moura',
+  'ricardo passalacqua':          'ricardo passalaqua',
+  'maurilio faria morais':        'maurilio faria',
+  'julio lima casagrande':        'julio casagrande',
+  'leonardo lino leoncini':       'leonardo leoncini',
+  'jean rafael mendes':           'jean mendes',
+  'marcos hiroshi kadota':        'marcos kadota',
+  'victor henrique pedraci':      'victor pedraci',
+  'hallyson izidoro dos santos':  'hallyson izidoro',
+  'itamar rodrigo barros':        'itamar barros',
+  'marcel chuma cerbantes':       'marcel cerbantes',
+  'roberto cabral lara':          'roberto lara',
+  'everton nascimento da silva':  'everton nascimento',
+  'tadayuki juliano takamiya':    'juliano takamiya',
+  'alexsson procopio dos santos': 'alexsson santos',
+};
+
+function buildUserNameMap(users) {
+  const map = {};
+  for (const u of users) map[normalizeName(u.name)] = u.id;
+  return map;
+}
+
+function resolveUserId(spreadsheetName, userNameMap) {
+  const norm = normalizeName(spreadsheetName);
+  if (!norm) return null;
+  if (userNameMap[norm] != null) return userNameMap[norm];
+  const alias = PERSON_ALIASES[norm];
+  if (alias && userNameMap[alias] != null) return userNameMap[alias];
+  return null;
+}
+
 router.post('/iacs/import', upload.single('file'), async (req, res) => {
   const client = await pool.connect();
   try {
     if (!req.file) return res.status(400).json({ error: 'Arquivo não enviado' });
+
+    const usersResult = await pool.query('SELECT id, name FROM users WHERE active = true');
+    const userNameMap = buildUserNameMap(usersResult.rows);
 
     await client.query('BEGIN');
 
@@ -847,6 +898,7 @@ router.post('/iacs/import', upload.single('file'), async (req, res) => {
         comments: getCell(colMap.comments),
         requester: truncate(getCell(colMap.requester), 120),
         team_leader: truncate(getCell(colMap.team_leader), 120),
+        team_leader_user_id: resolveUserId(getCell(colMap.team_leader) || '', userNameMap),
         chinese_work_staff: truncate(getCell(colMap.chinese_work_staff), 120),
         status_current: truncate(getCell(colMap.status_current) || '0 - Not started yet', 50),
         apresentado_work_team: truncate(getCell(colMap.apresentado_work_team) || 'Não', 10),
@@ -864,11 +916,11 @@ router.post('/iacs/import', upload.single('file'), async (req, res) => {
           iac_code, type_line, area,
           qty_pp_line_26_priority, qty_pp_line_26_no_priority,
           opening_date, when_open, project,
-          comments, requester, team_leader, chinese_work_staff,
+          comments, requester, team_leader, team_leader_user_id, chinese_work_staff,
           status_current, apresentado_work_team,
           organizer, supervisor, evaluation_team,
           priority, validity, continuidade, unique_key
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
         ON CONFLICT (unique_key) DO UPDATE SET
           type_line=EXCLUDED.type_line, area=EXCLUDED.area,
           qty_pp_line_26_priority=EXCLUDED.qty_pp_line_26_priority,
@@ -876,6 +928,7 @@ router.post('/iacs/import', upload.single('file'), async (req, res) => {
           opening_date=EXCLUDED.opening_date, when_open=EXCLUDED.when_open,
           project=EXCLUDED.project, comments=EXCLUDED.comments,
           requester=EXCLUDED.requester, team_leader=EXCLUDED.team_leader,
+          team_leader_user_id=EXCLUDED.team_leader_user_id,
           chinese_work_staff=EXCLUDED.chinese_work_staff,
           status_current=EXCLUDED.status_current,
           apresentado_work_team=EXCLUDED.apresentado_work_team,
@@ -888,7 +941,7 @@ router.post('/iacs/import', upload.single('file'), async (req, res) => {
         data.iac_code, data.type_line, data.area,
         data.qty_pp_line_26_priority, data.qty_pp_line_26_no_priority,
         data.opening_date, data.when_open, data.project,
-        data.comments, data.requester, data.team_leader, data.chinese_work_staff,
+        data.comments, data.requester, data.team_leader, data.team_leader_user_id, data.chinese_work_staff,
         data.status_current, data.apresentado_work_team,
         data.organizer, data.supervisor, data.evaluation_team,
         data.priority, data.validity, data.continuidade, data.unique_key,
@@ -961,6 +1014,7 @@ router.post('/iacs/import/preview', upload.single('file'), async (req, res) => {
     const areas = {};
     const statuses = {};
     const priorities = {};
+    const teamLeaderSet = new Set();
     let skipped = 0;
 
     for (let rowIdx = 2; rowIdx <= ws.rowCount; rowIdx++) {
@@ -1012,6 +1066,8 @@ router.post('/iacs/import/preview', upload.single('file'), async (req, res) => {
       const status = getCell(colMap.status_current) || '0 - Not started yet';
       const priority = getCell(colMap.priority) || 'Non Priority';
       const typeLine = getCell(colMap.type_line) || 'New';
+      const teamLeader = getCell(colMap.team_leader);
+      if (teamLeader) teamLeaderSet.add(teamLeader);
 
       areas[area] = (areas[area] || 0) + 1;
       statuses[status] = (statuses[status] || 0) + 1;
@@ -1068,6 +1124,7 @@ router.post('/iacs/import/preview', upload.single('file'), async (req, res) => {
       statuses,
       priorities,
       previewRows: rows,
+      uniqueTeamLeaders: [...teamLeaderSet].sort(),
     });
   } catch (err) {
     console.error('[IAC IMPORT ERROR]', err);
@@ -1125,6 +1182,7 @@ router.post('/projects-tracking/import/preview', upload.single('file'), async (r
     const areas = {};
     const statuses = {};
     const naturezas = { CAPEX: 0, OPEX: 0, 'Guarda-chuva': 0 };
+    const gestorSet = new Set();
     let totalContrato = 0;
     let skipped = 0;
 
@@ -1158,6 +1216,8 @@ router.post('/projects-tracking/import/preview', upload.single('file'), async (r
       const status = getCell(colMap.status) || 'Em andamento';
       const natureza = getCell(colMap.natureza) || 'OPEX';
       const val = parseVal(getCell(colMap.valor_contrato)) || 0;
+      const gestor = getCell(colMap.gestor);
+      if (gestor) gestorSet.add(gestor);
 
       areas[area] = (areas[area] || 0) + 1;
       statuses[status] = (statuses[status] || 0) + 1;
@@ -1218,6 +1278,7 @@ router.post('/projects-tracking/import/preview', upload.single('file'), async (r
       naturezas,
       totalContrato,
       previewRows: rows,
+      uniqueGestors: [...gestorSet].sort(),
     });
   } catch (err) { safeError(res, err); }
 });

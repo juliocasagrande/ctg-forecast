@@ -724,9 +724,17 @@ function IACModal({ item, onClose, onSave, onDelete, isNew, saving, deleting, al
                 </datalist>
               </Field>
               <Field label="Team Leader">
-                <select value={form.team_leader || ''} onChange={e => set('team_leader', e.target.value)} style={fS}>
+                <select
+                  value={form.team_leader_user_id || ''}
+                  onChange={e => {
+                    const uid = e.target.value ? parseInt(e.target.value) : null;
+                    const u = allUsers.find(x => x.id === uid);
+                    setForm(prev => ({ ...prev, team_leader_user_id: uid || null, team_leader: u?.name || '' }));
+                  }}
+                  style={fS}
+                >
                   <option value="">— Selecionar —</option>
-                  {allUsers.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
+                  {allUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                 </select>
               </Field>
               <Field label="Chinese Work Staff">
@@ -830,10 +838,12 @@ export default function IACsPage() {
   const preFiltered = useMemo(() => {
     let data = [...items];
     if (showMyIACs) {
+      const myId = user?.id;
       const myName = user?.name?.toLowerCase();
       data = data.filter(i =>
+        (myId && i.team_leader_user_id === myId) ||
         (i.requester && i.requester.toLowerCase().includes(myName)) ||
-        (i.team_leader && i.team_leader.toLowerCase().includes(myName)) ||
+        (i.team_leader_user_id == null && i.team_leader && i.team_leader.toLowerCase().includes(myName)) ||
         (i.organizer && i.organizer.toLowerCase().includes(myName)) ||
         (i.supervisor && i.supervisor.toLowerCase().includes(myName))
       );
@@ -963,10 +973,12 @@ export default function IACsPage() {
   const filtered = useMemo(() => {
     let data = [...items];
     if (showMyIACs) {
+      const myId = user?.id;
       const myName = user?.name?.toLowerCase();
       data = data.filter(i =>
+        (myId && i.team_leader_user_id === myId) ||
         (i.requester && i.requester.toLowerCase().includes(myName)) ||
-        (i.team_leader && i.team_leader.toLowerCase().includes(myName)) ||
+        (i.team_leader_user_id == null && i.team_leader && i.team_leader.toLowerCase().includes(myName)) ||
         (i.organizer && i.organizer.toLowerCase().includes(myName)) ||
         (i.supervisor && i.supervisor.toLowerCase().includes(myName))
       );
@@ -1029,14 +1041,16 @@ export default function IACsPage() {
     const m = { Todos: items.length };
     for (const a of AREAS) m[a] = items.filter(i => i.area === a).length;
     // Count "Meus IACs"
+    const myId = user?.id;
     const myName = user?.name?.toLowerCase();
     m['Meus IACs'] = items.filter(i =>
-      myName && (
+      (myId && i.team_leader_user_id === myId) ||
+      (myName && (
         (i.requester && i.requester.toLowerCase().includes(myName)) ||
-        (i.team_leader && i.team_leader.toLowerCase().includes(myName)) ||
+        (i.team_leader_user_id == null && i.team_leader && i.team_leader.toLowerCase().includes(myName)) ||
         (i.organizer && i.organizer.toLowerCase().includes(myName)) ||
         (i.supervisor && i.supervisor.toLowerCase().includes(myName))
-      )
+      ))
     ).length;
     return m;
   }, [items, user]);
