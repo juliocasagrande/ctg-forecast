@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
 import { useToast } from './ui/Toast.jsx';
@@ -14,6 +15,8 @@ const ROLE_LABELS = {
 };
 
 export default function Profile() {
+  const [searchParams] = useSearchParams();
+  const forceChange = searchParams.get('changePassword') === '1';
   const { user, updateUser } = useAuth();
   const { toast } = useToast();
   const [name, setName] = useState(user?.name || '');
@@ -21,6 +24,7 @@ export default function Profile() {
   const [saving, setSaving] = useState(false);
   const [pwForm, setPwForm] = useState({ current_password:'', new_password:'', confirm:'' });
   const [changingPw, setChangingPw] = useState(false);
+  const [showPwWarning, setShowPwWarning] = useState(forceChange || user?.must_change_password);
 
   const initials = name.split(' ').slice(0,2).map(w=>w[0]?.toUpperCase()||'').join('');
   const roleColor = {
@@ -56,6 +60,24 @@ export default function Profile() {
 
   return (
     <div style={{maxWidth:560}}>
+      {/* Aviso de senha temporária */}
+      {showPwWarning && (
+        <div style={{
+          marginBottom: 20, borderRadius: 'var(--radius-md)',
+          background: '#FEF3C7', border: '1px solid #F59E0B',
+          padding: '14px 16px', fontSize: '0.85rem', color: '#92400E',
+          display: 'flex', alignItems: 'flex-start', gap: 10,
+        }}>
+          <span style={{fontSize: '1.1rem', lineHeight: 1}}>⚠️</span>
+          <div>
+            <div style={{fontWeight: 700, marginBottom: 4}}>Troca de senha obrigatória</div>
+            <div style={{lineHeight: 1.5}}>
+              Você está usando uma senha temporária. Por segurança, altere sua senha abaixo antes de continuar usando o sistema.
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Avatar + role banner */}
       <div style={{background:`linear-gradient(135deg, ${roleColor}, ${roleColor}CC)`,borderRadius:'var(--radius-lg)',padding:'24px 24px 20px',marginBottom: user?._hasDelegation ? 8 : 20,display:'flex',alignItems:'center',gap:16}}>
         <div style={{width:56,height:56,borderRadius:'50%',background:'rgba(255,255,255,0.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'1.3rem',fontWeight:700,color:'#fff',flexShrink:0}}>

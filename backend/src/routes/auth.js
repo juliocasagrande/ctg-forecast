@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { pool } from '../db/schema.js';
 import { signToken, requireAuth, setAuthCookie, clearAuthCookie } from '../middleware/auth.js';
 import { loginLimiter, registerLimiter } from '../middleware/security.js';
 import { logAuthEvent, getClientIP } from '../middleware/audit.js';
 import { validatePassword } from '../middleware/validation.js';
+import { enviarEmail } from '../utils/mailer.js';
 
 const router = Router();
 
@@ -105,7 +107,7 @@ router.post('/login', loginLimiter, async (req, res) => {
 
     res.json({
       token,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role, area: user.area, avatar_initials: user.avatar_initials }
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, area: user.area, avatar_initials: user.avatar_initials, must_change_password: user.must_change_password || false }
     });
   } catch (err) {
     safeError(res, err);
@@ -122,7 +124,7 @@ router.post('/logout', (req, res) => {
 router.get('/me', requireAuth, async (req, res) => {
   try {
     const r = await pool.query(
-      'SELECT id, name, email, role, area, avatar_initials, created_at FROM users WHERE id=$1',
+      'SELECT id, name, email, role, area, avatar_initials, created_at, must_change_password FROM users WHERE id=$1',
       [req.user.id]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Usuário não encontrado' });
@@ -136,6 +138,7 @@ router.get('/me', requireAuth, async (req, res) => {
       area:           req.user.area,           // effective area
       _originalRole:  dbUser.role,             // role real para exibição no perfil
       _hasDelegation: req.user._delegatorIds?.length > 0,
+      must_change_password: dbUser.must_change_password || false,
     });
   } catch (err) {
     safeError(res, err);
@@ -156,7 +159,7 @@ router.post('/change-password', requireAuth, async (req, res) => {
     if (!valid) return res.status(401).json({ error: 'Senha atual incorreta' });
 
     const hash = await bcrypt.hash(new_password, 12);
-    await pool.query('UPDATE users SET password_hash=$1, updated_at=NOW() WHERE id=$2', [hash, req.user.id]);
+    await pool.query('UPDATE users SET password_hash=$1, updated_at=NOW(), must_change_password=false WHERE id=$2', [hash, req.user.id]);
 
     await logAuthEvent('password_change', {
       email: req.user.email,
@@ -167,6 +170,124 @@ router.post('/change-password', requireAuth, async (req, res) => {
     });
 
     res.json({ success: true });
+  } catch (err) {
+    safeError(res, err);
+  }
+});
+
+// ─── POST /api/auth/forgot-password ────────────────────────────────────────
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'E-mail é obrigatório' });
+
+    const userR = await pool.query('SELECT id, name, email FROM users WHERE email=$1 AND active=true', [email.toLowerCase()]);
+    const user = userR.rows[0];
+
+    // Sempre retorna sucesso para evitar enumeração de emails
+    if (!user) {
+      return res.json({ message: 'Se o e-mail estiver cadastrado, você receberá um link para redefinir sua senha.' });
+    }
+
+    // Gera token aleatório
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+
+    // Salva token no banco (remove tokens antigos primeiro)
+    await pool.query('DELETE FROM password_reset_tokens WHERE user_id=$1', [user.id]);
+    await pool.query(
+      'INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)',
+      [user.id, token, expiresAt]
+    );
+
+    // Monta link de redefinição
+    const frontendUrl = process.env.FRONTEND_URL?.split(',')[0] || 'http://localhost:5173';
+    const resetLink = `${frontendUrl}/reset-password?token=${token}`;
+
+    // Envia e-mail
+    const html = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #001F5B;">Redefinição de Senha</h2>
+        <p>Olá, <strong>${user.name}</strong>,</p>
+        <p>Você solicitou a redefinição de senha da sua conta no CTG.Engenharia.</p>
+        <p>Clique no botão abaixo para criar uma nova senha (válido por 1 hora):</p>
+        <p style="text-align: center; margin: 30px 0;">
+          <a href="${resetLink}" style="background: #0070B8; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600;">
+            Redefinir Senha
+          </a>
+        </p>
+        <p>Ou copie e cole este link no navegador:</p>
+        <p style="color: #666; word-break: break-all;">${resetLink}</p>
+        <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;" />
+        <p style="font-size: 0.85rem; color: #999;">Se você não solicitou esta redefinição, ignore este e-mail. Sua senha permanecerá inalterada.</p>
+        <p style="font-size: 0.85rem; color: #999;">CTG Brasil — Engenharia</p>
+      </div>
+    `;
+
+    try {
+      await enviarEmail({
+        destinatarios: [user.email],
+        assunto: 'CTG.Engenharia — Redefinição de Senha',
+        mensagemHtml: html,
+      });
+    } catch (emailErr) {
+      console.error('Erro ao enviar e-mail de redefinição:', emailErr);
+      // Não expõe erro de e-mail para o cliente
+    }
+
+    await logAuthEvent('forgot_password', {
+      email: user.email,
+      userId: user.id,
+      ip: getClientIP(req),
+      userAgent: req.headers['user-agent'],
+      success: true,
+    });
+
+    res.json({ message: 'Se o e-mail estiver cadastrado, você receberá um link para redefinir sua senha.' });
+  } catch (err) {
+    safeError(res, err);
+  }
+});
+
+// ─── POST /api/auth/reset-password ─────────────────────────────────────────
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, new_password } = req.body;
+    if (!token || !new_password) {
+      return res.status(400).json({ error: 'Token e nova senha são obrigatórios' });
+    }
+
+    // Valida nova senha
+    const pwCheck = validatePassword(new_password);
+    if (!pwCheck.valid) return res.status(400).json({ error: pwCheck.error });
+
+    // Busca token válido
+    const tokenR = await pool.query(
+      'SELECT * FROM password_reset_tokens WHERE token=$1 AND used=false AND expires_at > NOW()',
+      [token]
+    );
+
+    if (!tokenR.rows.length) {
+      return res.status(400).json({ error: 'Token inválido ou expirado' });
+    }
+
+    const resetToken = tokenR.rows[0];
+
+    // Gera hash da nova senha
+    const hash = await bcrypt.hash(new_password, 12);
+
+    // Atualiza senha do usuário e marca token como usado
+    await pool.query('UPDATE users SET password_hash=$1, updated_at=NOW(), must_change_password=false WHERE id=$2', [hash, resetToken.user_id]);
+    await pool.query('UPDATE password_reset_tokens SET used=true WHERE id=$1', [resetToken.id]);
+
+    await logAuthEvent('password_reset', {
+      userId: resetToken.user_id,
+      ip: getClientIP(req),
+      userAgent: req.headers['user-agent'],
+      success: true,
+    });
+
+    res.json({ success: true, message: 'Senha redefinida com sucesso! Faça login com sua nova senha.' });
   } catch (err) {
     safeError(res, err);
   }

@@ -39,6 +39,11 @@ export function AuthProvider({ children }) {
     localStorage.setItem('ctg_token', token);
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     setUser(user);
+    
+    // Se a senha é temporária, força troca
+    if (user.must_change_password) {
+      return { ...user, forcePasswordChange: true };
+    }
     return user;
   }, []);
 

@@ -74,15 +74,16 @@ export async function initDB() {
       );
     `);
 
-    await client.query(`
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'engenheiro';
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true;
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_approval BOOLEAN DEFAULT false;
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_initials VARCHAR(4);
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS area VARCHAR(30) DEFAULT NULL;
-    `);
+await client.query(`
+       ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+       ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'engenheiro';
+       ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true;
+       ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_approval BOOLEAN DEFAULT false;
+       ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_initials VARCHAR(4);
+       ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+       ALTER TABLE users ADD COLUMN IF NOT EXISTS area VARCHAR(30) DEFAULT NULL;
+       ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT false;
+     `);
 
     await client.query(`
       UPDATE users SET role = 'coordenador' WHERE role = 'gestor';
@@ -314,6 +315,18 @@ export async function initDB() {
         alert_key VARCHAR(120),
         dismissed_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(user_id, alert_type, alert_key)
+      );
+    `);
+
+    /* ───────── PASSWORD RESET TOKENS ───────── */
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        token VARCHAR(100) UNIQUE NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        used BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
 

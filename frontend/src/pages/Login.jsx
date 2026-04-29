@@ -4,6 +4,83 @@ import { useAuth } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
 import PasswordInput, { getPasswordStrength } from '../components/ui/PasswordInput.jsx';
 
+// ─── MODAL DE RECUPERAÇÃO DE SENHA ─────────────────────────────────────
+function ForgotPasswordModal({ onClose }) {
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setMessage('');
+    if (!email) {
+      setError('Informe seu e-mail');
+      return;
+    }
+    setLoading(true);
+    try {
+      const r = await api.post('/auth/forgot-password', { email });
+      setMessage(r.data.message || 'Se o e-mail estiver cadastrado, você receberá um link para redefinir sua senha.');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Erro ao solicitar redefinição.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      background: 'rgba(0,0,0,0.5)', display: 'flex',
+      alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+    }}>
+      <div style={{
+        background: '#fff', borderRadius: 12, padding: '32px', maxWidth: 420, width: '90%',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+      }}>
+        <h2 style={{ margin: '0 0 8px', color: 'var(--ctg-navy)' }}>Esqueceu sua senha?</h2>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 20 }}>
+          Informe seu e-mail cadastrado. Enviaremos um link para redefinir sua senha.
+        </p>
+
+        {error && <div className="login-error">{error}</div>}
+        {message && <div className="login-success" style={{ padding: '12px', fontSize: '0.85rem' }}>{message}</div>}
+
+        {!message && (
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label className="form-label">E-mail</label>
+              <input
+                className="form-input"
+                type="email"
+                placeholder="seu@email.com"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                autoComplete="email"
+                required
+                autoFocus
+              />
+            </div>
+            <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: 12 }}
+              disabled={loading}>
+              {loading ? 'Enviando...' : 'Enviar link de redefinição'}
+            </button>
+          </form>
+        )}
+
+        <button
+          onClick={onClose}
+          className="btn btn-secondary"
+          style={{ width: '100%', marginTop: 12, background: 'transparent', border: '1px solid var(--border)' }}>
+          Voltar ao login
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const ROLE_OPTIONS = [
   {
     value: 'engenheiro',
@@ -37,6 +114,7 @@ const AREA_OPTIONS = [
 
 export default function Login() {
   const [tab, setTab] = useState('login');
+  const [showForgot, setShowForgot] = useState(false);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -64,7 +142,12 @@ export default function Login() {
     setLoginLoading(true);
     try {
       const user = await login(email, password);
-      navigate(user.role === 'admin' ? '/admin' : '/');
+      // Se a senha é temporária, vai para o perfil para trocar
+      if (user.forcePasswordChange) {
+        navigate('/profile?changePassword=1');
+      } else {
+        navigate(user.role === 'admin' ? '/admin' : '/');
+      }
     } catch (err) {
       setLoginError(err.response?.data?.error || 'Erro ao entrar. Tente novamente.');
     } finally {
@@ -156,7 +239,14 @@ export default function Login() {
                 </button>
               </form>
 
-              <p style={{ marginTop: 20, fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+              <p style={{ marginTop: 12, fontSize: '0.78rem', textAlign: 'center' }}>
+                <button style={{ background: 'none', border: 'none', color: 'var(--ctg-blue)', cursor: 'pointer', fontWeight: 600, fontSize: 'inherit' }}
+                  onClick={() => setShowForgot(true)}>
+                  Esqueceu sua senha?
+                </button>
+              </p>
+
+              <p style={{ marginTop: 8, fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center' }}>
                 Ainda não tem conta?{' '}
                 <button style={{ background: 'none', border: 'none', color: 'var(--ctg-blue)', cursor: 'pointer', fontWeight: 600, fontSize: 'inherit' }}
                   onClick={() => setTab('register')}>
@@ -277,6 +367,7 @@ export default function Login() {
             </>
           )}
 
+          {showForgot && <ForgotPasswordModal onClose={() => setShowForgot(false)} />}
         </div>
 
         <div style={{

@@ -6,6 +6,7 @@ import { useSettings } from './context/SettingsContext.jsx';
 import Sidebar from './components/layout/Sidebar.jsx';
 import { ToastProvider } from './components/ui/Toast.jsx';
 import Login from './pages/Login.jsx';
+import ResetPassword from './pages/ResetPassword.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import ProjectsPage from './pages/ProjectsPage.jsx';
 import ProjectDetail from './components/ProjectDetail.jsx';
@@ -733,6 +734,7 @@ export default function App() {
   if (!user) return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
