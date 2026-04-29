@@ -1,0 +1,88 @@
+name: Gerar e Enviar Cronograma PDF
+
+on:
+  schedule:
+    - cron: "0 8 1 * *"
+
+  workflow_dispatch:
+    inputs:
+      year:
+        description: "Ano do cronograma (ex: 2026)"
+        required: false
+        default: ""
+      dry_run:
+        description: "Gerar PDF sem enviar e-mail? (true/false)"
+        required: false
+        default: "false"
+
+jobs:
+  gerar-e-enviar:
+    name: Gerar PDF e Enviar E-mail
+    runs-on: self-hosted
+    timeout-minutes: 15
+
+    steps:
+      # ── 1. Checkout ────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      # ── 2. Instalar dependências Python ────────────────────────────────────
+      - name: Instalar dependências Python
+        shell: cmd
+        run: |
+          "C:\Program Files\Python314\python.exe" -m pip install -r requirements.txt --quiet
+
+      # ── 3. Validar conexão com o banco ─────────────────────────────────────
+      - name: Validar conexão com o banco de dados
+        shell: cmd
+        run: |
+          "C:\Program Files\Python314\python.exe" scripts/validate_db.py
+
+      # ── 4. Gerar PDF + Enviar e-mail ────────────────────────────────────────
+      - name: Executar geração e envio
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        shell: cmd
+        run: |
+          set OUTPUT_PATH=output/cronograma_manutencoes.pdf
+          set GANTT_YEAR=${{ github.event.inputs.year }}
+          set SMTP_HOST=${{ secrets.SMTP_HOST }}
+          set SMTP_PORT=${{ secrets.SMTP_PORT }}
+          set SMTP_FROM=${{ secrets.SMTP_FROM }}
+          set SMTP_USER=${{ secrets.SMTP_USER }}
+          set SMTP_PASS=${{ secrets.SMTP_PASS }}
+          set SMTP_TLS=${{ secrets.SMTP_TLS }}
+          set RECIPIENTS: '[{"nome": "Júlio", "email": "julio.casagrande@ctgbr.com.br"}, {"nome": "Beltrano", "email": "beltrano@ctgbr.com.br"}]'
+          "C:\Program Files\Python314\python.exe" scripts/run.py
+      # set RECIPIENTS=${{ secrets.RECIPIENTS }}
+      # ── 4b. Dry run ────────────────────────────────────────────────────────
+      - name: Gerar PDF (dry run — sem envio)
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        shell: cmd
+        run: |
+          set OUTPUT_PATH=output/cronograma_manutencoes.pdf
+          set GANTT_YEAR=${{ github.event.inputs.year }}
+          "C:\Program Files\Python314\python.exe" scripts/dry_run.py
+
+      # ── 5. Upload ──────────────────────────────────────────────────────────
+      - name: Upload do PDF gerado
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: cronograma-pdf
+          path: output/cronograma_manutencoes.pdf
+          retention-days: 30
+
+      # ── 6. Resumo ──────────────────────────────────────────────────────────
+      - name: Resumo do job
+        if: always()
+        shell: cmd
+        run: |
+          echo ## Resultado >> %GITHUB_STEP_SUMMARY%
+          if exist output\cronograma_manutencoes.pdf (
+            for %%A in (output\cronograma_manutencoes.pdf) do echo ✅ PDF gerado (%%~zA bytes) >> %GITHUB_STEP_SUMMARY%
+          ) else (
+            echo ❌ PDF nao foi gerado >> %GITHUB_STEP_SUMMARY%
+          )
+          echo - Ano: ${{ github.event.inputs.year || 'auto' }} >> %GITHUB_STEP_SUMMARY%
+          echo - Dry run: ${{ github.event.inputs.dry_run || 'false' }} >> %GITHUB_STEP_SUMMARY%
+          echo - Trigger: ${{ github.event_name }} >> %GITHUB_STEP_SUMMARY%
