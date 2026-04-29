@@ -1,5 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { toPng } from 'html-to-image';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useAuth } from '../../context/AuthContext.jsx';
 import api from '../../utils/api.js';
 
@@ -54,8 +56,34 @@ export default function ChatBadge() {
   const [messages, setMessages] = useState([]);
   const [input, setInput]     = useState('');
   const [loading, setLoading] = useState(false);
-  const endRef   = useRef(null);
-  const inputRef = useRef(null);
+  const endRef      = useRef(null);
+  const inputRef    = useRef(null);
+  const msgRefs     = useRef({});
+  const [hoveredMsg, setHoveredMsg] = useState(null);
+  const [exporting,  setExporting]  = useState(null);
+
+  const exportAsImage = useCallback(async (idx) => {
+    const el = msgRefs.current[idx];
+    if (!el) return;
+    setExporting(idx);
+    try {
+      const dataUrl = await toPng(el, {
+        backgroundColor: '#F1F5F9',
+        pixelRatio: 2,
+        width: el.scrollWidth,
+        height: el.scrollHeight,
+        style: { overflow: 'visible', width: `${el.scrollWidth}px`, height: `${el.scrollHeight}px` },
+      });
+      const a = document.createElement('a');
+      a.download = `ctg-chat-${Date.now()}.png`;
+      a.href = dataUrl;
+      a.click();
+    } catch (e) {
+      console.error('Export failed', e);
+    } finally {
+      setExporting(null);
+    }
+  }, []);
 
   useEffect(() => {
     if (open) {
@@ -102,7 +130,7 @@ export default function ChatBadge() {
       {open && (
         <div style={{
           position: 'absolute', bottom: 68, right: 0,
-          width: 600, maxHeight: 700,
+          width: '80vw', maxHeight: 'calc(100vh - 120px)',
           background: '#fff', borderRadius: 16,
           boxShadow: '0 12px 48px rgba(0,31,91,0.25)',
           border: '1px solid #E2E8F0',
@@ -171,24 +199,64 @@ export default function ChatBadge() {
               </div>
             )}
 
-            {messages.map((m, i) => (
-              <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start', width: m.role === 'user' ? 'auto' : '100%' }}>
-                <div style={{
-                  maxWidth: m.role === 'user' ? '85%' : '100%',
-                  width: m.role === 'user' ? 'auto' : '100%',
-                  padding: '10px 14px',
-                  borderRadius: m.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-                  background: m.role === 'user' ? '#001F5B' : '#F1F5F9',
-                  color: m.role === 'user' ? '#fff' : '#1E293B',
-                  fontSize: '0.8rem', lineHeight: 1.6,
-                  wordBreak: 'break-word',
-                  overflowX: 'auto',
-                }}>
+            {messages.map((m, i) => {
+              const hasTable = m.role === 'assistant' && m.content.includes('|') && m.content.includes('---');
+              return (
+              <div key={i}
+                style={{ display: 'flex', flexDirection: 'column', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start', width: m.role === 'user' ? 'auto' : '100%' }}
+                onMouseEnter={() => hasTable && setHoveredMsg(i)}
+                onMouseLeave={() => setHoveredMsg(null)}
+              >
+                <div
+                  style={{
+                    position: 'relative',
+                    maxWidth: m.role === 'user' ? '85%' : '100%',
+                    width: m.role === 'user' ? 'auto' : '100%',
+                    padding: '10px 14px',
+                    borderRadius: m.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+                    background: m.role === 'user' ? '#001F5B' : '#F1F5F9',
+                    color: m.role === 'user' ? '#fff' : '#1E293B',
+                    fontSize: '0.8rem', lineHeight: 1.6,
+                    wordBreak: 'break-word',
+                    overflowX: 'auto',
+                  }}>
+                  {hasTable && (
+                    <button
+                      onClick={() => exportAsImage(i)}
+                      title="Baixar tabela como imagem"
+                      style={{
+                        position: 'absolute', top: 8, right: 8,
+                        height: 24, borderRadius: 6, border: 'none',
+                        background: hoveredMsg === i ? 'rgba(0,31,91,0.12)' : 'transparent',
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                        fontSize: '0.72rem', opacity: exporting === i ? 0.6 : hoveredMsg === i ? 1 : 0.3,
+                        transition: 'all 0.15s', zIndex: 1, padding: '0 8px',
+                        fontFamily: 'inherit', color: '#001F5B', fontWeight: 600, whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {exporting === i ? '⏳' : '⬇'}
+                      <span style={{ fontSize: '0.68rem' }}>{exporting === i ? 'Exportando...' : 'Baixar imagem'}</span>
+                    </button>
+                  )}
                   {m.role === 'user' ? (
                     m.content
                   ) : (
-                    <div style={{ width: '100%', overflowX: 'auto' }} className="markdown-content">
-                      <Markdown>{m.content}</Markdown>
+                    <div
+                      ref={el => { if (el && hasTable) msgRefs.current[i] = el; }}
+                      style={{ width: '100%', overflowX: 'auto' }} className="markdown-content">
+                      <Markdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          td({ children, ...props }) {
+                            const text = String(children ?? '');
+                            let extraStyle;
+                            if (text.startsWith('+'))      extraStyle = { color: '#059669', fontWeight: 700 };
+                            else if (text.startsWith('-')) extraStyle = { color: '#DC2626', fontWeight: 700 };
+                            else if (text.startsWith('=')) extraStyle = { color: '#0066B3', fontWeight: 700 };
+                            return <td {...props} style={extraStyle}>{children}</td>;
+                          },
+                        }}
+                      >{m.content}</Markdown>
                     </div>
                   )}
                 </div>
@@ -201,7 +269,8 @@ export default function ChatBadge() {
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
 
             {loading && (
               <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
@@ -316,9 +385,12 @@ export default function ChatBadge() {
          .markdown-content table {
           border-collapse: collapse;
           width: 100%;
-          margin: 6px 0;
-          font-size: 0.75rem;
+          margin: 8px 0;
+          font-size: 0.74rem;
           overflow-x: auto;
+          border-radius: 6px;
+          overflow: hidden;
+          box-shadow: 0 1px 4px rgba(0,31,91,0.08);
         }
         .markdown-content {
           width: 100%;
@@ -326,12 +398,30 @@ export default function ChatBadge() {
         }
         .markdown-content th, .markdown-content td {
           border: 1px solid #CBD5E1;
-          padding: 4px 8px;
+          padding: 5px 10px;
+          text-align: right;
+          white-space: nowrap;
+        }
+        .markdown-content th:first-child, .markdown-content td:first-child {
+          text-align: left;
+        }
+        .markdown-content th:nth-child(2), .markdown-content td:nth-child(2) {
           text-align: left;
         }
         .markdown-content th {
-          background: #F1F5F9;
-          font-weight: 600;
+          background: linear-gradient(135deg, #001F5B 0%, #0066B3 100%);
+          color: #fff;
+          font-weight: 700;
+          font-size: 0.68rem;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          border-color: #0050A0;
+        }
+        .markdown-content tbody tr:nth-child(even) {
+          background: #F8FAFC;
+        }
+        .markdown-content tbody tr:hover {
+          background: #EFF6FF;
         }
         .markdown-content a {
           color: #0066B3;

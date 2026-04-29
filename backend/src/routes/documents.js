@@ -37,8 +37,8 @@ async function isResponsible(docId, userName) {
 async function hasActiveDelegationForDoc(docId, userId) {
   const r = await pool.query(`
     SELECT 1 FROM access_delegations d
-    JOIN documents doc ON LOWER(doc.responsible) = LOWER(u.name)
     JOIN users u ON u.id = d.delegator_id
+    JOIN documents doc ON LOWER(doc.responsible) = LOWER(u.name)
     WHERE d.delegate_id = $1
       AND d.active = true
       AND CURRENT_DATE BETWEEN d.start_date AND d.end_date
@@ -251,8 +251,8 @@ router.put('/:id', async (req, res) => {
   const { plant, responsible, date, subject, status, document_link, notes, author_ids } = req.body;
   const userId = req.user.id;
 
-    if (!(await canEdit(id, userId, req.user.role, req.user.name)))
-      return res.status(403).json({ error: 'Sem permissão para editar este documento' });
+  if (!(await canEdit(id, userId, req.user.role, req.user.name)))
+    return res.status(403).json({ error: 'Sem permissão para editar este documento' });
 
   const client = await pool.connect();
   try {
@@ -298,8 +298,8 @@ router.patch('/:id/status', async (req, res) => {
   if (!validStatuses.includes(status))
     return res.status(400).json({ error: 'Status inválido' });
 
-    if (!(await canEdit(id, userId, req.user.role, req.user.name)))
-      return res.status(403).json({ error: 'Sem permissão' });
+  if (!(await canEdit(id, userId, req.user.role, req.user.name)))
+    return res.status(403).json({ error: 'Sem permissão' });
 
   try {
     const r = await pool.query(

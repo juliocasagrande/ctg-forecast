@@ -39,7 +39,7 @@ describe('POST /api/chat — sem auth', () => {
 // Sem GROQ_API_KEY
 // ──────────────────────────────────────────────────────────────
 describe('POST /api/chat — sem GROQ_API_KEY', () => {
-  beforeEach(() => { delete process.env.GROQ_API_KEY; });
+  beforeEach(() => { delete process.env.GROQ_API_KEY; delete process.env.GROQ_API_KEYS; });
 
   it('retorna 503 com mensagem explicativa', async () => {
     const res = await request(app)
@@ -62,6 +62,7 @@ describe('POST /api/chat — com GROQ_API_KEY', () => {
 
   afterEach(() => {
     delete process.env.GROQ_API_KEY;
+    delete process.env.GROQ_API_KEYS;
     vi.restoreAllMocks();
   });
 

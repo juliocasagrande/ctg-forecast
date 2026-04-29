@@ -5,44 +5,38 @@ import { requireAuth } from '../middleware/auth.js';
 const router = Router();
 router.use(requireAuth);
 
-const SUPERIOR_ROLES = ['gestor', 'planejador', 'coordenador', 'admin'];
-
 // ─── Sistema de rotação de chaves Groq ───────────────────────────────
-const apiKeys = process.env.GROQ_API_KEYS 
-  ? process.env.GROQ_API_KEYS.split(',').map(k => k.trim()).filter(Boolean)
-  : process.env.GROQ_API_KEY 
-    ? [process.env.GROQ_API_KEY]
-    : [];
 let currentKeyIndex = 0;
 
-function getNextApiKey() {
-  if (apiKeys.length === 0) return null;
-  const key = apiKeys[currentKeyIndex];
-  currentKeyIndex = (currentKeyIndex + 1) % apiKeys.length;
-  return key;
+// Lê as chaves do env em tempo de execução (necessário para testes e hot-reload)
+function getApiKeys() {
+  if (process.env.GROQ_API_KEYS)
+    return process.env.GROQ_API_KEYS.split(',').map(k => k.trim()).filter(Boolean);
+  if (process.env.GROQ_API_KEY) return [process.env.GROQ_API_KEY];
+  return [];
 }
 
 async function fetchWithKeyRotation(url, options) {
+  const apiKeys = getApiKeys();
+  if (apiKeys.length === 0) {
+    const err = new Error('Nenhuma chave de API configurada');
+    err.status = 503;
+    throw err;
+  }
+
   let lastError = null;
-  
-  // Tentar todas as chaves disponíveis
-  for (let triedKeys = 0; triedKeys < apiKeys.length; triedKeys++) {
-    const key = getNextApiKey();
-    if (!key) throw new Error('Nenhuma chave de API configurada');
-    
+  for (let i = 0; i < apiKeys.length; i++) {
+    const key = apiKeys[currentKeyIndex % apiKeys.length];
+    currentKeyIndex = (currentKeyIndex + 1) % apiKeys.length;
+
     const opts = {
       ...options,
-      headers: {
-        ...options.headers,
-        'Authorization': `Bearer ${key}`,
-      },
+      headers: { ...options.headers, 'Authorization': `Bearer ${key}` },
     };
-    
     try {
       const res = await fetch(url, opts);
       if (res.status === 429) {
-        // Rate limit atingido, tenta próxima chave
-        lastError = { status: 429, message: 'Rate limit' };
+        lastError = { status: 429, message: 'Rate limit atingido' };
         continue;
       }
       return res;
@@ -50,9 +44,8 @@ async function fetchWithKeyRotation(url, options) {
       lastError = err;
     }
   }
-  
-  // Todas as chaves falharam
-  const err = new Error('Todas as chaves de API atingiram o limite ou falharam');
+
+  const err = new Error(lastError?.message || 'Todas as chaves de API falharam');
   err.status = lastError?.status || 500;
   throw err;
 }
@@ -166,36 +159,81 @@ async function getProjectsTrackingInfo(projectCodes) {
   return tracking;
 }
 
+// Busca totais de Budget e Realizado por projeto em uma única query
+async function getProjectsFinancials(projectIds) {
+  if (!projectIds.length) return {};
+  const r = await pool.query(`
+    SELECT project_id, type, COALESCE(SUM(value), 0) AS total
+    FROM forecast_entries
+    WHERE project_id = ANY($1) AND type IN ('Budget', 'Realizado')
+    GROUP BY project_id, type
+  `, [projectIds]);
+  const result = {};
+  for (const row of r.rows) {
+    if (!result[row.project_id]) result[row.project_id] = { budget: 0, realizado: 0 };
+    if (row.type === 'Budget')    result[row.project_id].budget    = parseFloat(row.total) || 0;
+    if (row.type === 'Realizado') result[row.project_id].realizado = parseFloat(row.total) || 0;
+  }
+  return result;
+}
+
 // Busca resumo dos projetos do usuário (para contexto do chat)
 async function getProjectsSummary(userId, role, area) {
   const projects = await getAllowedProjects(userId, role, area);
   if (projects.length === 0) return 'Nenhum projeto atribuído no momento.';
 
-  // Buscar forecasts reais
-  const projectIds = projects.map(p => p.id);
-  const forecasts = await getProjectsForecast(projectIds);
+  const projectIds   = projects.map(p => p.id);
+  const projectCodes = projects.map(p => p.code);
+  const currentYear  = new Date().getFullYear();
+
+  const [forecasts, tracking, financials] = await Promise.all([
+    getProjectsForecast(projectIds),
+    getProjectsTrackingInfo(projectCodes),
+    getProjectsFinancials(projectIds),
+  ]);
 
   const lines = projects.map(p => {
-    const plants = Array.isArray(p.plants) ? p.plants.join(', ') : (p.plants || '—');
-    let line = `• ${p.code} — ${p.name}\n  Usina(s): ${plants}`;
-    
-    // SI e Pool
-    if (p.si_value || p.pool_value) {
-      line += `\n  SI: ${formatBRL(p.si_value)} | Pool: ${formatBRL(p.pool_value)}`;
-    }
-    
-    // Forecasts por ano
+    const plants     = Array.isArray(p.plants) ? p.plants.join(', ') : (p.plants || '—');
+    const t          = tracking[p.id];
+    const fin        = financials[p.id] || { budget: 0, realizado: 0 };
+    const siValue    = parseFloat(p.si_value)   || 0;
+    const pool       = parseFloat(p.pool_value) || 0;
+    const saldoSI    = t?.si.saldo ?? 0;
+
+    // Forecast (entries type=Forecast) por ano corrente e total
+    let forecastFutureCurrent = 0;
+    let forecastFutureTotal   = 0;
     if (forecasts[p.id]) {
-      const years = Object.keys(forecasts[p.id]).sort();
-      line += '\n  📅 Forecasts:';
-      years.forEach(year => {
-        const yData = forecasts[p.id][year];
-        const months = Object.keys(yData.byMonth).sort((a,b) => a-b);
-        const monthsStr = months.map(m => `M${m}: ${formatBRL(yData.byMonth[m])}`).join(', ');
-        line += `\n    ${year}: ${formatBRL(yData.total)} (${monthsStr})`;
+      Object.entries(forecasts[p.id]).forEach(([y, d]) => {
+        forecastFutureTotal += d.total;
+        if (parseInt(y) === currentYear) forecastFutureCurrent = d.total;
       });
     }
-    
+
+    // Totais finais = Forecast + Realizado
+    const budgetTotal   = fin.budget   + fin.realizado;
+    const forecastTotal = forecastFutureTotal + fin.realizado;
+    const forecastCurrentTotal = forecastFutureCurrent + fin.realizado;
+
+    // Δ Budget − Forecast (prefixo +/=/- para o renderer colorido do front)
+    const delta = budgetTotal - forecastTotal;
+    const deltaStr = delta > 0
+      ? `+${formatBRL(delta)}`
+      : delta < 0 ? `-${formatBRL(Math.abs(delta))}` : `=${formatBRL(0)}`;
+
+    let line = `• ${p.code} — ${p.name}`;
+    line += `\n  Usina(s): ${plants}`;
+    line += `\n  Valor SI: ${formatBRL(siValue)} | Pool: ${formatBRL(pool)} | Saldo SI: ${formatBRL(saldoSI)}`;
+    line += `\n  Realizado: ${formatBRL(fin.realizado)}`;
+    line += `\n  Budget (forecast Budget + Realizado): ${formatBRL(budgetTotal)}`;
+    line += `\n  Forecast ${currentYear} (Forecast + Realizado): ${formatBRL(forecastCurrentTotal)} | Forecast Total (Forecast + Realizado): ${formatBRL(forecastTotal)}`;
+    line += `\n  Δ Budget-Forecast: ${deltaStr}`;
+
+    if (t?.si.total > 0)
+      line += `\n  SI → Total: ${formatBRL(t.si.total)} | Realizado SI: ${formatBRL(t.si.realizado)} (${t.si.pctRealizado}%) | Saldo: ${formatBRL(t.si.saldo)}`;
+    if (t?.contrato.total > 0)
+      line += `\n  Contrato → Total: ${formatBRL(t.contrato.total)} | Realizado Contrato: ${formatBRL(t.contrato.realizado)} (${t.contrato.pctRealizado}%) | Saldo: ${formatBRL(t.contrato.saldo)}`;
+
     return line;
   });
   return lines.join('\n\n');
@@ -218,8 +256,13 @@ const SYSTEM_PROMPT = `Você é a Assistente CTG, assistente virtual **apenas in
    - Apenas informe e explique como o usuário pode fazer algo.
 4. **PERMISSÕES**: Você só verá dados que o usuário tem permissão para ver. Nunca invente dados que não estejam no contexto fornecido.
 5. **IDIOMA**: Responda sempre em português brasileiro, de forma concisa, objetiva e profissional.
-6. **FORMATAÇÃO**: Use Markdown para formatar respostas. Mantenha a formatação limpa e legível.
-7. **PROIBIÇÃO DE CÁLCULOS INVENTADOS**: NUNCA invente, estime ou calcule valores que não estejam explicitamente fornecidos no contexto. Se o contexto diz "Forecast: 2026: Total 5000 (M1: 500, M2: 500, ...)", use APENAS esses valores. NUNCA multiplique valores mensais por 12 ou qualquer outro número. Se não houver dados de forecast para um ano específico, diga "Dados de forecast não disponíveis para este ano" em vez de inventar.
+6. **FORMATAÇÃO — TABELAS PRIMEIRO**: Sempre que a resposta contiver dados comparativos, listas de projetos, valores financeiros ou qualquer conjunto estruturado, use **tabela Markdown** como formato principal. Use texto corrido apenas para explicações curtas ou quando não houver dados tabulares.
+7. **PROIBIÇÃO DE CÁLCULOS INVENTADOS**: NUNCA invente, estime ou calcule valores que não estejam explicitamente fornecidos no contexto. Use APENAS os valores do contexto. Se não houver dados para um período, escreva "—" na célula da tabela.
+8. **STATUS / RESUMO DOS PROJETOS**: Quando perguntado sobre "status", "situação", "resumo" ou "meus projetos", monte SEMPRE uma tabela Markdown com exatamente estas colunas (na ordem):
+   | Projeto | Usina | Valor SI | Saldo SI | Budget | Forecast [ano atual] | Forecast Total | Δ Budget-Forecast |
+   - A coluna **Δ Budget-Forecast** deve conter o valor numérico formatado com prefixo obrigatório: "+R$ X" se Budget > Forecast Total, "-R$ X" se Budget < Forecast Total, "=R$ 0" se iguais. NUNCA omita o prefixo.
+   - Preencha com "—" células sem dados. NÃO crie colunas adicionais de Forecast por ano.
+   - NÃO use colunas de status de documento ("Em elaboração", "Publicado") — isso é status de documento, não de projeto.
 
 ## Sistema CTG.Engenharia — Visão Geral
 Plataforma web de gestão de engenharia de manutenção que integra: forecast financeiro de projetos, controle de IACs, acompanhamento de contratos, gestão de documentos técnicos, controle de férias e relatórios.
@@ -258,7 +301,7 @@ Controle por área (Elétrica, Mecânica, Confiabilidade). Timeline, KPIs, tabel
 - Importação Excel para IACs, Projetos e Documentos`;
 
 router.post('/', async (req, res) => {
-  if (apiKeys.length === 0)
+  if (getApiKeys().length === 0)
     return res.status(503).json({ error: 'Chat não configurado. Adicione GROQ_API_KEY ou GROQ_API_KEYS ao .env do servidor.' });
 
   const { messages } = req.body;
@@ -266,8 +309,7 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'Mensagens inválidas' });
 
   try {
-    // Buscar dados que o usuário tem permissão para ver
-    const userId = req.user.id;
+    const userId   = req.user.id;
     const userRole = req.user.role;
     const userArea = req.user.area;
     const userName = req.user.name;
@@ -277,9 +319,7 @@ router.post('/', async (req, res) => {
       pool.query('SELECT COUNT(*) FROM projects').then(r => parseInt(r.rows[0].count)),
     ]);
 
-    // Montar contexto com dados reais
-    const userContext = `
-## DADOS DO USUÁRIO
+    const userContext = `## DADOS DO USUÁRIO
 - Nome: ${userName}
 - Cargo: ${userRole}
 - Área: ${userArea || 'N/A'}
@@ -293,23 +333,19 @@ ${projectsSummary}
 - Use APENAS os dados acima para responder sobre projetos.
 - Se perguntarem sobre um projeto específico, verifique se ele está na lista acima.
 - Se não estiver na lista, informe que o usuário não tem permissão para ver esse projeto.
-- Seja conciso e use os dados reais fornecidos.
-`.trim();
+- Seja conciso e use os dados reais fornecidos.`;
 
     const groqRes = await fetchWithKeyRotation('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'llama-3.1-8b-instant',
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'system', content: userContext },
-          ...messages.slice(-10).map(({ role, content }) => ({ role, content })),
+          { role: 'system', content: `${SYSTEM_PROMPT}\n\n---\n\n${userContext}` },
+          ...messages.slice(-12).map(({ role, content }) => ({ role, content })),
         ],
         max_tokens: 1024,
-        temperature: 0.7,
+        temperature: 0.2,
       }),
     });
 
@@ -321,7 +357,10 @@ ${projectsSummary}
   } catch (err) {
     console.error('[CHAT ERROR]', err.message);
     const status = err.status || 500;
-    res.status(status).json({ error: 'Erro ao processar mensagem' });
+    const message = status === 429
+      ? 'Rate limit atingido. Tente novamente em alguns instantes.'
+      : 'Erro ao processar mensagem';
+    res.status(status).json({ error: message });
   }
 });
 
