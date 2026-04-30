@@ -24,7 +24,6 @@ import IACsPage from './pages/IACsPage.jsx';
 import ProjectsTrackingPage from './pages/ProjectsTrackingPage.jsx';
 import AdminPanel from './components/admin/AdminPanel.jsx';
 import AlertBell from './components/ui/AlertBell.jsx';
-import ChatBadge from './components/ui/ChatBadge.jsx';
 import api from './utils/api.js';
 
 // ── Error Boundary ──────────────────────────────────────────────────────────
@@ -1161,9 +1160,6 @@ export default function App() {
         open={planjExportModal}
         onClose={() => setPlanjExportModal(false)}
       />
-
-      {/* Chat assistant badge — visible in all authenticated pages */}
-      {!isAdmin && <ChatBadge />}
 
       {/* Mobile bottom navigation — hidden on desktop via CSS */}
       {!isAdmin && (
