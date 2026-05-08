@@ -1422,31 +1422,45 @@ export default function HomePage({ year }) {
             </div>
           </HomeCard>
 
-          <div className="card" style={{ gridColumn: '1', gridRow: '2', padding: '10px 14px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.68rem', fontWeight: 900, color: 'var(--text-muted)', whiteSpace: 'nowrap', flexShrink: 0 }}>Filtro de usinas:</span>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1 }}>
-                {PROJECT_PLANTS.map(plant => {
-                  const active = selectedPlants.includes(plant);
-                  return (
-                    <button
-                      key={plant}
-                      type="button"
-                      onClick={() => setSelectedPlants(prev => active ? prev.filter(p => p !== plant) : [...prev, plant])}
-                      style={{ padding: '4px 12px', borderRadius: 999, border: `1.5px solid ${active ? '#0070B8' : '#E2E8F0'}`, background: active ? '#EFF6FF' : '#F8FAFC', color: active ? '#0070B8' : '#64748B', fontSize: '0.7rem', fontWeight: active ? 900 : 600, cursor: 'pointer', transition: 'all 0.15s' }}
-                    >
-                      {PROJECT_PLANT_SIGLAS[plant] || compactLabel(plant)}
-                    </button>
-                  );
-                })}
-              </div>
-              {selectedPlants.length > 0 && (
-                <button type="button" onClick={() => setSelectedPlants([])} style={{ border: '1px solid #FECACA', background: '#FEE2E2', color: '#991B1B', borderRadius: 999, padding: '4px 10px', fontSize: '0.66rem', fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                  Limpar
-                </button>
-              )}
+          <HomeCard
+            style={{ gridColumn: '1', gridRow: '2' }}
+            title="Filtro de usinas"
+            icon="folder"
+            action={selectedPlants.length > 0 ? (
+              <button type="button" onClick={() => setSelectedPlants([])} style={{ border: '1px solid #FECACA', background: '#FEE2E2', color: '#991B1B', borderRadius: 6, padding: '3px 9px', fontSize: '0.64rem', fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                Limpar ({selectedPlants.length})
+              </button>
+            ) : (
+              <span style={{ fontSize: '0.64rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Todas selecionadas</span>
+            )}
+          >
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {PROJECT_PLANTS.map(plant => {
+                const active = selectedPlants.includes(plant);
+                return (
+                  <button
+                    key={plant}
+                    type="button"
+                    onClick={() => setSelectedPlants(prev => active ? prev.filter(p => p !== plant) : [...prev, plant])}
+                    style={{
+                      padding: '5px 13px',
+                      borderRadius: 999,
+                      border: `1.5px solid ${active ? '#0070B8' : '#E2E8F0'}`,
+                      background: active ? 'linear-gradient(135deg, #EFF6FF, #DBEAFE)' : '#F8FAFC',
+                      color: active ? '#0050B3' : '#64748B',
+                      fontSize: '0.72rem',
+                      fontWeight: active ? 900 : 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                      boxShadow: active ? '0 1px 4px rgba(0,112,184,0.18)' : 'none',
+                    }}
+                  >
+                    {PROJECT_PLANT_SIGLAS[plant] || compactLabel(plant)}
+                  </button>
+                );
+              })}
             </div>
-          </div>
+          </HomeCard>
 
           <div style={{ gridColumn: '2', gridRow: '1 / 3', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <AttentionPanel total={pendingTotal} items={attentionItems} navigate={navigate} />
