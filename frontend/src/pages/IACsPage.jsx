@@ -1118,7 +1118,7 @@ export default function IACsPage() {
     <div style={{ padding: '12px 16px 16px 0' }}>
 
       {/* ── Summary row ── */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'nowrap', alignItems: 'stretch', minHeight: 170 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'nowrap', alignItems: 'stretch', height: 170 }}>
 
         {/* Status cards 2x2 - pastel blue tones matching UHE style */}
         <div style={{ flex: '0 0 240px', display: 'flex', flexDirection: 'column' }}>
@@ -1132,10 +1132,10 @@ export default function IACsPage() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, flex: 1 }}>
             {[
-              { label: 'Total',          value: filtered.length,                                         color: '#0050B3' },
-              { label: 'Elétrica',       value: filtered.filter(i => i.area === 'Elétrica').length,      color: '#1D4ED8' },
-              { label: 'Mecânica',       value: filtered.filter(i => i.area === 'Mecânica').length,      color: '#9A3412' },
-              { label: 'Confiabilidade', value: filtered.filter(i => i.area === 'Confiabilidade').length, color: '#5B21B6' },
+              { label: 'Total',          value: filtered.length,                                         color: '#0b5cab' },
+              { label: 'Elétrica',       value: filtered.filter(i => i.area === 'Elétrica').length,      color: '#0EA5E9' },
+              { label: 'Mecânica',       value: filtered.filter(i => i.area === 'Mecânica').length,      color: '#F59E0B' },
+              { label: 'Confiabilidade', value: filtered.filter(i => i.area === 'Confiabilidade').length, color: '#94A3B8' },
             ].map(c => (
               <div
                 key={c.label}
@@ -1178,7 +1178,7 @@ export default function IACsPage() {
               </span>
             )}
           </div>
-          <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, borderTop: '3px solid #0b5cab', padding: '10px', flex: 1, overflowY: 'auto', minHeight: 158 }}>
+          <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, borderTop: '3px solid #0b5cab', padding: '10px', flex: 1, overflowY: 'auto', minHeight: 0 }}>
             {(() => {
               // Always show all statuses from STATUS_OPTIONS (even with count 0)
               const visibleData = statusBarData;
