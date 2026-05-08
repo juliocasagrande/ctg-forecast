@@ -1441,7 +1441,7 @@ export default function HomePage({ year }) {
                     {[{ m: 5, color: '#10B981' }, { m: 6, color: '#0070B8' }, { m: 7, color: '#F59E0B' }].map(({ m, color }) => (
                       <div key={m} style={{ position: 'absolute', left: `${(m / 8) * 100}%`, top: 0, transform: 'translateX(-50%)', pointerEvents: 'none' }}>
                         <div style={{ width: 2, height: 7, background: color, borderRadius: 1 }} />
-                        <div style={{ marginTop: 2, fontSize: '0.5rem', color, fontWeight: 900, textAlign: 'center', whiteSpace: 'nowrap' }}>{m}m</div>
+                        <div style={{ marginTop: 2, fontSize: '0.8rem', color, fontWeight: 900, textAlign: 'center', whiteSpace: 'nowrap' }}>{m}m</div>
                       </div>
                     ))}
                   </div>
