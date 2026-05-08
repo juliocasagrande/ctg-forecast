@@ -21,6 +21,8 @@ export default function Profile() {
   const { toast } = useToast();
   const [name, setName] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
+  const [azureUpn, setAzureUpn] = useState(user?.azure_upn || '');
+  const [savingUpn, setSavingUpn] = useState(false);
   const [saving, setSaving] = useState(false);
   const [pwForm, setPwForm] = useState({ current_password:'', new_password:'', confirm:'' });
   const [changingPw, setChangingPw] = useState(false);
@@ -44,6 +46,16 @@ export default function Profile() {
       toast('Perfil atualizado', 'success');
     } catch (err) { toast(err.response?.data?.error || 'Erro ao salvar', 'error'); }
     finally { setSaving(false); }
+  };
+
+  const handleSaveAzureUpn = async () => {
+    setSavingUpn(true);
+    try {
+      const r = await api.patch('/auth/azure-upn', { azure_upn: azureUpn.trim() || null });
+      updateUser({ azure_upn: r.data.azure_upn });
+      toast('Conta Microsoft vinculada com sucesso', 'success');
+    } catch (err) { toast(err.response?.data?.error || 'Erro ao salvar', 'error'); }
+    finally { setSavingUpn(false); }
   };
 
   const handleChangePassword = async () => {
@@ -163,6 +175,32 @@ export default function Profile() {
           <button className="btn btn-primary" onClick={handleChangePassword}
             disabled={changingPw || !getPasswordStrength(pwForm.new_password).allPassed || pwForm.new_password !== pwForm.confirm}>
             {changingPw ? 'Alterando...' : 'Alterar Senha'}
+          </button>
+        </div>
+      </div>
+
+      {/* Microsoft SSO */}
+      <div className="card" style={{marginBottom:16}}>
+        <div className="card-header"><span className="card-title">Conta Microsoft (SSO)</span></div>
+        <div className="card-body">
+          <p style={{fontSize:'0.8rem',color:'var(--text-secondary)',marginBottom:12,lineHeight:1.5}}>
+            Informe o e-mail da sua conta Microsoft corporativa para habilitar o login com SSO.
+            Geralmente termina com <strong>@ctgpar.ctgbr.com.br</strong>.
+          </p>
+          <div className="form-group" style={{marginBottom:0}}>
+            <label className="form-label">E-mail Microsoft (UPN)</label>
+            <input
+              className="form-input"
+              type="email"
+              placeholder="exemplo@ctgpar.ctgbr.com.br"
+              value={azureUpn}
+              onChange={e => setAzureUpn(e.target.value)}
+            />
+          </div>
+        </div>
+        <div style={{padding:'0 20px 16px',display:'flex',justifyContent:'flex-end'}}>
+          <button className="btn btn-primary" onClick={handleSaveAzureUpn} disabled={savingUpn}>
+            {savingUpn ? 'Salvando...' : 'Vincular Conta'}
           </button>
         </div>
       </div>

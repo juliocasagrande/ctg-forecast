@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import api from '../utils/api.js';
+import { msalInstance, msalInitialized, loginRequest } from '../utils/msalConfig.js';
 
 const AuthContext = createContext(null);
 
@@ -39,11 +40,33 @@ export function AuthProvider({ children }) {
     localStorage.setItem('ctg_token', token);
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     setUser(user);
-    
+
     // Se a senha é temporária, força troca
     if (user.must_change_password) {
       return { ...user, forcePasswordChange: true };
     }
+    return user;
+  }, []);
+
+  const loginWithAzure = useCallback(async () => {
+    await msalInitialized;
+    let result;
+    try {
+      result = await msalInstance.loginPopup(loginRequest);
+    } catch (err) {
+      if (err.errorCode === 'interaction_in_progress') {
+        // Limpa estado pendente e retentar
+        await msalInstance.handleRedirectPromise();
+        result = await msalInstance.loginPopup(loginRequest);
+      } else {
+        throw err;
+      }
+    }
+    const r = await api.post('/auth/azure-login', { idToken: result.idToken });
+    const { token, user } = r.data;
+    localStorage.setItem('ctg_token', token);
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    setUser(user);
     return user;
   }, []);
 
@@ -57,7 +80,7 @@ export function AuthProvider({ children }) {
   const updateUser = useCallback((data) => setUser(u => ({ ...u, ...data })), []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithAzure, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

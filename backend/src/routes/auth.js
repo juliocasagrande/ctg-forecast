@@ -1,12 +1,45 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 import { pool } from '../db/schema.js';
 import { signToken, requireAuth, setAuthCookie, clearAuthCookie } from '../middleware/auth.js';
 import { loginLimiter, registerLimiter } from '../middleware/security.js';
 import { logAuthEvent, getClientIP } from '../middleware/audit.js';
 import { validatePassword } from '../middleware/validation.js';
 import { enviarEmail } from '../utils/mailer.js';
+
+const AZURE_TENANT_ID = process.env.AZURE_TENANT_ID || 'f21848f2-6893-4fa8-b96b-b23fb3ec84ee';
+const AZURE_CLIENT_ID = process.env.AZURE_CLIENT_ID || 'dac17d08-dfdd-456a-8a85-bcb18d46be7b';
+
+// Cache JWKS for 1 hour to avoid fetching on every login
+let _jwksCache = null;
+let _jwksCacheTime = 0;
+
+async function getAzurePublicKey(kid) {
+  const now = Date.now();
+  if (!_jwksCache || now - _jwksCacheTime > 60 * 60 * 1000) {
+    const resp = await fetch(
+      `https://login.microsoftonline.com/${AZURE_TENANT_ID}/discovery/v2.0/keys`
+    );
+    _jwksCache = (await resp.json()).keys;
+    _jwksCacheTime = now;
+  }
+  const jwk = _jwksCache.find(k => k.kid === kid);
+  if (!jwk) throw new Error('Azure public key not found');
+  return crypto.createPublicKey({ key: jwk, format: 'jwk' });
+}
+
+async function verifyAzureToken(idToken) {
+  const [headerB64] = idToken.split('.');
+  const header = JSON.parse(Buffer.from(headerB64, 'base64url').toString());
+  const pubKey = await getAzurePublicKey(header.kid);
+  return jwt.verify(idToken, pubKey, {
+    algorithms: ['RS256'],
+    audience: AZURE_CLIENT_ID,
+    issuer: `https://login.microsoftonline.com/${AZURE_TENANT_ID}/v2.0`,
+  });
+}
 
 const router = Router();
 
@@ -114,6 +147,69 @@ router.post('/login', loginLimiter, async (req, res) => {
   }
 });
 
+// ─── POST /api/auth/azure-login — SSO Microsoft/Azure AD ───────────────────
+router.post('/azure-login', loginLimiter, async (req, res) => {
+  const ip = getClientIP(req);
+  const ua = req.headers['user-agent'];
+  try {
+    const { idToken } = req.body;
+    if (!idToken) return res.status(400).json({ error: 'Token Azure obrigatório' });
+
+    let decoded;
+    try {
+      decoded = await verifyAzureToken(idToken);
+    } catch {
+      return res.status(401).json({ error: 'Token Azure inválido ou expirado' });
+    }
+
+    // Collect all email-like claims from the token (deduplicated, lowercase)
+    const emailClaims = [...new Set(
+      [decoded.preferred_username, decoded.email, decoded.unique_name, decoded.upn]
+        .filter(Boolean)
+        .map(e => e.toLowerCase())
+    )];
+    if (emailClaims.length === 0) return res.status(401).json({ error: 'E-mail não encontrado no token Azure' });
+
+    // Match against azure_upn OR email — try all claims at once
+    const r = await pool.query(
+      `SELECT * FROM users
+       WHERE active = true
+         AND (LOWER(azure_upn) = ANY($1) OR LOWER(email) = ANY($1))
+       LIMIT 1`,
+      [emailClaims]
+    );
+    let user = r.rows[0];
+
+    // Auto-save azure_upn on first successful match so future logins are faster
+    if (user && !user.azure_upn) {
+      const upn = emailClaims[0]; // preferred_username is first
+      await pool.query('UPDATE users SET azure_upn=$1, updated_at=NOW() WHERE id=$2', [upn, user.id]);
+      user = { ...user, azure_upn: upn };
+    }
+
+    if (!user) {
+      await logAuthEvent('login_failed', { email, ip, userAgent: ua, success: false, detail: 'Azure SSO — usuário não cadastrado' });
+      return res.status(401).json({ error: 'Usuário não cadastrado no sistema. Solicite acesso ao administrador.' });
+    }
+
+    if (user.pending_approval) {
+      return res.status(403).json({ error: 'Sua conta está aguardando aprovação do administrador.' });
+    }
+
+    const token = signToken({ id: user.id, name: user.name, email: user.email, role: user.role, area: user.area });
+    setAuthCookie(res, token);
+
+    await logAuthEvent('login_success', { email: user.email, userId: user.id, ip, userAgent: ua, success: true, detail: 'Azure SSO' });
+
+    res.json({
+      token,
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, area: user.area, avatar_initials: user.avatar_initials, must_change_password: false },
+    });
+  } catch (err) {
+    safeError(res, err);
+  }
+});
+
 // ─── POST /api/auth/logout ──────────────────────────────────────────────────
 router.post('/logout', (req, res) => {
   clearAuthCookie(res);
@@ -124,7 +220,7 @@ router.post('/logout', (req, res) => {
 router.get('/me', requireAuth, async (req, res) => {
   try {
     const r = await pool.query(
-      'SELECT id, name, email, role, area, avatar_initials, created_at, must_change_password FROM users WHERE id=$1',
+      'SELECT id, name, email, role, area, avatar_initials, created_at, must_change_password, azure_upn FROM users WHERE id=$1',
       [req.user.id]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Usuário não encontrado' });
@@ -139,7 +235,20 @@ router.get('/me', requireAuth, async (req, res) => {
       _originalRole:  dbUser.role,             // role real para exibição no perfil
       _hasDelegation: req.user._delegatorIds?.length > 0,
       must_change_password: dbUser.must_change_password || false,
+      azure_upn: dbUser.azure_upn || null,
     });
+  } catch (err) {
+    safeError(res, err);
+  }
+});
+
+// ─── PATCH /api/auth/azure-upn — link Microsoft account UPN ─────────────────
+router.patch('/azure-upn', requireAuth, async (req, res) => {
+  try {
+    const { azure_upn } = req.body;
+    const upn = azure_upn?.trim().toLowerCase() || null;
+    await pool.query('UPDATE users SET azure_upn=$1, updated_at=NOW() WHERE id=$2', [upn, req.user.id]);
+    res.json({ success: true, azure_upn: upn });
   } catch (err) {
     safeError(res, err);
   }

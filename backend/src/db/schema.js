@@ -83,6 +83,7 @@ await client.query(`
        ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
        ALTER TABLE users ADD COLUMN IF NOT EXISTS area VARCHAR(30) DEFAULT NULL;
        ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT false;
+       ALTER TABLE users ADD COLUMN IF NOT EXISTS azure_upn VARCHAR(120) DEFAULT NULL;
      `);
 
     await client.query(`

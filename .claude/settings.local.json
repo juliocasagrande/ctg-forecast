@@ -13,7 +13,8 @@
       "Bash(node --input-type=module)",
       "Bash(npx vite *)",
       "mcp__vexp__run_pipeline",
-      "Bash(grep -v \"^$\")"
+      "Bash(grep -v \"^$\")",
+      "Bash(node -e \"import\\('@azure/msal-browser'\\).then\\(m => console.log\\(Object.keys\\(m\\)\\)\\).catch\\(e => console.log\\(e\\)\\)\")"
     ]
   }
 }

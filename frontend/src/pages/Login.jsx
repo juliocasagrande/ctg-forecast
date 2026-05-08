@@ -130,11 +130,33 @@ export default function Login() {
   const [regSuccess, setRegSuccess] = useState('');
   const [regLoading, setRegLoading] = useState(false);
 
-  const { login } = useAuth();
+  const { login, loginWithAzure } = useAuth();
   const navigate = useNavigate();
+  const [azureLoading, setAzureLoading] = useState(false);
 
   const selectedRoleOpt = ROLE_OPTIONS.find(r => r.value === regRole);
   const needsArea = selectedRoleOpt?.needsArea ?? false;
+
+  const handleAzureLogin = async () => {
+    setLoginError('');
+    setAzureLoading(true);
+    try {
+      const user = await loginWithAzure();
+      navigate(user.role === 'admin' ? '/admin' : '/');
+    } catch (err) {
+      console.error('[Azure SSO]', err);
+      const errorCode = err.errorCode || err.name || '';
+      // Só silencia se o usuário fechou o popup voluntariamente
+      if (errorCode === 'user_cancelled' || errorCode === 'popup_window_error') {
+        // noop
+      } else {
+        const msg = err.response?.data?.error || err.message || 'Erro ao autenticar com Microsoft.';
+        setLoginError(msg);
+      }
+    } finally {
+      setAzureLoading(false);
+    }
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -220,6 +242,35 @@ export default function Login() {
               </div>
 
               {loginError && <div className="login-error">{loginError}</div>}
+
+              {/* SSO Microsoft */}
+              <button
+                type="button"
+                onClick={handleAzureLogin}
+                disabled={azureLoading || loginLoading}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  gap: 10, padding: '11px 16px', borderRadius: 8, cursor: 'pointer',
+                  border: '1.5px solid #D1D5DB', background: '#fff', fontWeight: 600,
+                  fontSize: '0.9rem', color: '#374151', transition: 'all 0.15s',
+                  marginBottom: 16,
+                }}
+              >
+                {/* Microsoft logo */}
+                <svg width="18" height="18" viewBox="0 0 21 21" fill="none">
+                  <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
+                  <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
+                  <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
+                  <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
+                </svg>
+                {azureLoading ? 'Aguarde...' : 'Entrar com Microsoft'}
+              </button>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                <div style={{ flex: 1, height: 1, background: '#E5E7EB' }} />
+                <span style={{ fontSize: '0.75rem', color: '#9CA3AF', whiteSpace: 'nowrap' }}>ou entre com senha</span>
+                <div style={{ flex: 1, height: 1, background: '#E5E7EB' }} />
+              </div>
 
               <form onSubmit={handleLogin}>
                 <div className="form-group">

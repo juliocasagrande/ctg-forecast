@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head><title>Auth</title></head>
+<body>
+<script>
+  // MSAL v5 uses BroadcastChannel with libraryState.id to communicate popup response
+  try {
+    const responseStr = window.location.hash || window.location.search;
+    const params = new URLSearchParams(
+      window.location.hash ? window.location.hash.substring(1) : window.location.search.substring(1)
+    );
+    const state = params.get("state");
+    if (state && responseStr) {
+      // state format: "<userState>|<base64(libraryState)>"
+      const parts = state.split("|");
+      const libraryStatePart = parts[parts.length - 1];
+      const libraryState = JSON.parse(atob(libraryStatePart));
+      const channel = new BroadcastChannel(libraryState.id);
+      channel.postMessage({ payload: responseStr, v: 1 });
+      channel.close();
+    }
+  } catch(e) {
+    console.error("MSAL blank redirect error:", e);
+  }
+</script>
+</body>
+</html>
