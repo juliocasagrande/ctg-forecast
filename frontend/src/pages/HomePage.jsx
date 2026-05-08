@@ -831,6 +831,7 @@ function ValueConsumptionBox({ label, value, realized, color }) {
 
 function PlantColumnChart({ items }) {
   const [hovered, setHovered] = useState(null);
+  const [tipPos, setTipPos] = useState({ x: 0, y: 0 });
   const rows = items;
   const max = Math.max(1, ...rows.map(item => Number(item.value) || 0));
   if (!rows.length) return <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>Sem valores por usina neste escopo.</span>;
@@ -851,7 +852,7 @@ function PlantColumnChart({ items }) {
     </div>
   );
   return (
-    <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10, background: '#FBFDFF', minHeight: 0, height: '100%', position: 'relative', overflow: 'visible', display: 'flex', flexDirection: 'column' }} onMouseLeave={() => setHovered(null)}>
+    <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10, background: '#FBFDFF', minHeight: 0, height: '100%', position: 'relative', overflow: 'visible', display: 'flex', flexDirection: 'column' }} onMouseMove={e => setTipPos({ x: e.clientX, y: e.clientY })} onMouseLeave={() => setHovered(null)}>
       <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6, flexShrink: 0 }}>Por usina</div>
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${rows.length}, minmax(24px, 1fr))`, gridTemplateRows: '1fr', gap: 7, flex: 1, minHeight: 60, paddingBottom: 6 }}>
         {rows.map((item, idx) => {
@@ -876,7 +877,10 @@ function PlantColumnChart({ items }) {
       </div>
       {hovered && (
         <div style={{
-          position: 'absolute', right: 10, top: 30, zIndex: 50,
+          position: 'fixed',
+          left: tipPos.x + 16,
+          top: tipPos.y - 10,
+          zIndex: 9999,
           background: 'var(--bg-card)', border: '1px solid var(--border)',
           borderRadius: 8, padding: '10px 14px', boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
           fontSize: '0.8rem', minWidth: 230, maxWidth: 280, pointerEvents: 'none',

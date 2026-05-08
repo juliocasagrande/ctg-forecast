@@ -22,6 +22,8 @@ export default function AlertBell() {
   const [open, setOpen] = useState(false);
   const [dismissing, setDismissing] = useState(new Set());
   const ref = useRef(null);
+  const btnRef = useRef(null);
+  const [dropPos, setDropPos] = useState({ top: 0, right: 0 });
   const navigate = useNavigate();
   const { isGestor, isPlanejador, isAdmin } = useRole();
   const isManager = isGestor || isPlanejador || isAdmin;
@@ -94,7 +96,14 @@ export default function AlertBell() {
     <div ref={ref} style={{ position: 'relative' }}>
       {/* Bell button */}
       <button
-        onClick={() => setOpen(o => !o)}
+        ref={btnRef}
+        onClick={() => {
+          if (btnRef.current) {
+            const r = btnRef.current.getBoundingClientRect();
+            setDropPos({ top: r.bottom + 8, right: window.innerWidth - r.right });
+          }
+          setOpen(o => !o);
+        }}
         title="Alertas"
         style={{
           position: 'relative',
@@ -128,11 +137,11 @@ export default function AlertBell() {
       {/* Dropdown panel */}
       {open && (
         <div className="alert-bell-dropdown" style={{
-          position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+          position: 'fixed', top: dropPos.top, right: dropPos.right,
           width: 370, background: 'var(--bg-card)',
           border: '1px solid var(--border-strong)',
           borderRadius: 'var(--radius-lg)',
-          boxShadow: 'var(--shadow-lg)', zIndex: 300, overflow: 'hidden',
+          boxShadow: 'var(--shadow-lg)', zIndex: 9999, overflow: 'hidden',
         }}>
           {/* Header */}
           <div style={{
