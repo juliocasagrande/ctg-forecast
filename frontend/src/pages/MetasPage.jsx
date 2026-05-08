@@ -10,15 +10,16 @@ const AREAS = [
 ];
 
 const STATUS = [
+  { value: 'Não iniciado', color: '#64748B', bg: '#F1F5F9', text: '#334155' },
   { value: 'Em andamento', color: '#F59E0B', bg: '#FEF3C7', text: '#92400E' },
   { value: 'Concluida', color: '#10B981', bg: '#D1FAE5', text: '#065F46' },
   { value: 'Cancelada', color: '#EF4444', bg: '#FEE2E2', text: '#991B1B' },
 ];
 
 const TABLE_TONES = {
-  personal: { header: '#002A67', sub: '#163F7A' },
-  collective: { header: '#0B4F82', sub: '#1E6FA5' },
-  subordinate: { header: '#244B7A', sub: '#365F8D' },
+  personal: { header: '#002A67', sub: '#123E7A', row: '#F8FBFF', alt: '#EEF6FF' },
+  collective: { header: '#075985', sub: '#0E7490', row: '#F0FDFA', alt: '#DDF8F3' },
+  subordinate: { header: '#334155', sub: '#475569', row: '#F8FAFC', alt: '#EEF2F7' },
 };
 
 const KPI_OPTIONS = [
@@ -72,14 +73,31 @@ function fmtPercent(v) {
   return `${n.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
 }
 
-function metaWeight(meta) {
-  const n = Number(meta?.weight);
+function assignedWeightMap(meta) {
+  const raw = meta?.assigned_weights;
+  if (!raw) return {};
+  if (typeof raw === 'object' && !Array.isArray(raw)) return raw;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function metaWeight(meta, memberId) {
+  const map = assignedWeightMap(meta);
+  const personal = memberId != null ? Number(map[String(memberId)] ?? map[Number(memberId)]) : NaN;
+  const n = Number.isFinite(personal) && personal > 0 ? personal : Number(meta?.weight);
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
-function weightedAchievement(metas) {
+function weightedAchievement(metas, memberId) {
   const rows = metas
-    .map(m => ({ weight: metaWeight(m), achievement: achievementPercent(m) }))
+    .map(m => ({ weight: metaWeight(m, memberId), achievement: achievementPercent(m) }))
     .filter(r => r.weight > 0 && Number.isFinite(r.achievement));
   const totalWeight = rows.reduce((sum, r) => sum + r.weight, 0);
   if (totalWeight <= 0) return null;
@@ -120,6 +138,11 @@ function evidenceFits(meta) {
     }
   }
   return Array.from({ length: 4 }, (_, i) => fits[i] === 'cover' ? 'cover' : 'contain');
+}
+
+function withMemberWeight(meta, member) {
+  if (!meta?.is_general || !member?.id) return meta;
+  return { ...meta, weight: metaWeight(meta, member.id) };
 }
 
 function evidenceLayout(meta) {
@@ -196,11 +219,11 @@ function StatusBadge({ status }) {
   );
 }
 
-const STATUS_EN = { 'Em andamento': 'In Progress', 'Concluida': 'Completed', 'Cancelada': 'Cancelled' };
+const STATUS_EN = { 'Não iniciado': 'Not Started', 'Em andamento': 'In Progress', 'Concluida': 'Completed', 'Cancelada': 'Cancelled' };
 
 function buildGoalsHTML({ member, metas, year }) {
   const now = new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'long', year: 'numeric' });
-  const averageAchievement = weightedAchievement(metas);
+  const averageAchievement = weightedAchievement(metas, member?.id);
   const metasWithEvidence = metas.filter(m => visibleEvidenceImages(m).some(Boolean)).length;
   const achievedMetas = metas.filter(m => (achievementPercent(m) || 0) >= 100).length;
   const totalColor = '#10B981';
@@ -223,7 +246,7 @@ function buildGoalsHTML({ member, metas, year }) {
   `;
   const summaryRows = metas.map(m => {
     const achievement = achievementPercent(m);
-    const weight = metaWeight(m);
+    const weight = metaWeight(m, member?.id);
     return `
       <tr class="${m.is_general ? 'summary-collective' : 'summary-individual'}">
         <td><span class="type-badge ${m.is_general ? 'badge-collective' : 'badge-individual'}">${m.is_general ? 'Collective' : 'Individual'}</span></td>
@@ -256,7 +279,7 @@ function buildGoalsHTML({ member, metas, year }) {
           </div>
           <div class="meta-grid">
             <div><span>KPI</span><strong>${escapeHTML(m.kpi || '-')}</strong></div>
-            <div><span>Weight</span><strong>${m.weight ? `${fmtNumber(m.weight * 100)}%` : '-'}</strong></div>
+            <div><span>Weight</span><strong>${metaWeight(m, member?.id) ? `${fmtNumber(metaWeight(m, member?.id) * 100)}%` : '-'}</strong></div>
             <div><span>Achieved</span><strong>${fmtPercent(m.achieved_value)}</strong></div>
           </div>
           ${m.detailed ? `<div class="detail-block"><div class="section-label">Goal Description</div><p class="detail">${escapeHTML(m.detailed)}</p></div>` : ''}
@@ -340,14 +363,13 @@ figcaption{margin-top:4px}
 </html>`;
 }
 
-function MetaModal({ meta, userId, area, year, members, canEditOthers, onSave, onDelete, onEvidenceSlot, onClose }) {
+function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUser, onSave, onDelete, onEvidenceSlot, onClose }) {
   // For collective metas: which members receive it (null = all)
-  const areaEngineers = members.filter(m => m.role === 'engenheiro');
   const [assignedUserIds, setAssignedUserIds] = useState(() => {
     if (!meta?.is_general) return null;
     if (Array.isArray(meta?.assigned_user_ids) && meta.assigned_user_ids.length > 0)
       return new Set(meta.assigned_user_ids.map(Number));
-    return new Set(areaEngineers.map(m => m.id)); // default: all selected
+    return new Set(currentUser?.id ? [currentUser.id] : []);
   });
 
   const [form, setForm] = useState({
@@ -381,12 +403,37 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, onSave, o
   const inp = { padding: '7px 10px', borderRadius: 7, border: '1px solid var(--border)', fontSize: '0.82rem', background: 'var(--bg-card)', color: 'var(--text-primary)', width: '100%', outline: 'none', fontFamily: 'var(--font-body)' };
   const label = { fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 };
   const busy = saving || deletingMeta || uploadingEvidence;
+  const collectiveMembers = members
+    .filter(m => (m.id === currentUser?.id) || (m.role === 'engenheiro' && (!form.assigned_area || m.area === form.assigned_area)))
+    .sort((a, b) => (a.id === currentUser?.id ? -1 : b.id === currentUser?.id ? 1 : a.name.localeCompare(b.name, 'pt-BR')));
+  const [assignedWeights, setAssignedWeights] = useState(() => {
+    const map = assignedWeightMap(meta);
+    const fallback = meta?.weight != null && meta?.weight !== '' ? parseFloat((Number(meta.weight) * 100).toFixed(2)) : '';
+    return Object.fromEntries(Object.entries(map).map(([id, val]) => [id, parseFloat((Number(val) * 100).toFixed(2)) || fallback]));
+  });
 
   useEffect(() => {
     setEvidenceDraft(evidenceImages(meta));
     setFitDraft(evidenceFits(meta));
     setForm(f => ({ ...f, evidence_layout: evidenceLayout(meta) }));
   }, [meta?.id, meta?.evidence_images, meta?.evidence_image, meta?.evidence_fits, meta?.evidence_layout]);
+
+  useEffect(() => {
+    if (!form.is_general) return;
+    const fallback = form.weight !== '' && form.weight != null ? Number(form.weight) : '';
+    setAssignedUserIds(prev => {
+      const next = new Set(prev || []);
+      if (!meta?.id && currentUser?.id) next.add(currentUser.id);
+      return next;
+    });
+    setAssignedWeights(prev => {
+      const next = { ...prev };
+      for (const member of collectiveMembers) {
+        if (next[member.id] === undefined || next[member.id] === '') next[member.id] = fallback;
+      }
+      return next;
+    });
+  }, [form.is_general, form.assigned_area, form.weight, currentUser?.id, meta?.id]);
 
   async function handleSubmit() {
     if (!form.description.trim()) return setError('Preencha a descricao da meta');
@@ -395,13 +442,18 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, onSave, o
     setSaving(true);
     setError('');
     try {
+      const selectedIds = form.is_general && assignedUserIds
+        ? [...new Set([...(currentUser?.id ? [currentUser.id] : []), ...assignedUserIds])]
+        : null;
+      const weightMap = form.is_general && selectedIds
+        ? Object.fromEntries(selectedIds.map(id => [id, assignedWeights[id] !== '' && assignedWeights[id] != null ? Number(assignedWeights[id]) / 100 : (form.weight !== '' && form.weight != null ? Number(form.weight) / 100 : null)]).filter(([, v]) => Number.isFinite(v) && v >= 0))
+        : {};
       const payload = {
         ...form,
         weight: form.weight !== '' && form.weight != null ? Number(form.weight) / 100 : null,
         achieved_value: parseFloat(form.achieved_value) || 0,
-        assigned_user_ids: form.is_general && assignedUserIds
-          ? [...assignedUserIds]
-          : null,
+        assigned_user_ids: selectedIds,
+        assigned_weights: weightMap,
       };
       await onSave(meta?.id ? 'put' : 'post', meta?.id || null, payload);
       onClose();
@@ -492,6 +544,34 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, onSave, o
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '18px 20px', overflowY: 'auto' }}>
+          {canEditOthers && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', borderRadius: 8, border: '1px solid var(--border)', background: form.is_general ? '#EFF6FF' : '#F8FAFC', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={form.is_general}
+                onChange={e => {
+                  const checked = e.target.checked;
+                  const targetArea = form.assigned_area || form.area || area;
+                  setForm(f => ({ ...f, is_general: checked, assigned_area: targetArea, area: targetArea, user_id: checked ? (currentUser?.id || f.user_id) : f.user_id }));
+                  if (checked) {
+                    const eligible = members.filter(m => m.id === currentUser?.id || (m.role === 'engenheiro' && m.area === targetArea));
+                    setAssignedUserIds(new Set(eligible.map(m => m.id)));
+                    const fallback = form.weight !== '' && form.weight != null ? Number(form.weight) : '';
+                    setAssignedWeights(prev => {
+                      const next = { ...prev };
+                      eligible.forEach(m => { if (next[m.id] === undefined || next[m.id] === '') next[m.id] = fallback; });
+                      return next;
+                    });
+                  }
+                }}
+                style={{ accentColor: 'var(--ctg-blue)', width: 15, height: 15 }}
+              />
+              <span style={{ fontSize: '0.78rem', fontWeight: 800, color: form.is_general ? '#1D4ED8' : 'var(--text-secondary)' }}>
+                Meta coletiva
+              </span>
+            </label>
+          )}
+
           {canEditOthers && !form.is_general && (
             <div>
               <label style={label}>COLABORADOR</label>
@@ -503,15 +583,26 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, onSave, o
 
           {form.is_general && (
             <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 8, padding: '10px 12px' }}>
-              <div style={{ fontSize: '0.76rem', fontWeight: 700, color: '#1D4ED8', marginBottom: areaEngineers.length > 0 ? 8 : 0 }}>
-                Meta coletiva: {areaLabel(form.assigned_area)}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.1fr', gap: 10, alignItems: 'end', marginBottom: collectiveMembers.length > 0 ? 8 : 0 }}>
+                <div style={{ fontSize: '0.76rem', fontWeight: 700, color: '#1D4ED8' }}>Meta coletiva</div>
+                <label>
+                  <span style={{ ...label, marginBottom: 3 }}>AREA DA META</span>
+                  <select value={form.assigned_area} onChange={e => {
+                    const nextArea = e.target.value;
+                    const eligible = members.filter(m => m.id === currentUser?.id || (m.role === 'engenheiro' && m.area === nextArea));
+                    setForm(f => ({ ...f, assigned_area: nextArea, area: nextArea }));
+                    setAssignedUserIds(new Set(eligible.map(m => m.id)));
+                  }} style={inp}>
+                    {AREAS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
+                  </select>
+                </label>
               </div>
-              {areaEngineers.length > 0 && (
+              {collectiveMembers.length > 0 && (
                 <>
                   <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#1E40AF', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>DESTINATÁRIOS</span>
+                    <span>PESO POR PESSOA</span>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button type="button" onClick={() => setAssignedUserIds(new Set(areaEngineers.map(m => m.id)))}
+                      <button type="button" onClick={() => setAssignedUserIds(new Set(collectiveMembers.map(m => m.id)))}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.68rem', color: '#2563EB', fontWeight: 700, padding: 0 }}>
                         Todos
                       </button>
@@ -522,11 +613,11 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, onSave, o
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 160, overflowY: 'auto' }}>
-                    {areaEngineers.map(m => {
+                    {collectiveMembers.map(m => {
                       const checked = assignedUserIds ? assignedUserIds.has(m.id) : true;
                       return (
                         <label key={m.id} style={{
-                          display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px',
+                          display: 'grid', gridTemplateColumns: 'auto 22px minmax(0, 1fr) 90px', alignItems: 'center', gap: 8, padding: '5px 8px',
                           borderRadius: 6, cursor: 'pointer',
                           background: checked ? 'rgba(37,99,235,0.08)' : 'transparent',
                           border: `1px solid ${checked ? '#93C5FD' : 'transparent'}`,
@@ -534,15 +625,26 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, onSave, o
                         }}>
                           <input type="checkbox" checked={checked} onChange={() => {
                             setAssignedUserIds(prev => {
-                              const next = new Set(prev || areaEngineers.map(x => x.id));
+                              const next = new Set(prev || collectiveMembers.map(x => x.id));
                               next.has(m.id) ? next.delete(m.id) : next.add(m.id);
                               return next;
                             });
                           }} style={{ accentColor: '#2563EB', width: 13, height: 13, flexShrink: 0 }} />
                           <Avatar name={m.name} initials={m.avatar_initials} size={22} />
-                          <span style={{ fontSize: '0.78rem', fontWeight: checked ? 600 : 400, color: checked ? '#1E3A8A' : 'var(--text-secondary)' }}>
+                          <span style={{ fontSize: '0.78rem', fontWeight: checked ? 600 : 400, color: checked ? '#1E3A8A' : 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {m.name}
                           </span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="1"
+                            value={assignedWeights[m.id] ?? ''}
+                            disabled={!checked}
+                            onChange={e => setAssignedWeights(prev => ({ ...prev, [m.id]: e.target.value }))}
+                            onClick={e => e.stopPropagation()}
+                            style={{ ...inp, padding: '5px 7px', fontSize: '0.74rem', opacity: checked ? 1 : 0.45 }}
+                          />
                         </label>
                       );
                     })}
@@ -560,7 +662,7 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, onSave, o
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
               <label style={label}>AREA</label>
-              <select value={form.area} onChange={e => setForm(f => ({ ...f, area: e.target.value }))} style={inp}>
+              <select value={form.area} onChange={e => setForm(f => ({ ...f, area: e.target.value, assigned_area: f.is_general ? e.target.value : f.assigned_area }))} style={inp}>
                 {AREAS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
               </select>
             </div>
@@ -838,6 +940,9 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
     if (method === 'post') await api.post('/metas', { ...form, year });
     else await api.put(`/metas/${id}`, { ...form, year });
     await load();
+    if (form?.is_general) {
+      setOpenGoalSections(prev => new Set([...prev, 'general']));
+    }
   }
 
   async function handleDelete(id) {
@@ -931,8 +1036,14 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
     .sort((a, b) => a.memberName.localeCompare(b.memberName, 'pt-BR') || a.meta_number - b.meta_number);
 
   const reportMember = allMembers.find(m => m.id === Number(reportUserId)) || allMembers.find(m => m.id === user?.id) || user;
+  const collectiveAppliesToMember = (meta, member) => {
+    if (!member?.id) return false;
+    const assigned = Array.isArray(meta.assigned_user_ids) ? meta.assigned_user_ids.map(Number) : [];
+    if (assigned.length > 0) return assigned.includes(Number(member.id));
+    return (meta.assigned_area || meta.area) === (member.area || 'eletrica') || Number(meta.user_id) === Number(member.id);
+  };
   const reportGeneralMetas = ['engenheiro', 'coordenador'].includes(reportMember?.role)
-    ? generalMetas.filter(m => (m.assigned_area || m.area) === (reportMember.area || 'eletrica'))
+    ? generalMetas.filter(m => collectiveAppliesToMember(m, reportMember)).map(m => withMemberWeight(m, reportMember))
     : [];
   const reportPersonalMetas = (metasByUser[reportMember?.id] || []).sort((a, b) => a.meta_number - b.meta_number);
   const reportMetas = [...reportGeneralMetas, ...reportPersonalMetas];
@@ -1084,11 +1195,7 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
         title="Metas Coletivas"
         sub={`${rows.length} meta(s) coletiva(s)`}
         tone={TABLE_TONES.collective}
-        action={canManageGeneral && (
-          <button onClick={(e) => { e.stopPropagation(); openNewGeneralMeta(); }} style={{ background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 6, color: '#fff', cursor: 'pointer', fontSize: '0.68rem', fontWeight: 800, padding: '3px 8px' }}>
-            + meta coletiva
-          </button>
-        )}
+        action={null}
       >
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', minWidth: 900 }}>
@@ -1103,7 +1210,7 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
               {rows.length === 0 ? (
                 <tr><td colSpan={8} style={{ padding: 18, textAlign: 'center', color: 'var(--text-secondary)' }}>Nenhuma meta coletiva cadastrada para esta area.</td></tr>
               ) : rows.map((m, i) => (
-                <tr key={m.id} onClick={() => canManageGeneral && setModal({ meta: m, userId: null })} style={{ background: i % 2 ? '#F8FAFC' : 'var(--bg-card)', borderBottom: '1px solid #E2E8F0', cursor: canManageGeneral ? 'pointer' : 'default' }}>
+                <tr key={m.id} onClick={() => canManageGeneral && setModal({ meta: m, userId: null })} style={{ background: i % 2 ? TABLE_TONES.collective.alt : TABLE_TONES.collective.row, borderBottom: '1px solid #BFECE5', boxShadow: `inset 3px 0 0 ${TABLE_TONES.collective.header}`, cursor: canManageGeneral ? 'pointer' : 'default' }}>
                   <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', fontWeight: 700 }}>{areaLabel(m.assigned_area || m.area)}</td>
                   <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', fontWeight: 700, color: 'var(--ctg-navy)' }}>Meta {m.meta_number}</td>
                   <td title={m.description} style={{ padding: '8px 10px', maxWidth: 340, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.description}</td>
@@ -1235,7 +1342,7 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
                   key={m.id}
                   onClick={() => canEdit && setModal({ meta: m, userId: member.id })}
                   title={canEdit ? 'Clique para editar esta meta' : undefined}
-                  style={{ background: i % 2 ? '#F8FAFC' : 'var(--bg-card)', borderBottom: '1px solid #E2E8F0', cursor: canEdit ? 'pointer' : 'default' }}
+                  style={{ background: i % 2 ? (tone.alt || '#F8FAFC') : (tone.row || 'var(--bg-card)'), borderBottom: '1px solid #E2E8F0', boxShadow: `inset 3px 0 0 ${tone.header}`, cursor: canEdit ? 'pointer' : 'default' }}
                 >
                   <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', fontWeight: 700, color: 'var(--ctg-navy)' }}>Meta {m.meta_number}</td>
                   <td title={m.description} style={{ padding: '8px 10px', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.description}</td>
@@ -1310,34 +1417,38 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
           {renderDisciplineTables()}
 
           <section style={{ display: 'grid', gridTemplateColumns: '360px minmax(0, 1fr)', gap: 12, alignItems: 'stretch', flexShrink: 0 }}>
-            <div className="card" style={{ padding: '14px 16px' }}>
-              <div className="card-title" style={{ marginBottom: 10 }}>Relatorio individual</div>
-              {canEditOthers ? (
-                <label style={{ display: 'block', marginBottom: 10 }}>
-                  <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Colaborador</div>
-                  <select className="form-input" value={reportUserId} onChange={e => setReportUserId(e.target.value)} style={{ width: '100%' }}>
-                    {allMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                  </select>
-                </label>
-              ) : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                  <Avatar name={user?.name} initials={user?.avatar_initials} />
-                  <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{user?.name}</span>
-                </div>
-              )}
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 10 }}>
-                <div style={{ background: '#F8FAFC', borderRadius: 8, padding: 8 }}><div className="stat-label">Metas</div><strong>{reportMetas.length}</strong></div>
-                <div style={{ background: '#F8FAFC', borderRadius: 8, padding: 8 }}><div className="stat-label">Evid.</div><strong>{reportMetas.filter(m => visibleEvidenceImages(m).length > 0).length}</strong></div>
-                <div style={{ background: '#F8FAFC', borderRadius: 8, padding: 8 }}><div className="stat-label">Ano</div><strong>{year}</strong></div>
+            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+              <div style={{ background: 'linear-gradient(135deg, #002A67, #0B4F82)', color: '#fff', padding: '10px 16px', fontSize: '0.9rem', fontWeight: 900, letterSpacing: '0.01em' }}>
+                Relatorio individual
               </div>
+              <div style={{ padding: '14px 16px' }}>
+                {canEditOthers ? (
+                  <label style={{ display: 'block', marginBottom: 10 }}>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Colaborador</div>
+                    <select className="form-input" value={reportUserId} onChange={e => setReportUserId(e.target.value)} style={{ width: '100%' }}>
+                      {allMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    </select>
+                  </label>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <Avatar name={user?.name} initials={user?.avatar_initials} />
+                    <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{user?.name}</span>
+                  </div>
+                )}
 
-              {reportWarning && <div style={{ background: '#FEF3C7', color: '#92400E', borderRadius: 7, padding: '8px 10px', fontSize: '0.75rem', marginBottom: 10 }}>{reportWarning}</div>}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 10 }}>
+                  <div style={{ background: '#F8FAFC', borderRadius: 8, padding: 8 }}><div className="stat-label">Metas</div><strong>{reportMetas.length}</strong></div>
+                  <div style={{ background: '#F8FAFC', borderRadius: 8, padding: 8 }}><div className="stat-label">Evid.</div><strong>{reportMetas.filter(m => visibleEvidenceImages(m).length > 0).length}</strong></div>
+                  <div style={{ background: '#F8FAFC', borderRadius: 8, padding: 8 }}><div className="stat-label">Ano</div><strong>{year}</strong></div>
+                </div>
 
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-primary" onClick={generateReport} style={{ flex: 1, justifyContent: 'center', padding: '9px 10px' }}>Gerar</button>
-                <button onClick={downloadReport} disabled={!previewSrc} title="Baixar HTML" style={{ width: 38, borderRadius: 8, border: '1.5px solid #10B981', background: previewSrc ? '#F0FDF4' : 'var(--bg-app)', color: '#059669', cursor: previewSrc ? 'pointer' : 'not-allowed', fontWeight: 800 }}>H</button>
-                <button onClick={printReport} disabled={!previewSrc} title="Imprimir / salvar PDF" style={{ width: 38, borderRadius: 8, border: '1.5px solid #EA580C', background: previewSrc ? '#FFF7ED' : 'var(--bg-app)', color: '#EA580C', cursor: previewSrc ? 'pointer' : 'not-allowed', fontWeight: 800 }}>P</button>
+                {reportWarning && <div style={{ background: '#FEF3C7', color: '#92400E', borderRadius: 7, padding: '8px 10px', fontSize: '0.75rem', marginBottom: 10 }}>{reportWarning}</div>}
+
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-primary" onClick={generateReport} style={{ flex: 1, justifyContent: 'center', padding: '9px 10px' }}>Gerar</button>
+                  <button onClick={downloadReport} disabled={!previewSrc} title="Baixar HTML" style={{ width: 38, borderRadius: 8, border: '1.5px solid #10B981', background: previewSrc ? '#F0FDF4' : 'var(--bg-app)', color: '#059669', cursor: previewSrc ? 'pointer' : 'not-allowed', fontWeight: 800 }}>H</button>
+                  <button onClick={printReport} disabled={!previewSrc} title="Imprimir / salvar PDF" style={{ width: 38, borderRadius: 8, border: '1.5px solid #EA580C', background: previewSrc ? '#FFF7ED' : 'var(--bg-app)', color: '#EA580C', cursor: previewSrc ? 'pointer' : 'not-allowed', fontWeight: 800 }}>P</button>
+                </div>
               </div>
             </div>
 
@@ -1362,6 +1473,7 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
           year={year}
           members={allMembers}
           canEditOthers={canEditOthers}
+          currentUser={user}
           onSave={handleSave}
           onDelete={handleDelete}
           onEvidenceSlot={handleEvidenceSlot}

@@ -39,7 +39,8 @@ function buildVisibilityWhere(req, baseParamCount = 1, tableAlias = 'm', userAli
 }
 
 function normalizeStatus(status) {
-  return status === 'Concluída' ? 'Concluida' : (status || 'Em andamento');
+  if (status === 'Nao iniciado') return 'N\u00e3o iniciado';
+  return status === 'Conclu\u00edda' ? 'Concluida' : (status || 'Em andamento');
 }
 
 function normalizeEvidenceLayout(layout) {
@@ -72,6 +73,15 @@ function fitList(row) {
   return Array.isArray(row.evidence_fits) ? [...row.evidence_fits] : [];
 }
 
+function normalizeAssignedWeights(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([key, val]) => [String(parseInt(key, 10)), Number(val)])
+      .filter(([key, val]) => key !== 'NaN' && Number.isFinite(val) && val >= 0),
+  );
+}
+
 router.get('/', async (req, res) => {
   const year = parseInt(req.query.year) || new Date().getFullYear();
   const area = req.query.area || null;
@@ -83,7 +93,7 @@ router.get('/', async (req, res) => {
            m.kpi, m.detailed, m.weight, m.target_80, m.target_100, m.target_120,
            m.target_value, m.achieved_value, m.unit, m.status,
            m.evidence_image, m.evidence_images, m.evidence_fits, m.evidence_layout,
-           m.is_general, m.assigned_area, m.assigned_user_ids,
+           m.is_general, m.assigned_area, m.assigned_user_ids, m.assigned_weights,
            m.evidence_link, m.notes, m.created_at, m.updated_at
     FROM metas m
     LEFT JOIN users u ON u.id = m.user_id
@@ -129,7 +139,7 @@ router.post('/', async (req, res) => {
     user_id, area, year, meta_number, description, kpi, detailed, weight,
     target_80, target_100, target_120, target_value, achieved_value, unit,
     status, notes, evidence_link, evidence_layout, is_general, assigned_area,
-    assigned_user_ids,
+    assigned_user_ids, assigned_weights,
   } = req.body;
   const general = is_general === true || is_general === 'true';
   const targetArea = general
@@ -157,20 +167,22 @@ router.post('/', async (req, res) => {
   const userIds = general && Array.isArray(assigned_user_ids) && assigned_user_ids.length > 0
     ? assigned_user_ids.map(Number).filter(Boolean)
     : null;
+  const weightMap = general ? normalizeAssignedWeights(assigned_weights) : {};
 
   const { rows } = await pool.query(`
     INSERT INTO metas (
       user_id, area, year, meta_number, description, kpi, detailed, weight,
       target_80, target_100, target_120, target_value, achieved_value, unit,
-      status, notes, evidence_link, evidence_layout, is_general, assigned_area, assigned_user_ids, created_by
+      status, notes, evidence_link, evidence_layout, is_general, assigned_area, assigned_user_ids, assigned_weights, created_by
     )
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING *`,
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22::jsonb,$23) RETURNING *`,
     [
       general ? null : user_id, targetArea, year, meta_number, description, kpi || null, detailed || null,
       weight === '' || weight == null ? null : weight, target_80 || null,
       target_100 || null, target_120 || null, target_value || 0, achieved_value || 0,
       unit || '', normalizeStatus(status), notes || null, evidence_link || null,
-      normalizeEvidenceLayout(evidence_layout), general, general ? targetArea : null, userIds, requesterId,
+      normalizeEvidenceLayout(evidence_layout), general, general ? targetArea : null, userIds,
+      JSON.stringify(weightMap), requesterId,
     ]);
   res.status(201).json(rows[0]);
 });
@@ -195,7 +207,7 @@ router.put('/:id', async (req, res) => {
   const {
     area, year, meta_number, description, kpi, detailed, weight, target_80,
     target_100, target_120, target_value, achieved_value, unit, status, notes,
-    evidence_link, evidence_layout, assigned_area, assigned_user_ids,
+    evidence_link, evidence_layout, assigned_area, assigned_user_ids, assigned_weights,
   } = req.body;
   const targetArea = existingMeta.is_general
     ? (req.user.role === 'coordenador' ? (req.user.area || 'eletrica') : (assigned_area || area || existingMeta.assigned_area || 'eletrica'))
@@ -203,19 +215,20 @@ router.put('/:id', async (req, res) => {
   const userIds = existingMeta.is_general && Array.isArray(assigned_user_ids) && assigned_user_ids.length > 0
     ? assigned_user_ids.map(Number).filter(Boolean)
     : (existingMeta.is_general && assigned_user_ids === null ? null : undefined);
+  const weightMap = existingMeta.is_general ? normalizeAssignedWeights(assigned_weights) : {};
   const { rows } = await pool.query(`
     UPDATE metas SET area=$1, year=$2, meta_number=$3, description=$4, kpi=$5,
            detailed=$6, weight=$7, target_80=$8, target_100=$9, target_120=$10,
            target_value=$11, achieved_value=$12, unit=$13, status=$14, notes=$15,
            evidence_link=$16, evidence_layout=$17, assigned_area=$18,
-           assigned_user_ids=$19, updated_at=NOW() WHERE id=$20 RETURNING *`,
+           assigned_user_ids=$19, assigned_weights=$20::jsonb, updated_at=NOW() WHERE id=$21 RETURNING *`,
     [
       targetArea, year, meta_number, description, kpi || null, detailed || null,
       weight === '' || weight == null ? null : weight, target_80 || null,
       target_100 || null, target_120 || null, target_value || 0, achieved_value || 0,
       unit || '', normalizeStatus(status), notes || null, evidence_link || null,
       normalizeEvidenceLayout(evidence_layout), existingMeta.is_general ? targetArea : null,
-      userIds !== undefined ? userIds : null, id,
+      userIds !== undefined ? userIds : null, JSON.stringify(weightMap), id,
     ]);
   res.json(rows[0]);
 });

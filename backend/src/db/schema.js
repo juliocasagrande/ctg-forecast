@@ -87,7 +87,8 @@ await client.query(`
      `);
 
     await client.query(`
-      ALTER TABLE metas ADD COLUMN IF NOT EXISTS assigned_user_ids INTEGER[] DEFAULT NULL;
+      ALTER TABLE IF EXISTS metas ADD COLUMN IF NOT EXISTS assigned_user_ids INTEGER[] DEFAULT NULL;
+      ALTER TABLE IF EXISTS metas ADD COLUMN IF NOT EXISTS assigned_weights JSONB DEFAULT '{}'::jsonb;
     `);
 
     await client.query(`
@@ -431,7 +432,7 @@ await client.query(`
       -- Garante que a constraint de status aceita os valores corretos
       ALTER TABLE metas DROP CONSTRAINT IF EXISTS metas_status_check;
       ALTER TABLE metas ADD CONSTRAINT metas_status_check
-        CHECK (status IN ('Em andamento','Concluida','Concluída','Cancelada'));
+        CHECK (status IN ('Não iniciado','Nao iniciado','Em andamento','Concluida','Concluída','Cancelada'));
 
       ALTER TABLE metas ADD COLUMN IF NOT EXISTS kpi TEXT DEFAULT NULL;
       ALTER TABLE metas ADD COLUMN IF NOT EXISTS detailed TEXT DEFAULT NULL;
@@ -445,6 +446,9 @@ await client.query(`
       ALTER TABLE metas ADD COLUMN IF NOT EXISTS evidence_layout VARCHAR(40) DEFAULT 'grid-2x2';
       ALTER TABLE metas ADD COLUMN IF NOT EXISTS is_general BOOLEAN DEFAULT false;
       ALTER TABLE metas ADD COLUMN IF NOT EXISTS assigned_area VARCHAR(30) DEFAULT NULL;
+      ALTER TABLE metas ADD COLUMN IF NOT EXISTS assigned_user_ids INTEGER[] DEFAULT NULL;
+      ALTER TABLE metas ADD COLUMN IF NOT EXISTS assigned_weights JSONB DEFAULT '{}'::jsonb;
+      UPDATE metas SET user_id = NULL WHERE COALESCE(is_general, false) = true;
     `);
 
     /* ───────── LISTS: IACs ───────── */

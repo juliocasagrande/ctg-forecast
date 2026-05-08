@@ -1473,13 +1473,13 @@ export default function HomePage({ year }) {
               overflow: 'hidden',
             }}
           >
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: 'var(--ctg-navy)', fontSize: '0.9rem', fontWeight: 900, whiteSpace: 'nowrap', flexShrink: 0 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--ctg-navy)', fontSize: '0.9rem', fontWeight: 900, whiteSpace: 'nowrap', flexShrink: 0 }}>
               <svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true" style={{ color: '#0070B8', flexShrink: 0 }}>
                 <path d="M3 4h14l-5.4 6.2V15l-3.2 1.4v-6.2L3 4Z" fill="currentColor" />
               </svg>
-              Filtro Usinas
+              Filtro
             </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'nowrap', overflowX: 'auto', paddingBottom: 2, flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'nowrap', overflowX: 'auto', paddingBottom: 2, flex: 1, minWidth: 0 }}>
               {PLANT_FILTER_POLES.map(group => (
                 <div
                   key={group.label}
