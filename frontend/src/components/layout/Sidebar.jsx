@@ -130,52 +130,16 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
         </div>
 
         <div className="sidebar-nav">
+          {navItem('/', IC.dashboard, 'Inicio')}
 
           {/* Admin */}
           {isAdmin && <>
             <div className="nav-section-label">Administração</div>
             {navItem('/admin', IC.users, 'Gerenciar Usuários')}
-            {navItem('/', IC.dashboard, 'Dashboard')}
           </>}
 
           {/* Gestor / Engenheiro / Planejador */}
           {!isAdmin && <>
-
-            {/* ── SEÇÃO 1: Planejamento ─────────────────────────── */}
-            <div className="nav-section-label" style={{color:"rgba(255,255,255,0.85)"}}>
-              Forecast
-            </div>
-            {navItem('/', IC.dashboard, 'Dashboard')}
-            <div style={{ display:'flex', alignItems:'center', gap:2 }}>
-              <NavLink to="/projects" onClick={onClose}
-                className={({ isActive }) => `nav-item ${isActive && !location.pathname.includes('/projects/') ? 'active' : ''}`}
-                style={{ flex:1 }}>
-                {IC.projects}<span>Projetos</span>
-              </NavLink>
-              {(canManageSidebar) && (
-                <button
-                  title="Novo Projeto"
-                  onClick={() => { onNewProject?.(); onClose(); }}
-                  style={{
-                    flexShrink:0, width:26, height:26,
-                    background:'rgba(255,255,255,0.08)',
-                    border:'1px solid rgba(255,255,255,0.12)',
-                    borderRadius:'var(--radius-sm)',
-                    color:'rgba(255,255,255,0.7)',
-                    cursor:'pointer', fontSize:'1rem', lineHeight:1,
-                    display:'flex', alignItems:'center', justifyContent:'center',
-                    transition:'all 0.15s',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background='rgba(0,174,239,0.25)'; e.currentTarget.style.color='#fff'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.08)'; e.currentTarget.style.color='rgba(255,255,255,0.7)'; }}
-                >+</button>
-              )}
-            </div>
-            {navItem('/polos', IC.polos, 'Visão Geral')}
-            {navItem('/report', IC.report, 'Relatório HTML')}
-
-            {/* ── DIVISOR ───────────────────────────────────────── */}
-            <div style={{ margin: '10px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
 
             {/* ── SEÇÃO 2: Lists ────────────────────────────────── */}
             <div className="nav-section-label" style={{color:"rgba(255,255,255,0.75)"}}>
@@ -195,6 +159,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
             </div>
             {navItem('/vacations', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd"/></svg>, 'Férias')}
             {navItem('/documents', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd"/></svg>, 'Documentos')}
+             {navItem('/metas', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9zM4 5a2 2 0 00-2 2v6a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2H4zm0 2h12v6H4V7z"/></svg>, 'Metas')}
 
           </>}
 

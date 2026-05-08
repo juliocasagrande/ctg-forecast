@@ -7,6 +7,7 @@ import Sidebar from './components/layout/Sidebar.jsx';
 import { ToastProvider } from './components/ui/Toast.jsx';
 import Login from './pages/Login.jsx';
 import ResetPassword from './pages/ResetPassword.jsx';
+import HomePage from './pages/HomePage.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import ProjectsPage from './pages/ProjectsPage.jsx';
 import ProjectDetail from './components/ProjectDetail.jsx';
@@ -19,6 +20,7 @@ import TutorialPage from './pages/TutorialPage.jsx';
 import FeedbackPage from './pages/FeedbackPage.jsx';
 import FeedbackInbox from './pages/FeedbackInbox.jsx';
 import VacationsPage from './pages/VacationsPage.jsx';
+import MetasPage from './pages/MetasPage.jsx';
 import DocumentsPage from './pages/DocumentsPage.jsx';
 import IACsPage from './pages/IACsPage.jsx';
 import ProjectsTrackingPage from './pages/ProjectsTrackingPage.jsx';
@@ -402,15 +404,19 @@ function MobileBottomNav({ onLogout, isPlanejador, unreadCount = 0 }) {
     <nav className="mobile-bottom-nav">
       <NavLink to="/" end className={`mobile-bottom-nav-item ${location.pathname === '/' ? 'active' : ''}`}>
         <Icon name="house-chimney" />
-        <span>Dashboard</span>
+        <span>Inicio</span>
       </NavLink>
 
-      <NavLink to="/polos" className={`mobile-bottom-nav-item ${isActive('/polos') ? 'active' : ''}`}>
-        <Icon name="layer-group" /><span>Polos</span>
+      <NavLink to="/metas" className={`mobile-bottom-nav-item ${isActive('/metas') ? 'active' : ''}`}>
+        <Icon name="bullseye" /><span>Metas</span>
       </NavLink>
-      <NavLink to="/projects" className={`mobile-bottom-nav-item ${isActive('/projects') ? 'active' : ''}`}>
-        <Icon name="folder-open" />
-        <span>Projetos</span>
+      <NavLink to="/vacations" className={`mobile-bottom-nav-item ${isActive('/vacations') ? 'active' : ''}`}>
+        <Icon name="calendar-days" />
+        <span>Ferias</span>
+      </NavLink>
+      <NavLink to="/documents" className={`mobile-bottom-nav-item ${isActive('/documents') ? 'active' : ''}`}>
+        <Icon name="file-lines" />
+        <span>Docs</span>
       </NavLink>
 
       <NavLink to="/profile" className={`mobile-bottom-nav-item ${isActive('/profile') ? 'active' : ''}`}>
@@ -608,7 +614,20 @@ function AreaFilter({ value, onChange }) {
 }
 
 
-function MobileFilterModal({ open, onClose, period, onPeriod, activePlants, plantFilter, onPlantFilter, isPlanejador, onOpenExport }) {
+function MobileFilterModal({
+  open,
+  onClose,
+  period,
+  onPeriod,
+  activePlants,
+  plantFilter,
+  onPlantFilter,
+  isPeopleControlPage = false,
+  areaFilter = '',
+  onAreaFilter = () => {},
+  vacYear,
+  onVacYear = () => {},
+}) {
   if (!open) return null;
   return (
     <div style={{
@@ -627,14 +646,41 @@ function MobileFilterModal({ open, onClose, period, onPeriod, activePlants, plan
         
         <div style={{ fontSize:'0.82rem', fontWeight:700, color:'var(--ctg-navy)', marginBottom:14 }}>Filtros</div>
         
-        {/* Period */}
-        <div style={{ marginBottom:16 }}>
-          <div style={{ fontSize:'0.68rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--text-muted)', marginBottom:8 }}>Período</div>
-          <PeriodSelector period={period} onChange={onPeriod} />
-        </div>
+        {isPeopleControlPage ? (
+          <>
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:'0.68rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--text-muted)', marginBottom:8 }}>Area</div>
+              <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                {AREA_OPTIONS_LIST.map(opt => (
+                  <button key={opt.value}
+                    style={{ padding:'5px 12px', borderRadius:20, border:'1.5px solid var(--border-strong)',
+                      background: areaFilter === opt.value ? 'var(--ctg-blue)' : 'transparent',
+                      color: areaFilter === opt.value ? '#fff' : 'var(--text-secondary)',
+                      fontSize:'0.78rem', cursor:'pointer', fontFamily:'var(--font-body)' }}
+                    onClick={() => onAreaFilter(opt.value)}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:'0.68rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--text-muted)', marginBottom:8 }}>Ano</div>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:16 }}>
+                <button onClick={() => onVacYear(y => y - 1)} style={{ width:34, height:34, borderRadius:8, border:'1px solid var(--border)', background:'var(--bg-app)', cursor:'pointer', color:'var(--text-secondary)', fontSize:'1.2rem' }}>‹</button>
+                <span style={{ minWidth:70, textAlign:'center', fontWeight:800, color:'var(--ctg-navy)', fontSize:'1.1rem' }}>{vacYear}</span>
+                <button onClick={() => onVacYear(y => y + 1)} style={{ width:34, height:34, borderRadius:8, border:'1px solid var(--border)', background:'var(--bg-app)', cursor:'pointer', color:'var(--text-secondary)', fontSize:'1.2rem' }}>›</button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div style={{ marginBottom:16 }}>
+            <div style={{ fontSize:'0.68rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--text-muted)', marginBottom:8 }}>Periodo</div>
+            <PeriodSelector period={period} onChange={onPeriod} />
+          </div>
+        )}
         
         {/* Plant filter */}
-        {activePlants.length > 0 && (
+        {!isPeopleControlPage && activePlants.length > 0 && (
           <div style={{ marginBottom:16 }}>
             <div style={{ fontSize:'0.68rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--text-muted)', marginBottom:8 }}>Usina</div>
             <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
@@ -668,7 +714,8 @@ function MobileFilterModal({ open, onClose, period, onPeriod, activePlants, plan
 }
 
 function getPageMeta(pathname) {
-  if (pathname === '/') return { title: 'Dashboard', sub: null };
+  if (pathname === '/') return { title: 'Inicio', sub: 'Resumo operacional' };
+  if (pathname === '/forecast-dashboard') return { title: 'Dashboard', sub: null };
   if (pathname === '/projects') return { title: 'Projetos', sub: null };
   if (pathname === '/admin') return { title: 'Administração', sub: 'Gestão de Usuários' };
   if (pathname === '/profile') return { title: 'Meu Perfil', sub: null };
@@ -679,6 +726,7 @@ function getPageMeta(pathname) {
   if (pathname === '/feedback') return { title: 'Sugestões e Feedback', sub: 'Envie sua contribuição' };
   if (pathname === '/feedback/inbox') return { title: 'Inbox de Feedback', sub: 'Mensagens dos usuários do sistema' };
   if (pathname === '/vacations') return { title: 'Controle de Férias', sub: null };
+  if (pathname === '/metas') return { title: 'Controle de Metas', sub: null };
   if (pathname === '/documents') return { title: 'Controle de Documentos', sub: null };
   if (pathname === '/lists/iacs') return { title: 'IACs 2026'};
   if (pathname === '/lists/projects-tracking') return { title: 'Acompanhamento de Projetos', sub: 'Relatório mensal — contratos em andamento' };
@@ -739,7 +787,10 @@ export default function App() {
   );
 
   const { title, sub } = getPageMeta(location.pathname);
-  const showControls   = ['/', '/projects', '/polos', '/vacations'].includes(location.pathname) && !isAdmin;
+  const showControls   = ['/forecast-dashboard', '/projects', '/polos', '/vacations', '/metas'].includes(location.pathname) && !isAdmin;
+  const isPeopleControlPage = location.pathname === '/vacations' || location.pathname === '/metas';
+  const showFilterPill = location.pathname !== '/';
+  const isHomePage = location.pathname === '/';
 
   // Active plants = plants that exist in at least one project
   const activePlants = ALL_PLANTS.filter(pl => projects.some(p => (p.plants || []).includes(pl)));
@@ -758,6 +809,7 @@ export default function App() {
 
       <div className="main-content">
         {/* ── MOBILE: single sticky header row ── */}
+        {!isHomePage && (
         <header className="page-header mobile-header">
           {/* Mobile: menu toggle inline with title */}
           <button className="sidebar-toggle-inline" onClick={() => setSidebarOpen(o => !o)}>☰</button>
@@ -844,6 +896,24 @@ export default function App() {
               })()}
 
               {/* ── Botões da página de IACs ── */}
+              {location.pathname === '/metas' && (
+                <button onClick={() => {
+                  window.dispatchEvent(new CustomEvent('new-meta'));
+                }} style={{
+                  display: 'flex', alignItems: 'center', gap: 7,
+                  padding: '8px 18px', borderRadius: 10, border: 'none',
+                  background: 'linear-gradient(135deg, #001F5B, #0b5cab)',
+                  color: '#fff', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(11,92,171,0.25)',
+                  marginRight: 8, whiteSpace: 'nowrap',
+                }}>
+                  <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                    <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd"/>
+                  </svg>
+                  Nova Meta
+                </button>
+              )}
+
               {location.pathname === '/lists/iacs' && (() => {
                 const canImport = ['gestor', 'coordenador', 'planejador', 'admin'].includes(user?.role) ||
                   user?.email === 'julio.casagrande@ctgbr.com.br';
@@ -958,6 +1028,7 @@ export default function App() {
               <AlertBell />
 
               {/* ── Pill de filtros — sempre renderizado para altura consistente ── */}
+              {showFilterPill && (
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 2,
                 marginLeft: 10,
@@ -975,8 +1046,8 @@ export default function App() {
                   <path d="M2 4h12M4.5 8h7M7 12h2" strokeLinecap="round"/>
                 </svg>
 
-                {/* Filtro de usina — páginas com showControls exceto férias */}
-                {showControls && location.pathname !== '/vacations' && (
+                {/* Filtro de usina — páginas com showControls exceto pessoas */}
+                {showControls && !isPeopleControlPage && (
                   <PlantFilter
                     activePlants={activePlants}
                     selected={plantFilter}
@@ -984,8 +1055,8 @@ export default function App() {
                   />
                 )}
 
-                {/* Filtro de projeto — só no dashboard */}
-                {showControls && location.pathname === '/' && (
+                {/* Filtro de projeto — só no dashboard de forecast */}
+                {showControls && location.pathname === '/forecast-dashboard' && (
                   <>
                     <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.12)', margin: '0 4px', flexShrink: 0 }} />
                     <ProjectFilter
@@ -997,16 +1068,16 @@ export default function App() {
                   </>
                 )}
 
-                {/* Filtro de área — férias */}
-                {showControls && location.pathname === '/vacations' && (
+                {/* Filtro de área — férias e metas */}
+                {showControls && isPeopleControlPage && (
                   <>
                     <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.12)', margin: '0 4px', flexShrink: 0 }} />
                     <AreaFilter value={areaFilter} onChange={setAreaFilter} />
                   </>
                 )}
 
-                {/* Seletor de ano — apenas férias */}
-                {showControls && location.pathname === '/vacations' && (
+                {/* Seletor de ano — férias e metas */}
+                {showControls && isPeopleControlPage && (
                   <>
                     <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.15)', margin: '0 8px', flexShrink: 0 }} />
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
@@ -1020,14 +1091,15 @@ export default function App() {
                   </>
                 )}
 
-                {/* Seletor de período — todas as páginas exceto férias */}
-                {!showControls || location.pathname !== '/vacations' ? (
+                {/* Seletor de período — todas as páginas exceto pessoas */}
+                {!showControls || !isPeopleControlPage ? (
                   <>
                     <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.15)', margin: '0 8px', flexShrink: 0 }} />
                     <PeriodSelector period={period} onChange={setPeriod} />
                   </>
                 ) : null}
               </div>
+              )}
             </div>
           </div>
 
@@ -1048,6 +1120,22 @@ export default function App() {
                   <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd"/>
                 </svg>
                 Novo Projeto
+              </button>
+            )}
+            {location.pathname === '/metas' && (
+              <button onClick={() => {
+                window.dispatchEvent(new CustomEvent('new-meta'));
+              }} style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                padding: '7px 14px', borderRadius: 8, border: 'none',
+                background: 'linear-gradient(135deg, #001F5B, #0b5cab)',
+                color: '#fff', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}>
+                <svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
+                  <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd"/>
+                </svg>
+                Nova Meta
               </button>
             )}
             {/* Botão Novo IAC (apenas na página de IACs, não para engenheiros, exceto julio.casagrande) */}
@@ -1082,6 +1170,7 @@ export default function App() {
             )}
           </div>
         </header>
+        )}
 
         {/* Mobile filter modal */}
         <MobileFilterModal
@@ -1092,11 +1181,14 @@ export default function App() {
           activePlants={activePlants}
           plantFilter={plantFilter}
           onPlantFilter={setPlantFilter}
-          isPlanejador={isPlanejador}
-          onOpenExport={() => setPlanjExportModal(true)}
+          isPeopleControlPage={isPeopleControlPage}
+          areaFilter={areaFilter}
+          onAreaFilter={setAreaFilter}
+          vacYear={vacYear}
+          onVacYear={setVacYear}
         />
 
-        <main className="page-body">
+        <main className={`page-body ${isHomePage ? 'home-page-body' : ''}`}>
           <Routes>
             <Route path="/login" element={<Navigate to="/" replace />} />
 
@@ -1104,8 +1196,14 @@ export default function App() {
               <RequireAuth>
                 {isAdmin
                   ? <Navigate to="/admin" replace />
-                  : <Dashboard period={period} plantFilter={plantFilter} projectFilter={projectFilter} onProjectFilterChange={setProjectFilter} />
+                  : <HomePage year={vacYear} />
                 }
+              </RequireAuth>
+            } />
+
+            <Route path="/forecast-dashboard" element={
+              <RequireAuth>
+                <Dashboard period={period} plantFilter={plantFilter} projectFilter={projectFilter} onProjectFilterChange={setProjectFilter} />
               </RequireAuth>
             } />
 
@@ -1138,8 +1236,9 @@ export default function App() {
             <Route path="/tutorial" element={<RequireAuth><TutorialPage /></RequireAuth>} />
             <Route path="/feedback" element={<RequireAuth><FeedbackPage /></RequireAuth>} />
             <Route path="/feedback/inbox" element={<RequireAuth><FeedbackInbox /></RequireAuth>} />
-            <Route path="/vacations" element={<RequireAuth><VacationsPage areaFilter={areaFilter} year={vacYear} onYearChange={setVacYear} /></RequireAuth>} />
-            <Route path="/documents" element={<RequireAuth><DocumentsPage /></RequireAuth>} />
+             <Route path="/vacations" element={<RequireAuth><VacationsPage areaFilter={areaFilter} year={vacYear} onYearChange={setVacYear} /></RequireAuth>} />
+             <Route path="/metas" element={<RequireAuth><MetasPage areaFilter={areaFilter} year={vacYear} onYearChange={setVacYear} /></RequireAuth>} />
+             <Route path="/documents" element={<RequireAuth><DocumentsPage /></RequireAuth>} />
             <Route path="/lists/iacs" element={<RequireAuth><IACsPage /></RequireAuth>} />
             <Route path="/lists/projects-tracking" element={<RequireAuth><ProjectsTrackingPage /></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" replace />} />

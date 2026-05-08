@@ -44,6 +44,7 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
 .page-title{font-family:var(--font-display);font-size:1.45rem;color:var(--ctg-navy);line-height:1.2;}
 .page-subtitle{font-size:0.78rem;color:var(--text-muted);margin-top:2px;}
 .page-body{padding:16px 24px;flex:1;min-height:0;display:flex;flex-direction:column;}
+.page-body.home-page-body{margin-top:0!important;}
 
 /* ─── CARDS ─── */
 .card{background:var(--bg-card);border-radius:var(--radius-lg);border:1px solid var(--border);box-shadow:var(--shadow-sm);}

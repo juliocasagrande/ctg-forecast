@@ -30,6 +30,7 @@ import feedbackRouter    from './routes/feedback.js';
 import documentsRouter   from './routes/documents.js';
 import delegationsRouter from './routes/delegations.js';
 import vacationsRouter   from './routes/vacations.js';
+import metasRouter       from './routes/metas.js';
 import monthlyReportRouter from './routes/monthly-report.js';
 import listsRouter       from './routes/lists.js';
 import chatRouter        from './routes/chat.js';
@@ -96,8 +97,9 @@ export function createApp({ disableRateLimit = false } = {}) {
   app.use('/api/feedback', feedbackRouter);
   app.use('/api/documents',   documentsRouter);
   app.use('/api/delegations', delegationsRouter);
-  app.use('/api/vacations',   vacationsRouter);
-  app.use('/api/lists',       listsRouter);
+   app.use('/api/vacations',   vacationsRouter);
+   app.use('/api/metas',      metasRouter);
+   app.use('/api/lists',       listsRouter);
   app.use('/api/chat',        chatRouter);
 
   if (disableRateLimit) {

@@ -11,7 +11,9 @@
       "Bash(npx vitest *)",
       "Bash(wait)",
       "Bash(node --input-type=module)",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "mcp__vexp__run_pipeline",
+      "Bash(grep -v \"^$\")"
     ]
   }
 }

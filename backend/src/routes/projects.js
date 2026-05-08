@@ -161,7 +161,7 @@ router.post('/', requireRole('admin', 'coordenador', 'planejador'), async (req, 
 });
 
 // PUT /api/projects/:id — admin/coordenador/planejador
-router.put('/:id', requireRole('admin', 'coordenador', 'planejador'), async (req, res) => {
+router.put('/:id', requireRole('admin', 'coordenador', 'planejador'), requireProjectAccess, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -190,7 +190,7 @@ router.put('/:id', requireRole('admin', 'coordenador', 'planejador'), async (req
 });
 
 // DELETE /api/projects/:id — admin/coordenador/planejador, requires project name confirmation
-router.delete('/:id', requireRole('admin', 'coordenador', 'planejador'), async (req, res) => {
+router.delete('/:id', requireRole('admin', 'coordenador', 'planejador'), requireProjectAccess, async (req, res) => {
   try {
     const { confirmName } = req.body || {};
     // Fetch project to validate name
@@ -222,9 +222,10 @@ router.get('/:id/engineers', requireProjectAccess, async (req, res) => {
 });
 
 // POST /api/projects/:id/engineers — assign engineer
-router.post('/:id/engineers', requireRole('admin', 'coordenador', 'planejador'), async (req, res) => {
+router.post('/:id/engineers', requireRole('admin', 'coordenador', 'planejador'), requireProjectAccess, async (req, res) => {
   try {
     const { user_id } = req.body;
+    if (!user_id) return res.status(400).json({ error: 'user_id é obrigatório' });
     await pool.query(
       'INSERT INTO project_assignments (project_id, user_id, assigned_by) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
       [req.params.id, user_id, req.user.id]
@@ -234,7 +235,7 @@ router.post('/:id/engineers', requireRole('admin', 'coordenador', 'planejador'),
 });
 
 // DELETE /api/projects/:id/engineers/:userId — remove assignment
-router.delete('/:id/engineers/:userId', requireRole('admin', 'coordenador', 'planejador'), async (req, res) => {
+router.delete('/:id/engineers/:userId', requireRole('admin', 'coordenador', 'planejador'), requireProjectAccess, async (req, res) => {
   try {
     await pool.query(
       'DELETE FROM project_assignments WHERE project_id=$1 AND user_id=$2',

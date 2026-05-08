@@ -9,6 +9,15 @@ const api = axios.create({
 // Auto-set token from localStorage as fallback (migration period)
 // Primary auth is via httpOnly cookie (sent automatically with withCredentials: true)
 api.interceptors.request.use(config => {
+  if (config.data instanceof FormData) {
+    if (typeof config.headers?.delete === 'function') {
+      config.headers.delete('Content-Type');
+      config.headers.delete('content-type');
+    } else if (config.headers) {
+      delete config.headers['Content-Type'];
+      delete config.headers['content-type'];
+    }
+  }
   const token = localStorage.getItem('ctg_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;

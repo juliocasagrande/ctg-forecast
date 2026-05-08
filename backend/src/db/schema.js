@@ -396,6 +396,52 @@ await client.query(`
         CHECK (area IN ('eletrica','mecanica','confiabilidade','coordenacao','modernizacao'));
     `);
 
+    /* ───────── METAS (Metas Engenharia) ───────── */
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS metas (
+        id              SERIAL PRIMARY KEY,
+        user_id         INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        area            VARCHAR(30) NOT NULL DEFAULT 'eletrica',
+        year            INTEGER NOT NULL,
+        meta_number     INTEGER NOT NULL,
+        description     TEXT NOT NULL,
+        target_value    NUMERIC(15,2) DEFAULT 0,
+        achieved_value   NUMERIC(15,2) DEFAULT 0,
+        unit            VARCHAR(30) DEFAULT '',
+        status          VARCHAR(30) DEFAULT 'Em andamento',
+        evidence_image  TEXT DEFAULT NULL,
+        evidence_link   TEXT DEFAULT NULL,
+        notes           TEXT DEFAULT NULL,
+        created_by      INTEGER REFERENCES users(id),
+        created_at      TIMESTAMPTZ DEFAULT NOW(),
+        updated_at      TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, year, meta_number)
+      );
+
+      -- Garante que a constraint de área aceita todas as categorias
+      ALTER TABLE metas DROP CONSTRAINT IF EXISTS metas_area_check;
+      ALTER TABLE metas ADD CONSTRAINT metas_area_check
+        CHECK (area IN ('eletrica','mecanica','confiabilidade','coordenacao','modernizacao'));
+
+      -- Garante que a constraint de status aceita os valores corretos
+      ALTER TABLE metas DROP CONSTRAINT IF EXISTS metas_status_check;
+      ALTER TABLE metas ADD CONSTRAINT metas_status_check
+        CHECK (status IN ('Em andamento','Concluida','Concluída','Cancelada'));
+
+      ALTER TABLE metas ADD COLUMN IF NOT EXISTS kpi TEXT DEFAULT NULL;
+      ALTER TABLE metas ADD COLUMN IF NOT EXISTS detailed TEXT DEFAULT NULL;
+      ALTER TABLE metas ADD COLUMN IF NOT EXISTS weight NUMERIC(8,4) DEFAULT NULL;
+      ALTER TABLE metas ADD COLUMN IF NOT EXISTS target_80 TEXT DEFAULT NULL;
+      ALTER TABLE metas ADD COLUMN IF NOT EXISTS target_100 TEXT DEFAULT NULL;
+      ALTER TABLE metas ADD COLUMN IF NOT EXISTS target_120 TEXT DEFAULT NULL;
+      ALTER TABLE metas ADD COLUMN IF NOT EXISTS evidence_link TEXT DEFAULT NULL;
+      ALTER TABLE metas ADD COLUMN IF NOT EXISTS evidence_images JSONB DEFAULT '[]'::jsonb;
+      ALTER TABLE metas ADD COLUMN IF NOT EXISTS evidence_fits JSONB DEFAULT '[]'::jsonb;
+      ALTER TABLE metas ADD COLUMN IF NOT EXISTS evidence_layout VARCHAR(40) DEFAULT 'grid-2x2';
+      ALTER TABLE metas ADD COLUMN IF NOT EXISTS is_general BOOLEAN DEFAULT false;
+      ALTER TABLE metas ADD COLUMN IF NOT EXISTS assigned_area VARCHAR(30) DEFAULT NULL;
+    `);
+
     /* ───────── LISTS: IACs ───────── */
     await client.query(`
       CREATE TABLE IF NOT EXISTS lists_iacs (
@@ -564,7 +610,7 @@ await client.query(`
 
   } catch (err) {
     console.error('❌ ERRO NO DB:', err);
-    // NÃO derruba container
+    throw err;
   } finally {
     client.release();
   }

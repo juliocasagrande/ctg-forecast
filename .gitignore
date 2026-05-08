@@ -11,3 +11,4 @@ frontend/.env
 .DS_Store
 README.txt
 QWEN.md
+docs/

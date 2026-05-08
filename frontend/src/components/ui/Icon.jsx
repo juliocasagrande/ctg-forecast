@@ -25,6 +25,21 @@ const icons = {
       <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/>
     </svg>
   ),
+  'bullseye': (
+    <svg viewBox="0 0 20 20" fill="currentColor" width="1em" height="1em">
+      <path fillRule="evenodd" d="M10 2a8 8 0 108 8 1 1 0 10-2 0 6 6 0 11-6-6 1 1 0 100-2zm0 4a4 4 0 104 4 1 1 0 10-2 0 2 2 0 11-2-2 1 1 0 100-2zm6.707-3.707a1 1 0 00-1.414 0L10 7.586V10h2.414l5.293-5.293a1 1 0 000-1.414l-1-1z" clipRule="evenodd"/>
+    </svg>
+  ),
+  'calendar-days': (
+    <svg viewBox="0 0 20 20" fill="currentColor" width="1em" height="1em">
+      <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zM4 8h12v8H4V8zm2 2h2v2H6v-2zm4 0h2v2h-2v-2zm4 0h1v2h-1v-2z" clipRule="evenodd"/>
+    </svg>
+  ),
+  'file-lines': (
+    <svg viewBox="0 0 20 20" fill="currentColor" width="1em" height="1em">
+      <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm3 6a1 1 0 100 2h6a1 1 0 100-2H7zm0 3a1 1 0 100 2h4a1 1 0 100-2H7z" clipRule="evenodd"/>
+    </svg>
+  ),
   'folder-open': (
     <svg viewBox="0 0 20 20" fill="currentColor" width="1em" height="1em">
       <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>

@@ -251,6 +251,7 @@ router.post('/forgot-password', async (req, res) => {
 
 // ─── POST /api/auth/reset-password ─────────────────────────────────────────
 router.post('/reset-password', async (req, res) => {
+  const client = await pool.connect();
   try {
     const { token, new_password } = req.body;
     if (!token || !new_password) {
@@ -261,13 +262,16 @@ router.post('/reset-password', async (req, res) => {
     const pwCheck = validatePassword(new_password);
     if (!pwCheck.valid) return res.status(400).json({ error: pwCheck.error });
 
+    await client.query('BEGIN');
+
     // Busca token válido
-    const tokenR = await pool.query(
-      'SELECT * FROM password_reset_tokens WHERE token=$1 AND used=false AND expires_at > NOW()',
+    const tokenR = await client.query(
+      'SELECT * FROM password_reset_tokens WHERE token=$1 AND used=false AND expires_at > NOW() FOR UPDATE',
       [token]
     );
 
     if (!tokenR.rows.length) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Token inválido ou expirado' });
     }
 
@@ -277,8 +281,9 @@ router.post('/reset-password', async (req, res) => {
     const hash = await bcrypt.hash(new_password, 12);
 
     // Atualiza senha do usuário e marca token como usado
-    await pool.query('UPDATE users SET password_hash=$1, updated_at=NOW(), must_change_password=false WHERE id=$2', [hash, resetToken.user_id]);
-    await pool.query('UPDATE password_reset_tokens SET used=true WHERE id=$1', [resetToken.id]);
+    await client.query('UPDATE users SET password_hash=$1, updated_at=NOW(), must_change_password=false WHERE id=$2', [hash, resetToken.user_id]);
+    await client.query('UPDATE password_reset_tokens SET used=true WHERE id=$1', [resetToken.id]);
+    await client.query('COMMIT');
 
     await logAuthEvent('password_reset', {
       userId: resetToken.user_id,
@@ -289,7 +294,10 @@ router.post('/reset-password', async (req, res) => {
 
     res.json({ success: true, message: 'Senha redefinida com sucesso! Faça login com sua nova senha.' });
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     safeError(res, err);
+  } finally {
+    client.release();
   }
 });
 

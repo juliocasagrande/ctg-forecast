@@ -13,7 +13,7 @@ const PREFIX = 'proj';
 
 let adminCookies, coordCookies, engCookies, gerenteCookies;
 let adminUser, coordUser, engUser;
-let publicProject, assignedProject;
+let publicProject, assignedProject, mechanicalProject;
 
 beforeAll(async () => {
   await cleanTables('project_assignments', 'projects', 'users');
@@ -21,6 +21,7 @@ beforeAll(async () => {
   adminUser  = await createTestUser({ email: `${PREFIX}.admin@ctg-test.internal`,  role: 'admin' });
   coordUser  = await createTestUser({ email: `${PREFIX}.coord@ctg-test.internal`,  role: 'coordenador', area: 'eletrica' });
   engUser    = await createTestUser({ email: `${PREFIX}.eng@ctg-test.internal`,    role: 'engenheiro',  area: 'eletrica' });
+  const mechEng = await createTestUser({ email: `${PREFIX}.mech@ctg-test.internal`, role: 'engenheiro',  area: 'mecanica' });
   const gerente = await createTestUser({ email: `${PREFIX}.ger@ctg-test.internal`, role: 'gerente' });
 
   ({ cookies: adminCookies  } = await loginAs(app, adminUser));
@@ -34,6 +35,9 @@ beforeAll(async () => {
 
   // Projeto sem atribuição (apenas admin/planejador/gerente vê)
   publicProject = await createProject({ code: 'PROJ-PUBLIC', name: 'Projeto Público' });
+
+  mechanicalProject = await createProject({ code: 'PROJ-MECH', name: 'Projeto Mecânico' });
+  await assignEngineer(mechanicalProject.id, mechEng.id);
 });
 
 afterAll(async () => {
@@ -188,6 +192,15 @@ describe('PUT /api/projects/:id', () => {
 
     expect(res.status).toBe(403);
   });
+
+  it('coordenador não atualiza projeto fora da sua área (403)', async () => {
+    const res = await request(app)
+      .put(`/api/projects/${mechanicalProject.id}`)
+      .set('Cookie', cookieHeader(coordCookies))
+      .send({ name: 'Fora da área' });
+
+    expect(res.status).toBe(403);
+  });
 });
 
 // ──────────────────────────────────────────────────────────────
@@ -224,10 +237,24 @@ describe('POST /api/projects/:id/engineers', () => {
     const res = await request(app)
       .post(`/api/projects/${publicProject.id}/engineers`)
       .set('Cookie', cookieHeader(adminCookies))
-      .send({ userId: newEng.id });
+      .send({ user_id: newEng.id });
 
     // Pode retornar 200 ou 201
     expect([200, 201]).toContain(res.status);
+
+    const assigned = await request(app)
+      .get(`/api/projects/${publicProject.id}/engineers`)
+      .set('Cookie', cookieHeader(adminCookies));
+    expect(assigned.body.map(e => e.id)).toContain(newEng.id);
+  });
+
+  it('retorna 400 quando user_id não é enviado', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${publicProject.id}/engineers`)
+      .set('Cookie', cookieHeader(adminCookies))
+      .send({ userId: adminUser.id });
+
+    expect(res.status).toBe(400);
   });
 });
 

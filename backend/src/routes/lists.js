@@ -16,6 +16,14 @@ function safeError(res, err) {
   res.status(500).json({ error: err.message });
 }
 
+function areaVariants(area) {
+  const key = String(area || '').toLowerCase();
+  if (key === 'mecanica') return ['Mecânica', 'Mecanica', 'mecanica'];
+  if (key === 'confiabilidade') return ['Confiabilidade', 'confiabilidade'];
+  if (key === 'modernizacao') return ['Modernização', 'Modernizacao', 'modernizacao'];
+  return ['Elétrica', 'Eletrica', 'eletrica'];
+}
+
 /* ══════════════════════════════════════════════════════
  * IACs
  * ══════════════════════════════════════════════════════ */
@@ -159,7 +167,8 @@ router.get('/iacs/:id/viewed-by-me', async (req, res) => {
       'SELECT viewed_at FROM lists_iacs_last_viewed WHERE iac_id=$1 AND user_id=$2',
       [id, user.id]
     );
-    res.json(r.rows[0] || null);
+    const viewedAt = r.rows[0]?.viewed_at || null;
+    res.json({ viewed: Boolean(viewedAt), viewed_at: viewedAt });
   } catch (err) { safeError(res, err); }
 });
 
@@ -171,7 +180,8 @@ router.get('/iacs/:id/alert-info', async (req, res) => {
       'SELECT updated_at, requester FROM lists_iacs WHERE id=$1',
       [id]
     );
-    res.json(r.rows[0] || null);
+    const viewedAt = r.rows[0]?.viewed_at || null;
+    res.json({ viewed: Boolean(viewedAt), viewed_at: viewedAt });
   } catch (err) { safeError(res, err); }
 });
 
@@ -380,10 +390,10 @@ router.get('/projects-tracking/stale-projects', async (req, res) => {
         SELECT id, pp_contrato, projeto, area, gestor, updated_at
         FROM lists_projects_tracking
         WHERE updated_at < NOW() - ($1::text || ' days')::interval
-          AND area = $2
+          AND area = ANY($2::text[])
         ORDER BY updated_at ASC
       `;
-      params = [String(intervalDays), user.area || ''];
+      params = [String(intervalDays), areaVariants(user.area)];
     } else {
       // Gerentes see all areas
       query = `
@@ -439,10 +449,10 @@ router.get('/iacs/stale-iacs', async (req, res) => {
         SELECT id, iac_code, project, area, team_leader, updated_at
         FROM lists_iacs
         WHERE updated_at < NOW() - ($1::text || ' days')::interval
-          AND area = $2
+          AND area = ANY($2::text[])
         ORDER BY updated_at ASC
       `;
-      params = [String(intervalDays), user.area || ''];
+      params = [String(intervalDays), areaVariants(user.area)];
     } else {
       // Gerentes see all areas
       query = `

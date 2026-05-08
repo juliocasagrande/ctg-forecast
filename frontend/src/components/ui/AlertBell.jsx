@@ -5,6 +5,10 @@ import { useRole } from '../../context/AuthContext.jsx';
 
 const POLL_INTERVAL = 60_000;
 
+// Forecast está temporariamente oculto na navegação. Para reativar os alertas
+// dessa seção no sino, basta voltar esta flag para true e reexibir os links.
+const SHOW_FORECAST_ALERTS = false;
+
 function timeAgo(daysAgo) {
   if (daysAgo < 1) return 'hoje';
   if (daysAgo === 1) return 'ontem';
@@ -43,7 +47,9 @@ export default function AlertBell() {
       // Add stale IACs count
       const staleIACs = staleIACsR.data || [];
       setStaleIACs(staleIACs);
-      data.total = (data.total || 0) + delegations.length + (data.doc_unpublished?.count || 0) + staleProjects.length + staleIACs.length;
+      const vacationCount = data.vacation_adp?.count || 0;
+      const forecastTotal = SHOW_FORECAST_ALERTS ? (data.total || 0) : 0;
+      data.total = forecastTotal + delegations.length + (SHOW_FORECAST_ALERTS ? 0 : vacationCount) + (data.doc_unpublished?.count || 0) + staleProjects.length + staleIACs.length;
       setAlerts(data);
       if ('setAppBadge' in navigator) {
         const count = data?.total ?? 0;
@@ -151,8 +157,8 @@ export default function AlertBell() {
               </div>
             ) : (
               <>
-                {/* Unread messages */}
-                {alerts.unread_messages.count > 0 && (
+                {/* Forecast temporariamente suprimido: mensagens, forecast vazio, forecast desatualizado e realizado pendente. */}
+                {SHOW_FORECAST_ALERTS && alerts.unread_messages.count > 0 && (
                   <Section icon={<MsgIcon />} title="Mensagens não lidas" count={alerts.unread_messages.count} color="#0070B8">
                     {Object.entries(alerts.unread_messages.by_project).map(([pid, count]) => (
                       <AlertRow
@@ -168,8 +174,8 @@ export default function AlertBell() {
                   </Section>
                 )}
 
-                {/* Empty forecast */}
-                {alerts.empty_forecast.count > 0 && (
+                {/* Forecast temporariamente suprimido. Reativar junto com SHOW_FORECAST_ALERTS. */}
+                {SHOW_FORECAST_ALERTS && alerts.empty_forecast.count > 0 && (
                   <Section icon={<EditIcon />} title="Forecast não preenchido" count={alerts.empty_forecast.count} color="#B45309">
                     {alerts.empty_forecast.projects.map(p => (
                       <AlertRow
@@ -185,8 +191,8 @@ export default function AlertBell() {
                   </Section>
                 )}
 
-                {/* Stale forecast */}
-                {alerts.stale_forecast.count > 0 && (
+                {/* Forecast temporariamente suprimido. Reativar junto com SHOW_FORECAST_ALERTS. */}
+                {SHOW_FORECAST_ALERTS && alerts.stale_forecast.count > 0 && (
                   <Section icon={<ClockIcon />} title="Sem atualização recente" count={alerts.stale_forecast.count} color="#6B7280">
                     {alerts.stale_forecast.projects.map(p => (
                       <AlertRow
@@ -202,8 +208,8 @@ export default function AlertBell() {
                   </Section>
                 )}
 
-                {/* Pending actual */}
-                {alerts.pending_actual?.count > 0 && (
+                {/* Forecast temporariamente suprimido. Reativar junto com SHOW_FORECAST_ALERTS. */}
+                {SHOW_FORECAST_ALERTS && alerts.pending_actual?.count > 0 && (
                   <Section
                     icon={<WarningIcon />}
                     title={`Realizado de ${alerts.pending_actual.month_label} pendente`}

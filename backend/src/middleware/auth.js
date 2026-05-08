@@ -16,7 +16,7 @@ const COOKIE_OPTIONS = {
 };
 
 // Hierarquia de roles para elevação por delegação
-const ROLE_RANK = { engenheiro: 1, coordenador: 2, planejador: 3, gerente: 3, admin: 5 };
+const ROLE_RANK = { engenheiro: 1, coordenador: 2, planejador: 3, gerente: 3, gestor: 4, admin: 5 };
 
 export function signToken(payload) {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
@@ -95,8 +95,9 @@ export async function requireAuth(req, res, next) {
       _delegatorIds: delegatorIds, // IDs dos delegadores — permite acesso aos projetos deles
     };
   } catch (dbErr) {
-    console.warn('[AUTH] Falha ao revalidar usuário no banco, usando token como fallback:', dbErr.message);
-    req.user = decoded;
+    console.error('[AUTH] Falha ao revalidar usuário no banco:', dbErr.message);
+    clearAuthCookie(res);
+    return res.status(503).json({ error: 'Não foi possível validar a sessão. Tente novamente.' });
   }
 
   next();
