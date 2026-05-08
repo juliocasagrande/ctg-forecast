@@ -1021,6 +1021,25 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
   const mgmtMembers = allMembers.filter(m => mgmtRoles.includes(m.role));
   const areaMembers = members.filter(m => (canViewAllMetas || m.area === area) && !mgmtRoles.includes(m.role));
   const selfMember = members.find(m => m.id === user?.id) || allMembers.find(m => m.id === user?.id) || user;
+  const collectiveAppliesToMember = (meta, member) => {
+    if (!member?.id) return false;
+    if (member.role === 'coordenador') {
+      return (meta.assigned_area || meta.area) === (member.area || 'eletrica');
+    }
+    const assigned = Array.isArray(meta.assigned_user_ids) ? meta.assigned_user_ids.map(Number) : [];
+    if (assigned.length > 0) return assigned.includes(Number(member.id));
+    return (meta.assigned_area || meta.area) === (member.area || 'eletrica') || Number(meta.user_id) === Number(member.id);
+  };
+  const metasForMember = (member) => {
+    const collective = generalMetas
+      .filter(m => collectiveAppliesToMember(m, member))
+      .map(m => withMemberWeight(m, member));
+    const personal = (metasByUser[member?.id] || []);
+    return [...collective, ...personal].sort((a, b) => {
+      if (!!a.is_general !== !!b.is_general) return a.is_general ? -1 : 1;
+      return a.meta_number - b.meta_number;
+    });
+  };
   const summaryMembers = canViewAllMetas ? members : areaMembers;
   const areaMetas = metas.filter(m => !m.is_general && summaryMembers.some(mem => mem.id === m.user_id));
   const withMeta = new Set(areaMetas.map(m => m.user_id)).size;
@@ -1029,12 +1048,12 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
   const totalMetas = areaMetas.length;
 
   const listRows = areaMembers
-    .map(m => ({ member: m, metas: (metasByUser[m.id] || []).sort((a, b) => a.meta_number - b.meta_number) }))
+    .map(m => ({ member: m, metas: metasForMember(m) }))
     .sort((a, b) => a.member.name.localeCompare(b.member.name, 'pt-BR'));
-  const selfRow = selfMember ? { member: selfMember, metas: (metasByUser[selfMember.id] || []).sort((a, b) => a.meta_number - b.meta_number) } : null;
+  const selfRow = selfMember ? { member: selfMember, metas: metasForMember(selfMember) } : null;
 
   const mgmtRows = mgmtMembers
-    .map(m => ({ member: m, metas: (metasByUser[m.id] || []).sort((a, b) => a.meta_number - b.meta_number) }))
+    .map(m => ({ member: m, metas: metasForMember(m) }))
     .sort((a, b) => a.member.name.localeCompare(b.member.name, 'pt-BR'));
 
   const goalsSummaryRows = areaMetas
@@ -1045,20 +1064,7 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
     .sort((a, b) => a.memberName.localeCompare(b.memberName, 'pt-BR') || a.meta_number - b.meta_number);
 
   const reportMember = allMembers.find(m => m.id === Number(reportUserId)) || allMembers.find(m => m.id === user?.id) || user;
-  const collectiveAppliesToMember = (meta, member) => {
-    if (!member?.id) return false;
-    if (member.role === 'coordenador') {
-      return (meta.assigned_area || meta.area) === (member.area || 'eletrica');
-    }
-    const assigned = Array.isArray(meta.assigned_user_ids) ? meta.assigned_user_ids.map(Number) : [];
-    if (assigned.length > 0) return assigned.includes(Number(member.id));
-    return (meta.assigned_area || meta.area) === (member.area || 'eletrica') || Number(meta.user_id) === Number(member.id);
-  };
-  const reportGeneralMetas = ['engenheiro', 'coordenador'].includes(reportMember?.role)
-    ? generalMetas.filter(m => collectiveAppliesToMember(m, reportMember)).map(m => withMemberWeight(m, reportMember))
-    : [];
-  const reportPersonalMetas = (metasByUser[reportMember?.id] || []).sort((a, b) => a.meta_number - b.meta_number);
-  const reportMetas = [...reportGeneralMetas, ...reportPersonalMetas];
+  const reportMetas = metasForMember(reportMember);
 
   function generateReport() {
     if (!reportMember) return;
@@ -1210,7 +1216,17 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
         action={null}
       >
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', minWidth: 900 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', minWidth: 980, tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: 120 }} />
+              <col style={{ width: 360 }} />
+              <col style={{ width: 180 }} />
+              <col style={{ width: 90 }} />
+              <col style={{ width: 100 }} />
+              <col style={{ width: 90 }} />
+              <col style={{ width: 130 }} />
+              <col style={{ width: 110 }} />
+            </colgroup>
             <thead>
               <tr>
                 {['Area', 'Meta', 'Proposta', 'KPI', 'Peso', 'Realizado', 'Status', 'Evidencias'].map(h => (
@@ -1317,7 +1333,11 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
   function renderCollaboratorTable(member, memberMetas, options = {}) {
     const { open = false, sectionKey = `member-${member.id}`, title = member.name, sub, tone = TABLE_TONES.subordinate } = options;
     const canEdit = canEditOthers || member.id === user?.id;
-    const sortedMetas = [...memberMetas].sort((a, b) => a.meta_number - b.meta_number);
+    const personalMetas = (metasByUser[member.id] || []).sort((a, b) => a.meta_number - b.meta_number);
+    const sortedMetas = [...memberMetas].sort((a, b) => {
+      if (!!a.is_general !== !!b.is_general) return a.is_general ? -1 : 1;
+      return a.meta_number - b.meta_number;
+    });
     return (
       <CollapsibleSection
         key={member.id}
@@ -1326,18 +1346,28 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
         sub={sub || `${areaLabel(member.area)} · ${sortedMetas.length} meta(s)`}
         defaultOpen={open}
         tone={tone}
-        action={canEdit && sortedMetas.length < 10 && (
-          <button onClick={(e) => { e.stopPropagation(); setModal({ meta: { user_id: member.id, area: member.area || area, meta_number: nextMetaNumber(sortedMetas), year }, userId: member.id }); }}
+        action={canEdit && personalMetas.length < 10 && (
+          <button onClick={(e) => { e.stopPropagation(); setModal({ meta: { user_id: member.id, area: member.area || area, meta_number: nextMetaNumber(personalMetas), year }, userId: member.id }); }}
             style={{ background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 6, color: '#fff', cursor: 'pointer', fontSize: '0.68rem', fontWeight: 800, padding: '3px 8px' }}>
             + meta
           </button>
         )}
       >
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', minWidth: 900 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', minWidth: 1180, tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: 110 }} />
+              <col style={{ width: 410 }} />
+              <col style={{ width: 180 }} />
+              <col style={{ width: 85 }} />
+              <col style={{ width: 105 }} />
+              <col style={{ width: 85 }} />
+              <col style={{ width: 130 }} />
+              <col style={{ width: 75 }} />
+            </colgroup>
             <thead>
               <tr>
-                {['Meta', 'Proposta', 'KPI', 'Peso', 'Realizado', 'Ating.', 'Status', 'Evidencias'].map(h => (
+                {['Tipo Meta', 'Proposta', 'KPI', 'Peso', 'Realizado', 'Ating.', 'Status', 'Evidencias'].map(h => (
                   <th key={h} style={{ background: tone.sub, color: '#fff', padding: '7px 10px', textAlign: 'left', fontWeight: 700, fontSize: '0.66rem', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -1349,14 +1379,23 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
                     Nenhuma meta cadastrada para este colaborador.
                   </td>
                 </tr>
-              ) : sortedMetas.map((m, i) => (
+              ) : sortedMetas.map((m, i) => {
+                const rowTone = m.is_general ? TABLE_TONES.collective : tone;
+                const canManageCollective = m.is_general && (role === 'coordenador' || ['admin', 'gestor', 'planejador'].includes(role));
+                const canEditRow = m.is_general ? canManageCollective : canEdit;
+                const canOpenRow = m.is_general || canEditRow;
+                return (
                 <tr
-                  key={m.id}
-                  onClick={() => canEdit && setModal({ meta: m, userId: member.id })}
-                  title={canEdit ? 'Clique para editar esta meta' : undefined}
-                  style={{ background: i % 2 ? (tone.alt || '#F8FAFC') : (tone.row || 'var(--bg-card)'), borderBottom: '1px solid #E2E8F0', boxShadow: `inset 3px 0 0 ${tone.header}`, cursor: canEdit ? 'pointer' : 'default' }}
+                  key={`${m.is_general ? 'general' : 'personal'}-${m.id}`}
+                  onClick={() => canOpenRow && setModal({ meta: m, userId: member.id, readOnly: !canEditRow })}
+                  title={canOpenRow ? (canEditRow ? 'Clique para editar esta meta' : 'Clique para visualizar esta meta') : undefined}
+                  style={{ background: i % 2 ? (rowTone.alt || '#F8FAFC') : (rowTone.row || 'var(--bg-card)'), borderBottom: '1px solid #E2E8F0', boxShadow: `inset 3px 0 0 ${rowTone.header}`, cursor: canOpenRow ? 'pointer' : 'default' }}
                 >
-                  <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', fontWeight: 700, color: 'var(--ctg-navy)' }}>Meta {m.meta_number}</td>
+                  <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', fontWeight: 700, color: 'var(--ctg-navy)' }}>
+                    <span style={{ fontSize: '0.62rem', textTransform: 'uppercase', letterSpacing: '0.04em', borderRadius: 999, padding: '2px 7px', color: m.is_general ? '#075985' : '#1D4ED8', background: m.is_general ? '#CCFBF1' : '#DBEAFE', border: `1px solid ${m.is_general ? '#99F6E4' : '#BFDBFE'}` }}>
+                      {m.is_general ? 'Coletiva' : 'Individual'}
+                    </span>
+                  </td>
                   <td title={m.description} style={{ padding: '8px 10px', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.description}</td>
                   <td title={m.kpi || ''} style={{ padding: '8px 10px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.kpi || '-'}</td>
                   <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{m.weight ? `${fmtNumber(m.weight * 100)}%` : '-'}</td>
@@ -1371,7 +1410,7 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
                     )}
                   </td>
                 </tr>
-              ))}
+              );})}
             </tbody>
           </table>
         </div>
@@ -1425,7 +1464,6 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
       ) : (
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto', paddingTop: 8 }}>
           {role === 'coordenador' && selfRow && renderCollaboratorTable(selfRow.member, selfRow.metas, { open: true, sectionKey: 'self', title: `${selfRow.member.name} (minhas metas)`, sub: `${selfRow.metas.length} meta(s) cadastrada(s)`, tone: TABLE_TONES.personal })}
-          {renderGeneralGoalsTable()}
           {renderDisciplineTables()}
 
           <section style={{ display: 'grid', gridTemplateColumns: '360px minmax(0, 1fr)', gap: 12, alignItems: 'stretch', flexShrink: 0 }}>
