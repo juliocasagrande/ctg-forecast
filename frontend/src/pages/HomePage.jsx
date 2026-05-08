@@ -138,6 +138,27 @@ const PROJECT_PLANT_POLES = {
   'UHE Garibaldi': 'Polo Capivara',
 };
 
+const PLANT_FILTER_POLES = [
+  {
+    label: 'Rio Paraná',
+    color: '#0070B8',
+    bg: '#EFF6FF',
+    plants: ['UHE Ilha Solteira', 'UHE Jupiá', 'UHE Salto'],
+  },
+  {
+    label: 'Polo Chavantes',
+    color: '#10B981',
+    bg: '#ECFDF5',
+    plants: ['UHE Canoas I', 'UHE Canoas II', 'UHE Chavantes', 'UHE Salto Grande', 'UHE Jurumirim', 'PCH Retiro', 'PCH Palmeiras'],
+  },
+  {
+    label: 'Polo Capivara',
+    color: '#6366F1',
+    bg: '#EEF2FF',
+    plants: ['UHE Capivara', 'UHE Rosana', 'UHE Taquaruçu', 'UHE Garibaldi'],
+  },
+];
+
 const BRAZIL_OUTLINE = [
   [-51.2, 4.3], [-48.2, 2.3], [-45.8, 1.2], [-43.2, -2.5], [-41.2, -2.7], [-38.5, -5.1],
   [-35.1, -5.8], [-34.8, -8.1], [-36.4, -10.7], [-38.5, -12.8], [-39.2, -15.4], [-38.8, -18.1],
@@ -1274,46 +1295,59 @@ export default function HomePage({ year }) {
   const metasMissingEvidence = data.metas.filter(m => evidenceCount(m) === 0).length;
   const vacationPeople = new Set(data.vacations.map(v => v.user_id)).size;
   const vacationDays = data.vacations.reduce((s, v) => s + (Number(v.days) || 0), 0);
-  const docsTotal = data.documents.length || (data.docsStats?.by_status || []).reduce((s, r) => s + Number(r.count || 0), 0);
-  const docsPublishedNoLink = data.documents.length
-    ? data.documents.filter(d => d.status === 'Publicado' && !d.document_link).length
-    : Number(data.docsStats?.published_without_link || 0);
-  const activeTracking = data.tracking.filter(p => !/encerrado/i.test(p.status || '')).length;
-  const activeIacs = data.iacs.filter(i => !/cancel|hired|signed/i.test(i.status_current || '')).length;
-  const alertDocCount = Number(data.alerts?.doc_unpublished?.count || 0);
+  const rowMatchesSelectedPlant = (row, exactFields = ['uhe', 'plant', 'usina']) => {
+    if (!selectedPlants.length) return true;
+    return selectedPlants.some(plant => {
+      const plantKey = normalizePlant(plant);
+      const plantSigla = normalizePlant(PROJECT_PLANT_SIGLAS[plant] || '');
+      const explicitValues = exactFields.map(field => normalizePlant(row?.[field] || '')).filter(Boolean);
+      if (!explicitValues.length) return true;
+      return explicitValues.some(key => key === plantKey || key === plantSigla);
+    });
+  };
+  const projectRows = data.tracking.filter(row => rowMatchesSelectedPlant(row, ['uhe', 'plant', 'usina']));
+  const staleTrackingRows = data.staleTracking.filter(row => rowMatchesSelectedPlant(row, ['uhe', 'plant', 'usina']));
+  const documentRows = data.documents.filter(row => rowMatchesSelectedPlant(row, ['plant', 'uhe', 'usina']));
+  const iacRows = data.iacs.filter(row => rowMatchesSelectedPlant(row, ['uhe', 'plant', 'usina']));
+  const staleIacRows = data.staleIacs.filter(row => rowMatchesSelectedPlant(row, ['uhe', 'plant', 'usina']));
+  const useDocsStatsFallback = !selectedPlants.length && !documentRows.length;
+  const docsTotal = documentRows.length || (useDocsStatsFallback ? (data.docsStats?.by_status || []).reduce((s, r) => s + Number(r.count || 0), 0) : 0);
+  const docsPublishedNoLink = documentRows.length
+    ? documentRows.filter(d => d.status === 'Publicado' && !d.document_link).length
+    : (useDocsStatsFallback ? Number(data.docsStats?.published_without_link || 0) : 0);
+  const activeTracking = projectRows.filter(p => !/encerrado/i.test(p.status || '')).length;
+  const activeIacs = iacRows.filter(i => !/cancel|hired|signed/i.test(i.status_current || '')).length;
   const alertVacationCount = Number(data.alerts?.vacation_adp?.count || 0);
   const alertDelegationCount = data.delegations.length;
-  const docsPublished = data.documents.length
-    ? data.documents.filter(d => d.status === 'Publicado').length
-    : Number((data.docsStats?.by_status || []).find(r => r.status === 'Publicado')?.count || 0);
+  const docsPublished = documentRows.length
+    ? documentRows.filter(d => d.status === 'Publicado').length
+    : (useDocsStatsFallback ? Number((data.docsStats?.by_status || []).find(r => r.status === 'Publicado')?.count || 0) : 0);
   const docsPublishedPct = docsTotal ? Math.round((docsPublished / docsTotal) * 100) : 0;
   const docsGauge = docsTotal ? (docsPublished / docsTotal) * 100 : 0;
   const vacationsGauge = vacationPeople ? Math.min(100, (data.vacations.length / Math.max(vacationPeople, 1)) * 100) : 0;
-  const projectRows = selectedPlants.length ? data.tracking.filter(p => selectedPlants.some(pl => normalizePlant(pl) === normalizePlant(p.uhe || ''))) : data.tracking;
-  const staleTrackingRows = selectedPlants.length ? data.staleTracking.filter(p => selectedPlants.some(pl => normalizePlant(pl) === normalizePlant(p.uhe || ''))) : data.staleTracking;
-  const staleProjectKeys = new Set(data.staleTracking.map(p => p.id || p.unique_key || p.pp_contrato).filter(Boolean).map(String));
-  const staleIacKeys = new Set(data.staleIacs.map(i => i.id || i.unique_key || i.iac_code).filter(Boolean).map(String));
+  const staleProjectKeys = new Set(staleTrackingRows.map(p => p.id || p.unique_key || p.pp_contrato).filter(Boolean).map(String));
+  const staleIacKeys = new Set(staleIacRows.map(i => i.id || i.unique_key || i.iac_code).filter(Boolean).map(String));
   const projectStaleCount = projectRows.filter(p => staleProjectKeys.has(String(p.id || p.unique_key || p.pp_contrato))).length || Math.min(staleTrackingRows.length, projectRows.length);
-  const iacStaleCount = data.iacs.filter(i => staleIacKeys.has(String(i.id || i.unique_key || i.iac_code))).length || Math.min(data.staleIacs.length, data.iacs.length);
+  const iacStaleCount = iacRows.filter(i => staleIacKeys.has(String(i.id || i.unique_key || i.iac_code))).length || Math.min(staleIacRows.length, iacRows.length);
   const projectUpdatedCount = Math.max(0, projectRows.length - projectStaleCount);
-  const iacUpdatedCount = Math.max(0, data.iacs.length - iacStaleCount);
+  const iacUpdatedCount = Math.max(0, iacRows.length - iacStaleCount);
   const projectUpdatedPct = projectRows.length ? Math.round((projectUpdatedCount / projectRows.length) * 100) : 0;
-  const iacUpdatedPct = data.iacs.length ? Math.round((iacUpdatedCount / data.iacs.length) * 100) : 0;
-  const iacPriorityData = countBy(data.iacs, 'priority').map(item => ({
+  const iacUpdatedPct = iacRows.length ? Math.round((iacUpdatedCount / iacRows.length) * 100) : 0;
+  const iacPriorityData = countBy(iacRows, 'priority').map(item => ({
     ...item,
     color: item.label === 'Priority' ? '#0070B8' : item.label === 'Hired' ? '#00AEEF' : '#64748B',
   }));
   const iacProcessData = IAC_STATUS_OPTIONS.map(option => ({
     status: option.value,
-    count: data.iacs.filter(i => i.status_current === option.value).length,
+    count: iacRows.filter(i => i.status_current === option.value).length,
   }));
-  const iacStatusData = countBy(data.iacs, 'status_current').map(item => ({
+  const iacStatusData = countBy(iacRows, 'status_current').map(item => ({
     ...item,
     label: item.label.split(' - ').slice(1).join(' - ') || item.label,
     color: item.label.startsWith('0') ? '#94A3B8' : item.label.startsWith('1') ? '#3B82F6' : item.label.startsWith('2') ? '#8B5CF6' : item.label.startsWith('3') ? '#F59E0B' : item.label.startsWith('4') ? '#F97316' : item.label.startsWith('5') ? '#0EA5E9' : item.label.startsWith('6') ? '#10B981' : item.label.startsWith('8') || item.label.startsWith('9') ? '#16A34A' : '#64748B',
     bg: item.label.startsWith('0') ? '#F1F5F9' : item.label.startsWith('3') || item.label.startsWith('4') ? '#FFF7ED' : item.label.startsWith('6') || item.label.startsWith('8') || item.label.startsWith('9') ? '#ECFDF5' : '#EFF6FF',
   }));
-  const iac2026 = data.iacs.filter(i => (i.iac_code || i.name || '').startsWith('IAC2026'));
+  const iac2026 = iacRows.filter(i => (i.iac_code || i.name || '').startsWith('IAC2026'));
   const iacMonths = iac2026.map(i => monthDiffFrom(i.opening_date)).filter(v => v !== null);
   const iacAvgMonths = iacMonths.length ? Math.round(iacMonths.reduce((sum, v) => sum + v, 0) / iacMonths.length) : null;
   const iacMetaColor = iacAvgMonths === null ? '#10B981' : iacAvgMonths < 5 ? '#10B981' : iacAvgMonths < 6 ? '#0070B8' : iacAvgMonths < 7 ? '#F59E0B' : '#EF4444';
@@ -1327,7 +1361,8 @@ export default function HomePage({ year }) {
   const projectTotalSi = projectRows.reduce((sum, p) => sum + parseMoney(p.valor_si), 0);
   const projectRealizadoContrato = projectRows.reduce((sum, p) => sum + parseMoney(p.realizado_contrato), 0);
   const projectRealizadoSi = projectRows.reduce((sum, p) => sum + parseMoney(p.realizado_si), 0);
-  const unpublishedDocs = data.alerts?.doc_unpublished?.docs || data.documents.filter(d => d.status !== 'Publicado' || !d.document_link);
+  const unpublishedDocs = documentRows.filter(d => d.status !== 'Publicado' || !d.document_link);
+  const alertDocCount = unpublishedDocs.length || (!selectedPlants.length ? Number(data.alerts?.doc_unpublished?.count || 0) : 0);
   const metasAttention = data.metas
     .filter(m => evidenceCount(m) === 0 || Number(m.achieved_value || 0) < 100)
     .sort((a, b) => Number(a.achieved_value || 0) - Number(b.achieved_value || 0));
@@ -1370,9 +1405,9 @@ export default function HomePage({ year }) {
   const pendingTotal = attentionItems.reduce((sum, item) => sum + item.value, 0);
   const projectActionItems = [
     ...unpublishedDocs.slice(0, 2).map(d => ({ title: d.subject || d.code || 'Documento pendente', sub: d.status || 'Em elaboracao', date: d.code || '' })),
-    ...data.staleTracking.slice(0, 2).map(p => ({ title: p.projeto || p.pp_contrato || 'Projeto sem revisao', sub: p.status || 'Atualizacao pendente', date: p.vencimento_txt || '' })),
+    ...staleTrackingRows.slice(0, 2).map(p => ({ title: p.projeto || p.pp_contrato || 'Projeto sem revisao', sub: p.status || 'Atualizacao pendente', date: p.vencimento_txt || '' })),
   ];
-  const iacActionItems = data.iacs.slice(0, 3).map(i => ({
+  const iacActionItems = iacRows.slice(0, 3).map(i => ({
     title: i.project || i.iac_code || 'IAC em andamento',
     sub: i.status_current?.split(' - ').slice(1).join(' - ') || i.status_current || 'Sem status',
     date: i.validity || '',
@@ -1415,52 +1450,95 @@ export default function HomePage({ year }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 290px', gridTemplateRows: 'auto auto', gap: 10, flexShrink: 0 }}>
           <HomeCard title="Resumo operacional" style={{ gridColumn: '1', gridRow: '1' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
-              <OperationalTile label="IACs" value={data.iacs.length} sub={`${iacUpdatedPct}% atualizado`} color="#F59E0B" icon="warning" trend gaugeValue={iacUpdatedPct} onClick={() => navigate('/lists/iacs')} />
+              <OperationalTile label="IACs" value={iacRows.length} sub={`${iacUpdatedPct}% atualizado`} color="#F59E0B" icon="warning" trend gaugeValue={iacUpdatedPct} onClick={() => navigate('/lists/iacs')} />
               <OperationalTile label="Projetos" value={projectRows.length} sub={`${projectUpdatedPct}% atualizado`} color="#0070B8" icon="folder" trend gaugeValue={projectUpdatedPct} onClick={() => navigate('/lists/projects-tracking')} />
               <OperationalTile label="Documentos" value={docsTotal} sub={`${docsPublished} publicados`} color="#6366F1" icon="file" trend gaugeValue={docsPublishedPct} onClick={() => navigate('/documents')} />
               <OperationalTile label="Metas" value={pct(metasAvg)} sub={`${metasDone} de ${data.metas.length} atingidas`} color="#10B981" icon="target" trend gaugeValue={metasAvg || 0} onClick={() => navigate('/metas')} />
             </div>
           </HomeCard>
 
-          <HomeCard
-            style={{ gridColumn: '1', gridRow: '2' }}
-            title="Filtro de usinas"
-            icon="folder"
-            action={selectedPlants.length > 0 ? (
-              <button type="button" onClick={() => setSelectedPlants([])} style={{ border: '1px solid #FECACA', background: '#FEE2E2', color: '#991B1B', borderRadius: 6, padding: '3px 9px', fontSize: '0.64rem', fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                Limpar ({selectedPlants.length})
-              </button>
-            ) : (
-              <span style={{ fontSize: '0.64rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Todas selecionadas</span>
-            )}
+          <div
+            className="card"
+            style={{
+              gridColumn: '1',
+              gridRow: '2',
+              borderRadius: 8,
+              border: '1px solid var(--border)',
+              background: '#fff',
+              padding: '9px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              minWidth: 0,
+              overflow: 'hidden',
+            }}
           >
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {PROJECT_PLANTS.map(plant => {
-                const active = selectedPlants.includes(plant);
-                return (
-                  <button
-                    key={plant}
-                    type="button"
-                    onClick={() => setSelectedPlants(prev => active ? prev.filter(p => p !== plant) : [...prev, plant])}
-                    style={{
-                      padding: '5px 13px',
-                      borderRadius: 999,
-                      border: `1.5px solid ${active ? '#0070B8' : '#E2E8F0'}`,
-                      background: active ? 'linear-gradient(135deg, #EFF6FF, #DBEAFE)' : '#F8FAFC',
-                      color: active ? '#0050B3' : '#64748B',
-                      fontSize: '0.72rem',
-                      fontWeight: active ? 900 : 600,
-                      cursor: 'pointer',
-                      transition: 'all 0.15s',
-                      boxShadow: active ? '0 1px 4px rgba(0,112,184,0.18)' : 'none',
-                    }}
-                  >
-                    {PROJECT_PLANT_SIGLAS[plant] || compactLabel(plant)}
-                  </button>
-                );
-              })}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: 'var(--ctg-navy)', fontSize: '0.9rem', fontWeight: 900, whiteSpace: 'nowrap', flexShrink: 0 }}>
+              <svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true" style={{ color: '#0070B8', flexShrink: 0 }}>
+                <path d="M3 4h14l-5.4 6.2V15l-3.2 1.4v-6.2L3 4Z" fill="currentColor" />
+              </svg>
+              Filtro Usinas
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'nowrap', overflowX: 'auto', paddingBottom: 2, flex: 1, minWidth: 0 }}>
+              {PLANT_FILTER_POLES.map(group => (
+                <div
+                  key={group.label}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    background: '#FBFDFF',
+                    padding: '6px 8px',
+                    flex: '0 0 auto',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 999, background: group.color, boxShadow: `0 0 0 4px ${group.bg}` }} />
+                    <span style={{ color: 'var(--ctg-navy)', fontSize: '0.68rem', fontWeight: 900, whiteSpace: 'nowrap' }}>{group.label}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'nowrap', justifyContent: 'flex-start' }}>
+                    {group.plants.map(plant => {
+                      const active = selectedPlants.includes(plant);
+                      return (
+                        <button
+                          key={plant}
+                          type="button"
+                          title={plant}
+                          onClick={() => setSelectedPlants(prev => active ? prev.filter(p => p !== plant) : [...prev, plant])}
+                          style={{
+                            minWidth: 38,
+                            padding: '4px 8px',
+                            borderRadius: 999,
+                            border: `1.5px solid ${active ? group.color : '#E2E8F0'}`,
+                            background: active ? group.bg : '#fff',
+                            color: active ? group.color : '#64748B',
+                            fontSize: '0.64rem',
+                            fontWeight: active ? 900 : 700,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s',
+                            boxShadow: active ? `0 1px 5px ${group.color}24` : 'none',
+                          }}
+                        >
+                          {PROJECT_PLANT_SIGLAS[plant] || compactLabel(plant)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
-          </HomeCard>
+            <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', minWidth: 92 }}>
+              {selectedPlants.length > 0 ? (
+                <button type="button" onClick={() => setSelectedPlants([])} style={{ border: '1px solid #FECACA', background: '#FEE2E2', color: '#991B1B', borderRadius: 6, padding: '4px 9px', fontSize: '0.64rem', fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  Limpar ({selectedPlants.length})
+                </button>
+              ) : (
+                <span style={{ fontSize: '0.64rem', color: 'var(--text-muted)', fontStyle: 'italic', whiteSpace: 'nowrap' }}>Todas selecionadas</span>
+              )}
+            </div>
+          </div>
 
           <div style={{ gridColumn: '2', gridRow: '1 / 3', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <AttentionPanel total={pendingTotal} items={attentionItems} navigate={navigate} />
@@ -1498,7 +1576,7 @@ export default function HomePage({ year }) {
                   </div>
                 </StatBox>
                 <ChartBox title="Por prioridade">
-                  <DistributionDonut items={iacPriorityData} total={data.iacs.length} centerLabel={data.iacs.length} />
+                  <DistributionDonut items={iacPriorityData} total={iacRows.length} centerLabel={iacRows.length} />
                 </ChartBox>
               </div>
               <IacStatusProcessChart items={iacProcessData} />
