@@ -341,6 +341,15 @@ figcaption{margin-top:4px}
 }
 
 function MetaModal({ meta, userId, area, year, members, canEditOthers, onSave, onDelete, onEvidenceSlot, onClose }) {
+  // For collective metas: which members receive it (null = all)
+  const areaEngineers = members.filter(m => m.role === 'engenheiro');
+  const [assignedUserIds, setAssignedUserIds] = useState(() => {
+    if (!meta?.is_general) return null;
+    if (Array.isArray(meta?.assigned_user_ids) && meta.assigned_user_ids.length > 0)
+      return new Set(meta.assigned_user_ids.map(Number));
+    return new Set(areaEngineers.map(m => m.id)); // default: all selected
+  });
+
   const [form, setForm] = useState({
     user_id: meta?.user_id || userId,
     area: meta?.area || area,
@@ -381,6 +390,8 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, onSave, o
 
   async function handleSubmit() {
     if (!form.description.trim()) return setError('Preencha a descricao da meta');
+    if (form.is_general && assignedUserIds && assignedUserIds.size === 0)
+      return setError('Selecione ao menos um destinatario');
     setSaving(true);
     setError('');
     try {
@@ -388,6 +399,9 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, onSave, o
         ...form,
         weight: form.weight !== '' && form.weight != null ? Number(form.weight) / 100 : null,
         achieved_value: parseFloat(form.achieved_value) || 0,
+        assigned_user_ids: form.is_general && assignedUserIds
+          ? [...assignedUserIds]
+          : null,
       };
       await onSave(meta?.id ? 'put' : 'post', meta?.id || null, payload);
       onClose();
@@ -488,8 +502,58 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, onSave, o
           )}
 
           {form.is_general && (
-            <div style={{ background: '#EFF6FF', color: '#1D4ED8', borderRadius: 8, padding: '8px 10px', fontSize: '0.76rem', fontWeight: 700 }}>
-              Meta coletiva: {areaLabel(form.assigned_area)}
+            <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 8, padding: '10px 12px' }}>
+              <div style={{ fontSize: '0.76rem', fontWeight: 700, color: '#1D4ED8', marginBottom: areaEngineers.length > 0 ? 8 : 0 }}>
+                Meta coletiva: {areaLabel(form.assigned_area)}
+              </div>
+              {areaEngineers.length > 0 && (
+                <>
+                  <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#1E40AF', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>DESTINATÁRIOS</span>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button type="button" onClick={() => setAssignedUserIds(new Set(areaEngineers.map(m => m.id)))}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.68rem', color: '#2563EB', fontWeight: 700, padding: 0 }}>
+                        Todos
+                      </button>
+                      <button type="button" onClick={() => setAssignedUserIds(new Set())}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.68rem', color: '#6B7280', fontWeight: 700, padding: 0 }}>
+                        Nenhum
+                      </button>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 160, overflowY: 'auto' }}>
+                    {areaEngineers.map(m => {
+                      const checked = assignedUserIds ? assignedUserIds.has(m.id) : true;
+                      return (
+                        <label key={m.id} style={{
+                          display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px',
+                          borderRadius: 6, cursor: 'pointer',
+                          background: checked ? 'rgba(37,99,235,0.08)' : 'transparent',
+                          border: `1px solid ${checked ? '#93C5FD' : 'transparent'}`,
+                          transition: 'all 0.12s',
+                        }}>
+                          <input type="checkbox" checked={checked} onChange={() => {
+                            setAssignedUserIds(prev => {
+                              const next = new Set(prev || areaEngineers.map(x => x.id));
+                              next.has(m.id) ? next.delete(m.id) : next.add(m.id);
+                              return next;
+                            });
+                          }} style={{ accentColor: '#2563EB', width: 13, height: 13, flexShrink: 0 }} />
+                          <Avatar name={m.name} initials={m.avatar_initials} size={22} />
+                          <span style={{ fontSize: '0.78rem', fontWeight: checked ? 600 : 400, color: checked ? '#1E3A8A' : 'var(--text-secondary)' }}>
+                            {m.name}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {assignedUserIds && assignedUserIds.size === 0 && (
+                    <div style={{ fontSize: '0.7rem', color: '#EF4444', marginTop: 6, fontWeight: 600 }}>
+                      Selecione ao menos um destinatário
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
 

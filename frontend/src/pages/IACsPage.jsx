@@ -1406,7 +1406,9 @@ export default function IACsPage() {
                             {item.opening_date ? new Date(item.opening_date).toLocaleDateString('pt-BR') : '—'}
                           </td>
                           <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                            <OpenTimeBadge openingDate={item.opening_date} />
+                            {(item.iac_code || item.name || '').startsWith('IAC2026')
+                              ? <OpenTimeBadge openingDate={item.opening_date} />
+                              : <span style={{ fontSize: '0.68rem', color: '#94A3B8' }}>—</span>}
                           </td>
                           <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                             {item.when_open ? new Date(item.when_open).toLocaleDateString('pt-BR') : '—'}

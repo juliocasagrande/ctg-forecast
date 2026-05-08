@@ -775,7 +775,7 @@ function OperationalTile({ label, value, sub, color, icon, trend, gaugeValue, on
         border: 'none',
         background: hasBubble ? `linear-gradient(110deg, ${statusColor}20 0%, rgba(255,255,255,0) 72%)` : 'transparent',
         borderRadius: hasBubble ? 8 : 0,
-        padding: '2px 10px',
+        padding: '4px 8px',
         textAlign: 'left',
         cursor: 'pointer',
         minWidth: 0,
@@ -788,14 +788,14 @@ function OperationalTile({ label, value, sub, color, icon, trend, gaugeValue, on
           <span style={{ position: 'absolute', right: 42, bottom: -28, width: 64, height: 50, borderRadius: '50%', background: `${statusColor}1f`, filter: 'blur(1px)', animation: 'metricBubbleFloat 8s ease-in-out infinite reverse', pointerEvents: 'none' }} />
         </>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'clamp(34px, 4vw, 44px) 1fr auto', gap: 11, alignItems: 'center', minWidth: 0 }}>
-        <span style={{ width: 'clamp(34px, 4vw, 44px)', height: 'clamp(34px, 4vw, 44px)', borderRadius: 9, display: 'grid', placeItems: 'center', background: `${color}18`, color, fontWeight: 900 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '30px 1fr auto', gap: 9, alignItems: 'center', minWidth: 0 }}>
+        <span style={{ width: 30, height: 30, borderRadius: 8, display: 'grid', placeItems: 'center', background: `${color}18`, color, fontWeight: 900, flexShrink: 0 }}>
           <OperationalIcon name={icon} color={color} />
         </span>
         <div style={{ minWidth: 0 }}>
-          <div style={{ color: 'var(--text-muted)', fontSize: 'clamp(0.68rem, 1.1vw, 0.82rem)', fontWeight: 900 }}>{label}</div>
-          <div style={{ color: 'var(--ctg-navy)', fontFamily: 'var(--font-display)', fontSize: 'clamp(1.3rem, 2.5vw, 1.9rem)', fontWeight: 900, lineHeight: 1.05, marginTop: 2 }}>{value}</div>
-          <div style={{ color: 'var(--text-muted)', fontSize: 'clamp(0.66rem, 1vw, 0.78rem)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 3 }}>{sub}</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 900 }}>{label}</div>
+          <div style={{ color: 'var(--ctg-navy)', fontFamily: 'var(--font-display)', fontSize: 'clamp(1.1rem, 2vw, 1.5rem)', fontWeight: 900, lineHeight: 1.05, marginTop: 1 }}>{value}</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>{sub}</div>
         </div>
         {trend && <Sparkline color={statusColor} />}
       </div>
@@ -1183,18 +1183,20 @@ function AttentionPanel({ total, items, navigate }) {
   };
   return (
     <HomeCard title="Atenção agora" icon="!" action={`${total} pendências`} style={{ minHeight: 0 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0, paddingTop: 2 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, padding: '6px 4px 4px' }}>
         {items.map(item => (
-          <div key={item.label} style={{ display: 'grid', gridTemplateColumns: '30px minmax(92px, 1fr) minmax(92px, .82fr) 28px', gap: 9, alignItems: 'center', minWidth: 0 }}>
+          <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
             <span style={{ width: 28, height: 28, borderRadius: 7, display: 'grid', placeItems: 'center', background: `${item.color}16`, color: item.color, flexShrink: 0 }}>
               <OperationalIcon name={iconByLabel[item.label] || 'target'} color={item.color} />
             </span>
-            <div style={{ minWidth: 0 }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ color: 'var(--ctg-navy)', fontSize: '0.72rem', fontWeight: 900, lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</div>
               <div style={{ color: 'var(--text-muted)', fontSize: '0.6rem', lineHeight: 1.2, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.sub}</div>
+              <div style={{ marginTop: 5 }}>
+                <MiniBar value={(item.value / max) * 100} color={item.color} />
+              </div>
             </div>
-            <MiniBar value={(item.value / max) * 100} color={item.color} />
-            <strong style={{ color: item.color, fontSize: '0.72rem', textAlign: 'right' }}>{item.value}</strong>
+            <strong style={{ color: item.color, fontSize: '0.82rem', fontWeight: 900, flexShrink: 0, minWidth: 20, textAlign: 'right' }}>{item.value}</strong>
           </div>
         ))}
       </div>
@@ -1218,8 +1220,7 @@ export default function HomePage({ year }) {
     staleTracking: [],
     staleIacs: [],
   });
-  const [selectedPlant, setSelectedPlant] = useState('');
-  const [sankeyExpanded, setSankeyExpanded] = useState(false);
+  const [selectedPlants, setSelectedPlants] = useState([]);
 
   const scope = useMemo(() => {
     if (user?.role === 'engenheiro') return { label: 'Meus dados', area: user?.area || 'eletrica' };
@@ -1288,9 +1289,8 @@ export default function HomePage({ year }) {
   const docsPublishedPct = docsTotal ? Math.round((docsPublished / docsTotal) * 100) : 0;
   const docsGauge = docsTotal ? (docsPublished / docsTotal) * 100 : 0;
   const vacationsGauge = vacationPeople ? Math.min(100, (data.vacations.length / Math.max(vacationPeople, 1)) * 100) : 0;
-  const selectedPlantKey = selectedPlant ? normalizePlant(selectedPlant) : '';
-  const projectRows = selectedPlantKey ? data.tracking.filter(p => normalizePlant(p.uhe || '') === selectedPlantKey) : data.tracking;
-  const staleTrackingRows = selectedPlantKey ? data.staleTracking.filter(p => normalizePlant(p.uhe || '') === selectedPlantKey) : data.staleTracking;
+  const projectRows = selectedPlants.length ? data.tracking.filter(p => selectedPlants.some(pl => normalizePlant(pl) === normalizePlant(p.uhe || ''))) : data.tracking;
+  const staleTrackingRows = selectedPlants.length ? data.staleTracking.filter(p => selectedPlants.some(pl => normalizePlant(pl) === normalizePlant(p.uhe || ''))) : data.staleTracking;
   const staleProjectKeys = new Set(data.staleTracking.map(p => p.id || p.unique_key || p.pp_contrato).filter(Boolean).map(String));
   const staleIacKeys = new Set(data.staleIacs.map(i => i.id || i.unique_key || i.iac_code).filter(Boolean).map(String));
   const projectStaleCount = projectRows.filter(p => staleProjectKeys.has(String(p.id || p.unique_key || p.pp_contrato))).length || Math.min(staleTrackingRows.length, projectRows.length);
@@ -1313,7 +1313,8 @@ export default function HomePage({ year }) {
     color: item.label.startsWith('0') ? '#94A3B8' : item.label.startsWith('1') ? '#3B82F6' : item.label.startsWith('2') ? '#8B5CF6' : item.label.startsWith('3') ? '#F59E0B' : item.label.startsWith('4') ? '#F97316' : item.label.startsWith('5') ? '#0EA5E9' : item.label.startsWith('6') ? '#10B981' : item.label.startsWith('8') || item.label.startsWith('9') ? '#16A34A' : '#64748B',
     bg: item.label.startsWith('0') ? '#F1F5F9' : item.label.startsWith('3') || item.label.startsWith('4') ? '#FFF7ED' : item.label.startsWith('6') || item.label.startsWith('8') || item.label.startsWith('9') ? '#ECFDF5' : '#EFF6FF',
   }));
-  const iacMonths = data.iacs.map(i => monthDiffFrom(i.opening_date)).filter(v => v !== null);
+  const iac2026 = data.iacs.filter(i => (i.iac_code || i.name || '').startsWith('IAC2026'));
+  const iacMonths = iac2026.map(i => monthDiffFrom(i.opening_date)).filter(v => v !== null);
   const iacAvgMonths = iacMonths.length ? Math.round(iacMonths.reduce((sum, v) => sum + v, 0) / iacMonths.length) : null;
   const iacMetaColor = iacAvgMonths === null ? '#10B981' : iacAvgMonths < 5 ? '#10B981' : iacAvgMonths < 6 ? '#0070B8' : iacAvgMonths < 7 ? '#F59E0B' : '#EF4444';
   const projectNatureData = countBy(projectRows, 'natureza').map(item => ({
@@ -1322,7 +1323,6 @@ export default function HomePage({ year }) {
   }));
   const projectPlantData = sumBy(projectRows, 'uhe', 'valor_contrato').filter(item => item.label !== 'Geral');
   const projectAllPlantData = plantValueData(projectRows);
-  const projectMapData = plantValueData(data.tracking);
   const projectTotalContrato = projectRows.reduce((sum, p) => sum + parseMoney(p.valor_contrato), 0);
   const projectTotalSi = projectRows.reduce((sum, p) => sum + parseMoney(p.valor_si), 0);
   const projectRealizadoContrato = projectRows.reduce((sum, p) => sum + parseMoney(p.realizado_contrato), 0);
@@ -1409,19 +1409,54 @@ export default function HomePage({ year }) {
         </div>
       </section>
 
-      <section style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.88fr) minmax(330px, .82fr)', gridTemplateRows: 'auto 1fr', gap: 10, alignItems: 'stretch', flex: 1, minHeight: 0 }}>
-        <HomeCard title="Resumo operacional" style={{ gridColumn: '1 / 2' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
-            <OperationalTile label="IACs" value={data.iacs.length} sub={`${iacUpdatedPct}% atualizado`} color="#F59E0B" icon="warning" trend gaugeValue={iacUpdatedPct} onClick={() => navigate('/lists/iacs')} />
-            <OperationalTile label="Projetos" value={projectRows.length} sub={`${projectUpdatedPct}% atualizado`} color="#0070B8" icon="folder" trend gaugeValue={projectUpdatedPct} onClick={() => navigate('/lists/projects-tracking')} />
-            <OperationalTile label="Documentos" value={docsTotal} sub={`${docsPublished} publicados`} color="#6366F1" icon="file" trend gaugeValue={docsPublishedPct} onClick={() => navigate('/documents')} />
-            <OperationalTile label="Metas" value={pct(metasAvg)} sub={`${metasDone} de ${data.metas.length} atingidas`} color="#10B981" icon="target" trend gaugeValue={metasAvg || 0} onClick={() => navigate('/metas')} />
-          </div>
-        </HomeCard>
+      <section style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1, minHeight: 0 }}>
 
-        <div style={{ gridColumn: '1 / 2', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, minHeight: 0 }}>
+        {/* Row 1: left col = Resumo + Filter stacked; right col = Atenção agora spanning both */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 290px', gridTemplateRows: 'auto auto', gap: 10, flexShrink: 0 }}>
+          <HomeCard title="Resumo operacional" style={{ gridColumn: '1', gridRow: '1' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
+              <OperationalTile label="IACs" value={data.iacs.length} sub={`${iacUpdatedPct}% atualizado`} color="#F59E0B" icon="warning" trend gaugeValue={iacUpdatedPct} onClick={() => navigate('/lists/iacs')} />
+              <OperationalTile label="Projetos" value={projectRows.length} sub={`${projectUpdatedPct}% atualizado`} color="#0070B8" icon="folder" trend gaugeValue={projectUpdatedPct} onClick={() => navigate('/lists/projects-tracking')} />
+              <OperationalTile label="Documentos" value={docsTotal} sub={`${docsPublished} publicados`} color="#6366F1" icon="file" trend gaugeValue={docsPublishedPct} onClick={() => navigate('/documents')} />
+              <OperationalTile label="Metas" value={pct(metasAvg)} sub={`${metasDone} de ${data.metas.length} atingidas`} color="#10B981" icon="target" trend gaugeValue={metasAvg || 0} onClick={() => navigate('/metas')} />
+            </div>
+          </HomeCard>
+
+          <div className="card" style={{ gridColumn: '1', gridRow: '2', padding: '10px 14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.68rem', fontWeight: 900, color: 'var(--text-muted)', whiteSpace: 'nowrap', flexShrink: 0 }}>Filtro de usinas:</span>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1 }}>
+                {PROJECT_PLANTS.map(plant => {
+                  const active = selectedPlants.includes(plant);
+                  return (
+                    <button
+                      key={plant}
+                      type="button"
+                      onClick={() => setSelectedPlants(prev => active ? prev.filter(p => p !== plant) : [...prev, plant])}
+                      style={{ padding: '4px 12px', borderRadius: 999, border: `1.5px solid ${active ? '#0070B8' : '#E2E8F0'}`, background: active ? '#EFF6FF' : '#F8FAFC', color: active ? '#0070B8' : '#64748B', fontSize: '0.7rem', fontWeight: active ? 900 : 600, cursor: 'pointer', transition: 'all 0.15s' }}
+                    >
+                      {PROJECT_PLANT_SIGLAS[plant] || compactLabel(plant)}
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedPlants.length > 0 && (
+                <button type="button" onClick={() => setSelectedPlants([])} style={{ border: '1px solid #FECACA', background: '#FEE2E2', color: '#991B1B', borderRadius: 999, padding: '4px 10px', fontSize: '0.66rem', fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  Limpar
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div style={{ gridColumn: '2', gridRow: '1 / 3', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <AttentionPanel total={pendingTotal} items={attentionItems} navigate={navigate} />
+          </div>
+        </div>
+
+        {/* Row 2: main cards side by side */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, flex: 1, minHeight: 0 }}>
           <HomeCard title="Projetos em acompanhamento" icon="folder" action="›" onClick={() => navigate('/lists/projects-tracking')}>
-            <div style={{ display: 'grid', gridTemplateRows: 'auto auto minmax(0, 1fr) auto auto', gap: 8, height: '100%', minHeight: 0 }}>
+            <div style={{ display: 'grid', gridTemplateRows: 'auto auto minmax(0, 1fr) auto', gap: 8, height: '100%', minHeight: 0 }}>
               <ProjectStatusStrip items={projectStatusItems} />
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
                 <ValueConsumptionBox label="Valor total do contrato" value={projectTotalContrato} realized={projectRealizadoContrato} color="#10B981" />
@@ -1429,17 +1464,13 @@ export default function HomePage({ year }) {
               </div>
               <PlantColumnChart items={projectAllPlantData} />
               <NaturezaHorizontalChart items={projectNatureData} />
-              <InfoStrip items={[
-                { label: 'Usina principal', value: mainPlant, icon: '▥', color: '#0070B8', bg: '#EFF6FF' },
-                { label: 'Natureza predominante', value: mainNature, icon: '◔', color: '#475569', bg: '#F1F5F9' },
-              ]} />
             </div>
           </HomeCard>
 
           <HomeCard title="IACs em andamento" icon="warning" action="›" onClick={() => navigate('/lists/iacs')}>
             <div style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', gap: 10, height: '100%', minHeight: 0 }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, .85fr) minmax(0, 1fr)', gap: 10, minHeight: 0 }}>
-                <StatBox label="Média META" value={iacAvgMonths === null ? '-' : `${iacAvgMonths}m`} color={iacMetaColor} sub={`${iacMonths.length} IAC(s) com data de abertura`}>
+                <StatBox label="Média META" value={iacAvgMonths === null ? '-' : `${iacAvgMonths}m`} color={iacMetaColor} sub={`${iac2026.length} IAC(s) de 2026`}>
                   <div style={{ position: 'relative', paddingBottom: 14 }}>
                     <div style={{ height: 7, background: '#E2E8F0', borderRadius: 999, overflow: 'hidden' }}>
                       <div style={{ width: `${iacAvgMonths === null ? 0 : Math.min(100, (iacAvgMonths / 8) * 100)}%`, height: '100%', background: iacMetaColor, borderRadius: 999 }} />
@@ -1461,57 +1492,7 @@ export default function HomePage({ year }) {
           </HomeCard>
         </div>
 
-        <div style={{ gridColumn: '2 / 3', gridRow: '1 / 3', display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', gap: 10, minWidth: 0, minHeight: 0 }}>
-          <AttentionPanel total={pendingTotal} items={attentionItems} navigate={navigate} />
-          <HomeCard
-            title="Distribuição de valores"
-            icon="folder"
-            action={(
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); setSankeyExpanded(true); }}
-                title="Expandir gráfico"
-                style={{ border: '1px solid var(--border)', background: '#fff', color: '#0070B8', borderRadius: 6, padding: '3px 7px', fontSize: '0.62rem', fontWeight: 900, cursor: 'pointer' }}
-              >
-                Expandir
-              </button>
-            )}
-          >
-            <PlantValueSankey items={projectMapData} selectedPlant={selectedPlant} onSelectPlant={setSelectedPlant} />
-          </HomeCard>
-        </div>
       </section>
-
-      {sankeyExpanded && (
-        <div
-          onClick={() => setSankeyExpanded(false)}
-          style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(15,23,42,0.58)', backdropFilter: 'blur(3px)', padding: 24, display: 'grid', placeItems: 'center' }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="card"
-            style={{ width: 'min(1120px, calc(100vw - 48px))', height: 'min(760px, calc(100vh - 48px))', padding: 0, display: 'flex', flexDirection: 'column', overflow: 'visible' }}
-          >
-            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexShrink: 0 }}>
-              <div>
-                <div style={{ color: 'var(--ctg-navy)', fontWeight: 900, fontSize: '0.96rem' }}>Distribuição de valores</div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem', marginTop: 2 }}>Total de SI distribuído por polo e usina</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSankeyExpanded(false)}
-                style={{ width: 32, height: 32, border: '1px solid var(--border)', borderRadius: 8, background: '#fff', color: 'var(--ctg-navy)', fontWeight: 900, cursor: 'pointer' }}
-                title="Fechar"
-              >
-                ×
-              </button>
-            </div>
-            <div style={{ flex: 1, minHeight: 0, padding: 14 }}>
-              <PlantValueSankey items={projectMapData} selectedPlant={selectedPlant} onSelectPlant={setSelectedPlant} expanded />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

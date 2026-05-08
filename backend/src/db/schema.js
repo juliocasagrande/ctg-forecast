@@ -87,6 +87,10 @@ await client.query(`
      `);
 
     await client.query(`
+      ALTER TABLE metas ADD COLUMN IF NOT EXISTS assigned_user_ids INTEGER[] DEFAULT NULL;
+    `);
+
+    await client.query(`
       UPDATE users SET role = 'coordenador' WHERE role = 'gestor';
       ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
       ALTER TABLE users ADD CONSTRAINT users_role_check
