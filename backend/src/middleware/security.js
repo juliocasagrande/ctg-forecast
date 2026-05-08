@@ -51,6 +51,9 @@ export const securityHeaders = helmet({
         "'self'",
         "https://fonts.googleapis.com",
         "https://fonts.gstatic.com",
+        // MSAL: token endpoint + OIDC discovery
+        "https://login.microsoftonline.com",
+        "https://login.microsoft.com",
         ...allowedOrigins
       ],
 
