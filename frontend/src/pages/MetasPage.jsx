@@ -1146,8 +1146,8 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
           onClick={() => !defaultOpen && toggleGoalSection(sectionKey)}
           style={{ width: '100%', border: 'none', background: tone.header, color: '#fff', padding: '7px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, cursor: defaultOpen ? 'default' : 'pointer', textAlign: 'left' }}
         >
-          <span style={{ minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ display: 'block', fontSize: '0.86rem', fontWeight: 900 }}>{title}</span>
+          <span style={{ minWidth: 0, display: 'grid', gridTemplateColumns: '220px minmax(0, 1fr)', alignItems: 'center', columnGap: 8, rowGap: 4 }}>
+            <span title={typeof title === 'string' ? title : undefined} style={{ display: 'block', fontSize: '0.86rem', fontWeight: 900, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
             {sub && <span style={{ display: 'block', color: 'rgba(255,255,255,0.72)', fontSize: '0.72rem', fontWeight: 800 }}>{sub}</span>}
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -1342,24 +1342,39 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
     const individualCount = sortedMetas.length - collectiveCount;
     const weightSum = sortedMetas.reduce((sum, m) => sum + metaWeight(m, member.id), 0) * 100;
     const weightOk = Math.abs(weightSum - 100) < 0.05;
-    const typeBadgeStyle = (isGeneral) => ({
+    const typeBadgeStyle = (variant) => {
+      const palette = variant === 'total'
+        ? { color: '#334155', background: '#F1F5F9', border: '#CBD5E1' }
+        : variant === 'general'
+          ? { color: '#075985', background: '#CCFBF1', border: '#99F6E4' }
+          : { color: '#1D4ED8', background: '#DBEAFE', border: '#BFDBFE' };
+      return ({
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minWidth: variant === 'total' ? 96 : 102,
       borderRadius: 999,
-      padding: '1px 7px',
-      color: isGeneral ? '#075985' : '#1D4ED8',
-      background: isGeneral ? '#CCFBF1' : '#DBEAFE',
-      border: `1px solid ${isGeneral ? '#99F6E4' : '#BFDBFE'}`,
+      padding: '2px 7px',
+      color: palette.color,
+      background: palette.background,
+      border: `1px solid ${palette.border}`,
       fontWeight: 900,
-      textTransform: 'none',
-      letterSpacing: 0,
-      fontSize: 'inherit',
+      textTransform: 'uppercase',
+      letterSpacing: '0.04em',
+      fontSize: '0.62rem',
     });
+    };
     const headerSub = sub || (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span>{areaLabel(member.area)}</span>
-        <span>{sortedMetas.length} meta(s)</span>
-        <span style={typeBadgeStyle(true)}>{collectiveCount} Coletiva(s)</span>
-        <span style={typeBadgeStyle(false)}>{individualCount} Individual(is)</span>
+      <span style={{ display: 'inline-grid', gridTemplateColumns: '90px 108px 112px 118px 92px', alignItems: 'center', columnGap: 8, rowGap: 4 }}>
+        <span style={{ minWidth: 0 }}>{areaLabel(member.area)}</span>
+        <span style={typeBadgeStyle('total')}>{sortedMetas.length} Meta(s)</span>
+        <span style={typeBadgeStyle('general')}>{collectiveCount} Coletiva(s)</span>
+        <span style={typeBadgeStyle('individual')}>{individualCount} Individual(is)</span>
         <span style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minWidth: 86,
           borderRadius: 999,
           padding: '1px 7px',
           background: weightOk ? 'rgba(16,185,129,0.18)' : 'rgba(239,68,68,0.2)',
