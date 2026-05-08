@@ -21,6 +21,16 @@ const TABLE_TONES = {
   subordinate: { header: '#244B7A', sub: '#365F8D' },
 };
 
+const KPI_OPTIONS = [
+  'Milestone',
+  '%Achievement',
+  'Availability HPPs',
+  'Date',
+  'Executed Stages',
+  'Forced Outages',
+  'Procurement & Contract Management',
+];
+
 const EVIDENCE_LAYOUTS = [
   { value: 'single', label: 'Imagem unica', slots: 1 },
   { value: 'grid-2x2', label: '2 linhas x 2 colunas', slots: 4 },
@@ -186,8 +196,10 @@ function StatusBadge({ status }) {
   );
 }
 
+const STATUS_EN = { 'Em andamento': 'In Progress', 'Concluida': 'Completed', 'Cancelada': 'Cancelled' };
+
 function buildGoalsHTML({ member, metas, year }) {
-  const now = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+  const now = new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'long', year: 'numeric' });
   const averageAchievement = weightedAchievement(metas);
   const metasWithEvidence = metas.filter(m => visibleEvidenceImages(m).some(Boolean)).length;
   const achievedMetas = metas.filter(m => (achievementPercent(m) || 0) >= 100).length;
@@ -214,7 +226,7 @@ function buildGoalsHTML({ member, metas, year }) {
     const weight = metaWeight(m);
     return `
       <tr class="${m.is_general ? 'summary-collective' : 'summary-individual'}">
-        <td><span class="type-badge ${m.is_general ? 'badge-collective' : 'badge-individual'}">${m.is_general ? 'Coletiva' : 'Individual'}</span></td>
+        <td><span class="type-badge ${m.is_general ? 'badge-collective' : 'badge-individual'}">${m.is_general ? 'Collective' : 'Individual'}</span></td>
         <td>${escapeHTML(m.description)}</td>
         <td>${weight ? fmtPercent(weight * 100) : '-'}</td>
         <td>${fmtPercent(m.achieved_value)}</td>
@@ -229,7 +241,7 @@ function buildGoalsHTML({ member, metas, year }) {
     const fits = visibleEvidenceFits(m);
     const imageCells = images.map((src, idx) => `
       <div class="evidence-cell">
-        ${src ? `<img class="fit-${fits[idx] || 'contain'}" src="${escapeHTML(src)}" alt="Evidencia ${idx + 1} da meta ${escapeHTML(m.meta_number)}">` : '<div class="missing">Imagem nao carregada</div>'}
+        ${src ? `<img class="fit-${fits[idx] || 'contain'}" src="${escapeHTML(src)}" alt="Evidence image ${idx + 1} of goal ${escapeHTML(m.meta_number)}">` : '<div class="missing">Image not uploaded</div>'}
       </div>
     `).join('');
     return `
@@ -237,17 +249,17 @@ function buildGoalsHTML({ member, metas, year }) {
         <div class="goal">
           <div class="goal-head">
             <div>
-              <div class="goal-kicker">${m.is_general ? 'Meta coletiva' : 'Meta individual'} ${escapeHTML(m.meta_number)}</div>
+              <div class="goal-kicker">${m.is_general ? 'Collective Goal' : 'Individual Goal'} ${escapeHTML(m.meta_number)}</div>
               <h2>${escapeHTML(m.description)}</h2>
             </div>
-            <span class="status">${escapeHTML(m.status)}</span>
+            <span class="status">${escapeHTML(STATUS_EN[m.status] || m.status)}</span>
           </div>
           <div class="meta-grid">
             <div><span>KPI</span><strong>${escapeHTML(m.kpi || '-')}</strong></div>
-            <div><span>Peso</span><strong>${m.weight ? `${fmtNumber(m.weight * 100)}%` : '-'}</strong></div>
-            <div><span>Realizado</span><strong>${fmtPercent(m.achieved_value)}</strong></div>
+            <div><span>Weight</span><strong>${m.weight ? `${fmtNumber(m.weight * 100)}%` : '-'}</strong></div>
+            <div><span>Achieved</span><strong>${fmtPercent(m.achieved_value)}</strong></div>
           </div>
-          ${m.detailed ? `<div class="detail-block"><div class="section-label">Descricao detalhada da Meta</div><p class="detail">${escapeHTML(m.detailed)}</p></div>` : ''}
+          ${m.detailed ? `<div class="detail-block"><div class="section-label">Goal Description</div><p class="detail">${escapeHTML(m.detailed)}</p></div>` : ''}
           <div class="targets">
             <div><span>80%</span>${escapeHTML(m.target_80 || '-')}</div>
             <div><span>100%</span>${escapeHTML(m.target_100 || '-')}</div>
@@ -256,8 +268,8 @@ function buildGoalsHTML({ member, metas, year }) {
           <div class="progress"><span style="width:${progress}%"></span></div>
           ${m.notes ? `<div class="notes">${escapeHTML(m.notes)}</div>` : ''}
           <figure class="evidence-layout ${escapeLayoutClass(evidenceLayout(m))} image-count-${images.length}">
-            ${images.some(Boolean) ? imageCells : '<div class="missing">Evidencia nao carregada</div>'}
-            <figcaption>${evidenceLink ? `<a href="${evidenceLink}" target="_blank" rel="noopener">Abrir evidencias no SharePoint</a>` : `Link de evidencias nao informado - Meta ${escapeHTML(m.meta_number)}`}</figcaption>
+            ${images.some(Boolean) ? imageCells : '<div class="missing">Evidence not uploaded</div>'}
+            <figcaption>${evidenceLink ? `<a href="${evidenceLink}" target="_blank" rel="noopener">Open evidence on SharePoint</a>` : `Evidence link not provided — Goal ${escapeHTML(m.meta_number)}`}</figcaption>
           </figure>
         </div>
       </section>
@@ -265,11 +277,11 @@ function buildGoalsHTML({ member, metas, year }) {
   }).join('');
 
   return `<!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Relatorio de Metas - ${escapeHTML(member.name)} - ${year}</title>
+<title>Goals Report - ${escapeHTML(member.name)} - ${year}</title>
 <style>
 @page{size:A4 portrait;margin:0}
 *{box-sizing:border-box}html,body{margin:0;padding:0}body{background:#F8FAFC;color:#1E293B;font-family:'Segoe UI',Arial,sans-serif;font-size:13px}
@@ -308,21 +320,21 @@ figcaption{margin-top:4px}
 <body>
 <div class="header">
   <div class="brand">CTG<span>.</span>Engenharia</div>
-  <div class="title">Relatorio de Metas ${year}</div>
+  <div class="title">Goals Report ${year}</div>
   <div class="sub">${escapeHTML(member.name)} - ${escapeHTML(areaLabel(member.area))}</div>
-  <div class="meta"><span>Gerado em ${now}</span><span>${metas.length} metas</span><span>${metasWithEvidence} evidencias anexadas</span></div>
+  <div class="meta"><span>Generated on ${now}</span><span>${metas.length} goals</span><span>${metasWithEvidence} evidence attached</span></div>
 </div>
 <main class="content">
   <div class="summary">
     ${summaryCard('Total', metas.length, totalColor)}
-    ${summaryCard('Atingidas', achievedMetas, healthColor(achievedRate))}
-    ${summaryCard('Media ponderada', fmtPercent(averageAchievement), healthColor(averageAchievement))}
+    ${summaryCard('Achieved', achievedMetas, healthColor(achievedRate))}
+    ${summaryCard('Weighted Average', fmtPercent(averageAchievement), healthColor(averageAchievement))}
   </div>
   <table class="summary-table">
-    <thead><tr><th>Tipo</th><th>Proposta</th><th>Peso</th><th>Realizado</th><th>Pond.</th></tr></thead>
-    <tbody>${summaryRows || '<tr><td colspan="5">Nenhuma meta cadastrada para este periodo.</td></tr>'}</tbody>
+    <thead><tr><th>Type</th><th>Description</th><th>Weight</th><th>Achieved</th><th>Weighted</th></tr></thead>
+    <tbody>${summaryRows || '<tr><td colspan="5">No goals registered for this period.</td></tr>'}</tbody>
   </table>
-  ${rows || '<div class="card">Nenhuma meta cadastrada para este periodo.</div>'}
+  ${rows || '<div class="card">No goals registered for this period.</div>'}
 </main>
 </body>
 </html>`;
@@ -336,12 +348,12 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, onSave, o
     description: meta?.description || '',
     kpi: meta?.kpi || '',
     detailed: meta?.detailed || '',
-    weight: meta?.weight ?? '',
+    weight: meta?.weight != null && meta?.weight !== '' ? parseFloat((Number(meta.weight) * 100).toFixed(2)) : '',
     target_80: meta?.target_80 || '',
     target_100: meta?.target_100 || '',
     target_120: meta?.target_120 || '',
     target_value: meta?.target_value || 0,
-    achieved_value: meta?.achieved_value || 0,
+    achieved_value: meta?.achieved_value != null ? String(meta.achieved_value) : '',
     unit: meta?.unit || '',
     status: meta?.status || 'Em andamento',
     notes: meta?.notes || '',
@@ -372,7 +384,12 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, onSave, o
     setSaving(true);
     setError('');
     try {
-      await onSave(meta?.id ? 'put' : 'post', meta?.id || null, form);
+      const payload = {
+        ...form,
+        weight: form.weight !== '' && form.weight != null ? Number(form.weight) / 100 : null,
+        achieved_value: parseFloat(form.achieved_value) || 0,
+      };
+      await onSave(meta?.id ? 'put' : 'post', meta?.id || null, payload);
       onClose();
     } catch (e) {
       setError(e.response?.data?.error || 'Erro ao salvar');
@@ -493,27 +510,30 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, onSave, o
 
           <div>
             <label style={label}>NOME DA META</label>
-            <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} style={{ ...inp, resize: 'vertical' }} />
+            <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} style={{ ...inp, resize: 'vertical' }} placeholder="Descreva o objetivo principal desta meta" />
           </div>
 
           <div>
             <label style={label}>KPI / INDICADOR</label>
-            <textarea value={form.kpi} onChange={e => setForm(f => ({ ...f, kpi: e.target.value }))} rows={2} style={{ ...inp, resize: 'vertical' }} />
+            <select value={form.kpi} onChange={e => setForm(f => ({ ...f, kpi: e.target.value }))} style={inp}>
+              <option value="">-- Selecione --</option>
+              {KPI_OPTIONS.map(k => <option key={k} value={k}>{k}</option>)}
+            </select>
           </div>
 
           <div>
             <label style={label}>DETALHAMENTO</label>
-            <textarea value={form.detailed} onChange={e => setForm(f => ({ ...f, detailed: e.target.value }))} rows={3} style={{ ...inp, resize: 'vertical' }} />
+            <textarea value={form.detailed} onChange={e => setForm(f => ({ ...f, detailed: e.target.value }))} rows={3} style={{ ...inp, resize: 'vertical' }} placeholder="Critérios de avaliação, metodologia, entregáveis..." />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
-              <label style={label}>PESO</label>
-              <input type="number" step="0.01" value={form.weight} onChange={e => setForm(f => ({ ...f, weight: e.target.value }))} placeholder="0.15" style={inp} />
+              <label style={label}>PESO (%)</label>
+              <input type="number" step="1" min="0" max="100" value={form.weight} onChange={e => setForm(f => ({ ...f, weight: e.target.value }))} placeholder="Ex: 20 (para 20%)" style={inp} />
             </div>
             <div>
-              <label style={label}>REALIZADO</label>
-              <input type="number" value={form.achieved_value} onChange={e => setForm(f => ({ ...f, achieved_value: parseFloat(e.target.value) || 0 }))} style={inp} />
+              <label style={label}>REALIZADO (%)</label>
+              <input type="number" step="any" value={form.achieved_value} onChange={e => setForm(f => ({ ...f, achieved_value: e.target.value }))} placeholder="0 – 120" style={inp} />
             </div>
           </div>
 
@@ -524,13 +544,13 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, onSave, o
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
             {[
-              ['target_80', 'TARGET 80%'],
-              ['target_100', 'TARGET 100%'],
-              ['target_120', 'TARGET 120%'],
-            ].map(([key, title]) => (
+              ['target_80', 'TARGET 80%', 'Condição mínima de atingimento'],
+              ['target_100', 'TARGET 100%', 'Meta padrão esperada'],
+              ['target_120', 'TARGET 120%', 'Superação da meta'],
+            ].map(([key, title, ph]) => (
               <div key={key}>
                 <label style={label}>{title}</label>
-                <textarea value={form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} rows={3} style={{ ...inp, resize: 'vertical' }} />
+                <textarea value={form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} rows={3} style={{ ...inp, resize: 'vertical' }} placeholder={ph} />
               </div>
             ))}
           </div>
@@ -564,6 +584,9 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, onSave, o
                   <select value={form.evidence_layout} onChange={e => setForm(f => ({ ...f, evidence_layout: e.target.value }))} style={inp}>
                     {EVIDENCE_LAYOUTS.map(layout => <option key={layout.value} value={layout.value}>{layout.label}</option>)}
                   </select>
+                  <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 7, padding: '7px 10px', fontSize: '0.7rem', color: '#92400E', marginTop: 6 }}>
+                    As imagens somente poderão ser incluídas após o salvamento do layout desejado e reabertura do modal.
+                  </div>
                 </div>
                 <div style={{ display: 'grid', ...layoutGridStyle(form.evidence_layout), gap: 6, height: 190, padding: 6, borderRadius: 8, border: '1px solid var(--border)', background: '#F8FAFC' }}>
                   {Array.from({ length: currentSlotCount }, (_, i) => (
@@ -616,12 +639,15 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, onSave, o
               <select value={form.evidence_layout} onChange={e => setForm(f => ({ ...f, evidence_layout: e.target.value }))} style={inp}>
                 {EVIDENCE_LAYOUTS.map(layout => <option key={layout.value} value={layout.value}>{layout.label}</option>)}
               </select>
+              <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 7, padding: '7px 10px', fontSize: '0.7rem', color: '#92400E', marginTop: 6 }}>
+                As imagens somente poderão ser incluídas após o salvamento do layout desejado e reabertura do modal.
+              </div>
             </div>
           )}
 
           <div>
             <label style={label}>OBSERVACOES</label>
-            <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} style={{ ...inp, resize: 'vertical' }} />
+            <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} style={{ ...inp, resize: 'vertical' }} placeholder="Notas adicionais, contexto, dependências..." />
           </div>
 
           {error && <div style={{ background: '#FEE2E2', color: '#991B1B', borderRadius: 7, padding: '8px 12px', fontSize: '0.78rem' }}>{error}</div>}

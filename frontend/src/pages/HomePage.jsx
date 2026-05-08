@@ -788,14 +788,14 @@ function OperationalTile({ label, value, sub, color, icon, trend, gaugeValue, on
           <span style={{ position: 'absolute', right: 42, bottom: -28, width: 64, height: 50, borderRadius: '50%', background: `${statusColor}1f`, filter: 'blur(1px)', animation: 'metricBubbleFloat 8s ease-in-out infinite reverse', pointerEvents: 'none' }} />
         </>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: '38px 1fr auto', gap: 11, alignItems: 'center', minWidth: 0 }}>
-        <span style={{ width: 36, height: 36, borderRadius: 9, display: 'grid', placeItems: 'center', background: `${color}18`, color, fontWeight: 900 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'clamp(34px, 4vw, 44px) 1fr auto', gap: 11, alignItems: 'center', minWidth: 0 }}>
+        <span style={{ width: 'clamp(34px, 4vw, 44px)', height: 'clamp(34px, 4vw, 44px)', borderRadius: 9, display: 'grid', placeItems: 'center', background: `${color}18`, color, fontWeight: 900 }}>
           <OperationalIcon name={icon} color={color} />
         </span>
         <div style={{ minWidth: 0 }}>
-          <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', fontWeight: 900 }}>{label}</div>
-          <div style={{ color: 'var(--ctg-navy)', fontFamily: 'var(--font-display)', fontSize: '1.42rem', fontWeight: 900, lineHeight: 1.05, marginTop: 2 }}>{value}</div>
-          <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 3 }}>{sub}</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 'clamp(0.68rem, 1.1vw, 0.82rem)', fontWeight: 900 }}>{label}</div>
+          <div style={{ color: 'var(--ctg-navy)', fontFamily: 'var(--font-display)', fontSize: 'clamp(1.3rem, 2.5vw, 1.9rem)', fontWeight: 900, lineHeight: 1.05, marginTop: 2 }}>{value}</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 'clamp(0.66rem, 1vw, 0.78rem)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 3 }}>{sub}</div>
         </div>
         {trend && <Sparkline color={statusColor} />}
       </div>
@@ -806,8 +806,8 @@ function OperationalTile({ label, value, sub, color, icon, trend, gaugeValue, on
 function StatBox({ label, value, sub, color = '#0070B8', children }) {
   return (
     <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 11, background: '#FBFDFF', minHeight: 0 }}>
-      <div style={{ color: 'var(--text-muted)', fontSize: '0.63rem', fontWeight: 900 }}>{label}</div>
-      <div style={{ color, fontFamily: 'var(--font-display)', fontSize: '1.35rem', fontWeight: 900, marginTop: 5, lineHeight: 1 }}>{value}</div>
+      <div style={{ color: 'var(--text-muted)', fontSize: 'clamp(0.6rem, 0.9vw, 0.72rem)', fontWeight: 900 }}>{label}</div>
+      <div style={{ color, fontFamily: 'var(--font-display)', fontSize: 'clamp(1.15rem, 1.8vw, 1.6rem)', fontWeight: 900, marginTop: 5, lineHeight: 1 }}>{value}</div>
       {sub && <div style={{ color: 'var(--text-muted)', fontSize: '0.66rem', marginTop: 5 }}>{sub}</div>}
       {children && <div style={{ marginTop: 9 }}>{children}</div>}
     </div>
@@ -851,25 +851,25 @@ function PlantColumnChart({ items }) {
     </div>
   );
   return (
-    <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10, background: '#FBFDFF', minHeight: 0, position: 'relative', overflow: 'visible' }} onMouseLeave={() => setHovered(null)}>
-      <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 9 }}>Por usina</div>
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${rows.length}, minmax(24px, 1fr))`, gap: 7, alignItems: 'end', height: 98, paddingBottom: 8 }}>
+    <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10, background: '#FBFDFF', minHeight: 0, height: '100%', position: 'relative', overflow: 'visible', display: 'flex', flexDirection: 'column' }} onMouseLeave={() => setHovered(null)}>
+      <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6, flexShrink: 0 }}>Por usina</div>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${rows.length}, minmax(24px, 1fr))`, gridTemplateRows: '1fr', gap: 7, flex: 1, minHeight: 60, paddingBottom: 6 }}>
         {rows.map((item, idx) => {
           const hasValue = Number(item.value) > 0;
-          const height = hasValue ? Math.max(8, (Number(item.value) / max) * 48) : 0;
+          const barPct = hasValue ? Math.max(10, (Number(item.value) / max) * 100) : 0;
           const sigla = item.sigla || PROJECT_PLANT_SIGLAS[item.label] || PROJECT_PLANT_SIGLAS[compactLabel(item.label)] || compactLabel(item.label).slice(0, 3).toUpperCase();
           return (
             <div
               key={item.label}
               onMouseEnter={() => setHovered(item)}
               onFocus={() => setHovered(item)}
-              style={{ display: 'grid', gridTemplateRows: '12px 52px 22px', gap: 3, alignItems: 'end', justifyItems: 'center', minWidth: 0, cursor: 'default' }}
+              style={{ display: 'grid', gridTemplateRows: '12px 1fr 20px', gap: 2, justifyItems: 'center', minWidth: 0, cursor: 'default' }}
             >
               <div style={{ color: hasValue ? 'var(--ctg-navy)' : '#94A3B8', fontSize: '0.58rem', fontWeight: 900, whiteSpace: 'nowrap' }}>{hasValue ? moneyAxis(item.value) : '-'}</div>
-              <div style={{ width: '100%', maxWidth: 34, height: 52, borderRadius: 4, background: '#E2E8F0', display: 'flex', alignItems: 'flex-end', overflow: 'hidden' }}>
-                <div style={{ width: '100%', height, borderRadius: '4px 4px 0 0', background: hasValue ? ['#001F5B', '#0050B3', '#0070B8', '#00AEEF', '#7DD3FC'][idx % 5] : 'transparent' }} />
+              <div style={{ width: '100%', maxWidth: 34, height: '100%', borderRadius: 4, background: '#E2E8F0', display: 'flex', alignItems: 'flex-end', overflow: 'hidden' }}>
+                <div style={{ width: '100%', height: `${barPct}%`, borderRadius: '4px 4px 0 0', background: hasValue ? ['#001F5B', '#0050B3', '#0070B8', '#00AEEF', '#7DD3FC'][idx % 5] : 'transparent' }} />
               </div>
-              <div style={{ color: 'var(--ctg-navy)', fontSize: '0.58rem', lineHeight: 1, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', alignSelf: 'start', paddingTop: 2 }}>{sigla || item.label}</div>
+              <div style={{ color: 'var(--ctg-navy)', fontSize: '0.58rem', lineHeight: 1, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', alignSelf: 'start', paddingTop: 1 }}>{sigla || item.label}</div>
             </div>
           );
         })}
@@ -963,9 +963,9 @@ function PlantValueSankey({ items, selectedPlant, onSelectPlant, expanded = fals
           preserveAspectRatio="xMidYMid meet"
           role="img"
           aria-label="Fluxo dos valores de SI por polo e usina"
-          style={{ borderRadius: 8 }}
+          style={{ borderRadius: 8, background: '#F8FAFC' }}
         >
-          <rect x="0" y="0" width="100" height="100" rx="2" fill="#F8FAFC" />
+          <rect x="0" y="0" width={expanded ? 140 : 116} height="100" rx="2" fill="#F8FAFC" />
           {poles.map(pole => (
             <path key={`total-${pole.name}`} d={curvePath(node.totalLinkX, 50, node.poleLinkInX, pole.y)} fill="none" stroke={pole.color} strokeWidth={linkWidth(pole.value)} strokeOpacity="0.22" />
           ))}
@@ -1069,8 +1069,8 @@ function ProjectStatusStrip({ items }) {
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
       {items.map(item => (
         <div key={item.label} style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 8, borderTop: `3px solid ${item.color}`, padding: '8px 10px', minWidth: 0 }}>
-          <div style={{ color: 'var(--text-muted)', fontSize: '0.6rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</div>
-          <div style={{ color: item.color, fontFamily: 'var(--font-display)', fontSize: '1.35rem', fontWeight: 900, lineHeight: 1.05, marginTop: 4 }}>{item.value}</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 'clamp(0.58rem, 0.85vw, 0.68rem)', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</div>
+          <div style={{ color: item.color, fontFamily: 'var(--font-display)', fontSize: 'clamp(1.2rem, 2.2vw, 1.7rem)', fontWeight: 900, lineHeight: 1.05, marginTop: 4 }}>{item.value}</div>
         </div>
       ))}
     </div>
@@ -1138,8 +1138,8 @@ function InfoStrip({ items }) {
         <div key={item.label} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px', background: '#F8FAFC', display: 'grid', gridTemplateColumns: '24px 1fr', gap: 8, alignItems: 'center', minWidth: 0 }}>
           <span style={{ width: 22, height: 22, borderRadius: 6, display: 'grid', placeItems: 'center', background: item.bg || '#EFF6FF', color: item.color || '#0070B8', fontWeight: 900 }}>{item.icon}</span>
           <div style={{ minWidth: 0 }}>
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.6rem', fontWeight: 900 }}>{item.label}</div>
-            <div style={{ color: 'var(--ctg-navy)', fontSize: '0.74rem', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.value}</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 'clamp(0.58rem, 0.85vw, 0.68rem)', fontWeight: 900 }}>{item.label}</div>
+            <div style={{ color: 'var(--ctg-navy)', fontSize: 'clamp(0.72rem, 1.1vw, 0.9rem)', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.value}</div>
           </div>
         </div>
       ))}
@@ -1415,9 +1415,9 @@ export default function HomePage({ year }) {
 
         <div style={{ gridColumn: '1 / 2', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, minHeight: 0 }}>
           <HomeCard title="Projetos em acompanhamento" icon="folder" action="›" onClick={() => navigate('/lists/projects-tracking')}>
-            <div style={{ display: 'grid', gridTemplateRows: 'auto auto minmax(0, 1fr) auto auto', gap: 10, height: '100%', minHeight: 0 }}>
+            <div style={{ display: 'grid', gridTemplateRows: 'auto auto minmax(0, 1fr) auto auto', gap: 8, height: '100%', minHeight: 0 }}>
               <ProjectStatusStrip items={projectStatusItems} />
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
                 <ValueConsumptionBox label="Valor total do contrato" value={projectTotalContrato} realized={projectRealizadoContrato} color="#10B981" />
                 <ValueConsumptionBox label="Valor total de SI" value={projectTotalSi} realized={projectRealizadoSi} color="#6366F1" />
               </div>
