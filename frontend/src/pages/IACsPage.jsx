@@ -1118,7 +1118,7 @@ export default function IACsPage() {
     <div style={{ padding: '12px 16px 16px 0' }}>
 
       {/* ── Summary row ── */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'nowrap', alignItems: 'stretch', minHeight: 165 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'nowrap', alignItems: 'stretch', minHeight: 170 }}>
 
         {/* Status cards 2x2 - pastel blue tones matching UHE style */}
         <div style={{ flex: '0 0 240px', display: 'flex', flexDirection: 'column' }}>
@@ -1149,14 +1149,14 @@ export default function IACsPage() {
                 }}
               >
                 <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94A3B8' }}>{c.label}</div>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: '2rem', fontWeight: 700, color: c.color, lineHeight: 1.1 }}>{c.value}</div>
+                <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '2rem', fontWeight: 700, color: c.color, lineHeight: 1.1 }}>{c.value}</div>
               </div>
             ))}
           </div>
         </div>
 
         {/* Priority donut chart */}
-        <div style={{ flex: '0 0 200px', borderLeft: '2px solid #E2E8F0', paddingLeft: 10, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: '0 0 220px', borderLeft: '2px solid #E2E8F0', paddingLeft: 10, display: 'flex', flexDirection: 'column' }}>
           <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748B', marginBottom: 4 }}>
             Prioridade
             {filterPriority && (
@@ -1178,7 +1178,7 @@ export default function IACsPage() {
               </span>
             )}
           </div>
-          <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, borderTop: '3px solid #0b5cab', padding: '10px', flex: 1, overflowY: 'auto', minHeight: 140 }}>
+          <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, borderTop: '3px solid #0b5cab', padding: '10px', flex: 1, overflowY: 'auto', minHeight: 158 }}>
             {(() => {
               // Always show all statuses from STATUS_OPTIONS (even with count 0)
               const visibleData = statusBarData;
@@ -1423,8 +1423,12 @@ export default function IACsPage() {
                           <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>{item.team_leader || '—'}</td>
                           <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>{item.chinese_work_staff || '—'}</td>
                           <td style={{ padding: '10px 12px' }}><PillBadge value={item.apresentado_work_team} /></td>
-                          <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>{item.organizer || '—'}</td>
-                          <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>{item.supervisor || '—'}</td>
+                          <td title={item.organizer || '—'} style={{ padding: '10px 12px', color: '#475569', fontSize: '0.75rem', maxWidth: 130 }}>
+                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.organizer || '—'}</div>
+                          </td>
+                          <td title={item.supervisor || '—'} style={{ padding: '10px 12px', color: '#475569', fontSize: '0.75rem', maxWidth: 140 }}>
+                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.supervisor || '—'}</div>
+                          </td>
                           <td style={{ padding: '10px 12px' }}><PriorityBadge value={item.priority} /></td>
                           <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: '#0F172A' }}>{item.qty_pp_line_26_priority ?? '—'}</td>
                           <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: '#0F172A' }}>{item.qty_pp_line_26_no_priority ?? '—'}</td>

@@ -363,7 +363,7 @@ figcaption{margin-top:4px}
 </html>`;
 }
 
-function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUser, onSave, onDelete, onEvidenceSlot, onClose }) {
+function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUser, readOnly = false, onSave, onDelete, onEvidenceSlot, onClose }) {
   // For collective metas: which members receive it (null = all)
   const [assignedUserIds, setAssignedUserIds] = useState(() => {
     if (!meta?.is_general) return null;
@@ -403,6 +403,7 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
   const inp = { padding: '7px 10px', borderRadius: 7, border: '1px solid var(--border)', fontSize: '0.82rem', background: 'var(--bg-card)', color: 'var(--text-primary)', width: '100%', outline: 'none', fontFamily: 'var(--font-body)' };
   const label = { fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 };
   const busy = saving || deletingMeta || uploadingEvidence;
+  const isReadOnly = !!readOnly;
   const collectiveMembers = members
     .filter(m => (m.id === currentUser?.id) || (m.role === 'engenheiro' && (!form.assigned_area || m.area === form.assigned_area)))
     .sort((a, b) => (a.id === currentUser?.id ? -1 : b.id === currentUser?.id ? 1 : a.name.localeCompare(b.name, 'pt-BR')));
@@ -436,6 +437,7 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
   }, [form.is_general, form.assigned_area, form.weight, currentUser?.id, meta?.id]);
 
   async function handleSubmit() {
+    if (isReadOnly) return;
     if (!form.description.trim()) return setError('Preencha a descricao da meta');
     if (form.is_general && assignedUserIds && assignedUserIds.size === 0)
       return setError('Selecione ao menos um destinatario');
@@ -465,6 +467,7 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
   }
 
   async function handleDeleteClick() {
+    if (isReadOnly) return;
     if (!meta?.id || !confirm('Excluir esta meta?')) return;
     setDeletingMeta(true);
     setError('');
@@ -479,6 +482,7 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
   }
 
   async function handleEvidenceSlot(slotIndex, filesLike) {
+    if (isReadOnly) return;
     const file = Array.from(filesLike || [])[0];
     if (!meta?.id || !file || !onEvidenceSlot) return;
     setUploadingEvidence(true);
@@ -495,6 +499,7 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
   }
 
   async function handleClearEvidenceSlot(slotIndex) {
+    if (isReadOnly) return;
     if (!meta?.id || !onEvidenceSlot) return;
     setUploadingEvidence(true);
     setError('');
@@ -513,6 +518,7 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
   const currentSlotCount = evidenceSlotCount(form.evidence_layout);
 
   async function handleFitSlot(slotIndex, fit) {
+    if (isReadOnly) return;
     const nextFits = [...fitDraft];
     nextFits[slotIndex] = fit;
     setFitDraft(nextFits);
@@ -539,12 +545,12 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
           </div>
         )}
         <div style={{ background: 'var(--ctg-navy)', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#fff' }}>{meta?.id ? 'Editar meta' : 'Nova meta'}</span>
+          <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#fff' }}>{isReadOnly ? 'Visualizar meta' : (meta?.id ? 'Editar meta' : 'Nova meta')}</span>
           <button onClick={onClose} disabled={busy} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 6, cursor: busy ? 'not-allowed' : 'pointer', fontSize: '0.85rem', color: '#fff', width: 26, height: 26, fontWeight: 700 }}>x</button>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '18px 20px', overflowY: 'auto' }}>
-          {canEditOthers && (
+          {canEditOthers && !isReadOnly && (
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', borderRadius: 8, border: '1px solid var(--border)', background: form.is_general ? '#EFF6FF' : '#F8FAFC', cursor: 'pointer' }}>
               <input
                 type="checkbox"
@@ -572,7 +578,7 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
             </label>
           )}
 
-          {canEditOthers && !form.is_general && (
+          {canEditOthers && !isReadOnly && !form.is_general && (
             <div>
               <label style={label}>COLABORADOR</label>
               <select value={form.user_id} onChange={e => setForm(f => ({ ...f, user_id: parseInt(e.target.value) }))} style={inp}>
@@ -587,7 +593,7 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
                 <div style={{ fontSize: '0.76rem', fontWeight: 700, color: '#1D4ED8' }}>Meta coletiva</div>
                 <label>
                   <span style={{ ...label, marginBottom: 3 }}>AREA DA META</span>
-                  <select value={form.assigned_area} onChange={e => {
+                  <select value={form.assigned_area} disabled={isReadOnly} onChange={e => {
                     const nextArea = e.target.value;
                     const eligible = members.filter(m => m.id === currentUser?.id || (m.role === 'engenheiro' && m.area === nextArea));
                     setForm(f => ({ ...f, assigned_area: nextArea, area: nextArea }));
@@ -602,14 +608,14 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
                   <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#1E40AF', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span>PESO POR PESSOA</span>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button type="button" onClick={() => setAssignedUserIds(new Set(collectiveMembers.map(m => m.id)))}
+                      {!isReadOnly && <button type="button" onClick={() => setAssignedUserIds(new Set(collectiveMembers.map(m => m.id)))}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.68rem', color: '#2563EB', fontWeight: 700, padding: 0 }}>
                         Todos
-                      </button>
-                      <button type="button" onClick={() => setAssignedUserIds(new Set())}
+                      </button>}
+                      {!isReadOnly && <button type="button" onClick={() => setAssignedUserIds(new Set())}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.68rem', color: '#6B7280', fontWeight: 700, padding: 0 }}>
                         Nenhum
-                      </button>
+                      </button>}
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 160, overflowY: 'auto' }}>
@@ -618,12 +624,13 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
                       return (
                         <label key={m.id} style={{
                           display: 'grid', gridTemplateColumns: 'auto 22px minmax(0, 1fr) 90px', alignItems: 'center', gap: 8, padding: '5px 8px',
-                          borderRadius: 6, cursor: 'pointer',
+                          borderRadius: 6,
                           background: checked ? 'rgba(37,99,235,0.08)' : 'transparent',
                           border: `1px solid ${checked ? '#93C5FD' : 'transparent'}`,
+                          cursor: isReadOnly ? 'default' : 'pointer',
                           transition: 'all 0.12s',
                         }}>
-                          <input type="checkbox" checked={checked} onChange={() => {
+                          <input type="checkbox" checked={checked} disabled={isReadOnly} onChange={() => {
                             setAssignedUserIds(prev => {
                               const next = new Set(prev || collectiveMembers.map(x => x.id));
                               next.has(m.id) ? next.delete(m.id) : next.add(m.id);
@@ -640,7 +647,7 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
                             max="100"
                             step="1"
                             value={assignedWeights[m.id] ?? ''}
-                            disabled={!checked}
+                            disabled={isReadOnly || !checked}
                             onChange={e => setAssignedWeights(prev => ({ ...prev, [m.id]: e.target.value }))}
                             onClick={e => e.stopPropagation()}
                             style={{ ...inp, padding: '5px 7px', fontSize: '0.74rem', opacity: checked ? 1 : 0.45 }}
@@ -662,13 +669,13 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
               <label style={label}>AREA</label>
-              <select value={form.area} onChange={e => setForm(f => ({ ...f, area: e.target.value, assigned_area: f.is_general ? e.target.value : f.assigned_area }))} style={inp}>
+              <select value={form.area} disabled={isReadOnly} onChange={e => setForm(f => ({ ...f, area: e.target.value, assigned_area: f.is_general ? e.target.value : f.assigned_area }))} style={inp}>
                 {AREAS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
               </select>
             </div>
             <div>
               <label style={label}>META</label>
-              <select value={form.meta_number} onChange={e => setForm(f => ({ ...f, meta_number: parseInt(e.target.value) }))} style={inp}>
+              <select value={form.meta_number} disabled={isReadOnly} onChange={e => setForm(f => ({ ...f, meta_number: parseInt(e.target.value) }))} style={inp}>
                 {Array.from({ length: 10 }, (_, i) => i + 1).map(n => <option key={n} value={n}>Meta {n}</option>)}
               </select>
             </div>
@@ -676,12 +683,12 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
 
           <div>
             <label style={label}>NOME DA META</label>
-            <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} style={{ ...inp, resize: 'vertical' }} placeholder="Descreva o objetivo principal desta meta" />
+            <textarea value={form.description} disabled={isReadOnly} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} style={{ ...inp, resize: 'vertical' }} placeholder="Descreva o objetivo principal desta meta" />
           </div>
 
           <div>
             <label style={label}>KPI / INDICADOR</label>
-            <select value={form.kpi} onChange={e => setForm(f => ({ ...f, kpi: e.target.value }))} style={inp}>
+            <select value={form.kpi} disabled={isReadOnly} onChange={e => setForm(f => ({ ...f, kpi: e.target.value }))} style={inp}>
               <option value="">-- Selecione --</option>
               {KPI_OPTIONS.map(k => <option key={k} value={k}>{k}</option>)}
             </select>
@@ -689,23 +696,23 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
 
           <div>
             <label style={label}>DETALHAMENTO</label>
-            <textarea value={form.detailed} onChange={e => setForm(f => ({ ...f, detailed: e.target.value }))} rows={3} style={{ ...inp, resize: 'vertical' }} placeholder="Critérios de avaliação, metodologia, entregáveis..." />
+            <textarea value={form.detailed} disabled={isReadOnly} onChange={e => setForm(f => ({ ...f, detailed: e.target.value }))} rows={3} style={{ ...inp, resize: 'vertical' }} placeholder="Critérios de avaliação, metodologia, entregáveis..." />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
               <label style={label}>PESO (%)</label>
-              <input type="number" step="1" min="0" max="100" value={form.weight} onChange={e => setForm(f => ({ ...f, weight: e.target.value }))} placeholder="Ex: 20 (para 20%)" style={inp} />
+              <input type="number" step="1" min="0" max="100" value={form.weight} disabled={isReadOnly} onChange={e => setForm(f => ({ ...f, weight: e.target.value }))} placeholder="Ex: 20 (para 20%)" style={inp} />
             </div>
             <div>
               <label style={label}>REALIZADO (%)</label>
-              <input type="number" step="any" value={form.achieved_value} onChange={e => setForm(f => ({ ...f, achieved_value: e.target.value }))} placeholder="0 – 120" style={inp} />
+              <input type="number" step="any" value={form.achieved_value} disabled={isReadOnly} onChange={e => setForm(f => ({ ...f, achieved_value: e.target.value }))} placeholder="0 – 120" style={inp} />
             </div>
           </div>
 
           <div>
             <label style={label}>UNIDADE</label>
-            <input value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} placeholder="%, MW, horas, entrega" style={inp} />
+            <input value={form.unit} disabled={isReadOnly} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} placeholder="%, MW, horas, entrega" style={inp} />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
@@ -716,7 +723,7 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
             ].map(([key, title, ph]) => (
               <div key={key}>
                 <label style={label}>{title}</label>
-                <textarea value={form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} rows={3} style={{ ...inp, resize: 'vertical' }} placeholder={ph} />
+                <textarea value={form[key]} disabled={isReadOnly} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} rows={3} style={{ ...inp, resize: 'vertical' }} placeholder={ph} />
               </div>
             ))}
           </div>
@@ -725,8 +732,8 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
             <label style={label}>STATUS</label>
             <div style={{ display: 'flex', gap: 8 }}>
               {STATUS.map(s => (
-                <button key={s.value} onClick={() => setForm(f => ({ ...f, status: s.value }))} style={{
-                  flex: 1, padding: '7px 0', borderRadius: 7, cursor: 'pointer', fontSize: '0.72rem',
+                <button key={s.value} disabled={isReadOnly} onClick={() => setForm(f => ({ ...f, status: s.value }))} style={{
+                  flex: 1, padding: '7px 0', borderRadius: 7, cursor: isReadOnly ? 'default' : 'pointer', fontSize: '0.72rem',
                   border: `1.5px solid ${form.status === s.value ? s.color : 'var(--border)'}`,
                   background: form.status === s.value ? s.bg : 'transparent',
                   color: form.status === s.value ? s.text : 'var(--text-secondary)',
@@ -738,7 +745,7 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
 
           <div>
             <label style={label}>LINK DAS EVIDENCIAS (SHAREPOINT)</label>
-            <input value={form.evidence_link} onChange={e => setForm(f => ({ ...f, evidence_link: e.target.value }))} placeholder="https://..." style={inp} />
+            <input value={form.evidence_link} disabled={isReadOnly} onChange={e => setForm(f => ({ ...f, evidence_link: e.target.value }))} placeholder="https://..." style={inp} />
           </div>
 
           {meta?.id && (
@@ -747,12 +754,12 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
               <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 8 }}>
                 <div>
                   <label style={label}>LAYOUT DAS IMAGENS</label>
-                  <select value={form.evidence_layout} onChange={e => setForm(f => ({ ...f, evidence_layout: e.target.value }))} style={inp}>
+                  <select value={form.evidence_layout} disabled={isReadOnly} onChange={e => setForm(f => ({ ...f, evidence_layout: e.target.value }))} style={inp}>
                     {EVIDENCE_LAYOUTS.map(layout => <option key={layout.value} value={layout.value}>{layout.label}</option>)}
                   </select>
-                  <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 7, padding: '7px 10px', fontSize: '0.7rem', color: '#92400E', marginTop: 6 }}>
+                  {!isReadOnly && <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 7, padding: '7px 10px', fontSize: '0.7rem', color: '#92400E', marginTop: 6 }}>
                     As imagens somente poderão ser incluídas após o salvamento do layout desejado e reabertura do modal.
-                  </div>
+                  </div>}
                 </div>
                 <div style={{ display: 'grid', ...layoutGridStyle(form.evidence_layout), gap: 6, height: 190, padding: 6, borderRadius: 8, border: '1px solid var(--border)', background: '#F8FAFC' }}>
                   {Array.from({ length: currentSlotCount }, (_, i) => (
@@ -764,7 +771,7 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
                       borderRadius: 7,
                       background: '#fff',
                       overflow: 'hidden',
-                      cursor: uploadingEvidence ? 'wait' : 'pointer',
+                      cursor: isReadOnly ? 'default' : (uploadingEvidence ? 'wait' : 'pointer'),
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -775,26 +782,26 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
                       {currentImages[i] ? (
                         <>
                           <img src={currentImages[i]} alt={`Evidencia ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: fitDraft[i] === 'cover' ? 'cover' : 'contain' }} />
-                          <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); handleFitSlot(i, fitDraft[i] === 'cover' ? 'contain' : 'cover'); }} disabled={uploadingEvidence}
+                          {!isReadOnly && <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); handleFitSlot(i, fitDraft[i] === 'cover' ? 'contain' : 'cover'); }} disabled={uploadingEvidence}
                             title={fitDraft[i] === 'cover' ? 'Mostrar imagem inteira' : 'Cortar para preencher'}
                             style={{ position: 'absolute', left: 4, bottom: 4, borderRadius: 5, border: 'none', background: 'rgba(15,23,42,0.68)', color: '#fff', cursor: uploadingEvidence ? 'wait' : 'pointer', fontSize: '0.62rem', fontWeight: 800, padding: '3px 6px' }}>
                             {fitDraft[i] === 'cover' ? 'Cortar' : 'Inteira'}
-                          </button>
-                          <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); handleClearEvidenceSlot(i); }} disabled={uploadingEvidence}
+                          </button>}
+                          {!isReadOnly && <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); handleClearEvidenceSlot(i); }} disabled={uploadingEvidence}
                             style={{ position: 'absolute', top: 4, right: 4, width: 20, height: 20, borderRadius: 5, border: 'none', background: 'rgba(15,23,42,0.68)', color: '#fff', cursor: uploadingEvidence ? 'wait' : 'pointer', fontSize: '0.72rem', fontWeight: 800 }}>
                             x
-                          </button>
+                          </button>}
                         </>
                       ) : (
                         <span>Imagem {i + 1}</span>
                       )}
-                      <input type="file" accept="image/*" disabled={uploadingEvidence} onChange={e => handleEvidenceSlot(i, e.target.files)} style={{ display: 'none' }} />
+                      <input type="file" accept="image/*" disabled={isReadOnly || uploadingEvidence} onChange={e => handleEvidenceSlot(i, e.target.files)} style={{ display: 'none' }} />
                     </label>
                   ))}
                 </div>
               </div>
               <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem', marginTop: 5 }}>
-                Clique em um espaco para escolher ou substituir a imagem daquela posicao.
+                {isReadOnly ? 'Imagens anexadas a esta meta coletiva.' : 'Clique em um espaco para escolher ou substituir a imagem daquela posicao.'}
               </div>
             </div>
           )}
@@ -802,32 +809,34 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
           {!meta?.id && (
             <div>
               <label style={label}>LAYOUT DAS IMAGENS</label>
-              <select value={form.evidence_layout} onChange={e => setForm(f => ({ ...f, evidence_layout: e.target.value }))} style={inp}>
+              <select value={form.evidence_layout} disabled={isReadOnly} onChange={e => setForm(f => ({ ...f, evidence_layout: e.target.value }))} style={inp}>
                 {EVIDENCE_LAYOUTS.map(layout => <option key={layout.value} value={layout.value}>{layout.label}</option>)}
               </select>
-              <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 7, padding: '7px 10px', fontSize: '0.7rem', color: '#92400E', marginTop: 6 }}>
+              {!isReadOnly && <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 7, padding: '7px 10px', fontSize: '0.7rem', color: '#92400E', marginTop: 6 }}>
                 As imagens somente poderão ser incluídas após o salvamento do layout desejado e reabertura do modal.
-              </div>
+              </div>}
             </div>
           )}
 
           <div>
             <label style={label}>OBSERVACOES</label>
-            <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} style={{ ...inp, resize: 'vertical' }} placeholder="Notas adicionais, contexto, dependências..." />
+            <textarea value={form.notes} disabled={isReadOnly} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} style={{ ...inp, resize: 'vertical' }} placeholder="Notas adicionais, contexto, dependências..." />
           </div>
 
           {error && <div style={{ background: '#FEE2E2', color: '#991B1B', borderRadius: 7, padding: '8px 12px', fontSize: '0.78rem' }}>{error}</div>}
 
           <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-            {meta?.id && (
+            {meta?.id && !isReadOnly && (
               <button onClick={handleDeleteClick} disabled={deletingMeta} style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: '1px solid #FCA5A5', background: '#FEF2F2', cursor: deletingMeta ? 'not-allowed' : 'pointer', fontSize: '0.82rem', color: '#DC2626', fontWeight: 700 }}>
                 {deletingMeta ? 'Excluindo...' : 'Excluir'}
               </button>
             )}
-            <button onClick={onClose} style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Cancelar</button>
-            <button onClick={handleSubmit} disabled={saving} style={{ flex: 2, padding: '9px 0', borderRadius: 8, border: 'none', background: saving ? '#93C5FD' : 'var(--ctg-blue)', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', fontSize: '0.82rem', fontWeight: 700 }}>
-              {saving ? 'Salvando...' : 'Salvar'}
-            </button>
+            <button onClick={onClose} style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{isReadOnly ? 'Fechar' : 'Cancelar'}</button>
+            {!isReadOnly && (
+              <button onClick={handleSubmit} disabled={saving} style={{ flex: 2, padding: '9px 0', borderRadius: 8, border: 'none', background: saving ? '#93C5FD' : 'var(--ctg-blue)', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', fontSize: '0.82rem', fontWeight: 700 }}>
+                {saving ? 'Salvando...' : 'Salvar'}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1210,7 +1219,7 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
               {rows.length === 0 ? (
                 <tr><td colSpan={8} style={{ padding: 18, textAlign: 'center', color: 'var(--text-secondary)' }}>Nenhuma meta coletiva cadastrada para esta area.</td></tr>
               ) : rows.map((m, i) => (
-                <tr key={m.id} onClick={() => canManageGeneral && setModal({ meta: m, userId: null })} style={{ background: i % 2 ? TABLE_TONES.collective.alt : TABLE_TONES.collective.row, borderBottom: '1px solid #BFECE5', boxShadow: `inset 3px 0 0 ${TABLE_TONES.collective.header}`, cursor: canManageGeneral ? 'pointer' : 'default' }}>
+                <tr key={m.id} onClick={() => setModal({ meta: m, userId: null, readOnly: !canManageGeneral })} style={{ background: i % 2 ? TABLE_TONES.collective.alt : TABLE_TONES.collective.row, borderBottom: '1px solid #BFECE5', boxShadow: `inset 3px 0 0 ${TABLE_TONES.collective.header}`, cursor: 'pointer' }}>
                   <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', fontWeight: 700 }}>{areaLabel(m.assigned_area || m.area)}</td>
                   <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', fontWeight: 700, color: 'var(--ctg-navy)' }}>Meta {m.meta_number}</td>
                   <td title={m.description} style={{ padding: '8px 10px', maxWidth: 340, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.description}</td>
@@ -1474,6 +1483,7 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
           members={allMembers}
           canEditOthers={canEditOthers}
           currentUser={user}
+          readOnly={modal.readOnly}
           onSave={handleSave}
           onDelete={handleDelete}
           onEvidenceSlot={handleEvidenceSlot}
