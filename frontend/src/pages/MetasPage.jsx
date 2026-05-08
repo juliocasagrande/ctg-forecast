@@ -1047,6 +1047,9 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
   const reportMember = allMembers.find(m => m.id === Number(reportUserId)) || allMembers.find(m => m.id === user?.id) || user;
   const collectiveAppliesToMember = (meta, member) => {
     if (!member?.id) return false;
+    if (member.role === 'coordenador') {
+      return (meta.assigned_area || meta.area) === (member.area || 'eletrica');
+    }
     const assigned = Array.isArray(meta.assigned_user_ids) ? meta.assigned_user_ids.map(Number) : [];
     if (assigned.length > 0) return assigned.includes(Number(member.id));
     return (meta.assigned_area || meta.area) === (member.area || 'eletrica') || Number(meta.user_id) === Number(member.id);

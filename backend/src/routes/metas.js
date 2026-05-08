@@ -28,7 +28,7 @@ function buildVisibilityWhere(req, baseParamCount = 1, tableAlias = 'm', userAli
   }
   if (role === 'coordenador') {
     return {
-      sql: ` AND ((${tableAlias}.user_id = $${baseParamCount + 1}) OR (${userAlias}.role = 'engenheiro' AND COALESCE(${userAlias}.area,'eletrica') = $${baseParamCount + 2}) OR (${tableAlias}.is_general = true AND COALESCE(${tableAlias}.assigned_area, ${tableAlias}.area) = $${baseParamCount + 2} AND (${tableAlias}.assigned_user_ids IS NULL OR $${baseParamCount + 1} = ANY(${tableAlias}.assigned_user_ids))))`,
+      sql: ` AND ((${tableAlias}.user_id = $${baseParamCount + 1}) OR (${userAlias}.role = 'engenheiro' AND COALESCE(${userAlias}.area,'eletrica') = $${baseParamCount + 2}) OR (${tableAlias}.is_general = true AND COALESCE(${tableAlias}.assigned_area, ${tableAlias}.area) = $${baseParamCount + 2}))`,
       params: [id, area || 'eletrica'],
     };
   }
