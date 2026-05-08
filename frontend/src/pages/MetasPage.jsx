@@ -1144,11 +1144,11 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
         <button
           type="button"
           onClick={() => !defaultOpen && toggleGoalSection(sectionKey)}
-          style={{ width: '100%', border: 'none', background: tone.header, color: '#fff', padding: '9px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, cursor: defaultOpen ? 'default' : 'pointer', textAlign: 'left' }}
+          style={{ width: '100%', border: 'none', background: tone.header, color: '#fff', padding: '7px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, cursor: defaultOpen ? 'default' : 'pointer', textAlign: 'left' }}
         >
-          <span style={{ minWidth: 0 }}>
-            <span style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800 }}>{title}</span>
-            {sub && <span style={{ display: 'block', marginTop: 2, color: 'rgba(255,255,255,0.68)', fontSize: '0.64rem', fontWeight: 700 }}>{sub}</span>}
+          <span style={{ minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ display: 'block', fontSize: '0.86rem', fontWeight: 900 }}>{title}</span>
+            {sub && <span style={{ display: 'block', color: 'rgba(255,255,255,0.72)', fontSize: '0.72rem', fontWeight: 800 }}>{sub}</span>}
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             {action}
@@ -1338,12 +1338,45 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
       if (!!a.is_general !== !!b.is_general) return a.is_general ? -1 : 1;
       return a.meta_number - b.meta_number;
     });
+    const collectiveCount = sortedMetas.filter(m => m.is_general).length;
+    const individualCount = sortedMetas.length - collectiveCount;
+    const weightSum = sortedMetas.reduce((sum, m) => sum + metaWeight(m, member.id), 0) * 100;
+    const weightOk = Math.abs(weightSum - 100) < 0.05;
+    const typeBadgeStyle = (isGeneral) => ({
+      borderRadius: 999,
+      padding: '1px 7px',
+      color: isGeneral ? '#075985' : '#1D4ED8',
+      background: isGeneral ? '#CCFBF1' : '#DBEAFE',
+      border: `1px solid ${isGeneral ? '#99F6E4' : '#BFDBFE'}`,
+      fontWeight: 900,
+      textTransform: 'none',
+      letterSpacing: 0,
+      fontSize: 'inherit',
+    });
+    const headerSub = sub || (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span>{areaLabel(member.area)}</span>
+        <span>{sortedMetas.length} meta(s)</span>
+        <span style={typeBadgeStyle(true)}>{collectiveCount} Coletiva(s)</span>
+        <span style={typeBadgeStyle(false)}>{individualCount} Individual(is)</span>
+        <span style={{
+          borderRadius: 999,
+          padding: '1px 7px',
+          background: weightOk ? 'rgba(16,185,129,0.18)' : 'rgba(239,68,68,0.2)',
+          color: weightOk ? '#D1FAE5' : '#FEE2E2',
+          border: `1px solid ${weightOk ? 'rgba(167,243,208,0.36)' : 'rgba(254,202,202,0.5)'}`,
+          fontWeight: 900,
+        }}>
+          Peso {fmtPercent(weightSum)}
+        </span>
+      </span>
+    );
     return (
       <CollapsibleSection
         key={member.id}
         sectionKey={sectionKey}
         title={title}
-        sub={sub || `${areaLabel(member.area)} · ${sortedMetas.length} meta(s)`}
+        sub={headerSub}
         defaultOpen={open}
         tone={tone}
         action={canEdit && personalMetas.length < 10 && (
@@ -1463,7 +1496,7 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div className="spinner" /></div>
       ) : (
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto', paddingTop: 8 }}>
-          {role === 'coordenador' && selfRow && renderCollaboratorTable(selfRow.member, selfRow.metas, { open: true, sectionKey: 'self', title: `${selfRow.member.name} (minhas metas)`, sub: `${selfRow.metas.length} meta(s) cadastrada(s)`, tone: TABLE_TONES.personal })}
+          {role === 'coordenador' && selfRow && renderCollaboratorTable(selfRow.member, selfRow.metas, { sectionKey: 'self', title: selfRow.member.name, tone: TABLE_TONES.personal })}
           {renderDisciplineTables()}
 
           <section style={{ display: 'grid', gridTemplateColumns: '360px minmax(0, 1fr)', gap: 12, alignItems: 'stretch', flexShrink: 0 }}>
