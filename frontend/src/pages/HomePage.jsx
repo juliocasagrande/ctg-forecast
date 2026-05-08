@@ -833,7 +833,6 @@ function PlantColumnChart({ items }) {
   const [hovered, setHovered] = useState(null);
   const [tipPos, setTipPos] = useState({ x: 0, y: 0 });
   const rows = items;
-  const max = Math.max(1, ...rows.map(item => Number(item.value) || 0));
   if (!rows.length) return <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>Sem valores por usina neste escopo.</span>;
   const tooltipRow = (label, value, color) => (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, fontSize: '0.76rem', marginBottom: 2 }}>
@@ -855,9 +854,12 @@ function PlantColumnChart({ items }) {
     <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10, background: '#FBFDFF', minHeight: 0, height: '100%', position: 'relative', overflow: 'visible', display: 'flex', flexDirection: 'column' }} onMouseMove={e => setTipPos({ x: e.clientX, y: e.clientY })} onMouseLeave={() => setHovered(null)}>
       <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6, flexShrink: 0 }}>Por usina</div>
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${rows.length}, minmax(24px, 1fr))`, gridTemplateRows: '1fr', gap: 7, flex: 1, minHeight: 60, paddingBottom: 6 }}>
-        {rows.map((item, idx) => {
-          const hasValue = Number(item.value) > 0;
-          const barPct = hasValue ? Math.max(10, (Number(item.value) / max) * 100) : 0;
+        {rows.map((item) => {
+          const contratoTotal = Number(item.contratoTotal) || 0;
+          const contratoUtilizado = Number(item.contratoUtilizado) || 0;
+          const hasValue = contratoTotal > 0;
+          const utilizationPct = hasValue ? Math.min(100, (contratoUtilizado / contratoTotal) * 100) : 0;
+          const barColor = utilizationPct >= 100 ? '#EF4444' : utilizationPct >= 80 ? '#F59E0B' : '#10B981';
           const sigla = item.sigla || PROJECT_PLANT_SIGLAS[item.label] || PROJECT_PLANT_SIGLAS[compactLabel(item.label)] || compactLabel(item.label).slice(0, 3).toUpperCase();
           return (
             <div
@@ -866,9 +868,9 @@ function PlantColumnChart({ items }) {
               onFocus={() => setHovered(item)}
               style={{ display: 'grid', gridTemplateRows: '12px 1fr 20px', gap: 2, justifyItems: 'center', minWidth: 0, cursor: 'default' }}
             >
-              <div style={{ color: hasValue ? 'var(--ctg-navy)' : '#94A3B8', fontSize: '0.58rem', fontWeight: 900, whiteSpace: 'nowrap' }}>{hasValue ? moneyAxis(item.value) : '-'}</div>
+              <div style={{ color: hasValue ? 'var(--ctg-navy)' : '#94A3B8', fontSize: '0.58rem', fontWeight: 900, whiteSpace: 'nowrap' }}>{hasValue ? moneyAxis(contratoTotal) : '-'}</div>
               <div style={{ width: '100%', maxWidth: 34, height: '100%', borderRadius: 4, background: '#E2E8F0', display: 'flex', alignItems: 'flex-end', overflow: 'hidden' }}>
-                <div style={{ width: '100%', height: `${barPct}%`, borderRadius: '4px 4px 0 0', background: hasValue ? ['#001F5B', '#0050B3', '#0070B8', '#00AEEF', '#7DD3FC'][idx % 5] : 'transparent' }} />
+                <div style={{ width: '100%', height: `${utilizationPct}%`, borderRadius: '4px 4px 0 0', background: hasValue ? barColor : 'transparent', transition: 'height 0.3s ease' }} />
               </div>
               <div style={{ color: 'var(--ctg-navy)', fontSize: '0.58rem', lineHeight: 1, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', alignSelf: 'start', paddingTop: 1 }}>{sigla || item.label}</div>
             </div>
@@ -930,12 +932,12 @@ function PlantValueSankey({ items, selectedPlant, onSelectPlant, expanded = fals
       color: poleColors[name],
       value: plants.reduce((sum, item) => sum + (Number(item.siTotal) || 0), 0),
       plants,
-      y: 18 + idx * 28,
+      y: 23 + idx * 37,
     };
   });
   const plantRows = poles.flatMap(pole => pole.plants);
-  const rowGap = plantRows.length > 1 ? 74 / (plantRows.length - 1) : 0;
-  const plantLayout = new Map(plantRows.map((item, idx) => [item.label, { ...item, y: 13 + idx * rowGap }]));
+  const rowGap = plantRows.length > 1 ? 96 / (plantRows.length - 1) : 0;
+  const plantLayout = new Map(plantRows.map((item, idx) => [item.label, { ...item, y: 17 + idx * rowGap }]));
   const linkWidth = value => Math.max(2.2, Math.min(11, 2.2 + (Number(value || 0) / Math.max(maxSi, 1)) * 8.8));
   const curvePath = (x1, y1, x2, y2) => {
     const c = Math.max(10, (x2 - x1) * 0.52);
@@ -953,10 +955,10 @@ function PlantValueSankey({ items, selectedPlant, onSelectPlant, expanded = fals
     </div>
   );
   const disciplineRows = Object.entries(hover?.disciplines || {});
-  const viewBox = expanded ? '0 0 140 100' : '0 0 116 100';
+  const viewBox = expanded ? '0 0 140 130' : '0 0 116 130';
   const node = expanded
-    ? { totalX: 8, totalW: 18, poleX: 51, poleW: 18, plantX: 104, plantW: 7, plantTextX: 115, totalLinkX: 20, poleLinkInX: 55, poleLinkOutX: 68, plantLinkX: 106 }
-    : { totalX: 3, totalW: 16, poleX: 37, poleW: 18, plantX: 82, plantW: 7, plantTextX: 93, totalLinkX: 17, poleLinkInX: 41, poleLinkOutX: 54, plantLinkX: 84 };
+    ? { totalX: 8, totalW: 18, totalY: 65, poleX: 51, poleW: 18, plantX: 104, plantW: 8, plantTextX: 115, totalLinkX: 26, poleLinkInX: 55, poleLinkOutX: 69, plantLinkX: 106 }
+    : { totalX: 3, totalW: 16, totalY: 65, poleX: 37, poleW: 18, plantX: 82, plantW: 8, plantTextX: 93, totalLinkX: 19, poleLinkInX: 41, poleLinkOutX: 55, plantLinkX: 90 };
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'grid', gridTemplateRows: selectedPlant ? 'minmax(0, 1fr) auto' : 'minmax(0, 1fr)', gap: 8 }}>
       <div style={{ position: 'relative', border: '1px solid var(--border)', borderRadius: 8, background: 'linear-gradient(145deg, #F8FAFC, #EFF6FF)', overflow: 'visible', minHeight: 0 }} onMouseLeave={() => setHovered(null)}>
@@ -969,9 +971,9 @@ function PlantValueSankey({ items, selectedPlant, onSelectPlant, expanded = fals
           aria-label="Fluxo dos valores de SI por polo e usina"
           style={{ borderRadius: 8, background: '#F8FAFC' }}
         >
-          <rect x="0" y="0" width={expanded ? 140 : 116} height="100" rx="2" fill="#F8FAFC" />
+          <rect x="0" y="0" width={expanded ? 140 : 116} height="130" rx="2" fill="#F8FAFC" />
           {poles.map(pole => (
-            <path key={`total-${pole.name}`} d={curvePath(node.totalLinkX, 50, node.poleLinkInX, pole.y)} fill="none" stroke={pole.color} strokeWidth={linkWidth(pole.value)} strokeOpacity="0.22" />
+            <path key={`total-${pole.name}`} d={curvePath(node.totalLinkX, node.totalY, node.poleLinkInX, pole.y)} fill="none" stroke={pole.color} strokeWidth={linkWidth(pole.value)} strokeOpacity="0.22" />
           ))}
           {poles.flatMap(pole => pole.plants.map(plant => {
             const target = plantLayout.get(plant.label);
@@ -993,15 +995,15 @@ function PlantValueSankey({ items, selectedPlant, onSelectPlant, expanded = fals
               />
             );
           }))}
-          <rect x={node.totalX} y="35" width={node.totalW} height="30" rx="3" fill="#001F5B" />
-          <text x={node.totalX + node.totalW / 2} y="47" textAnchor="middle" style={{ fill: '#fff', fontSize: '3.2px', fontWeight: 900 }}>SI</text>
-          <text x={node.totalX + node.totalW / 2} y="53.5" textAnchor="middle" style={{ fill: '#fff', fontSize: '3.2px', fontWeight: 900 }}>total</text>
-          <text x={node.totalX + node.totalW / 2} y="59" textAnchor="middle" style={{ fill: '#CDEEFF', fontSize: '2.5px', fontWeight: 800 }}>{moneyCompact(totalSi).replace('R$ ', '')}</text>
+          <rect x={node.totalX} y={node.totalY - 20} width={node.totalW} height="40" rx="3" fill="#001F5B" />
+          <text x={node.totalX + node.totalW / 2} y={node.totalY - 6} textAnchor="middle" style={{ fill: '#fff', fontSize: '4px', fontWeight: 900 }}>SI</text>
+          <text x={node.totalX + node.totalW / 2} y={node.totalY + 1} textAnchor="middle" style={{ fill: '#fff', fontSize: '4px', fontWeight: 900 }}>total</text>
+          <text x={node.totalX + node.totalW / 2} y={node.totalY + 9} textAnchor="middle" style={{ fill: '#CDEEFF', fontSize: '3.2px', fontWeight: 800 }}>{moneyCompact(totalSi).replace('R$ ', '')}</text>
           {poles.map(pole => (
             <g key={pole.name}>
-              <rect x={node.poleX} y={pole.y - 6} width={node.poleW} height="12" rx="2.5" fill={pole.color} />
-              <text x={node.poleX + node.poleW / 2} y={pole.y - 1} textAnchor="middle" style={{ fill: '#fff', fontSize: '2.4px', fontWeight: 900 }}>{pole.name.replace('Polo ', '')}</text>
-              <text x={node.poleX + node.poleW / 2} y={pole.y + 3.5} textAnchor="middle" style={{ fill: 'rgba(255,255,255,0.82)', fontSize: '2.1px', fontWeight: 800 }}>{moneyCompact(pole.value).replace('R$ ', '')}</text>
+              <rect x={node.poleX} y={pole.y - 7.5} width={node.poleW} height="15" rx="3" fill={pole.color} />
+              <text x={node.poleX + node.poleW / 2} y={pole.y - 1} textAnchor="middle" style={{ fill: '#fff', fontSize: '3.1px', fontWeight: 900 }}>{pole.name.replace('Polo ', '')}</text>
+              <text x={node.poleX + node.poleW / 2} y={pole.y + 4.5} textAnchor="middle" style={{ fill: 'rgba(255,255,255,0.88)', fontSize: '2.7px', fontWeight: 800 }}>{moneyCompact(pole.value).replace('R$ ', '')}</text>
             </g>
           ))}
           {plantRows.map(plant => {
@@ -1025,8 +1027,8 @@ function PlantValueSankey({ items, selectedPlant, onSelectPlant, expanded = fals
                 }}
                 style={{ cursor: 'pointer', opacity: hasSelection && !isSelected ? 0.44 : 1 }}
               >
-                <rect x={node.plantX} y={row.y - 2.8} width={node.plantW} height="5.6" rx="1.4" fill={isSelected ? '#F59E0B' : plant.color} stroke="#fff" strokeWidth="0.5" />
-                <text x={node.plantTextX} y={row.y + 1.1} style={{ fill: 'var(--ctg-navy)', fontSize: '2.8px', fontWeight: 900 }}>{plant.sigla}</text>
+                <rect x={node.plantX} y={row.y - 3.5} width={node.plantW} height="7" rx="1.8" fill={isSelected ? '#F59E0B' : plant.color} stroke="#fff" strokeWidth="0.5" />
+                <text x={node.plantTextX} y={row.y + 1.4} style={{ fill: 'var(--ctg-navy)', fontSize: '3.5px', fontWeight: 900 }}>{plant.sigla}</text>
               </g>
             );
           })}
