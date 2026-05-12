@@ -141,19 +141,34 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
           {/* Gestor / Engenheiro / Planejador */}
           {!isAdmin && <>
 
-            {/* ── SEÇÃO 2: Lists ────────────────────────────────── */}
+            {/* ── SEÇÃO: Lists ──────────────────────────────────── */}
+            <div style={{ margin: '6px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
             <div className="nav-section-label" style={{color:"rgba(255,255,255,0.75)"}}>
               Lists
             </div>
             {navItem('/lists/projects-tracking', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>, 'Acomp. de Projetos')}
             {navItem('/lists/iacs', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd"/></svg>, 'IACs 2026')}
 
-            {/* ── DIVISOR ───────────────────────────────────────── */}
-            {(canManageSidebar || isGerente || user?.email === 'julio.casagrande@ctgbr.com.br') && (
-              <div style={{ margin: '10px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
+            {/* ── SEÇÃO: Mapa de Equipamentos ───────────────────── */}
+            <div style={{ margin: '6px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
+            <div className="nav-section-label" style={{color:"rgba(255,255,255,0.75)"}}>
+              Mapa de Equipamentos
+            </div>
+            {navItem('/engineering/equipamentos',
+              <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+                <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9zM4 5a2 2 0 00-2 2v6a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-2V4a1 1 0 00-1-1H7a1 1 0 00-1 1v1H4zm7 5a1 1 0 10-2 0v3a1 1 0 102 0v-3z"/>
+              </svg>,
+              'Mapa de Equipamentos'
+            )}
+            {navItem('/engineering/equipamentos-admin',
+              <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+                <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd"/>
+              </svg>,
+              'Gestão de Equipamentos'
             )}
 
-            {/* ── SEÇÃO 3: Pessoas ──────────────────────────────── */}
+            {/* ── SEÇÃO: Gestão de Pessoas e Documentos ─────────── */}
+            <div style={{ margin: '6px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
             <div className="nav-section-label" style={{color:"rgba(255,255,255,0.75)"}}>
               Gestão de Pessoas e Documentos
             </div>

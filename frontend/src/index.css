@@ -797,7 +797,7 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
   display: flex;
   flex-direction: column;
   gap: 0;
-  max-width: 900px;
+  max-width: 1200px;
   margin: 0 auto;
   padding-bottom: 80px; /* space for save bar */
 }

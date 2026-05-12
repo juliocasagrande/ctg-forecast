@@ -613,6 +613,64 @@ await client.query(`
       ALTER TABLE lists_projects_tracking ADD COLUMN IF NOT EXISTS gestor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
     `);
 
+    /* ───────── EQUIPAMENTOS DE SUBESTAÇÃO ───────── */
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS equipamentos_subestacao (
+        id                SERIAL PRIMARY KEY,
+        usina             VARCHAR(100) NOT NULL,
+        tipo_tabela       VARCHAR(100) NOT NULL DEFAULT 'Geral',
+        equipamento       VARCHAR(100) NOT NULL,
+        ug                VARCHAR(60)  NOT NULL,
+        tag               VARCHAR(60)  NOT NULL,
+        fabricante        VARCHAR(120),
+        modelo            VARCHAR(120),
+        num_serie         VARCHAR(120),
+        tem_sobressalente VARCHAR(10)  DEFAULT 'Não',
+        quantos           INTEGER      DEFAULT 0,
+        ano               INTEGER,
+        url_imagem        TEXT,
+        created_by        INTEGER REFERENCES users(id),
+        created_at        TIMESTAMPTZ  DEFAULT NOW(),
+        updated_at        TIMESTAMPTZ  DEFAULT NOW()
+      );
+    `);
+
+    await client.query(`
+      ALTER TABLE equipamentos_subestacao ADD COLUMN IF NOT EXISTS tipo_tabela VARCHAR(100) NOT NULL DEFAULT 'Geral';
+    `);
+
+    // Normalize existing usina names to full format
+    await client.query(`
+      UPDATE equipamentos_subestacao SET usina = 'UHE Capivara'      WHERE usina = 'Capivara';
+      UPDATE equipamentos_subestacao SET usina = 'UHE Garibaldi'     WHERE usina = 'Garibaldi';
+      UPDATE equipamentos_subestacao SET usina = 'UHE Ilha Solteira' WHERE usina = 'Ilha Solteira';
+      UPDATE equipamentos_subestacao SET usina = 'UHE Rosana'        WHERE usina = 'Rosana';
+      UPDATE equipamentos_subestacao SET usina = 'UHE Salto'         WHERE usina = 'Salto';
+      UPDATE equipamentos_subestacao SET usina = 'UHE Taquaruçu'     WHERE usina = 'Taquaruçu';
+      UPDATE equipamentos_subestacao SET usina = 'UHE Chavantes'     WHERE usina = 'Chavantes';
+      UPDATE equipamentos_subestacao SET usina = 'UHE Jupiá'         WHERE usina = 'Jupiá';
+      UPDATE equipamentos_subestacao SET usina = 'UHE Jurumirim'     WHERE usina = 'Jurumirim';
+      UPDATE equipamentos_subestacao SET usina = 'UHE Salto Grande'  WHERE usina = 'Salto Grande';
+      UPDATE equipamentos_subestacao SET usina = 'UHE Canoas 1'      WHERE usina IN ('Canoas I','Canoas 1');
+      UPDATE equipamentos_subestacao SET usina = 'UHE Canoas 2'      WHERE usina IN ('Canoas II','Canoas 2');
+      UPDATE equipamentos_subestacao SET usina = 'PCH Palmeiras'     WHERE usina = 'Palmeiras';
+      UPDATE equipamentos_subestacao SET usina = 'PCH Retiro'        WHERE usina = 'Retiro';
+    `);
+
+    /* ───────── EQUIPAMENTOS: CONTROLE DE ACESSO ───────── */
+    // Drop old table (had equipamento column) and recreate with tipo_tabela
+    await client.query(`
+      DROP TABLE IF EXISTS equipamentos_acesso;
+      CREATE TABLE IF NOT EXISTS equipamentos_acesso (
+        id          SERIAL PRIMARY KEY,
+        usina       VARCHAR(100) NOT NULL,
+        tipo_tabela VARCHAR(100) NOT NULL,
+        user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at  TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(usina, tipo_tabela, user_id)
+      );
+    `);
+
     console.log('✅ Migrations OK');
 
     await ensureAdminUser(client);

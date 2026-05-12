@@ -424,6 +424,9 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
     const fallback = form.weight !== '' && form.weight != null ? Number(form.weight) : '';
     setAssignedUserIds(prev => {
       const next = new Set(prev || []);
+      if (!meta?.id) {
+        for (const member of collectiveMembers) next.add(member.id);
+      }
       if (!meta?.id && currentUser?.id) next.add(currentUser.id);
       return next;
     });

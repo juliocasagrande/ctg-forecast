@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../utils/api.js';
 import { useToast } from '../components/ui/Toast.jsx';
 import SapMappingTab from '../components/SapMappingTab.jsx';
+import EquipamentosAcessoTab from '../components/EquipamentosAcessoTab.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 
 function CloseYearPanel({ settings, toast }) {
@@ -161,15 +162,16 @@ function FeedbackList({ toast }) {
 }
 
 const SECTIONS = [
-  { id: 'alerts',      label: '🔔 Alertas',             icon: '🔔' },
-  { id: 'documents',   label: '📄 Documentos',           icon: '📄' },
-  { id: 'tracking',    label: '📋 Acompanhamento',       icon: '📋' },
-  { id: 'colors',      label: '🎨 Cores',                icon: '🎨' },
-  { id: 'period',      label: '📆 Período e Ano Fiscal', icon: '📆' },
-  { id: 'export',      label: '📊 Exportação',           icon: '📊' },
-  { id: 'permissions', label: '🔐 Permissões',           icon: '🔐' },
-  { id: 'sap',         label: '🗂️ Mapeamento SAP',       icon: '🗂️' },
-  { id: 'feedback',    label: '💡 Feedbacks',            icon: '💡' },
+  { id: 'alerts',        label: '🔔 Alertas',             icon: '🔔' },
+  { id: 'documents',     label: '📄 Documentos',           icon: '📄' },
+  { id: 'tracking',      label: '📋 Acompanhamento',       icon: '📋' },
+  { id: 'colors',        label: '🎨 Cores',                icon: '🎨' },
+  { id: 'period',        label: '📆 Período e Ano Fiscal', icon: '📆' },
+  { id: 'export',        label: '📊 Exportação',           icon: '📊' },
+  { id: 'permissions',   label: '🔐 Permissões',           icon: '🔐' },
+  { id: 'equipamentos',  label: '⚡ Acesso Equipamentos',  icon: '⚡' },
+  { id: 'sap',           label: '🗂️ Mapeamento SAP',       icon: '🗂️' },
+  { id: 'feedback',      label: '💡 Feedbacks',            icon: '💡' },
 ];
 
 const DEFAULTS = {
@@ -865,6 +867,11 @@ export default function SettingsPage() {
         {/* ── FEEDBACKS ── */}
         {activeSection === 'feedback' && (
           <FeedbackList toast={toast} />
+        )}
+
+        {/* ── ACESSO EQUIPAMENTOS ── */}
+        {activeSection === 'equipamentos' && (
+          <EquipamentosAcessoTab />
         )}
 
         {activeSection === 'sap' && canAccessSap && (

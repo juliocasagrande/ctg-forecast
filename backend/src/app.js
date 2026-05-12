@@ -32,8 +32,9 @@ import delegationsRouter from './routes/delegations.js';
 import vacationsRouter   from './routes/vacations.js';
 import metasRouter       from './routes/metas.js';
 import monthlyReportRouter from './routes/monthly-report.js';
-import listsRouter       from './routes/lists.js';
-import chatRouter        from './routes/chat.js';
+import listsRouter          from './routes/lists.js';
+import chatRouter           from './routes/chat.js';
+import equipamentosRouter   from './routes/equipamentos.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -101,6 +102,7 @@ export function createApp({ disableRateLimit = false } = {}) {
    app.use('/api/metas',      metasRouter);
    app.use('/api/lists',       listsRouter);
   app.use('/api/chat',        chatRouter);
+  app.use('/api/equipamentos', equipamentosRouter);
 
   if (disableRateLimit) {
     app.use('/api/export',         exportRouter);

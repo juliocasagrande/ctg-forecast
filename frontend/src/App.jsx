@@ -24,6 +24,8 @@ import MetasPage from './pages/MetasPage.jsx';
 import DocumentsPage from './pages/DocumentsPage.jsx';
 import IACsPage from './pages/IACsPage.jsx';
 import ProjectsTrackingPage from './pages/ProjectsTrackingPage.jsx';
+import EquipamentosPage from './pages/EquipamentosPage.jsx';
+import EquipamentosAdminPage from './pages/EquipamentosAdminPage.jsx';
 import AdminPanel from './components/admin/AdminPanel.jsx';
 import AlertBell from './components/ui/AlertBell.jsx';
 import api from './utils/api.js';
@@ -730,6 +732,8 @@ function getPageMeta(pathname) {
   if (pathname === '/documents') return { title: 'Controle de Documentos', sub: null };
   if (pathname === '/lists/iacs') return { title: 'IACs 2026'};
   if (pathname === '/lists/projects-tracking') return { title: 'Acompanhamento de Projetos', sub: 'Relatório mensal — contratos em andamento' };
+  if (pathname === '/engineering/equipamentos') return { title: 'Mapa de Equipamentos', sub: 'CTG Brasil' };
+  if (pathname === '/engineering/equipamentos-admin') return { title: 'Gestão de Equipamentos', sub: 'Cadastro e manutenção dos dados' };
   if (pathname.startsWith('/projects/')) return { title: 'Projetos', sub: null };
   return { title: 'CTG.Engenharia', sub: null };
 }
@@ -749,6 +753,7 @@ export default function App() {
   const [projectFilter, setProjectFilter]   = useState([]);
   const [areaFilter, setAreaFilter]         = useState('');
   const [vacYear, setVacYear]               = useState(new Date().getFullYear());
+  const [equipamentosStats, setEquipamentosStats] = useState(null);
   const location  = useLocation();
   const navigate  = useNavigate();
 
@@ -758,6 +763,12 @@ export default function App() {
   };
 
   useEffect(() => { if (user) fetchProjects(); }, [user]);
+
+  useEffect(() => {
+    const handler = (e) => setEquipamentosStats(e.detail);
+    window.addEventListener('equipamentos-stats', handler);
+    return () => window.removeEventListener('equipamentos-stats', handler);
+  }, []);
 
   const openNewProject = () => { setEditingProject(null); setProjectFormOpen(true); };
   const openEditProject = async (p) => {
@@ -1025,6 +1036,28 @@ export default function App() {
                 );
               })()}
 
+              {/* ── KPIs do Mapa de Equipamentos ── */}
+              {location.pathname === '/engineering/equipamentos' && equipamentosStats && (
+                <div style={{ display: 'flex', gap: 6, marginRight: 6 }}>
+                  {[
+                    { label: 'Usinas',    value: equipamentosStats.usinas },
+                    { label: 'Funções',   value: equipamentosStats.funcoes },
+                    { label: 'Tipos',     value: equipamentosStats.tipos },
+                    { label: 'Registros', value: equipamentosStats.registros },
+                  ].map(({ label, value }) => (
+                    <div key={label} style={{
+                      textAlign: 'center', padding: '4px 10px',
+                      background: 'rgba(0,31,91,0.07)',
+                      border: '1px solid rgba(0,31,91,0.13)',
+                      borderRadius: 8,
+                    }}>
+                      <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--ctg-navy)', lineHeight: 1 }}>{value}</div>
+                      <div style={{ fontSize: '0.55rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginTop: 2 }}>{label}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <AlertBell />
 
               {/* ── Pill de filtros — sempre renderizado para altura consistente ── */}
@@ -1241,6 +1274,8 @@ export default function App() {
              <Route path="/documents" element={<RequireAuth><DocumentsPage /></RequireAuth>} />
             <Route path="/lists/iacs" element={<RequireAuth><IACsPage /></RequireAuth>} />
             <Route path="/lists/projects-tracking" element={<RequireAuth><ProjectsTrackingPage /></RequireAuth>} />
+            <Route path="/engineering/equipamentos" element={<RequireAuth><EquipamentosPage /></RequireAuth>} />
+            <Route path="/engineering/equipamentos-admin" element={<RequireAuth><EquipamentosAdminPage /></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
