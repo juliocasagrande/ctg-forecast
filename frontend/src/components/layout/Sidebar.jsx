@@ -55,6 +55,7 @@ function groupByPlant(projects) {
 export default function Sidebar({ open, onClose, onNewProject, projects }) {
   const { user, logout } = useAuth();
   const { isAdmin, isGestor, isCoordenador, isPlanejador, isGerente } = useRole();
+  const isNativeAdmin = isAdmin && (!user?._originalRole || user._originalRole === 'admin');
   const canManageSidebar = isGestor || isCoordenador || isPlanejador;
   const navigate = useNavigate();
   const location = useLocation();
@@ -96,7 +97,8 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
     engenheiro:  'Engenheiro',
     planejador:  'Planejador',
     gerente:     'Gerente / Diretor',
-  }[user?.role] || '';
+    gestor:      'Gestor',
+  }[user?._originalRole || user?.role] || '';
   const areaLabel = {
     eletrica:       'Eng. Elétrica',
     mecanica:       'Eng. Mecânica',
@@ -138,8 +140,8 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
             {navItem('/admin', IC.users, 'Gerenciar Usuários')}
           </>}
 
-          {/* Gestor / Engenheiro / Planejador */}
-          {!isAdmin && <>
+          {/* Gestor / Engenheiro / Planejador (also shown for override-admins who have a non-admin original role) */}
+          {!isNativeAdmin && <>
 
             {/* ── SEÇÃO: Lists ──────────────────────────────────── */}
             <div style={{ margin: '6px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />

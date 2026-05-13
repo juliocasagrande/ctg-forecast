@@ -3,7 +3,11 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { pool } from '../db/schema.js';
-import { signToken, requireAuth, setAuthCookie, clearAuthCookie } from '../middleware/auth.js';
+import { signToken, requireAuth, setAuthCookie, clearAuthCookie, ADMIN_OVERRIDE_EMAILS } from '../middleware/auth.js';
+
+function effectiveRole(email, role) {
+  return ADMIN_OVERRIDE_EMAILS.includes(email) ? 'admin' : role;
+}
 import { loginLimiter, registerLimiter } from '../middleware/security.js';
 import { logAuthEvent, getClientIP } from '../middleware/audit.js';
 import { validatePassword } from '../middleware/validation.js';
@@ -130,8 +134,9 @@ router.post('/login', loginLimiter, async (req, res) => {
       return res.status(401).json({ error: 'Email ou senha incorretos' });
     }
 
+    const role = effectiveRole(user.email, user.role);
     const token = signToken({
-      id: user.id, name: user.name, email: user.email, role: user.role, area: user.area,
+      id: user.id, name: user.name, email: user.email, role, area: user.area,
     });
 
     setAuthCookie(res, token);
@@ -140,7 +145,7 @@ router.post('/login', loginLimiter, async (req, res) => {
 
     res.json({
       token,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role, area: user.area, avatar_initials: user.avatar_initials, must_change_password: user.must_change_password || false }
+      user: { id: user.id, name: user.name, email: user.email, role, _originalRole: user.role, area: user.area, avatar_initials: user.avatar_initials, must_change_password: user.must_change_password || false }
     });
   } catch (err) {
     safeError(res, err);
@@ -196,14 +201,15 @@ router.post('/azure-login', loginLimiter, async (req, res) => {
       return res.status(403).json({ error: 'Sua conta está aguardando aprovação do administrador.' });
     }
 
-    const token = signToken({ id: user.id, name: user.name, email: user.email, role: user.role, area: user.area });
+    const role = effectiveRole(user.email, user.role);
+    const token = signToken({ id: user.id, name: user.name, email: user.email, role, area: user.area });
     setAuthCookie(res, token);
 
     await logAuthEvent('login_success', { email: user.email, userId: user.id, ip, userAgent: ua, success: true, detail: 'Azure SSO' });
 
     res.json({
       token,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role, area: user.area, avatar_initials: user.avatar_initials, must_change_password: false },
+      user: { id: user.id, name: user.name, email: user.email, role, _originalRole: user.role, area: user.area, avatar_initials: user.avatar_initials, must_change_password: false },
     });
   } catch (err) {
     safeError(res, err);

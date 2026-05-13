@@ -167,7 +167,7 @@ function UserDropdown({ users, selectedIds, onAdd, onClose }) {
 }
 
 /* ── TableCard ───────────────────────────────────────────────────────────── */
-function TableCard({ usina, tipoTabela, selectedIds, users, onChange, dirty }) {
+function TableCard({ tipoTabela, selectedIds, users, onChange, dirty, isPre, hasData, onDelete, deleting }) {
   const [dropOpen, setDropOpen] = useState(false);
   const selectedUsers = users.filter(u => selectedIds.includes(u.id));
 
@@ -184,19 +184,38 @@ function TableCard({ usina, tipoTabela, selectedIds, users, onChange, dirty }) {
       transition: 'border-color 0.15s, box-shadow 0.15s',
     }}>
       {/* Header */}
-      <div style={{ marginBottom: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-          <span style={{
-            fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase',
-            letterSpacing: '0.09em', color: 'var(--ctg-blue)',
-            background: '#EFF6FF', padding: '2px 7px', borderRadius: 5,
-          }}>
-            {usina}
-          </span>
+      <div style={{ marginBottom: 10, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+        <div>
+          {isPre && !hasData && (
+            <span style={{
+              fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase',
+              letterSpacing: '0.08em', color: '#92400E',
+              background: '#FEF3C7', border: '1px solid #FDE68A',
+              padding: '1px 6px', borderRadius: 4, display: 'inline-block', marginBottom: 4,
+            }}>
+              Pré-configurada
+            </span>
+          )}
+          <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--ctg-navy)' }}>
+            {tipoTabela}
+          </div>
         </div>
-        <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--ctg-navy)' }}>
-          {tipoTabela}
-        </div>
+        {isPre && !hasData && (
+          <button
+            onClick={() => onDelete(tipoTabela)}
+            disabled={deleting}
+            title="Remover tabela pré-configurada"
+            style={{
+              background: 'none', border: 'none', cursor: deleting ? 'default' : 'pointer',
+              color: '#DC2626', opacity: deleting ? 0.4 : 0.7, padding: '2px 4px',
+              fontSize: '1rem', lineHeight: 1, flexShrink: 0,
+            }}
+            onMouseEnter={e => { if (!deleting) e.currentTarget.style.opacity = '1'; }}
+            onMouseLeave={e => { if (!deleting) e.currentTarget.style.opacity = '0.7'; }}
+          >
+            🗑
+          </button>
+        )}
       </div>
 
       {/* Restriction notice */}
@@ -261,65 +280,51 @@ function TableCard({ usina, tipoTabela, selectedIds, users, onChange, dirty }) {
 export default function EquipamentosAcessoTab() {
   const { toast } = useToast();
   const [users, setUsers]             = useState([]);
-  const [combos, setCombos]           = useState([]); // [{ usina, tipo_tabela }]
-  const [access, setAccess]           = useState({}); // key "usina|tipo_tabela" → [user_id]
+  const [tables, setTables]           = useState([]); // [{ tipo_tabela, is_pre_configured, has_data }]
+  const [access, setAccess]           = useState({}); // key = tipo_tabela → [user_id]
   const [savedAccess, setSavedAccess] = useState({});
   const [loading, setLoading]         = useState(true);
   const [saving, setSaving]           = useState(false);
-  const [filterUsina, setFilterUsina] = useState('');
+  const [newTabela, setNewTabela]     = useState('');
+  const [creating, setCreating]       = useState(false);
+  const [deleting, setDeleting]       = useState(null); // tipo_tabela being deleted
 
-  const makeKey = (u, t) => `${u}|${t}`;
-
-  useEffect(() => {
-    Promise.all([
+  const loadData = () => {
+    return Promise.all([
       api.get('/users/for-delegation'),
-      api.get('/equipamentos'),
       api.get('/equipamentos/acesso'),
-    ]).then(([uRes, eRes, aRes]) => {
+    ]).then(([uRes, aRes]) => {
       setUsers(uRes.data.filter(u => u.role !== 'admin'));
-
-      // Derive unique (usina, tipo_tabela) combinations
-      const seen = new Set();
-      const c = [];
-      for (const row of eRes.data) {
-        const k = makeKey(row.usina, row.tipo_tabela);
-        if (!seen.has(k)) { seen.add(k); c.push({ usina: row.usina, tipo_tabela: row.tipo_tabela }); }
-      }
-      c.sort((a, b) => a.usina.localeCompare(b.usina) || a.tipo_tabela.localeCompare(b.tipo_tabela));
-      setCombos(c);
-
-      // Build access map from API response { usina, tipo_tabela, user_ids }
+      setTables(aRes.data);
       const map = {};
-      for (const row of aRes.data) {
-        map[makeKey(row.usina, row.tipo_tabela)] = (row.user_ids || []).map(Number);
-      }
+      for (const row of aRes.data) map[row.tipo_tabela] = row.user_ids || [];
       setAccess(map);
       setSavedAccess(JSON.parse(JSON.stringify(map)));
-    }).catch(() => {
-      toast('Erro ao carregar dados', 'error');
-    }).finally(() => setLoading(false));
-  }, []);
-
-  const setComboAccess = (usina, tipoTabela, userIds) => {
-    setAccess(prev => ({ ...prev, [makeKey(usina, tipoTabela)]: userIds }));
+    });
   };
 
-  const isDirty = (usina, tipoTabela) => {
-    const key  = makeKey(usina, tipoTabela);
-    const cur  = JSON.stringify((access[key] || []).slice().sort());
-    const orig = JSON.stringify((savedAccess[key] || []).slice().sort());
+  useEffect(() => {
+    loadData().catch(() => toast('Erro ao carregar dados', 'error')).finally(() => setLoading(false));
+  }, []);
+
+  const setTableAccess = (tipoTabela, userIds) => {
+    setAccess(prev => ({ ...prev, [tipoTabela]: userIds }));
+  };
+
+  const isDirty = (tipoTabela) => {
+    const cur  = JSON.stringify((access[tipoTabela] || []).slice().sort());
+    const orig = JSON.stringify((savedAccess[tipoTabela] || []).slice().sort());
     return cur !== orig;
   };
 
-  const anyDirty = combos.some(({ usina, tipo_tabela }) => isDirty(usina, tipo_tabela));
+  const anyDirty = tables.some(({ tipo_tabela }) => isDirty(tipo_tabela));
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const payload = combos.map(({ usina, tipo_tabela }) => ({
-        usina,
+      const payload = tables.map(({ tipo_tabela }) => ({
         tipo_tabela,
-        user_ids: access[makeKey(usina, tipo_tabela)] || [],
+        user_ids: access[tipo_tabela] || [],
       }));
       await api.put('/equipamentos/acesso', payload);
       setSavedAccess(JSON.parse(JSON.stringify(access)));
@@ -331,15 +336,37 @@ export default function EquipamentosAcessoTab() {
     }
   };
 
-  const handleDiscard = () => {
-    setAccess(JSON.parse(JSON.stringify(savedAccess)));
+  const handleDiscard = () => setAccess(JSON.parse(JSON.stringify(savedAccess)));
+
+  const handleCreateTabela = async () => {
+    if (!newTabela.trim()) return;
+    setCreating(true);
+    try {
+      await api.post('/equipamentos/tabelas-pre', { tipo_tabela: newTabela.trim() });
+      setNewTabela('');
+      await loadData();
+      toast('Tabela criada com sucesso!', 'success');
+    } catch (err) {
+      toast(err.response?.data?.error || 'Erro ao criar tabela', 'error');
+    } finally {
+      setCreating(false);
+    }
   };
 
-  const usinaOptions = useMemo(() => [...new Set(combos.map(c => c.usina))].sort(), [combos]);
-  const filtered = useMemo(() =>
-    filterUsina ? combos.filter(c => c.usina === filterUsina) : combos,
-    [combos, filterUsina]
-  );
+  const handleDeleteTabela = async (tipo_tabela) => {
+    setDeleting(tipo_tabela);
+    try {
+      await api.delete('/equipamentos/tabelas-pre', { data: { tipo_tabela } });
+      await loadData();
+      toast('Tabela removida.', 'success');
+    } catch (err) {
+      toast(err.response?.data?.error || 'Erro ao remover tabela', 'error');
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const tabelaOptions = useMemo(() => tables.map(t => t.tipo_tabela).sort(), [tables]);
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
@@ -347,22 +374,57 @@ export default function EquipamentosAcessoTab() {
     </div>
   );
 
-  if (combos.length === 0) return (
-    <div style={{
-      textAlign: 'center', padding: 40, color: 'var(--text-muted)',
-      background: 'var(--bg-app)', borderRadius: 12, border: '1px solid var(--border)',
-    }}>
-      <div style={{ fontSize: '2rem', marginBottom: 12 }}>📋</div>
-      <div style={{ fontWeight: 700, marginBottom: 6 }}>Nenhum equipamento cadastrado</div>
-      <div style={{ fontSize: '0.82rem' }}>
-        Acesse <strong>Gestão de Equipamentos</strong> e importe os dados antes de configurar os acessos.
-      </div>
-    </div>
-  );
+  const inpStyle = {
+    padding: '7px 10px', borderRadius: 7, border: '1px solid var(--border-strong)',
+    background: 'var(--bg-app)', fontSize: '0.82rem', color: 'var(--text-primary)',
+    outline: 'none', fontFamily: 'var(--font-body)',
+  };
 
   return (
     <div>
-      {/* Header + actions */}
+      {/* ── Nova Tabela ── */}
+      <div style={{
+        background: 'var(--bg-card)', borderRadius: 12, border: '1px solid var(--border)',
+        padding: '16px 20px', marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+      }}>
+        <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--ctg-navy)', margin: '0 0 6px' }}>
+          Nova Tabela
+        </h3>
+        <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '0 0 12px', lineHeight: 1.5 }}>
+          Crie tabelas antecipadamente para configurar acessos antes de importar os dados.
+        </p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Nome da Tabela</div>
+            <input
+              list="tabela-pre-list"
+              value={newTabela}
+              onChange={e => setNewTabela(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleCreateTabela()}
+              placeholder="Ex: Subestação, Proteção de Barras..."
+              style={{ ...inpStyle, width: '100%', boxSizing: 'border-box' }}
+            />
+            <datalist id="tabela-pre-list">
+              {tabelaOptions.map(t => <option key={t} value={t} />)}
+            </datalist>
+          </div>
+          <button
+            onClick={handleCreateTabela}
+            disabled={creating || !newTabela.trim()}
+            style={{
+              padding: '7px 16px', borderRadius: 8, border: 'none',
+              background: !newTabela.trim() ? 'var(--border-strong)' : 'linear-gradient(135deg,#001F5B,#0b5cab)',
+              color: !newTabela.trim() ? 'var(--text-muted)' : '#fff',
+              fontWeight: 700, fontSize: '0.82rem', cursor: !newTabela.trim() ? 'default' : 'pointer',
+              fontFamily: 'var(--font-body)', whiteSpace: 'nowrap',
+            }}
+          >
+            {creating ? 'Criando...' : '+ Criar Tabela'}
+          </button>
+        </div>
+      </div>
+
+      {/* Header + filter + save */}
       <div style={{
         background: 'var(--bg-card)', borderRadius: 12,
         border: '1px solid var(--border)',
@@ -370,7 +432,7 @@ export default function EquipamentosAcessoTab() {
         boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
       }}>
         <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--ctg-navy)', margin: '0 0 4px' }}>
-          Permissões de Edição de Equipamentos
+          Permissões de Edição por Tabela
         </h3>
         <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0 0 14px', lineHeight: 1.6 }}>
           O Mapa de Equipamentos é visível para todos os usuários. Aqui você define quem pode
@@ -380,21 +442,8 @@ export default function EquipamentosAcessoTab() {
         </p>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <select
-            value={filterUsina}
-            onChange={e => setFilterUsina(e.target.value)}
-            style={{
-              padding: '6px 10px', borderRadius: 7, border: '1px solid var(--border-strong)',
-              background: 'var(--bg-app)', fontSize: '0.8rem', color: 'var(--text-primary)',
-              outline: 'none', fontFamily: 'var(--font-body)', minWidth: 150,
-            }}
-          >
-            <option value="">Todas as usinas</option>
-            {usinaOptions.map(u => <option key={u} value={u}>{u}</option>)}
-          </select>
-
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            {filtered.length} {filtered.length === 1 ? 'tabela' : 'tabelas'}
+            {tables.length} {tables.length === 1 ? 'tabela' : 'tabelas'}
           </span>
 
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
@@ -441,29 +490,43 @@ export default function EquipamentosAcessoTab() {
           <span style={{ background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 4, padding: '1px 6px', color: '#92400E', fontWeight: 600 }}>● Modificado</span>
           aguardando salvamento
         </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 4, padding: '1px 6px', color: '#92400E', fontWeight: 600 }}>Pré-configurada</span>
+          tabela sem dados — pode ser removida com 🗑
+        </span>
       </div>
 
       {/* Grid of table cards */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-        gap: 12,
-      }}>
-        {filtered.map(({ usina, tipo_tabela }) => {
-          const key = makeKey(usina, tipo_tabela);
-          return (
+      {tables.length === 0 ? (
+        <div style={{
+          textAlign: 'center', padding: '48px 24px',
+          color: 'var(--text-muted)', fontSize: '0.85rem',
+          background: 'var(--bg-card)', borderRadius: 12, border: '1px dashed var(--border-strong)',
+        }}>
+          Nenhuma tabela cadastrada. Crie uma tabela pré-configurada acima ou importe dados.
+        </div>
+      ) : (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+          gap: 12,
+        }}>
+          {tables.map(({ tipo_tabela, is_pre_configured, has_data }) => (
             <TableCard
-              key={key}
-              usina={usina}
+              key={tipo_tabela}
               tipoTabela={tipo_tabela}
-              selectedIds={access[key] || []}
+              selectedIds={access[tipo_tabela] || []}
               users={users}
-              onChange={(ids) => setComboAccess(usina, tipo_tabela, ids)}
-              dirty={isDirty(usina, tipo_tabela)}
+              onChange={(ids) => setTableAccess(tipo_tabela, ids)}
+              dirty={isDirty(tipo_tabela)}
+              isPre={is_pre_configured}
+              hasData={has_data}
+              onDelete={handleDeleteTabela}
+              deleting={deleting === tipo_tabela}
             />
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Sticky save bar */}
       {anyDirty && (

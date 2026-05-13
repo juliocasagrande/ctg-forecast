@@ -50,18 +50,17 @@ function normalizeUsina(name) {
   return USINA_NORMALIZE[t] || t;
 }
 
-// Check if user can edit records of a specific (usina, tipo_tabela).
-// Bypass users always can. canManage users can if no restriction entry exists,
-// or if they are listed in equipamentos_acesso for that combo.
-async function canEditTable(user, usina, tipoTabela) {
+// Check if user can edit records of a specific tipo_tabela.
+// Bypass users always can. If table has restrictions, user must be explicitly listed.
+// If no restrictions exist, only canManage-role users can edit.
+async function canEditTable(user, _usina, tipoTabela) {
   if (bypassesFilter(user)) return true;
-  if (!canManage(user)) return false;
   const r = await pool.query(
-    'SELECT user_id FROM equipamentos_acesso WHERE usina=$1 AND tipo_tabela=$2',
-    [usina, tipoTabela]
+    'SELECT user_id FROM equipamentos_acesso WHERE tipo_tabela=$1',
+    [tipoTabela]
   );
-  if (r.rows.length === 0) return true; // no restrictions set → all managers can edit
-  return r.rows.some(row => row.user_id === user.id);
+  if (r.rows.length === 0) return canManage(user); // no restrictions → role-based
+  return r.rows.some(row => row.user_id === user.id); // explicit access wins
 }
 
 /* ── GET all — visible to every authenticated user ───────────────────────── */
@@ -79,14 +78,69 @@ router.get('/', async (req, res) => {
 router.get('/acesso', async (req, res) => {
   if (!canManage(req.user)) return res.status(403).json({ error: 'Sem permissão' });
   try {
-    const r = await pool.query(`
-      SELECT a.usina, a.tipo_tabela,
-        array_agg(a.user_id ORDER BY a.user_id) AS user_ids
-      FROM equipamentos_acesso a
-      GROUP BY a.usina, a.tipo_tabela
-      ORDER BY a.usina, a.tipo_tabela
+    // All known tables: from equipment data + pre-configured + existing access entries
+    const tablesR = await pool.query(`
+      SELECT DISTINCT tipo_tabela FROM (
+        SELECT tipo_tabela FROM equipamentos_subestacao
+        UNION
+        SELECT tipo_tabela FROM equipamentos_tabelas_pre
+        UNION
+        SELECT tipo_tabela FROM equipamentos_acesso
+      ) src
+      ORDER BY tipo_tabela
     `);
-    res.json(r.rows);
+    const accessR = await pool.query(`
+      SELECT tipo_tabela, array_agg(user_id ORDER BY user_id) AS user_ids
+      FROM equipamentos_acesso
+      GROUP BY tipo_tabela
+    `);
+    const preR = await pool.query(`SELECT tipo_tabela FROM equipamentos_tabelas_pre`);
+    const dataR = await pool.query(`SELECT DISTINCT tipo_tabela FROM equipamentos_subestacao`);
+
+    const accessMap = {};
+    for (const row of accessR.rows) accessMap[row.tipo_tabela] = row.user_ids;
+    const preSet  = new Set(preR.rows.map(r => r.tipo_tabela));
+    const dataSet = new Set(dataR.rows.map(r => r.tipo_tabela));
+
+    const result = tablesR.rows.map(({ tipo_tabela }) => ({
+      tipo_tabela,
+      user_ids:         accessMap[tipo_tabela] || [],
+      is_pre_configured: preSet.has(tipo_tabela),
+      has_data:          dataSet.has(tipo_tabela),
+    }));
+    res.json(result);
+  } catch (err) { safeError(res, err); }
+});
+
+/* ── POST /tabelas-pre — criar tabela pré-configurada ────────────────────── */
+router.post('/tabelas-pre', async (req, res) => {
+  if (!canManage(req.user)) return res.status(403).json({ error: 'Sem permissão' });
+  const tipo_tabela = String(req.body.tipo_tabela || '').trim();
+  if (!tipo_tabela) return res.status(400).json({ error: 'Nome da tabela é obrigatório' });
+  try {
+    await pool.query(
+      `INSERT INTO equipamentos_tabelas_pre (tipo_tabela, created_by)
+       VALUES ($1, $2) ON CONFLICT (tipo_tabela) DO NOTHING`,
+      [tipo_tabela, req.user.id]
+    );
+    res.status(201).json({ ok: true, tipo_tabela });
+  } catch (err) { safeError(res, err); }
+});
+
+/* ── DELETE /tabelas-pre — remover tabela pré-configurada ────────────────── */
+router.delete('/tabelas-pre', async (req, res) => {
+  if (!canManage(req.user)) return res.status(403).json({ error: 'Sem permissão' });
+  const tipo_tabela = String(req.body.tipo_tabela || '').trim();
+  if (!tipo_tabela) return res.status(400).json({ error: 'tipo_tabela é obrigatório' });
+  try {
+    const hasData = await pool.query(
+      'SELECT 1 FROM equipamentos_subestacao WHERE tipo_tabela=$1 LIMIT 1',
+      [tipo_tabela]
+    );
+    if (hasData.rows.length) return res.status(409).json({ error: 'Tabela já possui dados importados. Exclua os dados antes de remover a configuração.' });
+    await pool.query('DELETE FROM equipamentos_tabelas_pre WHERE tipo_tabela=$1', [tipo_tabela]);
+    await pool.query('DELETE FROM equipamentos_acesso WHERE tipo_tabela=$1', [tipo_tabela]);
+    res.json({ ok: true });
   } catch (err) { safeError(res, err); }
 });
 
@@ -99,19 +153,15 @@ router.put('/acesso', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    for (const { usina, tipo_tabela } of assignments) {
-      await client.query(
-        'DELETE FROM equipamentos_acesso WHERE usina=$1 AND tipo_tabela=$2',
-        [usina, tipo_tabela]
-      );
+    for (const { tipo_tabela } of assignments) {
+      await client.query('DELETE FROM equipamentos_acesso WHERE tipo_tabela=$1', [tipo_tabela]);
     }
-    for (const { usina, tipo_tabela, user_ids } of assignments) {
+    for (const { tipo_tabela, user_ids } of assignments) {
       for (const uid of (user_ids || [])) {
         if (!uid) continue;
         await client.query(
-          `INSERT INTO equipamentos_acesso (usina, tipo_tabela, user_id)
-           VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
-          [usina, tipo_tabela, uid]
+          `INSERT INTO equipamentos_acesso (tipo_tabela, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+          [tipo_tabela, uid]
         );
       }
     }
@@ -218,9 +268,50 @@ router.delete('/:id', async (req, res) => {
   } catch (err) { safeError(res, err); }
 });
 
+/* ── GET /my-tabelas — tabelas que o usuário logado pode editar ──────────── */
+router.get('/my-tabelas', async (req, res) => {
+  try {
+    if (bypassesFilter(req.user)) {
+      const r = await pool.query(`
+        SELECT DISTINCT tipo_tabela FROM (
+          SELECT tipo_tabela FROM equipamentos_subestacao
+          UNION SELECT tipo_tabela FROM equipamentos_tabelas_pre
+        ) src ORDER BY tipo_tabela
+      `);
+      return res.json(r.rows.map(r => r.tipo_tabela));
+    }
+    if (canManage(req.user)) {
+      // Tables with restrictions AND user is listed, plus unrestricted tables
+      const restrictedR = await pool.query(
+        'SELECT DISTINCT tipo_tabela FROM equipamentos_acesso'
+      );
+      const allowedR = await pool.query(
+        'SELECT DISTINCT tipo_tabela FROM equipamentos_acesso WHERE user_id=$1',
+        [req.user.id]
+      );
+      const restrictedSet = new Set(restrictedR.rows.map(r => r.tipo_tabela));
+      const allowedSet    = new Set(allowedR.rows.map(r => r.tipo_tabela));
+      const allR = await pool.query(`
+        SELECT DISTINCT tipo_tabela FROM (
+          SELECT tipo_tabela FROM equipamentos_subestacao
+          UNION SELECT tipo_tabela FROM equipamentos_tabelas_pre
+        ) src ORDER BY tipo_tabela
+      `);
+      const result = allR.rows.map(r => r.tipo_tabela)
+        .filter(t => !restrictedSet.has(t) || allowedSet.has(t));
+      return res.json(result);
+    }
+    // Regular users: only explicitly assigned tables
+    const r = await pool.query(
+      'SELECT DISTINCT tipo_tabela FROM equipamentos_acesso WHERE user_id=$1 ORDER BY tipo_tabela',
+      [req.user.id]
+    );
+    res.json(r.rows.map(r => r.tipo_tabela));
+  } catch (err) { safeError(res, err); }
+});
+
 /* ── POST import Excel ───────────────────────────────────────────────────── */
 router.post('/import', upload.single('file'), async (req, res) => {
-  if (!canManage(req.user)) return res.status(403).json({ error: 'Sem permissão' });
   if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
 
   const tipoTabela = String(req.body.tipo_tabela || '').trim();
@@ -277,12 +368,9 @@ router.post('/import', upload.single('file'), async (req, res) => {
 
     if (!rows.length) return res.status(400).json({ error: 'Nenhuma linha válida encontrada' });
 
-    // Check edit permission per unique usina in the file
-    const usinas = [...new Set(rows.map(r => r.usina))];
-    for (const usina of usinas) {
-      if (!await canEditTable(req.user, usina, tipoTabela))
-        return res.status(403).json({ error: `Sem permissão para editar a tabela "${tipoTabela}" em ${usina}` });
-    }
+    // Check edit permission for this tipo_tabela
+    if (!await canEditTable(req.user, null, tipoTabela))
+      return res.status(403).json({ error: `Sem permissão para editar a tabela "${tipoTabela}"` });
 
     const client = await pool.connect();
     try {
@@ -319,34 +407,86 @@ router.post('/import', upload.single('file'), async (req, res) => {
 /* ── GET export Excel ────────────────────────────────────────────────────── */
 router.get('/export', async (req, res) => {
   try {
-    const r = await pool.query(`
-      SELECT * FROM equipamentos_subestacao
-      ORDER BY usina, tipo_tabela, equipamento, ug, tag
-    `);
+    const tabelasParam = req.query['tabelas[]'] || req.query.tabelas;
+    let tabelas = Array.isArray(tabelasParam) ? tabelasParam : tabelasParam ? [tabelasParam] : [];
+    tabelas = tabelas.map(t => String(t).trim()).filter(Boolean);
 
-    const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet('Equipamentos');
-    ws.columns = [
-      { header: 'Usina',              key: 'usina',             width: 22 },
-      { header: 'Tabela',             key: 'tipo_tabela',       width: 18 },
-      { header: 'Equipamento',        key: 'equipamento',       width: 30 },
-      { header: 'UG',                 key: 'ug',                width: 20 },
-      { header: 'TAG',                key: 'tag',               width: 20 },
-      { header: 'Fabricante',         key: 'fabricante',        width: 20 },
-      { header: 'Modelo',             key: 'modelo',            width: 20 },
-      { header: 'Nº Série',           key: 'num_serie',         width: 22 },
-      { header: 'Tem sobressalente?', key: 'tem_sobressalente', width: 18 },
+    let query = 'SELECT * FROM equipamentos_subestacao';
+    const params = [];
+    if (tabelas.length) { query += ' WHERE tipo_tabela = ANY($1)'; params.push(tabelas); }
+    query += ' ORDER BY tipo_tabela, usina, equipamento, ug, tag';
+
+    const r = await pool.query(query, params);
+
+    const COLS = [
+      { header: 'Usina',              key: 'usina',             width: 24 },
+      { header: 'Equipamento',        key: 'equipamento',       width: 34 },
+      { header: 'UG',                 key: 'ug',                width: 14 },
+      { header: 'TAG',                key: 'tag',               width: 16 },
+      { header: 'Fabricante',         key: 'fabricante',        width: 22 },
+      { header: 'Modelo',             key: 'modelo',            width: 22 },
+      { header: 'Nº Série',           key: 'num_serie',         width: 24 },
+      { header: 'Tem sobressalente?', key: 'tem_sobressalente', width: 20 },
       { header: 'Quantos?',           key: 'quantos',           width: 12 },
       { header: 'Ano',                key: 'ano',               width: 10 },
       { header: 'URL da Imagem',      key: 'url_imagem',        width: 40 },
     ];
-    const hr = ws.getRow(1);
-    hr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    hr.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF001F5B' } };
-    r.rows.forEach(row => ws.addRow(row));
+    const NAVY       = 'FF001F5B';
+    const WHITE      = 'FFFFFFFF';
+    const ALT_BLUE   = 'FFE8F0FE';
+    const BORDER_CLR = 'FFCCCCCC';
+    const lastCol    = String.fromCharCode(64 + COLS.length);
 
+    const buildSheet = (ws, rows) => {
+      ws.columns = COLS;
+      ws.views = [{ state: 'frozen', ySplit: 1 }];
+
+      const hr = ws.getRow(1);
+      hr.height = 26;
+      COLS.forEach((_, i) => {
+        const cell = hr.getCell(i + 1);
+        cell.font      = { bold: true, color: { argb: WHITE }, size: 10, name: 'Calibri' };
+        cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        cell.border    = { top: { style: 'thin', color: { argb: NAVY } }, left: { style: 'thin', color: { argb: NAVY } }, bottom: { style: 'thin', color: { argb: NAVY } }, right: { style: 'thin', color: { argb: NAVY } } };
+      });
+      ws.autoFilter = { from: 'A1', to: `${lastCol}1` };
+
+      rows.forEach((row, idx) => {
+        const dr  = ws.addRow(COLS.map(c => row[c.key] ?? ''));
+        const alt = idx % 2 === 1;
+        dr.height = 18;
+        COLS.forEach((_, i) => {
+          const cell = dr.getCell(i + 1);
+          cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: alt ? ALT_BLUE : WHITE } };
+          cell.font      = { size: 9, name: 'Calibri' };
+          cell.alignment = { vertical: 'middle' };
+          cell.border    = { top: { style: 'hair', color: { argb: BORDER_CLR } }, left: { style: 'hair', color: { argb: BORDER_CLR } }, bottom: { style: 'hair', color: { argb: BORDER_CLR } }, right: { style: 'hair', color: { argb: BORDER_CLR } } };
+        });
+      });
+    };
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'CTG Brasil';
+    wb.created = new Date();
+
+    const grouped = new Map();
+    for (const row of r.rows) {
+      if (!grouped.has(row.tipo_tabela)) grouped.set(row.tipo_tabela, []);
+      grouped.get(row.tipo_tabela).push(row);
+    }
+
+    if (grouped.size === 0) {
+      buildSheet(wb.addWorksheet('Equipamentos'), []);
+    } else {
+      for (const [tipoTabela, rows] of grouped) {
+        buildSheet(wb.addWorksheet(tipoTabela.slice(0, 31)), rows);
+      }
+    }
+
+    const date = new Date().toISOString().slice(0, 10);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=Equipamentos.xlsx');
+    res.setHeader('Content-Disposition', `attachment; filename="Equipamentos_${date}.xlsx"`);
     await wb.xlsx.write(res);
     res.end();
   } catch (err) { safeError(res, err); }

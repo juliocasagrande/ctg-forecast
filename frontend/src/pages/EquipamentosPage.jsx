@@ -432,6 +432,8 @@ function SummaryChart({ data, selUsina, selTabela, selEquip, selUG, color }) {
   );
 }
 
+const ALL_USINAS = USINA_POLES.flatMap(p => p.usinas);
+
 /* ── Main Page ───────────────────────────────────────────────────────────── */
 export default function EquipamentosPage() {
   const [data, setData]           = useState([]);
@@ -460,8 +462,6 @@ export default function EquipamentosPage() {
   }, []);
 
   /* ── Derived lists ─────────────────────────────────────────────────────── */
-  const ALL_USINAS = USINA_POLES.flatMap(p => p.usinas);
-
   const usinas = useMemo(() => {
     return ALL_USINAS.map(u => ({ name: u, count: data.filter(d => d.usina === u).length }));
   }, [data]);

@@ -435,6 +435,10 @@ export default function SettingsPage() {
     ['admin', 'gestor', 'planejador'].includes(user.role) ||
     ALLOWED_SAP_EMAILS.includes(user.email)
   );
+  const canManageEquipamentos = user && (
+    ['admin', 'coordenador', 'planejador', 'gestor'].includes(user.role) ||
+    ALLOWED_SAP_EMAILS.includes(user.email)
+  );
   const canEdit = user && (['admin', 'planejador'].includes(user.role) || ALLOWED_SAP_EMAILS.includes(user.email));
 
   useEffect(() => {
@@ -472,7 +476,7 @@ export default function SettingsPage() {
     <div className="settings-page">
       {/* Navigation tabs */}
       <div className="settings-nav">
-        {SECTIONS.filter(s => s.id !== 'sap' || canAccessSap).map(s => (
+        {SECTIONS.filter(s => (s.id !== 'sap' || canAccessSap) && (s.id !== 'equipamentos' || canManageEquipamentos)).map(s => (
           <button
             key={s.id}
             className={`settings-nav-btn ${activeSection === s.id ? 'active' : ''}`}

@@ -203,20 +203,19 @@ function EquipamentoModal({ item, onSave, onClose, onDelete, equipOptions, tabel
 }
 
 /* ── Import Modal ────────────────────────────────────────────────────────── */
-function ImportModal({ onClose, onImported, tabelaOptions }) {
-  const [file, setFile]           = useState(null);
-  const [tipoTabela, setTipoTabela] = useState('');
-  const [replace, setReplace]     = useState(false);
-  const [loading, setLoading]     = useState(false);
-  const [result, setResult]       = useState(null);
+function ImportModal({ onClose, onImported, myTabelas }) {
+  const [file, setFile]             = useState(null);
+  const [tipoTabela, setTipoTabela] = useState(myTabelas[0] || '');
+  const [replace, setReplace]       = useState(false);
+  const [loading, setLoading]       = useState(false);
+  const [result, setResult]         = useState(null);
 
   const handleImport = async () => {
-    if (!file) return;
-    if (!tipoTabela.trim()) { alert('Informe o nome da tabela.'); return; }
+    if (!file || !tipoTabela) return;
     setLoading(true);
     const fd = new FormData();
     fd.append('file', file);
-    fd.append('tipo_tabela', tipoTabela.trim());
+    fd.append('tipo_tabela', tipoTabela);
     fd.append('replace', replace ? 'true' : 'false');
     try {
       const r = await api.post('/equipamentos/import', fd, {
@@ -252,20 +251,17 @@ function ImportModal({ onClose, onImported, tabelaOptions }) {
             </div>
           ) : (
             <>
-              {/* Table name input */}
               <div style={{ marginBottom: 16 }}>
                 <label style={{
                   display: 'block', fontSize: '0.7rem', fontWeight: 700,
                   textTransform: 'uppercase', letterSpacing: '0.07em',
                   color: 'var(--text-muted)', marginBottom: 5,
                 }}>
-                  Nome da tabela <span style={{ color: '#EF4444' }}>*</span>
+                  Tabela de destino <span style={{ color: '#EF4444' }}>*</span>
                 </label>
-                <input
-                  list="tabela-import-list"
+                <select
                   value={tipoTabela}
                   onChange={e => setTipoTabela(e.target.value)}
-                  placeholder="Ex: Subestação, Proteção, Automação..."
                   style={{
                     width: '100%', boxSizing: 'border-box',
                     padding: '8px 10px', borderRadius: 7,
@@ -274,13 +270,9 @@ function ImportModal({ onClose, onImported, tabelaOptions }) {
                     fontSize: '0.84rem', color: 'var(--text-primary)',
                     outline: 'none', fontFamily: 'var(--font-body)',
                   }}
-                />
-                <datalist id="tabela-import-list">
-                  {tabelaOptions.map(t => <option key={t} value={t} />)}
-                </datalist>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4 }}>
-                  Este será o 2º nível no Mapa de Equipamentos (após a usina).
-                </div>
+                >
+                  {myTabelas.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
               </div>
 
               <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: 10 }}>
@@ -320,12 +312,99 @@ function ImportModal({ onClose, onImported, tabelaOptions }) {
           ) : (
             <>
               <button onClick={onClose} className="btn btn-secondary">Cancelar</button>
-              <button onClick={handleImport} disabled={!file || !tipoTabela.trim() || loading} className="btn"
+              <button onClick={handleImport} disabled={!file || !tipoTabela || loading} className="btn"
                 style={{ background: 'linear-gradient(135deg,#001F5B,#0b5cab)', color: '#fff', border: 'none' }}>
                 {loading ? 'Importando...' : 'Importar'}
               </button>
             </>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Export Modal ────────────────────────────────────────────────────────── */
+function ExportModal({ onClose, tabelaOptions }) {
+  const [selected, setSelected] = useState(() => new Set(tabelaOptions));
+  const [loading, setLoading]   = useState(false);
+
+  const toggle = (t) => setSelected(prev => {
+    const next = new Set(prev);
+    if (next.has(t)) next.delete(t); else next.add(t);
+    return next;
+  });
+  const allChecked = tabelaOptions.length > 0 && selected.size === tabelaOptions.length;
+
+  const handleExport = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('ctg_token');
+      const base  = import.meta.env.VITE_API_URL || '/api';
+      const qs    = [...selected].map(t => `tabelas[]=${encodeURIComponent(t)}`).join('&');
+      const res   = await fetch(`${base}/equipamentos/export${qs ? '?' + qs : ''}`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const a    = document.createElement('a');
+      a.href     = URL.createObjectURL(blob);
+      a.download = `Equipamentos_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      onClose();
+    } catch { alert('Erro ao exportar'); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 300 }}>
+      <div className="modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span className="modal-title">Exportar para Excel</span>
+          <button onClick={onClose} style={{ background:'none',border:'none',cursor:'pointer',color:'rgba(255,255,255,0.7)',fontSize:'1.1rem',padding:'0 4px' }}>✕</button>
+        </div>
+        <div className="modal-body">
+          <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: 14 }}>
+            Selecione as tabelas. Cada tabela será exportada em uma aba separada.
+          </p>
+          {tabelaOptions.length === 0 ? (
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', textAlign: 'center', padding: '20px 0' }}>
+              Nenhuma tabela com dados disponível.
+            </div>
+          ) : (
+            <>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 10, fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)', padding: '6px 10px', borderRadius: 7, background: 'var(--bg-app)' }}>
+                <input type="checkbox" checked={allChecked}
+                  onChange={() => setSelected(allChecked ? new Set() : new Set(tabelaOptions))}
+                  style={{ accentColor: '#001F5B', width: 14, height: 14 }} />
+                Selecionar todas
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 300, overflowY: 'auto' }}>
+                {tabelaOptions.map(t => (
+                  <label key={t} style={{
+                    display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+                    fontSize: '0.82rem', color: 'var(--text-primary)',
+                    padding: '7px 10px', borderRadius: 7,
+                    background: selected.has(t) ? '#EFF6FF' : 'transparent',
+                    border: `1px solid ${selected.has(t) ? '#BFDBFE' : 'transparent'}`,
+                    transition: 'all 0.12s',
+                  }}>
+                    <input type="checkbox" checked={selected.has(t)} onChange={() => toggle(t)}
+                      style={{ accentColor: '#001F5B', width: 14, height: 14, flexShrink: 0 }} />
+                    {t}
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button onClick={onClose} className="btn btn-secondary">Cancelar</button>
+          <button onClick={handleExport} disabled={selected.size === 0 || loading} className="btn"
+            style={{ background: '#059669', color: '#fff', border: 'none' }}>
+            {loading ? 'Exportando...' : `Exportar ${selected.size} aba${selected.size !== 1 ? 's' : ''}`}
+          </button>
         </div>
       </div>
     </div>
@@ -412,15 +491,17 @@ export default function EquipamentosAdminPage() {
   const { user } = useAuth();
   const toast = useToast();
   const [data, setData]               = useState([]);
-  const [acesso, setAcesso]           = useState([]); // [{usina, tipo_tabela, user_ids}]
+  const [acesso, setAcesso]           = useState([]);
+  const [myTabelas, setMyTabelas]     = useState([]); // tables this user can edit/import
   const [loading, setLoading]         = useState(true);
   const [modal, setModal]             = useState(null);
   const [importModal, setImportModal] = useState(false);
+  const [exportModal, setExportModal] = useState(false);
   const [search, setSearch]           = useState('');
   const [filterUsina, setFilterUsina] = useState('');
   const [filterTabela, setFilterTabela] = useState('');
   const [deletingTabela, setDeletingTabela] = useState(null);
-  const [expandedTabelas, setExpandedTabelas] = useState(new Set()); // empty = all collapsed by default
+  const [expandedTabelas, setExpandedTabelas] = useState(new Set());
   const [newTableDropdown, setNewTableDropdown] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -428,13 +509,15 @@ export default function EquipamentosAdminPage() {
     user?.email === 'julio.casagrande@ctgbr.com.br';
   const canCascadeDelete = ['admin', 'planejador'].includes(user?.role) ||
     user?.email === 'julio.casagrande@ctgbr.com.br';
+  const canImport = myTabelas.length > 0;
 
   const load = async () => {
     try {
-      const reqs = [api.get('/equipamentos')];
+      const reqs = [api.get('/equipamentos'), api.get('/equipamentos/my-tabelas')];
       if (canManage) reqs.push(api.get('/equipamentos/acesso'));
-      const [eRes, aRes] = await Promise.all(reqs);
+      const [eRes, mtRes, aRes] = await Promise.all(reqs);
       setData(eRes.data);
+      setMyTabelas(mtRes.data);
       if (aRes) setAcesso(aRes.data);
     } catch {
       toast?.error?.('Erro ao carregar dados');
@@ -452,40 +535,31 @@ export default function EquipamentosAdminPage() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Build set of (usina|tipo_tabela) keys the current user can edit
+  // Per-tabela edit restrictions (no usina dimension)
   const editableCombos = useMemo(() => {
     if (canCascadeDelete) return null; // null = all editable
-    if (!canManage) return new Set();
-    const restricted = new Set(acesso.map(a => `${a.usina}|${a.tipo_tabela}`));
-    const allowed = new Set();
-    for (const a of acesso) {
-      if ((a.user_ids || []).includes(user?.id)) allowed.add(`${a.usina}|${a.tipo_tabela}`);
-    }
-    // A combo is editable if: not restricted, OR user is explicitly allowed
+    if (!canManage) return { restricted: new Set(), allowed: new Set() };
+    const restricted = new Set(acesso.filter(a => a.user_ids.length > 0).map(a => a.tipo_tabela));
+    const allowed    = new Set(acesso.filter(a => (a.user_ids || []).includes(user?.id)).map(a => a.tipo_tabela));
     return { restricted, allowed };
   }, [acesso, user, canManage, canCascadeDelete]);
 
   const canEditRow = (row) => {
     if (!canManage) return false;
-    if (editableCombos === null) return true; // bypass user
-    const key = `${row.usina}|${row.tipo_tabela}`;
-    if (!editableCombos.restricted.has(key)) return true; // no restriction
-    return editableCombos.allowed.has(key);
+    if (editableCombos === null) return true;
+    if (!editableCombos.restricted.has(row.tipo_tabela)) return true;
+    return editableCombos.allowed.has(row.tipo_tabela);
   };
 
   const usinaOptions  = useMemo(() => [...new Set(data.map(d => d.usina))].sort(), [data]);
   const tabelaOptions = useMemo(() => [...new Set(data.map(d => d.tipo_tabela))].sort(), [data]);
   const equipOptions  = useMemo(() => [...new Set(data.map(d => d.equipamento))].sort(), [data]);
 
-  // Tabelas the current user can create/edit records in
+  // Tabelas the current canManage user can create new records in
   const editableTabelas = useMemo(() => {
     if (!canManage) return [];
-    if (editableCombos === null) return tabelaOptions; // bypass user
-    const restrictedTabelas = new Set([...editableCombos.restricted].map(k => k.split('|')[1]));
-    return tabelaOptions.filter(t => {
-      if (!restrictedTabelas.has(t)) return true;
-      return [...editableCombos.allowed].some(k => k.split('|')[1] === t);
-    });
+    if (editableCombos === null) return tabelaOptions;
+    return tabelaOptions.filter(t => !editableCombos.restricted.has(t) || editableCombos.allowed.has(t));
   }, [tabelaOptions, editableCombos, canManage]);
 
   const filtered = useMemo(() => {
@@ -546,22 +620,6 @@ export default function EquipamentosAdminPage() {
     }
   };
 
-  const handleExport = async () => {
-    try {
-      const token = localStorage.getItem('ctg_token');
-      const base = import.meta.env.VITE_API_URL || '/api';
-      const opts = { credentials: 'include' };
-      if (token) opts.headers = { 'Authorization': `Bearer ${token}` };
-      const res = await fetch(`${base}/equipamentos/export`, opts);
-      if (!res.ok) throw new Error();
-      const blob = await res.blob();
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'Equipamentos_Subestacao.xlsx';
-      a.click();
-      URL.revokeObjectURL(a.href);
-    } catch { alert('Erro ao exportar'); }
-  };
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300 }}>
@@ -610,21 +668,22 @@ export default function EquipamentosAdminPage() {
           {filtered.length} / {data.length} registros
         </span>
 
-        {canManage && (
-          <button onClick={handleExport}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1.5px solid #10B981', background: '#fff', color: '#059669', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
-            <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm7-13a1 1 0 011 1v4.586l1.707-1.707a1 1 0 111.414 1.414l-3.414 3.414a1 1 0 01-1.414 0l-3.414-3.414a1 1 0 111.414-1.414L9 9.586V5a1 1 0 011-1z" clipRule="evenodd"/></svg>
-            Exportar
+        <button onClick={() => setExportModal(true)}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1.5px solid #10B981', background: '#fff', color: '#059669', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+          <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm7-13a1 1 0 011 1v4.586l1.707-1.707a1 1 0 111.414 1.414l-3.414 3.414a1 1 0 01-1.414 0l-3.414-3.414a1 1 0 111.414-1.414L9 9.586V5a1 1 0 011-1z" clipRule="evenodd"/></svg>
+          Exportar
+        </button>
+
+        {canImport && (
+          <button onClick={() => setImportModal(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1.5px solid #0b5cab', background: '#fff', color: '#0b5cab', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+            <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"/></svg>
+            Importar
           </button>
         )}
-        {editableTabelas.length > 0 && (
-          <>
-            <button onClick={() => setImportModal(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1.5px solid #0b5cab', background: '#fff', color: '#0b5cab', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
-              <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"/></svg>
-              Importar
-            </button>
 
+        {canManage && (
+          <>
             {/* Novo — single table: open modal directly; multiple: show dropdown */}
             <div ref={dropdownRef} style={{ position: 'relative', flexShrink: 0 }}>
               <button
@@ -915,6 +974,12 @@ export default function EquipamentosAdminPage() {
         <ImportModal
           onClose={() => setImportModal(false)}
           onImported={load}
+          myTabelas={myTabelas}
+        />
+      )}
+      {exportModal && (
+        <ExportModal
+          onClose={() => setExportModal(false)}
           tabelaOptions={tabelaOptions}
         />
       )}

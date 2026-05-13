@@ -437,7 +437,7 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
       }
       return next;
     });
-  }, [form.is_general, form.assigned_area, form.weight, currentUser?.id, meta?.id]);
+  }, [form.is_general, form.assigned_area, form.weight, currentUser?.id, meta?.id, members]);
 
   async function handleSubmit() {
     if (isReadOnly) return;
@@ -937,13 +937,13 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
       setMetas(metasRes.data);
       setMembers(membersAreaRes.data);
       setAllMembers(membersAllRes.data);
-      if (!reportUserId && user?.id) setReportUserId(user.id);
+      setReportUserId(prev => prev || user?.id || '');
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
     }
-  }, [year, area, reportUserId, user?.id, canViewAllMetas]);
+  }, [year, area, canViewAllMetas, user?.id]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => () => { if (previewSrc) URL.revokeObjectURL(previewSrc); }, [previewSrc]);

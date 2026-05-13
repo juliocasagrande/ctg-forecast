@@ -658,16 +658,27 @@ await client.query(`
     `);
 
     /* ───────── EQUIPAMENTOS: CONTROLE DE ACESSO ───────── */
-    // Drop old table (had equipamento column) and recreate with tipo_tabela
+    // Access is per tipo_tabela only — usina is irrelevant for permissions
     await client.query(`
       DROP TABLE IF EXISTS equipamentos_acesso;
       CREATE TABLE IF NOT EXISTS equipamentos_acesso (
         id          SERIAL PRIMARY KEY,
-        usina       VARCHAR(100) NOT NULL,
         tipo_tabela VARCHAR(100) NOT NULL,
         user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         created_at  TIMESTAMPTZ DEFAULT NOW(),
-        UNIQUE(usina, tipo_tabela, user_id)
+        UNIQUE(tipo_tabela, user_id)
+      );
+    `);
+
+    /* ───────── EQUIPAMENTOS: TABELAS PRÉ-CONFIGURADAS ───────── */
+    await client.query(`
+      DROP TABLE IF EXISTS equipamentos_tabelas_pre;
+      CREATE TABLE IF NOT EXISTS equipamentos_tabelas_pre (
+        id          SERIAL PRIMARY KEY,
+        tipo_tabela VARCHAR(100) NOT NULL,
+        created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at  TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(tipo_tabela)
       );
     `);
 

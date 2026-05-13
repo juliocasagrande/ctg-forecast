@@ -15,6 +15,9 @@ const COOKIE_OPTIONS = {
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
 
+// Emails que recebem acesso equivalente a admin independente do role no banco
+export const ADMIN_OVERRIDE_EMAILS = ['julio.casagrande@ctgbr.com.br'];
+
 // Hierarquia de roles para elevação por delegação
 const ROLE_RANK = { engenheiro: 1, coordenador: 2, planejador: 3, gerente: 3, gestor: 4, admin: 5 };
 
@@ -86,6 +89,8 @@ export async function requireAuth(req, res, next) {
         effectiveArea = d.delegator_area;
       }
     }
+
+    if (ADMIN_OVERRIDE_EMAILS.includes(decoded.email)) effectiveRole = 'admin';
 
     req.user = {
       ...decoded,

@@ -757,8 +757,10 @@ export default function App() {
   const location  = useLocation();
   const navigate  = useNavigate();
 
+  const isNativeAdmin = user?.role === 'admin' && (!user?._originalRole || user._originalRole === 'admin');
+
   const fetchProjects = async () => {
-    if (!user || user.role === 'admin') return;
+    if (!user || isNativeAdmin) return;
     try { setProjects((await api.get('/projects')).data); } catch {}
   };
 
@@ -798,7 +800,7 @@ export default function App() {
   );
 
   const { title, sub } = getPageMeta(location.pathname);
-  const showControls   = ['/forecast-dashboard', '/projects', '/polos', '/vacations', '/metas'].includes(location.pathname) && !isAdmin;
+  const showControls   = ['/forecast-dashboard', '/projects', '/polos', '/vacations', '/metas'].includes(location.pathname) && !isNativeAdmin;
   const isPeopleControlPage = location.pathname === '/vacations' || location.pathname === '/metas';
   const showFilterPill = location.pathname !== '/';
   const isHomePage = location.pathname === '/';
@@ -1227,7 +1229,7 @@ export default function App() {
 
             <Route path="/" element={
               <RequireAuth>
-                {isAdmin
+                {isNativeAdmin
                   ? <Navigate to="/admin" replace />
                   : <HomePage year={vacYear} />
                 }
@@ -1296,7 +1298,7 @@ export default function App() {
       />
 
       {/* Mobile bottom navigation — hidden on desktop via CSS */}
-      {!isAdmin && (
+      {!isNativeAdmin && (
         <MobileBottomNav
           isPlanejador={isPlanejador}
           onLogout={() => { logout(); navigate('/login'); }}
