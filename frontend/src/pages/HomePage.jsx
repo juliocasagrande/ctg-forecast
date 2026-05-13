@@ -1227,6 +1227,7 @@ function AttentionPanel({ total, items, navigate }) {
 
 export default function HomePage({ year }) {
   const { user } = useAuth();
+  const viewRole = user?._originalRole || user?.role;
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState({
@@ -1269,16 +1270,17 @@ export default function HomePage({ year }) {
         api.get('/delegations/notifications').then(r => r.data).catch(() => []),
       ]);
       if (cancelled) return;
-      const ownMetas = user?.role === 'engenheiro' ? metas.filter(m => m.is_general || m.user_id === user.id) : metas;
-      const ownVacations = user?.role === 'engenheiro' ? vacations.filter(v => v.user_id === user.id) : vacations;
+      const viewRole = user?._originalRole || user?.role;
+      const ownMetas = viewRole === 'engenheiro' ? metas.filter(m => m.is_general || m.user_id === user.id) : metas;
+      const ownVacations = viewRole === 'engenheiro' ? vacations.filter(v => v.user_id === user.id) : vacations;
       const areaMatch = row => areaKey(row.area) === areaKey(scope.area);
-      const scopedTracking = user?.role === 'engenheiro'
+      const scopedTracking = viewRole === 'engenheiro'
         ? tracking.filter(r => Number(r.gestor_user_id) === Number(user.id))
         : scope.area ? tracking.filter(areaMatch) : tracking;
-      const scopedIacs = user?.role === 'engenheiro'
+      const scopedIacs = viewRole === 'engenheiro'
         ? iacs.filter(r => Number(r.team_leader_user_id) === Number(user.id))
         : scope.area ? iacs.filter(areaMatch) : iacs;
-      const scopedDocuments = user?.role === 'engenheiro'
+      const scopedDocuments = viewRole === 'engenheiro'
         ? documents.filter(d => (d.responsible || '').trim().toLowerCase() === (user?.name || '').trim().toLowerCase())
         : scope.area ? documents.filter(areaMatch) : documents;
       const scopedStaleTracking = scope.area ? staleTracking.filter(areaMatch) : staleTracking;
@@ -1288,7 +1290,7 @@ export default function HomePage({ year }) {
     }
     load();
     return () => { cancelled = true; };
-  }, [year, scope.area, user?.id, user?.role]);
+  }, [year, scope.area, user?.id, user?.role, user?._originalRole]);
 
   const metasDone = data.metas.filter(m => Number(m.achieved_value || 0) >= 100).length;
   const metasAvg = weightedAchievement(data.metas);

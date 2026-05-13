@@ -9,6 +9,12 @@ const USINAS = [
   'UHE Rosana', 'UHE Salto', 'UHE Salto Grande', 'UHE Taquaruçu',
   'PCH Palmeiras', 'PCH Retiro',
 ];
+
+const USINA_POLES = [
+  { label: 'Rio Paraná',     color: '#0070B8', usinas: ['UHE Ilha Solteira', 'UHE Jupiá', 'UHE Salto'] },
+  { label: 'Polo Chavantes', color: '#10B981', usinas: ['UHE Canoas 1', 'UHE Canoas 2', 'UHE Chavantes', 'UHE Salto Grande', 'UHE Jurumirim', 'PCH Retiro', 'PCH Palmeiras'] },
+  { label: 'Polo Capivara',  color: '#6366F1', usinas: ['UHE Capivara', 'UHE Rosana', 'UHE Taquaruçu', 'UHE Garibaldi'] },
+];
 const SIM_NAO = ['Sim', 'Não'];
 
 const EMPTY = {
@@ -415,14 +421,13 @@ function ExportModal({ onClose, tabelaOptions }) {
 function CompactCharts({ data }) {
   if (!data.length) return null;
 
-  const byUsina = [...data.reduce((m, r) => { m.set(r.usina, (m.get(r.usina) || 0) + 1); return m; }, new Map()).entries()]
-    .sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const usinaCountMap = data.reduce((m, r) => { m.set(r.usina, (m.get(r.usina) || 0) + 1); return m; }, new Map());
   const byEquip = [...data.reduce((m, r) => { m.set(r.equipamento, (m.get(r.equipamento) || 0) + 1); return m; }, new Map()).entries()]
     .sort((a, b) => b[1] - a[1]).slice(0, 6);
   const simCount = data.filter(r => r.tem_sobressalente === 'Sim').length;
   const total = data.length;
   const simPct = total ? Math.round((simCount / total) * 100) : 0;
-  const maxUsina = byUsina[0]?.[1] || 1;
+  const maxUsina = Math.max(1, ...usinaCountMap.values());
   const maxEquip = byEquip[0]?.[1] || 1;
 
   const ChartCard = ({ title, children }) => (
@@ -434,18 +439,43 @@ function CompactCharts({ data }) {
 
   return (
     <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+
       <ChartCard title="Registros por usina">
-        {byUsina.map(([usina, count]) => (
-          <div key={usina} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-            <div style={{ fontSize: '0.64rem', color: 'var(--text-secondary)', width: 88, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {usina.replace(/^(UHE|PCH) /, '')}
+        {USINA_POLES.map((pole, pi) => {
+          const poleUsinas = pole.usinas.filter(u => usinaCountMap.has(u));
+          if (!poleUsinas.length) return null;
+          return (
+            <div key={pole.label}>
+              {/* Polo header */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 4,
+                fontSize: '0.56rem', fontWeight: 800, textTransform: 'uppercase',
+                letterSpacing: '0.09em', color: pole.color,
+                marginBottom: 4,
+                marginTop: pi === 0 ? 0 : 8,
+                paddingBottom: 3,
+                borderBottom: `1px solid ${pole.color}30`,
+              }}>
+                <span style={{ width: 5, height: 5, borderRadius: '50%', background: pole.color, flexShrink: 0, display: 'inline-block' }} />
+                {pole.label}
+              </div>
+              {poleUsinas.map(usina => {
+                const count = usinaCountMap.get(usina) || 0;
+                return (
+                  <div key={usina} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                    <div style={{ fontSize: '0.63rem', color: 'var(--text-secondary)', width: 86, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {usina.replace(/^(UHE|PCH) /, '')}
+                    </div>
+                    <div style={{ flex: 1, height: 5, background: 'var(--bg-app)', borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{ width: `${(count / maxUsina) * 100}%`, height: '100%', background: pole.color, borderRadius: 3, transition: 'width 0.4s' }} />
+                    </div>
+                    <div style={{ fontSize: '0.61rem', fontWeight: 700, color: 'var(--text-muted)', width: 22, textAlign: 'right', flexShrink: 0 }}>{count}</div>
+                  </div>
+                );
+              })}
             </div>
-            <div style={{ flex: 1, height: 5, background: 'var(--bg-app)', borderRadius: 3, overflow: 'hidden' }}>
-              <div style={{ width: `${(count / maxUsina) * 100}%`, height: '100%', background: '#0066B3', borderRadius: 3, transition: 'width 0.4s' }} />
-            </div>
-            <div style={{ fontSize: '0.61rem', fontWeight: 700, color: 'var(--text-muted)', width: 22, textAlign: 'right', flexShrink: 0 }}>{count}</div>
-          </div>
-        ))}
+          );
+        })}
       </ChartCard>
 
       <ChartCard title="Tipos de equipamento">

@@ -907,10 +907,11 @@ function MetaCell({ meta, member, canEdit, deleting, uploading, onEdit, onDelete
 export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearProp }) {
   const { user } = useAuth();
   const role = user?.role;
-  const canEditOthers = ['admin', 'gestor', 'coordenador', 'gerente'].includes(role);
-  const canViewAllMetas = ['admin', 'gestor', 'planejador', 'gerente'].includes(role);
+  const viewRole = user?._originalRole || role;
+  const canEditOthers = ['admin', 'gestor', 'coordenador', 'gerente'].includes(viewRole);
+  const canViewAllMetas = ['admin', 'gestor', 'planejador', 'gerente'].includes(viewRole);
   const year = yearProp ?? new Date().getFullYear();
-  const area = ['engenheiro', 'coordenador'].includes(role)
+  const area = ['engenheiro', 'coordenador'].includes(viewRole)
     ? (user?.area || 'eletrica')
     : (areaFilterProp || 'eletrica');
 
