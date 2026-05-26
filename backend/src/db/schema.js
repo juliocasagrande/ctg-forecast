@@ -235,9 +235,19 @@ await client.query(`
         ('doc_alert_exclude_published','true'),
         ('doc_alert_roles','engenheiro,coordenador,planejador'),
         ('doc_alert_areas',''),
-        ('tracking_alert_interval_days','30'),
-        ('tracking_alert_enabled','true')
+        ('tracking_alert_interval_days','6'),
+        ('tracking_alert_enabled','true'),
+        ('tracking_alert_roles','gerente,coordenador,engenheiro,admin'),
+        ('iac_alert_interval_days','6'),
+        ('iac_alert_enabled','true'),
+        ('iac_alert_roles','gerente,coordenador,engenheiro,admin')
       ON CONFLICT (key) DO NOTHING;
+    `);
+
+    await client.query(`
+      UPDATE system_settings SET value='6'
+      WHERE (key='tracking_alert_interval_days' AND value='30')
+         OR (key='iac_alert_interval_days' AND value='14');
     `);
 
     /* ───────── YEAR CONSOLIDATED ───────── */
@@ -680,6 +690,74 @@ await client.query(`
         created_at  TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(tipo_tabela)
       );
+    `);
+
+    /* ───────── CRONOGRAMAS PROJECT (por usuário) ───────── */
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS schedule_projects (
+        id                  SERIAL PRIMARY KEY,
+        user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        client_uid          VARCHAR(80) NOT NULL,
+        name                TEXT NOT NULL DEFAULT 'Novo cronograma',
+        plant               TEXT DEFAULT '',
+        description         TEXT DEFAULT '',
+        active_revision_uid VARCHAR(80) DEFAULT 'rev-0',
+        created_at          TIMESTAMPTZ DEFAULT NOW(),
+        updated_at          TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, client_uid)
+      );
+
+      CREATE TABLE IF NOT EXISTS schedule_revisions (
+        id          SERIAL PRIMARY KEY,
+        project_id  INTEGER NOT NULL REFERENCES schedule_projects(id) ON DELETE CASCADE,
+        client_uid  VARCHAR(80) NOT NULL,
+        label       VARCHAR(40) NOT NULL,
+        sort_order  INTEGER DEFAULT 0,
+        created_at  TIMESTAMPTZ DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(project_id, client_uid)
+      );
+
+      CREATE TABLE IF NOT EXISTS schedule_tasks (
+        id              SERIAL PRIMARY KEY,
+        revision_id     INTEGER NOT NULL REFERENCES schedule_revisions(id) ON DELETE CASCADE,
+        client_uid      VARCHAR(80) NOT NULL,
+        wbs             VARCHAR(40) DEFAULT '',
+        name            TEXT NOT NULL DEFAULT 'Nova tarefa',
+        type            VARCHAR(20) NOT NULL DEFAULT 'task',
+        start_date      DATE,
+        end_date        DATE,
+        progress        INTEGER DEFAULT 0,
+        predecessor_uid VARCHAR(80) DEFAULT '',
+        dependency_type VARCHAR(10) DEFAULT 'FS',
+        notes           TEXT DEFAULT '',
+        sort_order      INTEGER DEFAULT 0,
+        created_at      TIMESTAMPTZ DEFAULT NOW(),
+        updated_at      TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(revision_id, client_uid)
+      );
+
+      CREATE TABLE IF NOT EXISTS schedule_user_settings (
+        user_id               INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        weekends_as_workdays  BOOLEAN DEFAULT false,
+        show_today            BOOLEAN DEFAULT true,
+        shade_weekends        BOOLEAN DEFAULT true,
+        workdays              INTEGER[] DEFAULT ARRAY[1,2,3,4,5],
+        holidays              JSONB DEFAULT '[]'::jsonb,
+        extra_workdays         JSONB DEFAULT '[]'::jsonb,
+        updated_at            TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      ALTER TABLE schedule_user_settings ADD COLUMN IF NOT EXISTS workdays INTEGER[] DEFAULT ARRAY[1,2,3,4,5];
+      ALTER TABLE schedule_user_settings ADD COLUMN IF NOT EXISTS holidays JSONB DEFAULT '[]'::jsonb;
+      ALTER TABLE schedule_user_settings ADD COLUMN IF NOT EXISTS extra_workdays JSONB DEFAULT '[]'::jsonb;
+
+      CREATE INDEX IF NOT EXISTS idx_schedule_projects_user
+        ON schedule_projects(user_id);
+      CREATE INDEX IF NOT EXISTS idx_schedule_revisions_project
+        ON schedule_revisions(project_id);
+      CREATE INDEX IF NOT EXISTS idx_schedule_tasks_revision
+        ON schedule_tasks(revision_id);
     `);
 
     console.log('✅ Migrations OK');

@@ -29,6 +29,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
         cleanupOutdatedCaches: true, // Limpa caches antigos automaticamente
@@ -61,6 +62,6 @@ export default defineConfig({
     })
   ],
   server: {
-    proxy: { '/api': { target: 'http://localhost:3001', changeOrigin: true } }
+    proxy: { '/api': { target: 'http://localhost:3005', changeOrigin: true } }
   }
 });

@@ -35,6 +35,7 @@ import monthlyReportRouter from './routes/monthly-report.js';
 import listsRouter          from './routes/lists.js';
 import chatRouter           from './routes/chat.js';
 import equipamentosRouter   from './routes/equipamentos.js';
+import scheduleProjectsRouter from './routes/schedule-projects.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -103,6 +104,7 @@ export function createApp({ disableRateLimit = false } = {}) {
    app.use('/api/lists',       listsRouter);
   app.use('/api/chat',        chatRouter);
   app.use('/api/equipamentos', equipamentosRouter);
+  app.use('/api/schedule-projects', scheduleProjectsRouter);
 
   if (disableRateLimit) {
     app.use('/api/export',         exportRouter);

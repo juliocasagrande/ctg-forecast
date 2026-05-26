@@ -17,6 +17,28 @@ const USINA_POLES = [
 ];
 const SIM_NAO = ['Sim', 'Não'];
 
+const normalizeUsinaKey = (value) => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/\b(uhe|pch)\b/g, ' ')
+  .replace(/\bii\b/g, '2')
+  .replace(/\bi\b/g, '1')
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim();
+
+const USINA_BY_KEY = new Map(USINAS.map(usina => [normalizeUsinaKey(usina), usina]));
+
+const canonicalUsina = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return raw;
+  return USINA_BY_KEY.get(normalizeUsinaKey(raw)) || raw;
+};
+
+const normalizeEquipamentoRow = (row) => (
+  row ? { ...row, usina: canonicalUsina(row.usina) } : row
+);
+
 const EMPTY = {
   usina: '', tipo_tabela: '', equipamento: '', ug: '', tag: '',
   fabricante: '', modelo: '', num_serie: '',
@@ -421,7 +443,11 @@ function ExportModal({ onClose, tabelaOptions }) {
 function CompactCharts({ data }) {
   if (!data.length) return null;
 
-  const usinaCountMap = data.reduce((m, r) => { m.set(r.usina, (m.get(r.usina) || 0) + 1); return m; }, new Map());
+  const usinaCountMap = data.reduce((m, r) => {
+    const usina = canonicalUsina(r.usina);
+    if (usina) m.set(usina, (m.get(usina) || 0) + 1);
+    return m;
+  }, new Map());
   const byEquip = [...data.reduce((m, r) => { m.set(r.equipamento, (m.get(r.equipamento) || 0) + 1); return m; }, new Map()).entries()]
     .sort((a, b) => b[1] - a[1]).slice(0, 6);
   const simCount = data.filter(r => r.tem_sobressalente === 'Sim').length;
@@ -463,8 +489,11 @@ function CompactCharts({ data }) {
                 const count = usinaCountMap.get(usina) || 0;
                 return (
                   <div key={usina} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                    <div style={{ fontSize: '0.63rem', color: 'var(--text-secondary)', width: 86, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {usina.replace(/^(UHE|PCH) /, '')}
+                    <div
+                      title={usina}
+                      style={{ fontSize: '0.63rem', color: 'var(--text-secondary)', width: 124, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    >
+                      {usina}
                     </div>
                     <div style={{ flex: 1, height: 5, background: 'var(--bg-app)', borderRadius: 3, overflow: 'hidden' }}>
                       <div style={{ width: `${(count / maxUsina) * 100}%`, height: '100%', background: pole.color, borderRadius: 3, transition: 'width 0.4s' }} />
@@ -546,7 +575,7 @@ export default function EquipamentosAdminPage() {
       const reqs = [api.get('/equipamentos'), api.get('/equipamentos/my-tabelas')];
       if (canManage) reqs.push(api.get('/equipamentos/acesso'));
       const [eRes, mtRes, aRes] = await Promise.all(reqs);
-      setData(eRes.data);
+      setData((eRes.data || []).map(normalizeEquipamentoRow));
       setMyTabelas(mtRes.data);
       if (aRes) setAcesso(aRes.data);
     } catch {
@@ -581,7 +610,12 @@ export default function EquipamentosAdminPage() {
     return editableCombos.allowed.has(row.tipo_tabela);
   };
 
-  const usinaOptions  = useMemo(() => [...new Set(data.map(d => d.usina))].sort(), [data]);
+  const usinaOptions  = useMemo(() => {
+    const used = new Set(data.map(d => canonicalUsina(d.usina)).filter(Boolean));
+    const known = USINAS.filter(usina => used.has(usina));
+    const unknown = [...used].filter(usina => !USINA_BY_KEY.has(normalizeUsinaKey(usina))).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    return [...known, ...unknown];
+  }, [data]);
   const tabelaOptions = useMemo(() => [...new Set(data.map(d => d.tipo_tabela))].sort(), [data]);
   const equipOptions  = useMemo(() => [...new Set(data.map(d => d.equipamento))].sort(), [data]);
 
@@ -620,13 +654,14 @@ export default function EquipamentosAdminPage() {
   }, [filtered]);
 
   const handleSave = async (form) => {
+    const payload = normalizeEquipamentoRow(form);
     if (form.id) {
-      const r = await api.put(`/equipamentos/${form.id}`, form);
-      setData(prev => prev.map(d => d.id === form.id ? r.data : d));
+      const r = await api.put(`/equipamentos/${form.id}`, payload);
+      setData(prev => prev.map(d => d.id === form.id ? normalizeEquipamentoRow(r.data) : d));
       toast?.success?.('Equipamento atualizado');
     } else {
-      const r = await api.post('/equipamentos', form);
-      setData(prev => [...prev, r.data]);
+      const r = await api.post('/equipamentos', payload);
+      setData(prev => [...prev, normalizeEquipamentoRow(r.data)]);
       toast?.success?.('Equipamento criado');
     }
   };

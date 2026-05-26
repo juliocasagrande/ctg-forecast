@@ -24,6 +24,7 @@ import MetasPage from './pages/MetasPage.jsx';
 import DocumentsPage from './pages/DocumentsPage.jsx';
 import IACsPage from './pages/IACsPage.jsx';
 import ProjectsTrackingPage from './pages/ProjectsTrackingPage.jsx';
+import ScheduleProjectPage from './pages/ScheduleProjectPage.jsx';
 import EquipamentosPage from './pages/EquipamentosPage.jsx';
 import EquipamentosAdminPage from './pages/EquipamentosAdminPage.jsx';
 import AdminPanel from './components/admin/AdminPanel.jsx';
@@ -732,6 +733,7 @@ function getPageMeta(pathname) {
   if (pathname === '/documents') return { title: 'Controle de Documentos', sub: null };
   if (pathname === '/lists/iacs') return { title: 'IACs 2026'};
   if (pathname === '/lists/projects-tracking') return { title: 'Acompanhamento de Projetos', sub: 'Relatório mensal — contratos em andamento' };
+  if (pathname === '/lists/schedule-project') return { title: 'Cronograma Project', sub: 'Gantt, vínculos e impressão em PDF' };
   if (pathname === '/engineering/equipamentos') return { title: 'Mapa de Equipamentos', sub: 'CTG Brasil' };
   if (pathname === '/engineering/equipamentos-admin') return { title: 'Gestão de Equipamentos', sub: 'Cadastro e manutenção dos dados' };
   if (pathname.startsWith('/projects/')) return { title: 'Projetos', sub: null };
@@ -1276,6 +1278,7 @@ export default function App() {
              <Route path="/documents" element={<RequireAuth><DocumentsPage /></RequireAuth>} />
             <Route path="/lists/iacs" element={<RequireAuth><IACsPage /></RequireAuth>} />
             <Route path="/lists/projects-tracking" element={<RequireAuth><ProjectsTrackingPage /></RequireAuth>} />
+            <Route path="/lists/schedule-project" element={<RequireAuth><ScheduleProjectPage /></RequireAuth>} />
             <Route path="/engineering/equipamentos" element={<RequireAuth><EquipamentosPage /></RequireAuth>} />
             <Route path="/engineering/equipamentos-admin" element={<RequireAuth><EquipamentosAdminPage /></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" replace />} />

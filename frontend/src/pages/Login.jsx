@@ -136,13 +136,17 @@ export default function Login() {
 
   const selectedRoleOpt = ROLE_OPTIONS.find(r => r.value === regRole);
   const needsArea = selectedRoleOpt?.needsArea ?? false;
+  const homePathFor = (user) =>
+    user?.role === 'admin' && (!user?._originalRole || user._originalRole === 'admin')
+      ? '/admin'
+      : '/';
 
   const handleAzureLogin = async () => {
     setLoginError('');
     setAzureLoading(true);
     try {
       const user = await loginWithAzure();
-      navigate(user.role === 'admin' ? '/admin' : '/');
+      navigate(homePathFor(user));
     } catch (err) {
       console.error('[Azure SSO]', err);
       const errorCode = err.errorCode || err.name || '';
@@ -168,7 +172,7 @@ export default function Login() {
       if (user.forcePasswordChange) {
         navigate('/profile?changePassword=1');
       } else {
-        navigate(user.role === 'admin' ? '/admin' : '/');
+        navigate(homePathFor(user));
       }
     } catch (err) {
       setLoginError(err.response?.data?.error || 'Erro ao entrar. Tente novamente.');

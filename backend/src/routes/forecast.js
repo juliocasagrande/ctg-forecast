@@ -693,8 +693,9 @@ router.get('/alerts', async (req, res) => {
           const docAlertEnabled = cfg.doc_alert_enabled !== 'false';
           if (!docAlertEnabled) return { count: 0, docs: [] };
 
-          const alertRoles = (cfg.doc_alert_roles || 'engenheiro,coordenador,planejador').split(',').map(r => r.trim()).filter(Boolean);
-          if (!alertRoles.includes(role)) return { count: 0, docs: [] };
+          const alertRole = req.user._originalRole || role;
+          const alertRoles = (cfg.doc_alert_roles || 'engenheiro,coordenador,planejador,admin').split(',').map(r => r.trim()).filter(Boolean);
+          if (!alertRoles.includes(alertRole)) return { count: 0, docs: [] };
 
           const alertAreas = (cfg.doc_alert_areas || '').split(',').map(a => a.trim()).filter(Boolean);
           if (alertAreas.length > 0 && !alertAreas.includes(req.user.area || '')) return { count: 0, docs: [] };
@@ -703,30 +704,42 @@ router.get('/alerts', async (req, res) => {
           const excCancelled = cfg.doc_alert_exclude_cancelled !== 'false';
           const excPublished  = cfg.doc_alert_exclude_published !== 'false';
 
-          const excludeStatuses = [];
-          if (excCancelled) excludeStatuses.push('Cancelado');
-          if (excPublished)  excludeStatuses.push('Publicado');
-
           const threshold = new Date();
           threshold.setDate(threshold.getDate() - intervalDays);
+          const docScopeSql = alertRole === 'engenheiro'
+            ? '($1::int IS NOT NULL AND LOWER(d.responsible) = LOWER($5))'
+            : `(d.created_by = $1
+                OR LOWER(d.responsible) = LOWER($5)
+                OR EXISTS (
+                  SELECT 1 FROM document_authors da
+                  WHERE da.document_id = d.id AND da.user_id = $1
+                ))`;
 
           const r = await pool.query(`
-            SELECT DISTINCT d.id, d.code, d.subject, d.status, d.created_at
+            SELECT d.id, d.code, d.subject, d.status, d.document_link, d.created_at
             FROM documents d
-            LEFT JOIN document_authors da ON da.document_id = d.id
-            WHERE (d.created_by = $1 OR da.user_id = $1)
-              AND ($2::text[] IS NULL OR array_length($2::text[], 1) = 0 OR d.status != ALL($2::text[]))
-              AND d.created_at < $3
+            WHERE (${docScopeSql})
+              AND ($2::boolean = false OR d.status <> 'Cancelado')
+              AND (
+                $3::boolean = false
+                OR d.status <> 'Publicado'
+                OR d.document_link IS NULL
+                OR d.document_link = ''
+              )
+              AND d.created_at < $4
             ORDER BY d.created_at ASC
             LIMIT 20
-          `, [userId, excludeStatuses.length ? excludeStatuses : null, threshold]);
+          `, [userId, excCancelled, excPublished, threshold, req.user.name || '']);
 
           const undismissed = r.rows.filter(d =>
             !isDismissed('doc_unpublished', String(d.id))
           );
 
           return { count: undismissed.length, docs: undismissed };
-        } catch { return { count: 0, docs: [] }; }
+        } catch (docErr) {
+          console.error('[DOC ALERT ERROR]', docErr.message);
+          return { count: 0, docs: [] };
+        }
       })(),
     });
   } catch (err) { safeError(res, err); }

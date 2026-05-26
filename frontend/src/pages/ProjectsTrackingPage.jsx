@@ -1090,7 +1090,6 @@ export default function ProjectsTrackingPage() {
   const [importPreview, setImportPreview] = useState(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importFile, setImportFile]   = useState(null);
-  const [clearing, setClearing]       = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
 
   // Column filters
@@ -1222,20 +1221,6 @@ export default function ProjectsTrackingPage() {
       addToast(err.response?.data?.error || 'Erro ao importar', 'error');
     } finally {
       setImportLoading(false);
-    }
-  };
-
-  const handleClearAll = async () => {
-    if (!confirm('⚠️ Tem certeza que deseja LIMPAR TODOS os projetos? Esta ação não pode ser desfeita.')) return;
-    setClearing(true);
-    try {
-      const res = await api.delete('/lists/projects-tracking/clear');
-      addToast(`Tabela limpa: ${res.data.deleted} registros removidos`, 'success');
-      await fetchItems();
-    } catch (err) {
-      addToast(err.response?.data?.error || 'Erro ao limpar tabela', 'error');
-    } finally {
-      setClearing(false);
     }
   };
 
@@ -1529,17 +1514,6 @@ export default function ProjectsTrackingPage() {
 
   return (
     <div style={{ padding: '12px 16px 16px 0' }}>
-
-      {/* Top actions: clear + admin */}
-      {user?.role === 'admin' && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-          <button onClick={handleClearAll} disabled={clearing} style={{
-            padding: '5px 14px', borderRadius: 6, border: '1.5px solid #EF4444',
-            background: '#fff', color: '#DC2626', fontSize: '0.75rem', fontWeight: 600,
-            cursor: clearing ? 'not-allowed' : 'pointer', opacity: clearing ? 0.6 : 1,
-          }}>{clearing ? 'Limpando...' : '🗑️ Limpar Tudo'}</button>
-        </div>
-      )}
 
       {/* Summary cards - redesigned layout */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'nowrap', alignItems: 'stretch', minHeight: 170 }}>

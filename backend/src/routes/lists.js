@@ -360,22 +360,23 @@ router.get('/projects-tracking/stale-projects', async (req, res) => {
     const settingsMap = {};
     settings.rows.forEach(r => { settingsMap[r.key] = r.value; });
 
-    if (settingsMap['tracking_alert_enabled'] !== 'true') {
+    if (settingsMap['tracking_alert_enabled'] === 'false') {
       return res.json([]);
     }
 
-    const intervalDays = parseInt(settingsMap['tracking_alert_interval_days']) || 30;
-    const allowedRoles = (settingsMap['tracking_alert_roles'] || 'gerente,coordenador,engenheiro').split(',').map(r => r.trim());
+    const intervalDays = parseInt(settingsMap['tracking_alert_interval_days']) || 6;
+    const alertRole = user._originalRole || user.role;
+    const allowedRoles = (settingsMap['tracking_alert_roles'] || 'gerente,coordenador,engenheiro,admin').split(',').map(r => r.trim());
 
     // Check if user's role is in the allowed roles
-    if (!allowedRoles.includes(user.role)) {
+    if (!allowedRoles.includes(alertRole)) {
       return res.json([]);
     }
 
     let query, params;
 
     // For engenheiro, only show their own projects
-    if (user.role === 'engenheiro') {
+    if (alertRole === 'engenheiro') {
       query = `
         SELECT id, pp_contrato, projeto, area, gestor, updated_at
         FROM lists_projects_tracking
@@ -384,7 +385,7 @@ router.get('/projects-tracking/stale-projects', async (req, res) => {
         ORDER BY updated_at ASC
       `;
       params = [String(intervalDays), user.id, user.name];
-    } else if (user.role === 'coordenador') {
+    } else if (alertRole === 'coordenador') {
       // Coordenadores see only projects from their area
       query = `
         SELECT id, pp_contrato, projeto, area, gestor, updated_at
@@ -419,22 +420,23 @@ router.get('/iacs/stale-iacs', async (req, res) => {
     const settingsMap = {};
     settings.rows.forEach(r => { settingsMap[r.key] = r.value; });
 
-    if (settingsMap['iac_alert_enabled'] !== 'true') {
+    if (settingsMap['iac_alert_enabled'] === 'false') {
       return res.json([]);
     }
 
-    const intervalDays = parseInt(settingsMap['iac_alert_interval_days']) || 14;
-    const allowedRoles = (settingsMap['iac_alert_roles'] || 'gerente,coordenador,engenheiro').split(',').map(r => r.trim());
+    const intervalDays = parseInt(settingsMap['iac_alert_interval_days']) || 6;
+    const alertRole = user._originalRole || user.role;
+    const allowedRoles = (settingsMap['iac_alert_roles'] || 'gerente,coordenador,engenheiro,admin').split(',').map(r => r.trim());
 
     // Check if user's role is in the allowed roles
-    if (!allowedRoles.includes(user.role)) {
+    if (!allowedRoles.includes(alertRole)) {
       return res.json([]);
     }
 
     let query, params;
 
     // For engenheiro, only show IACs where they are the team_leader
-    if (user.role === 'engenheiro') {
+    if (alertRole === 'engenheiro') {
       query = `
         SELECT id, iac_code, project, area, team_leader, updated_at
         FROM lists_iacs
@@ -443,7 +445,7 @@ router.get('/iacs/stale-iacs', async (req, res) => {
         ORDER BY updated_at ASC
       `;
       params = [String(intervalDays), user.id, user.name];
-    } else if (user.role === 'coordenador') {
+    } else if (alertRole === 'coordenador') {
       // Coordenadores see only IACs from their area
       query = `
         SELECT id, iac_code, project, area, team_leader, updated_at

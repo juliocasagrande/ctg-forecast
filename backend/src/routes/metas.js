@@ -22,7 +22,8 @@ function canEditGeneralMeta(req, assignedArea = '') {
 }
 
 function buildVisibilityWhere(req, baseParamCount = 1, tableAlias = 'm', userAlias = 'u') {
-  const { role, id, area } = req.user;
+  const { id, area } = req.user;
+  const role = req.user._originalRole || req.user.role;
   if (['admin', 'gestor', 'planejador', 'gerente'].includes(role)) {
     return { sql: '', params: [] };
   }
@@ -107,7 +108,8 @@ router.get('/', async (req, res) => {
 
 router.get('/members', async (req, res) => {
   const area = req.query.area || null;
-  const { role, id: requesterId } = req.user;
+  const role = req.user._originalRole || req.user.role;
+  const { id: requesterId } = req.user;
 
   let query, params;
   if (role === 'admin' || role === 'planejador' || role === 'gerente') {

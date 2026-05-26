@@ -1327,10 +1327,8 @@ export default function HomePage({ year }) {
   const docsPublishedPct = docsTotal ? Math.round((docsPublished / docsTotal) * 100) : 0;
   const docsGauge = docsTotal ? (docsPublished / docsTotal) * 100 : 0;
   const vacationsGauge = vacationPeople ? Math.min(100, (data.vacations.length / Math.max(vacationPeople, 1)) * 100) : 0;
-  const staleProjectKeys = new Set(staleTrackingRows.map(p => p.id || p.unique_key || p.pp_contrato).filter(Boolean).map(String));
-  const staleIacKeys = new Set(staleIacRows.map(i => i.id || i.unique_key || i.iac_code).filter(Boolean).map(String));
-  const projectStaleCount = projectRows.filter(p => staleProjectKeys.has(String(p.id || p.unique_key || p.pp_contrato))).length || Math.min(staleTrackingRows.length, projectRows.length);
-  const iacStaleCount = iacRows.filter(i => staleIacKeys.has(String(i.id || i.unique_key || i.iac_code))).length || Math.min(staleIacRows.length, iacRows.length);
+  const projectStaleCount = staleTrackingRows.length;
+  const iacStaleCount = staleIacRows.length;
   const projectUpdatedCount = Math.max(0, projectRows.length - projectStaleCount);
   const iacUpdatedCount = Math.max(0, iacRows.length - iacStaleCount);
   const projectUpdatedPct = projectRows.length ? Math.round((projectUpdatedCount / projectRows.length) * 100) : 0;

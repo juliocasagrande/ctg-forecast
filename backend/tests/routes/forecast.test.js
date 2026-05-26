@@ -6,7 +6,7 @@ import request from 'supertest';
 import { getTestApp } from '../setup/testApp.js';
 import { createTestUser, loginAs, cookieHeader } from '../helpers/auth.js';
 import { createProject, assignEngineer } from '../helpers/fixtures.js';
-import { cleanTables } from '../helpers/db.js';
+import { cleanTables, query } from '../helpers/db.js';
 
 const app    = getTestApp();
 const PREFIX = 'fc';
@@ -17,7 +17,7 @@ let project;
 let engUser;
 
 beforeAll(async () => {
-  await cleanTables('forecast_entries', 'year_consolidated', 'actual_consolidated', 'project_assignments', 'projects', 'users');
+  await cleanTables('forecast_entries', 'year_consolidated', 'actual_consolidated', 'project_assignments', 'documents', 'document_authors', 'alert_dismissals', 'projects', 'users');
 
   const adminUser = await createTestUser({ email: `${PREFIX}.admin@ctg-test.internal`, role: 'admin' });
   const planejador = await createTestUser({ email: `${PREFIX}.plan@ctg-test.internal`, role: 'planejador' });
@@ -32,7 +32,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await cleanTables('forecast_entries', 'year_consolidated', 'actual_consolidated', 'project_assignments', 'projects', 'users');
+  await cleanTables('forecast_entries', 'year_consolidated', 'actual_consolidated', 'project_assignments', 'documents', 'document_authors', 'alert_dismissals', 'projects', 'users');
 });
 
 // ──────────────────────────────────────────────────────────────
@@ -151,6 +151,48 @@ describe('GET /api/forecast/alerts', () => {
     expect(res.status).toBe(200);
     // Pode retornar array ou objeto dependendo da implementação
     expect(res.body !== null && typeof res.body === 'object').toBe(true);
+  });
+
+  it('conta documentos pendentes quando o usuário é responsável, mesmo sem ser autor', async () => {
+    await query(`
+      INSERT INTO documents (
+        type, area, sequence_number, year, responsible, date, subject, status,
+        code, base_code, created_by, updated_by, created_at, updated_at
+      )
+      VALUES (
+        'RT', 'eletrica', 901, 26, $1, CURRENT_DATE, 'Documento pendente por responsavel',
+        'Em elaboração', 'RT-eletrica-901-26', 'RT-eletrica-901-26', 1, 1,
+        NOW() - INTERVAL '10 days', NOW() - INTERVAL '10 days'
+      )
+    `, [engUser.name]);
+
+    const res = await request(app)
+      .get('/api/forecast/alerts')
+      .set('Cookie', cookieHeader(engCookies));
+
+    expect(res.status).toBe(200);
+    expect(res.body.doc_unpublished.docs.some(d => d.code === 'RT-eletrica-901-26')).toBe(true);
+  });
+
+  it('para engenheiro, nao conta documentos criados por ele quando outro usuario e responsavel', async () => {
+    await query(`
+      INSERT INTO documents (
+        type, area, sequence_number, year, responsible, date, subject, status,
+        code, base_code, created_by, updated_by, created_at, updated_at
+      )
+      VALUES (
+        'RT', 'eletrica', 902, 26, 'Outro Responsavel', CURRENT_DATE, 'Documento criado mas nao responsavel',
+        'Em elaboração', 'RT-eletrica-902-26', 'RT-eletrica-902-26', $1, $1,
+        NOW() - INTERVAL '10 days', NOW() - INTERVAL '10 days'
+      )
+    `, [engUser.id]);
+
+    const res = await request(app)
+      .get('/api/forecast/alerts')
+      .set('Cookie', cookieHeader(engCookies));
+
+    expect(res.status).toBe(200);
+    expect(res.body.doc_unpublished.docs.some(d => d.code === 'RT-eletrica-902-26')).toBe(false);
   });
 });
 

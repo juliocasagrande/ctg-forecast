@@ -11,7 +11,7 @@ if (process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL) {
 }
 
 const app  = createApp();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3005;
 
 async function start() {
   try {
