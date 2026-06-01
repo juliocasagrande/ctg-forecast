@@ -44,7 +44,7 @@ const UHE_COLORS = {
 const CTG_BAR_COLORS = [
   '#001F5B','#003A8C','#0050B3','#0066B3','#0070CC',
   '#0082E6','#0091EA','#00AEEF','#29BAF0','#64CCF4',
-  '#97DDF7','#BFECFA','#D6F4FF','#E8F8FF',
+  '#7ECEF5','#97DDF7','#AEEAF9','#BFECFA',
 ];
 
 const STATUS_OPTIONS = [
@@ -292,9 +292,17 @@ function DonutChart({ data, uheData = [], filteredItems = [] }) {
 
 /* ─── UHE Bar Chart with tooltip and click filter ────────────────────────────────────────────── */
 function UheBarChart({ data, height = 120, filterUHE, onFilterUHE }) {
-  const filteredData = data.filter(d => d.uhe !== 'Geral').sort((a, b) => b.valor_contrato - a.valor_contrato);
-  const maxVal = Math.max(...filteredData.map(d => d.valor_contrato || 0), 1);
+  const getSigla = (uhe) => UHE_SIGLAS[uhe] || uhe.replace('UHE ', '').replace('PCH ', '');
+  const filteredData = data.sort((a, b) => getSigla(a.uhe).localeCompare(getSigla(b.uhe), 'pt-BR'));
+  const nonGeralData = data.filter(d => d.uhe !== 'Geral');
+  const maxVal = Math.max(...nonGeralData.map(d => d.valor_contrato || 0), 1);
+  const totalBar = filteredData.reduce((acc, d) => ({
+    valor_contrato: acc.valor_contrato + (d.valor_contrato || 0),
+    saldo_contrato: acc.saldo_contrato + (d.saldo_contrato || 0),
+    count: acc.count + (d.count || 0),
+  }), { valor_contrato: 0, saldo_contrato: 0, count: 0 });
   const [hoveredIdx, setHoveredIdx] = useState(null);
+  const [hoveredTotal, setHoveredTotal] = useState(false);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const containerRef = useRef(null);
 
@@ -312,16 +320,19 @@ function UheBarChart({ data, height = 120, filterUHE, onFilterUHE }) {
 
   const barWidth = 42;
   const gap = 14;
-  const totalWidth = filteredData.length * (barWidth + gap) + 40;
+  const totalWidth = filteredData.length * (barWidth + gap) + 40 + gap + barWidth + 16;
+  const totalBarX = filteredData.length * (barWidth + gap) + 20 + gap + 16;
 
   return (
     <div ref={containerRef} style={{ overflowX: 'auto', position: 'relative' }}>
       <svg viewBox={`0 0 ${totalWidth} ${height + 28}`} style={{ width: '100%', height: height + 28 }}>
         {filteredData.map((d, i) => {
           const x = i * (barWidth + gap) + 20;
-          const barH = height - 20;
-          const utilized = d.valor_contrato > 0 ? (d.valor_contrato - d.saldo_contrato) / d.valor_contrato : 0;
-          const usedH = barH * utilized;
+          const maxBarH = height - 20;
+          const powerScale = maxVal > 0 && d.valor_contrato > 0 ? Math.pow(d.valor_contrato / maxVal, 0.35) : 0;
+          const barH = Math.max(10, Math.min(maxBarH, Math.round(maxBarH * powerScale)));
+          const remaining = d.valor_contrato > 0 ? d.saldo_contrato / d.valor_contrato : 0;
+          const usedH = barH * remaining;
           const sigla = UHE_SIGLAS[d.uhe] || d.uhe.replace('UHE ', '').replace('PCH ', '');
           const isActive = filterUHE === d.uhe;
           return (
@@ -349,6 +360,37 @@ function UheBarChart({ data, height = 120, filterUHE, onFilterUHE }) {
             </g>
           );
         })}
+        {/* Separator line before total bar */}
+        <line
+          x1={totalBarX - gap - 2} y1={10} x2={totalBarX - gap - 2} y2={height}
+          stroke="#CBD5E1" strokeWidth={1} strokeDasharray="4 3"
+        />
+        {/* Total bar */}
+        {(() => {
+          const maxBarH = height - 20;
+          const totalRemaining = totalBar.valor_contrato > 0
+            ? totalBar.saldo_contrato / totalBar.valor_contrato
+            : 0;
+          const totalUsedH = maxBarH * totalRemaining;
+          return (
+            <g
+              onMouseMove={(e) => { setHoveredTotal(true); setTooltipPos({ x: e.clientX, y: e.clientY }); }}
+              onMouseLeave={() => setHoveredTotal(false)}
+              style={{ cursor: 'default' }}
+            >
+              <text x={totalBarX + barWidth / 2} y={height - maxBarH - 6} textAnchor="middle" fontSize="10" fill="#059669" fontWeight="700">
+                {fmtM(totalBar.valor_contrato)}
+              </text>
+              {/* Background */}
+              <rect x={totalBarX} y={height - maxBarH} width={barWidth} height={maxBarH} fill="rgba(16,185,129,0.15)" rx={3} />
+              {/* Used portion */}
+              <rect x={totalBarX} y={height - totalUsedH} width={barWidth} height={totalUsedH} fill="rgba(16,185,129,0.55)" rx={3} />
+              <text x={totalBarX + barWidth / 2} y={height + 16} textAnchor="middle" fontSize="11" fill="#059669" fontWeight="700">
+                Total
+              </text>
+            </g>
+          );
+        })()}
       </svg>
       {/* Tooltip via portal */}
       {hoveredIdx !== null && filteredData[hoveredIdx] && createPortal(
@@ -388,6 +430,38 @@ function UheBarChart({ data, height = 120, filterUHE, onFilterUHE }) {
               <div style={{ display: 'flex', gap: 8 }}>
                 <span style={{ color: '#64748B' }}>Saldo:</span>
                 <span style={{ fontWeight: 600, color: '#065F46' }}>{fmtBRL(filteredData[hoveredIdx].saldo_si)}</span>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+      {hoveredTotal && createPortal(
+        <div style={{
+          position: 'fixed', left: tooltipPos.x, top: tooltipPos.y + 14,
+          transform: 'translateX(-50%)', pointerEvents: 'none', zIndex: 99999,
+        }}>
+          <div style={{
+            background: '#fff', border: '1px solid #D1FAE5', borderRadius: 8,
+            padding: '8px 12px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+            fontSize: '0.72rem', whiteSpace: 'nowrap',
+          }}>
+            <div style={{ fontWeight: 700, marginBottom: 4, color: '#059669', fontSize: '0.78rem' }}>
+              Total Geral
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 2 }}>
+              <span style={{ color: '#64748B' }}>Projetos:</span>
+              <span style={{ fontWeight: 700 }}>{totalBar.count}</span>
+            </div>
+            <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: 3, marginTop: 3 }}>
+              <div style={{ fontSize: '0.62rem', fontWeight: 700, color: '#059669', textTransform: 'uppercase', marginBottom: 2 }}>Contrato</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <span style={{ color: '#64748B' }}>Total:</span>
+                <span style={{ fontWeight: 600 }}>{fmtBRL(totalBar.valor_contrato)}</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <span style={{ color: '#64748B' }}>Saldo:</span>
+                <span style={{ fontWeight: 600, color: '#065F46' }}>{fmtBRL(totalBar.saldo_contrato)}</span>
               </div>
             </div>
           </div>
