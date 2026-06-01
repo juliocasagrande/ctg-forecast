@@ -670,6 +670,17 @@ export default function ScheduleProjectPage() {
   }, [loaded, project]);
 
   useEffect(() => {
+    window._scheduleCreateProject = createProject;
+    window._schedulePrint = () => window.print();
+    window._scheduleDeleteProject = deleteProject;
+    return () => {
+      delete window._scheduleCreateProject;
+      delete window._schedulePrint;
+      delete window._scheduleDeleteProject;
+    };
+  }, [project]);
+
+  useEffect(() => {
     if (!loaded) return;
     const timer = setTimeout(async () => {
       try {
@@ -1069,68 +1080,67 @@ export default function ScheduleProjectPage() {
     <div className="schedule-page">
       <div className="schedule-summary no-print">
         <div className="schedule-info-main">
-          <div className="schedule-summary-top">
-            <div className="schedule-summary-fields">
-              <select className="form-select schedule-project-select" value={project.id} onChange={e => { setProjectId(e.target.value); setSelectedId(''); setSelectedIds([]); setUndoStack([]); }}>
-                {projects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-              </select>
-              <div className="schedule-project-meta">
+          <div className="schedule-summary-fields">
+            <select className="schedule-project-name-select" value={project.id} onChange={e => { setProjectId(e.target.value); setSelectedId(''); setSelectedIds([]); setUndoStack([]); }}>
+              {projects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+            <div className="schedule-project-meta">
+              <span className="schedule-meta-chip schedule-meta-chip-usina">
+                <svg viewBox="0 0 20 20" fill="currentColor" width="11" height="11" style={{flexShrink:0}}>
+                  <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/>
+                </svg>
                 <input value={project.plant || ''} placeholder="Usina" onChange={e => updateProject(item => ({ ...item, plant: e.target.value }))} />
+              </span>
+              <span className="schedule-meta-chip">
                 <input value={project.description || ''} placeholder="Descrição" onChange={e => updateProject(item => ({ ...item, description: e.target.value }))} />
-                <div className="schedule-revision-row">
-                  <div className="schedule-revision-tabs">
-                    {project.revisions.map(revision => (
-                      <button
-                        key={revision.id}
-                        className={revision.id === activeRevision.id ? 'active' : ''}
-                        onClick={() => { setSelectedId(''); setSelectedIds([]); setUndoStack([]); updateProject(item => ({ ...item, activeRevisionId: revision.id })); }}
-                      >
-                        {revision.label}
-                      </button>
-                    ))}
-                  </div>
-                  <select
-                    className="schedule-revision-import"
-                    value=""
-                    onChange={event => importRevision(event.target.value)}
-                  >
-                    <option value="">Importar de...</option>
-                    {project.revisions
-                      .filter(revision => revision.id !== activeRevision.id)
-                      .map(revision => (
-                        <option key={revision.id} value={revision.id}>
-                          {revision.label} ({revision.tasks.length} atividade{revision.tasks.length === 1 ? '' : 's'})
-                        </option>
-                      ))}
-                  </select>
+              </span>
+              <div className="schedule-revision-row">
+                <div className="schedule-revision-tabs">
+                  {project.revisions.map(revision => (
+                    <button
+                      key={revision.id}
+                      className={revision.id === activeRevision.id ? 'active' : ''}
+                      onClick={() => { setSelectedId(''); setSelectedIds([]); setUndoStack([]); updateProject(item => ({ ...item, activeRevisionId: revision.id })); }}
+                    >
+                      {revision.label}
+                    </button>
+                  ))}
                 </div>
+                <select
+                  className="schedule-revision-import"
+                  value=""
+                  onChange={event => importRevision(event.target.value)}
+                >
+                  <option value="">Importar de...</option>
+                  {project.revisions
+                    .filter(revision => revision.id !== activeRevision.id)
+                    .map(revision => (
+                      <option key={revision.id} value={revision.id}>
+                        {revision.label} ({revision.tasks.length} atividade{revision.tasks.length === 1 ? '' : 's'})
+                      </option>
+                    ))}
+                </select>
               </div>
-            </div>
-            <div className="schedule-summary-actions">
-              <button className="btn schedule-new-btn" onClick={createProject}>
-                <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
-                  <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-                </svg>
-                Novo Cronograma
-              </button>
-              <button className="btn schedule-pdf-btn" onClick={() => window.print()}>
-                <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
-                  <path d="M5 2a2 2 0 00-2 2v8h2V4h6v4h4v4h2V7.414A2 2 0 0016.414 6L13 2.586A2 2 0 0011.586 2H5z" />
-                  <path d="M5 14a1 1 0 011-1h8a1 1 0 011 1v1h1a1 1 0 110 2h-1v1a1 1 0 11-2 0v-1H7v1a1 1 0 11-2 0v-1H4a1 1 0 110-2h1v-1z" />
-                </svg>
-                Imprimir PDF
-              </button>
-              <button className="btn schedule-delete-project-btn" onClick={deleteProject} disabled={!project}>
-                Excluir cronograma
-              </button>
             </div>
           </div>
         </div>
         <div className="schedule-stat-strip">
-          <span><strong>{stats.total}</strong>Atividades</span>
-          <span><strong>{stats.done}</strong>Concluídas</span>
-          <span><strong>{stats.late}</strong>Atrasadas</span>
-          <span><strong>{stats.links}</strong>Vínculos</span>
+          <span>
+            <svg className="schedule-stat-icon" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 4a1 1 0 000 2h14a1 1 0 100-2H3zm0 4a1 1 0 000 2h14a1 1 0 100-2H3zm0 4a1 1 0 000 2h8a1 1 0 100-2H3z" clipRule="evenodd"/></svg>
+            <strong>{stats.total}</strong>Atividades
+          </span>
+          <span>
+            <svg className="schedule-stat-icon" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
+            <strong>{stats.done}</strong>Concluídas
+          </span>
+          <span>
+            <svg className="schedule-stat-icon" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd"/></svg>
+            <strong>{stats.late}</strong>Atrasadas
+          </span>
+          <span>
+            <svg className="schedule-stat-icon" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z" clipRule="evenodd"/></svg>
+            <strong>{stats.links}</strong>Vínculos
+          </span>
         </div>
       </div>
 

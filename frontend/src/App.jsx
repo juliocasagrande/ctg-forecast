@@ -1059,6 +1059,47 @@ export default function App() {
                 </div>
               )}
 
+              {/* ── Botões do Cronograma Project ── */}
+              {location.pathname === '/lists/schedule-project' && (
+                <>
+                  <button onClick={() => window._scheduleCreateProject?.()} style={{
+                    display: 'flex', alignItems: 'center', gap: 7,
+                    padding: '8px 18px', borderRadius: 10, border: 'none',
+                    background: 'linear-gradient(135deg, #001F5B, #0b5cab)',
+                    color: '#fff', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(11,92,171,0.25)',
+                    marginRight: 8, whiteSpace: 'nowrap',
+                  }}>
+                    <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                      <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd"/>
+                    </svg>
+                    Novo Cronograma
+                  </button>
+                  <button onClick={() => window._scheduleDeleteProject?.()} style={{
+                    display: 'flex', alignItems: 'center', gap: 7,
+                    padding: '8px 14px', borderRadius: 10, border: '1.5px solid #FCA5A5',
+                    background: '#fff',
+                    color: '#DC2626', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                    marginRight: 8, whiteSpace: 'nowrap',
+                  }}>
+                    Excluir cronograma
+                  </button>
+                  <button onClick={() => window._schedulePrint?.()} style={{
+                    display: 'flex', alignItems: 'center', gap: 7,
+                    padding: '8px 14px', borderRadius: 10, border: '1.5px solid #F59E0B',
+                    background: '#fff',
+                    color: '#92400E', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                    marginRight: 8, whiteSpace: 'nowrap',
+                  }}>
+                    <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                      <path d="M5 2a2 2 0 00-2 2v8h2V4h6v4h4v4h2V7.414A2 2 0 0016.414 6L13 2.586A2 2 0 0011.586 2H5z" />
+                      <path d="M5 14a1 1 0 011-1h8a1 1 0 011 1v1h1a1 1 0 110 2h-1v1a1 1 0 11-2 0v-1H7v1a1 1 0 11-2 0v-1H4a1 1 0 110-2h1v-1z" />
+                    </svg>
+                    Imprimir PDF
+                  </button>
+                </>
+              )}
+
               <AlertBell />
 
               {/* ── Pill de filtros — sempre renderizado para altura consistente ── */}
