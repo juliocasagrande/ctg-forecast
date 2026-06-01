@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
+import { useToast } from '../components/ui/Toast.jsx';
 
 const AREAS = [
   { value: 'eletrica', label: 'Eng. Eletrica' },
@@ -363,7 +364,7 @@ figcaption{margin-top:4px}
 </html>`;
 }
 
-function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUser, readOnly = false, onSave, onDelete, onEvidenceSlot, onClose }) {
+function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUser, readOnly = false, onSave, onDelete, onEvidenceSlot, onClose, confirm }) {
   // For collective metas: which members receive it (null = all)
   const [assignedUserIds, setAssignedUserIds] = useState(() => {
     if (!meta?.is_general) return null;
@@ -471,7 +472,11 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
 
   async function handleDeleteClick() {
     if (isReadOnly) return;
-    if (!meta?.id || !confirm('Excluir esta meta?')) return;
+    if (!meta?.id || !await confirm({
+      title: 'Excluir meta',
+      message: 'Excluir esta meta?',
+      confirmLabel: 'Excluir',
+    })) return;
     setDeletingMeta(true);
     setError('');
     try {
@@ -906,6 +911,7 @@ function MetaCell({ meta, member, canEdit, deleting, uploading, onEdit, onDelete
 
 export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearProp }) {
   const { user } = useAuth();
+  const { alert: showAlert, confirm } = useToast();
   const role = user?.role;
   const viewRole = user?._originalRole || role;
   const canEditOthers = ['admin', 'gestor', 'coordenador', 'gerente'].includes(viewRole);
@@ -978,7 +984,11 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
       await api.post(`/metas/${meta.id}/evidence`, data);
       await load();
     } catch (e) {
-      alert(e.response?.data?.error || 'Erro ao enviar imagem.');
+      showAlert({
+        title: 'Erro ao enviar imagem',
+        message: e.response?.data?.error || 'Erro ao enviar imagem.',
+        variant: 'error',
+      });
     } finally {
       setUploading(null);
     }
@@ -1004,7 +1014,11 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
       await load();
       return res.data;
     } catch (e) {
-      alert(e.response?.data?.error || 'Erro ao atualizar imagem.');
+      showAlert({
+        title: 'Erro ao atualizar imagem',
+        message: e.response?.data?.error || 'Erro ao atualizar imagem.',
+        variant: 'error',
+      });
       throw e;
     } finally {
       setUploading(null);
@@ -1580,6 +1594,7 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
           onSave={handleSave}
           onDelete={handleDelete}
           onEvidenceSlot={handleEvidenceSlot}
+          confirm={confirm}
           onClose={() => setModal(null)}
         />
       )}

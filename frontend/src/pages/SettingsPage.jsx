@@ -5,7 +5,7 @@ import SapMappingTab from '../components/SapMappingTab.jsx';
 import EquipamentosAcessoTab from '../components/EquipamentosAcessoTab.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 
-function CloseYearPanel({ settings, toast }) {
+function CloseYearPanel({ settings, toast, confirm }) {
   const currentYear = new Date().getFullYear();
   const activeStart = parseInt(settings.active_year_start) || 2026;
   const yearsToClose = [];
@@ -18,8 +18,12 @@ function CloseYearPanel({ settings, toast }) {
   const [result, setResult] = useState(null);
 
   const handleClose = async () => {
-    if (!confirm(`Tem certeza que deseja consolidar o ano ${selectedYear}?\n\nTodos os valores mensais serão somados em um único valor consolidado por projeto/categoria/tipo.\n\nOs dados mensais NÃO serão apagados.`))
-      return;
+    if (!await confirm({
+      title: 'Consolidar ano',
+      message: `Tem certeza que deseja consolidar o ano ${selectedYear}?\n\nTodos os valores mensais serao somados em um unico valor consolidado por projeto/categoria/tipo.\n\nOs dados mensais NAO serao apagados.`,
+      confirmLabel: 'Consolidar',
+      variant: 'warning',
+    })) return;
     setClosing(true);
     setResult(null);
     try {
@@ -427,7 +431,7 @@ export default function SettingsPage() {
   const [saving,   setSaving]   = useState(false);
   const [dirty,    setDirty]    = useState(false);
   const [activeSection, setActiveSection] = useState('alerts');
-  const { toast } = useToast();
+  const { toast, confirm } = useToast();
   const { user } = useAuth();
 
   const ALLOWED_SAP_EMAILS = ['julio.casagrande@ctgbr.com.br'];
@@ -816,7 +820,7 @@ export default function SettingsPage() {
               title="Fechamento de ano"
               description="Consolida automaticamente todos os valores mensais de um ano em um único valor por projeto/categoria/tipo. Isso é útil ao encerrar um exercício — os dados mensais ficam preservados, e o valor consolidado é criado para referência rápida."
             >
-              <CloseYearPanel settings={settings} toast={toast} />
+              <CloseYearPanel settings={settings} toast={toast} confirm={confirm} />
             </SectionCard>
 
             <SectionCard

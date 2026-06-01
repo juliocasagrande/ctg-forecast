@@ -4,7 +4,7 @@ import { Routes, Route, Navigate, useLocation, useNavigate, NavLink } from 'reac
 import { useAuth, useRole } from './context/AuthContext.jsx';
 import { useSettings } from './context/SettingsContext.jsx';
 import Sidebar from './components/layout/Sidebar.jsx';
-import { ToastProvider } from './components/ui/Toast.jsx';
+import { ToastProvider, useToast } from './components/ui/Toast.jsx';
 import Login from './pages/Login.jsx';
 import ResetPassword from './pages/ResetPassword.jsx';
 import HomePage from './pages/HomePage.jsx';
@@ -457,6 +457,7 @@ const TYPE_COLOR_MAP = {
 function PlanejadorExportModal({ open, onClose }) {
   const [selTypes, setSelTypes] = useState([...PLANNER_TYPES]);
   const [exporting, setExporting] = useState(false);
+  const { toast } = useToast();
 
   const toggle = (val) =>
     setSelTypes(prev => prev.includes(val) ? prev.filter(x => x !== val) : [...prev, val]);
@@ -476,7 +477,7 @@ function PlanejadorExportModal({ open, onClose }) {
       link.click();
       URL.revokeObjectURL(link.href);
       onClose();
-    } catch { alert('Erro ao exportar'); }
+    } catch { toast('Erro ao exportar', 'error'); }
     finally { setExporting(false); }
   };
 

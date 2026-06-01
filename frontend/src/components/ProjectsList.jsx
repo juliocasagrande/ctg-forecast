@@ -16,11 +16,15 @@ const ORDERED_PLANTS = [
 export default function ProjectsList({ projects, onEditProject, onProjectsChange }) {
   const { canManage, isAdmin } = useRole();
   const navigate      = useNavigate();
-  const { toast }     = useToast();
+  const { toast, confirm } = useToast();
 
   const handleDelete = async (e, p) => {
     e.stopPropagation();
-    if (!confirm(`Excluir "${p.name}"?\nTodos os dados serão removidos.`)) return;
+    if (!await confirm({
+      title: 'Excluir projeto',
+      message: `Excluir "${p.name}"?\nTodos os dados serao removidos.`,
+      confirmLabel: 'Excluir',
+    })) return;
     try {
       await api.delete(`/projects/${p.id}`);
       onProjectsChange?.();

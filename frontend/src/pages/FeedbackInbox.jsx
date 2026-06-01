@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../utils/api.js';
+import { useToast } from '../components/ui/Toast.jsx';
 
 const STATUS_MAP = {
   new:         { label: 'Novo',        color: '#0EA5E9', bg: '#F0F9FF' },
@@ -29,6 +30,7 @@ function timeAgo(dateStr) {
 }
 
 export default function FeedbackInbox() {
+  const { confirm } = useToast();
   const [items, setItems]       = useState([]);
   const [selected, setSelected] = useState(null);
   const [filter, setFilter]     = useState('all'); // all, new, read, in_progress, resolved, archived
@@ -61,7 +63,11 @@ export default function FeedbackInbox() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('Excluir este feedback permanentemente?')) return;
+    if (!await confirm({
+      title: 'Excluir feedback',
+      message: 'Excluir este feedback permanentemente?',
+      confirmLabel: 'Excluir',
+    })) return;
     try {
       await api.delete(`/feedback/${id}`);
       setItems(prev => prev.filter(i => i.id !== id));

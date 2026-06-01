@@ -314,7 +314,7 @@ export default function ProjectDetail({ onEdit }) {
   const [editingNote,  setEditingNote] = useState(null);
   const [assignModal,  setAssignModal] = useState(false);
   const [exportModal,  setExportModal]  = useState(false);
-  const { toast } = useToast();
+  const { toast, confirm } = useToast();
 
   // Set default forecastType based on role
   useEffect(() => {
@@ -538,7 +538,11 @@ export default function ProjectDetail({ onEdit }) {
     catch { toast('Erro', 'error'); }
   };
   const handleUnassign = async (userId) => {
-    if (!confirm('Remover engenheiro?')) return;
+    if (!await confirm({
+      title: 'Remover engenheiro',
+      message: 'Remover engenheiro deste projeto?',
+      confirmLabel: 'Remover',
+    })) return;
     try { await api.delete(`/projects/${id}/engineers/${userId}`); setEngineers(prev=>prev.filter(e=>e.id!==userId)); toast('Removido', 'success'); }
     catch { toast('Erro', 'error'); }
   };
@@ -558,7 +562,11 @@ export default function ProjectDetail({ onEdit }) {
     } catch { toast('Erro', 'error'); }
   };
   const handleDeleteNote = async (noteId) => {
-    if (!confirm('Excluir aviso?')) return;
+    if (!await confirm({
+      title: 'Excluir aviso',
+      message: 'Excluir este aviso?',
+      confirmLabel: 'Excluir',
+    })) return;
     try { await api.delete(`/forecast/notes/${noteId}`); setNotes(prev=>prev.filter(n=>n.id!==noteId)); toast('Aviso removido', 'success'); }
     catch { toast('Erro', 'error'); }
   };

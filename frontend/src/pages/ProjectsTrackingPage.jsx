@@ -1207,7 +1207,7 @@ function ImportPreviewModal({ preview, onClose, onConfirm, loading }) {
 
 /* ─── Main Page ─────────────────────────────────────────────────────────────── */
 export default function ProjectsTrackingPage() {
-  const { toast: addToast } = useToast();
+  const { toast: addToast, confirm } = useToast();
   const { user } = useAuth();
   const [items, setItems]             = useState([]);
   const [allUsers, setAllUsers]       = useState([]);
@@ -1505,7 +1505,11 @@ export default function ProjectsTrackingPage() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('Excluir este projeto?')) return;
+    if (!await confirm({
+      title: 'Excluir projeto',
+      message: 'Excluir este projeto?',
+      confirmLabel: 'Excluir',
+    })) return;
     setDeleting(true);
     try {
       await api.delete(`/lists/projects-tracking/${id}`);

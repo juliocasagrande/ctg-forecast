@@ -75,7 +75,7 @@ export default function AdminPanel() {
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
   const [filterRole, setFilterRole] = useState('');
-  const { toast } = useToast();
+  const { toast, confirm } = useToast();
 
   const fetchUsers = async () => {
     try {
@@ -101,7 +101,11 @@ export default function AdminPanel() {
   };
 
   const handleReject = async (u) => {
-    if (!confirm(`Rejeitar solicitação de ${u.name}?`)) return;
+    if (!await confirm({
+      title: 'Rejeitar solicitacao',
+      message: `Rejeitar solicitacao de ${u.name}?`,
+      confirmLabel: 'Rejeitar',
+    })) return;
     try {
       await api.post(`/users/${u.id}/reject`);
       setPending(prev => prev.filter(p => p.id !== u.id));
@@ -139,7 +143,11 @@ export default function AdminPanel() {
   };
 
   const handleDeactivate = async (u) => {
-    if (!confirm(`Desativar ${u.name}?`)) return;
+    if (!await confirm({
+      title: 'Desativar usuario',
+      message: `Desativar ${u.name}?`,
+      confirmLabel: 'Desativar',
+    })) return;
     try {
       await api.delete(`/users/${u.id}`);
       setUsers(prev => prev.map(x => x.id === u.id ? { ...x, active: false } : x));

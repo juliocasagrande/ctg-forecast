@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../utils/api.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useToast } from './ui/Toast.jsx';
 
 const STATUS_COLORS = {
   active:  { bg: '#DCFCE7', color: '#166534', label: 'Ativa' },
@@ -25,6 +26,7 @@ function fmtDate(d) {
 
 export default function DelegationPanel() {
   const { user } = useAuth();
+  const { confirm } = useToast();
   const [delegations, setDelegations] = useState([]);
   const [allUsers, setAllUsers]     = useState([]);
   const [showForm, setShowForm]     = useState(false);
@@ -62,7 +64,11 @@ export default function DelegationPanel() {
   };
 
   const handleRevoke = async (id) => {
-    if (!confirm('Revogar esta delegação?')) return;
+    if (!await confirm({
+      title: 'Revogar delegacao',
+      message: 'Revogar esta delegacao?',
+      confirmLabel: 'Revogar',
+    })) return;
     try {
       await api.delete(`/delegations/${id}`);
       await fetchAll();

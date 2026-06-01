@@ -816,7 +816,7 @@ function IACModal({ item, onClose, onSave, onDelete, isNew, saving, deleting, al
 
 /* ─── Main Page ──────────────────────────────────────────────────────────────── */
 export default function IACsPage() {
-  const { toast: addToast } = useToast();
+  const { toast: addToast, confirm } = useToast();
   const { user } = useAuth();
   const [items, setItems]               = useState([]);
   const [allUsers, setAllUsers]         = useState([]);
@@ -1106,7 +1106,11 @@ export default function IACsPage() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('Excluir este IAC?')) return;
+    if (!await confirm({
+      title: 'Excluir IAC',
+      message: 'Excluir este IAC?',
+      confirmLabel: 'Excluir',
+    })) return;
     setDeleting(true);
     try {
       await api.delete(`/lists/iacs/${id}`);

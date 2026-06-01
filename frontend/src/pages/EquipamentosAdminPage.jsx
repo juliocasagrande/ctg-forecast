@@ -75,12 +75,13 @@ function EquipamentoModal({ item, onSave, onClose, onDelete, equipOptions, tabel
   const [form, setForm] = useState(item ? { ...item } : { ...EMPTY });
   const [saving, setSaving] = useState(false);
   const [delConfirm, setDelConfirm] = useState(false);
+  const { toast } = useToast();
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const handleSave = async () => {
     if (!form.usina || !form.tipo_tabela || !form.equipamento || !form.ug || !form.tag) {
-      alert('Preencha os campos obrigatórios: Usina, Tabela, Equipamento, UG e TAG.');
+      toast('Preencha os campos obrigatorios: Usina, Tabela, Equipamento, UG e TAG.', 'error');
       return;
     }
     setSaving(true);
@@ -88,7 +89,7 @@ function EquipamentoModal({ item, onSave, onClose, onDelete, equipOptions, tabel
       await onSave(form);
       onClose();
     } catch (err) {
-      alert('Erro ao salvar: ' + (err.response?.data?.error || err.message));
+      toast('Erro ao salvar: ' + (err.response?.data?.error || err.message), 'error');
     } finally {
       setSaving(false);
     }
@@ -100,7 +101,7 @@ function EquipamentoModal({ item, onSave, onClose, onDelete, equipOptions, tabel
       await onDelete(item.id);
       onClose();
     } catch (err) {
-      alert('Erro ao excluir: ' + (err.response?.data?.error || err.message));
+      toast('Erro ao excluir: ' + (err.response?.data?.error || err.message), 'error');
     } finally {
       setSaving(false);
     }
@@ -356,6 +357,7 @@ function ImportModal({ onClose, onImported, myTabelas }) {
 function ExportModal({ onClose, tabelaOptions }) {
   const [selected, setSelected] = useState(() => new Set(tabelaOptions));
   const [loading, setLoading]   = useState(false);
+  const { toast } = useToast();
 
   const toggle = (t) => setSelected(prev => {
     const next = new Set(prev);
@@ -378,7 +380,7 @@ function ExportModal({ onClose, tabelaOptions }) {
       a.click();
       URL.revokeObjectURL(a.href);
       onClose();
-    } catch { alert('Erro ao exportar'); }
+    } catch { toast('Erro ao exportar', 'error'); }
     finally { setLoading(false); }
   };
 

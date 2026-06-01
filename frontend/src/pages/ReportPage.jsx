@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import api from '../utils/api.js';
 import { useRole } from '../context/AuthContext.jsx';
 import { useTypeColors, useSettings } from '../context/SettingsContext.jsx';
+import { useToast } from '../components/ui/Toast.jsx';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function fmtBRL(v) {
@@ -426,6 +427,7 @@ export default function ReportPage() {
   const C = useTypeColors();
   const settings = useSettings();
   const { isEngenheiro } = useRole();
+  const { toast } = useToast();
   const activeStart = parseInt(settings.active_year_start) || 2026;
   const activeEnd   = parseInt(settings.active_year_end)   || 2031;
   const MIN_YEAR = activeStart - 1;
@@ -467,7 +469,7 @@ export default function ReportPage() {
       setGenerated(true);
     } catch (e) {
       console.error(e);
-      alert('Erro ao gerar relatório.');
+      toast('Erro ao gerar relatorio.', 'error');
     } finally { setLoading(false); }
   }, [config, C]);
 

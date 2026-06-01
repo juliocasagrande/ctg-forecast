@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import api from '../utils/api.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useToast } from '../components/ui/Toast.jsx';
 
-const STORAGE_KEY = 'ctg_schedule_projects_v1';
 const SETTINGS_KEY = 'ctg_schedule_settings_v1';
 const DAY_MS = 86400000;
 const TODAY = new Date();
@@ -291,14 +291,6 @@ function taskDuration(task, settings = DEFAULT_SETTINGS) {
   return Math.max(1, total);
 }
 
-function getInitialProjects() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (Array.isArray(saved) && saved.length) return saved.map(normalizeProject);
-  } catch {}
-  return [normalizeProject(demoProject)];
-}
-
 function getInitialSettings() {
   try {
     return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY)) };
@@ -307,13 +299,6 @@ function getInitialSettings() {
   }
 }
 
-function getLocalProjectsForMigration() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (Array.isArray(saved) && saved.length) return saved.map(normalizeProject);
-  } catch {}
-  return [];
-}
 
 function getCriticalPath(tasks, settings) {
   const taskList = tasks.filter(task => task.type !== 'phase');
@@ -597,6 +582,7 @@ function ScheduleSettingsModal({ open, settings, onChange, onClose }) {
 
 export default function ScheduleProjectPage() {
   const { user } = useAuth();
+  const { confirm } = useToast();
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState('');
   const [selectedId, setSelectedId] = useState('');
@@ -611,6 +597,9 @@ export default function ScheduleProjectPage() {
   const [loaded, setLoaded] = useState(false);
   const [loadingError, setLoadingError] = useState('');
   const [saveState, setSaveState] = useState('idle');
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const nameInputRef = useRef(null);
 
   const project = projects.find(item => item.id === projectId) || projects[0];
   const activeRevision = getActiveRevision(project);
@@ -628,15 +617,7 @@ export default function ScheduleProjectPage() {
           api.get('/schedule-projects/settings/me'),
         ]);
 
-        let remoteProjects = (projectsRes.data || []).map(normalizeProject);
-        if (!remoteProjects.length) {
-          const migration = getLocalProjectsForMigration();
-          const seed = migration.length ? migration : [normalizeProject(demoProject)];
-          for (const projectToSave of seed) {
-            const res = await api.post('/schedule-projects', projectToSave);
-            remoteProjects = (res.data || []).map(normalizeProject);
-          }
-        }
+        const remoteProjects = (projectsRes.data || []).map(normalizeProject);
 
         if (!alive) return;
         setProjects(remoteProjects);
@@ -942,11 +923,16 @@ export default function ScheduleProjectPage() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [selectedId, selectedIds, editingTask, settingsOpen, undoStack, rawTasks]);
 
-  const importRevision = (sourceRevisionId) => {
+  const importRevision = async (sourceRevisionId) => {
     if (!sourceRevisionId || sourceRevisionId === activeRevision.id) return;
     const source = project.revisions.find(revision => revision.id === sourceRevisionId);
     if (!source) return;
-    if (tasks.length > 0 && !confirm(`Substituir as tarefas da ${activeRevision.label} pela base da ${source.label}?`)) return;
+    if (tasks.length > 0 && !await confirm({
+      title: 'Substituir tarefas',
+      message: `Substituir as tarefas da ${activeRevision.label} pela base da ${source.label}?`,
+      confirmLabel: 'Substituir',
+      variant: 'warning',
+    })) return;
 
     const copiedTasks = source.tasks.map(task => ({ ...task }));
     updateRevision(revision => ({ ...revision, tasks: copiedTasks }));
@@ -976,7 +962,11 @@ export default function ScheduleProjectPage() {
 
   const deleteProject = async () => {
     if (!project) return;
-    if (!confirm(`Excluir o cronograma "${project.name}" e todas as suas revisões?`)) return;
+    if (!await confirm({
+      title: 'Excluir cronograma',
+      message: `Excluir o cronograma "${project.name}" e todas as suas revisoes?`,
+      confirmLabel: 'Excluir',
+    })) return;
     try {
       const res = await api.delete(`/schedule-projects/${encodeURIComponent(project.id)}`);
       const remoteProjects = (res.data || []).map(normalizeProject);
@@ -1074,16 +1064,52 @@ export default function ScheduleProjectPage() {
   };
   const generatedBy = user?.name || user?.email || 'Usuário não identificado';
 
-  if (!project) return null;
+  const startEditingName = () => {
+    setNameDraft(project.name || '');
+    setEditingName(true);
+    setTimeout(() => nameInputRef.current?.select(), 0);
+  };
+  const commitName = () => {
+    const trimmed = nameDraft.trim();
+    if (trimmed) updateProject(item => ({ ...item, name: trimmed }));
+    setEditingName(false);
+  };
+
+  if (!project) return <div className="schedule-page" />;
 
   return (
     <div className="schedule-page">
       <div className="schedule-summary no-print">
         <div className="schedule-info-main">
           <div className="schedule-summary-fields">
-            <select className="schedule-project-name-select" value={project.id} onChange={e => { setProjectId(e.target.value); setSelectedId(''); setSelectedIds([]); setUndoStack([]); }}>
-              {projects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {editingName ? (
+                <input
+                  ref={nameInputRef}
+                  className="schedule-project-name-select"
+                  value={nameDraft}
+                  onChange={e => setNameDraft(e.target.value)}
+                  onBlur={commitName}
+                  onKeyDown={e => { if (e.key === 'Enter') commitName(); if (e.key === 'Escape') setEditingName(false); }}
+                  style={{ minWidth: 200 }}
+                />
+              ) : (
+                <select className="schedule-project-name-select" value={project.id} onChange={e => { setProjectId(e.target.value); setSelectedId(''); setSelectedIds([]); setUndoStack([]); }}>
+                  {projects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+              )}
+              <button
+                onClick={editingName ? commitName : startEditingName}
+                title="Renomear cronograma"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '3px 4px', color: '#94A3B8', display: 'flex', alignItems: 'center', borderRadius: 4, flexShrink: 0 }}
+                onMouseEnter={e => e.currentTarget.style.color = '#0b5cab'}
+                onMouseLeave={e => e.currentTarget.style.color = '#94A3B8'}
+              >
+                <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
+                  <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                </svg>
+              </button>
+            </div>
             <div className="schedule-project-meta">
               <span className="schedule-meta-chip schedule-meta-chip-usina">
                 <svg viewBox="0 0 20 20" fill="currentColor" width="11" height="11" style={{flexShrink:0}}>
