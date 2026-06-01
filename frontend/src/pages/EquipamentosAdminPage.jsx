@@ -367,12 +367,9 @@ function ExportModal({ onClose, tabelaOptions }) {
   const handleExport = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('ctg_token');
       const base  = import.meta.env.VITE_API_URL || '/api';
       const qs    = [...selected].map(t => `tabelas[]=${encodeURIComponent(t)}`).join('&');
-      const res   = await fetch(`${base}/equipamentos/export${qs ? '?' + qs : ''}`, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      });
+      const res   = await fetch(`${base}/equipamentos/export${qs ? '?' + qs : ''}`, { credentials: 'include' });
       if (!res.ok) throw new Error();
       const blob = await res.blob();
       const a    = document.createElement('a');

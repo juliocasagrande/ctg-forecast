@@ -6,7 +6,14 @@ import multer from 'multer';
 const router = Router();
 router.use(requireAuth);
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 4 },
+  fileFilter: (_, file, cb) => {
+    const ok = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.mimetype);
+    ok ? cb(null, true) : cb(new Error('Tipo não permitido. Use JPEG, PNG, GIF ou WebP.'));
+  },
+});
 
 function canEditMeta(req, ownerId, ownerRole = '', ownerArea = '') {
   const { role, id: requesterId, area: requesterArea } = req.user;

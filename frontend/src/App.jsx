@@ -464,13 +464,10 @@ function PlanejadorExportModal({ open, onClose }) {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const token  = localStorage.getItem('ctg_token');
       const base   = import.meta.env.VITE_API_URL || '/api';
       const params = new URLSearchParams();
       selTypes.forEach(t => params.append('types', t));
-      const fetchOpts = { credentials: 'include' };
-      if (token) fetchOpts.headers = { 'Authorization': `Bearer ${token}` };
-      const res = await fetch(`${base}/export/planejador?${params.toString()}`, fetchOpts);
+      const res = await fetch(`${base}/export/planejador?${params.toString()}`, { credentials: 'include' });
       if (!res.ok) throw new Error();
       const blob = await res.blob();
       const link = document.createElement('a');

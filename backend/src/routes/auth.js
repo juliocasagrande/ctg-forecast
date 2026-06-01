@@ -8,7 +8,7 @@ import { signToken, requireAuth, setAuthCookie, clearAuthCookie, ADMIN_OVERRIDE_
 function effectiveRole(email, role) {
   return ADMIN_OVERRIDE_EMAILS.includes(email) ? 'admin' : role;
 }
-import { loginLimiter, registerLimiter } from '../middleware/security.js';
+import { loginLimiter, registerLimiter, forgotPasswordLimiter } from '../middleware/security.js';
 import { logAuthEvent, getClientIP } from '../middleware/audit.js';
 import { validatePassword } from '../middleware/validation.js';
 import { enviarEmail } from '../utils/mailer.js';
@@ -193,7 +193,7 @@ router.post('/azure-login', loginLimiter, async (req, res) => {
     }
 
     if (!user) {
-      await logAuthEvent('login_failed', { email, ip, userAgent: ua, success: false, detail: 'Azure SSO — usuário não cadastrado' });
+      await logAuthEvent('login_failed', { email: emailClaims[0], ip, userAgent: ua, success: false, detail: 'Azure SSO — usuário não cadastrado' });
       return res.status(401).json({ error: 'Usuário não cadastrado no sistema. Solicite acesso ao administrador.' });
     }
 
@@ -291,7 +291,7 @@ router.post('/change-password', requireAuth, async (req, res) => {
 });
 
 // ─── POST /api/auth/forgot-password ────────────────────────────────────────
-router.post('/forgot-password', async (req, res) => {
+router.post('/forgot-password', forgotPasswordLimiter, async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'E-mail é obrigatório' });

@@ -160,6 +160,18 @@ export const apiLimiter = rateLimit({
   }
 });
 
+export const forgotPasswordLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: getClientIp,
+  skip: skipInTest,
+  message: {
+    error: 'Muitas solicitações de redefinição de senha. Tente novamente mais tarde.'
+  }
+});
+
 // Stricter limiter for heavy operations (report generation, export)
 export const heavyOpLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,

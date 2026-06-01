@@ -670,7 +670,6 @@ await client.query(`
     /* ───────── EQUIPAMENTOS: CONTROLE DE ACESSO ───────── */
     // Access is per tipo_tabela only — usina is irrelevant for permissions
     await client.query(`
-      DROP TABLE IF EXISTS equipamentos_acesso;
       CREATE TABLE IF NOT EXISTS equipamentos_acesso (
         id          SERIAL PRIMARY KEY,
         tipo_tabela VARCHAR(100) NOT NULL,
@@ -682,7 +681,6 @@ await client.query(`
 
     /* ───────── EQUIPAMENTOS: TABELAS PRÉ-CONFIGURADAS ───────── */
     await client.query(`
-      DROP TABLE IF EXISTS equipamentos_tabelas_pre;
       CREATE TABLE IF NOT EXISTS equipamentos_tabelas_pre (
         id          SERIAL PRIMARY KEY,
         tipo_tabela VARCHAR(100) NOT NULL,
@@ -758,6 +756,16 @@ await client.query(`
         ON schedule_revisions(project_id);
       CREATE INDEX IF NOT EXISTS idx_schedule_tasks_revision
         ON schedule_tasks(revision_id);
+
+      -- FKs e colunas filtradas frequentemente (Dashboard / listagens)
+      CREATE INDEX IF NOT EXISTS idx_project_assignments_user        ON project_assignments(user_id);
+      CREATE INDEX IF NOT EXISTS idx_messages_project                ON messages(project_id);
+      CREATE INDEX IF NOT EXISTS idx_messages_user                   ON messages(user_id);
+      CREATE INDEX IF NOT EXISTS idx_audit_log_user_created          ON audit_log(user_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_alert_dismissals_user           ON alert_dismissals(user_id, dismissed_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_documents_year_responsible      ON documents(year, responsible);
+      CREATE INDEX IF NOT EXISTS idx_metas_user_year                 ON metas(user_id, year);
+      CREATE INDEX IF NOT EXISTS idx_forecast_entries_project        ON forecast_entries(project_id);
     `);
 
     console.log('✅ Migrations OK');

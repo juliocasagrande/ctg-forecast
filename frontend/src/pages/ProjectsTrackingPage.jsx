@@ -1180,11 +1180,8 @@ export default function ProjectsTrackingPage() {
   // Export to Excel
   const handleExport = async () => {
     try {
-      const token = localStorage.getItem('ctg_token');
       const base = import.meta.env.VITE_API_URL || '/api';
-      const fetchOpts = { credentials: 'include' };
-      if (token) fetchOpts.headers = { 'Authorization': `Bearer ${token}` };
-      const res = await fetch(`${base}/export/projects-tracking`, fetchOpts);
+      const res = await fetch(`${base}/export/projects-tracking`, { credentials: 'include' });
       if (!res.ok) throw new Error();
       const blob = await res.blob();
       const link = document.createElement('a');
@@ -1397,17 +1394,12 @@ export default function ProjectsTrackingPage() {
     }
 
     try {
-      const token = localStorage.getItem('ctg_token');
       const base = import.meta.env.VITE_API_URL || '/api';
       let res;
 
       if (source === 'db') {
-        // Generate from database
-        const opts = { credentials: 'include' };
-        if (token) opts.headers = { Authorization: `Bearer ${token}` };
-        res = await fetch(`${base}/monthly-report/generate-from-db?mes=${mesNum}&ano=${ano}`, opts);
+        res = await fetch(`${base}/monthly-report/generate-from-db?mes=${mesNum}&ano=${ano}`, { credentials: 'include' });
       } else {
-        // Generate from Excel file
         const formData = new FormData();
         formData.append('excel', file);
         formData.append('mes', mes);
@@ -1415,7 +1407,6 @@ export default function ProjectsTrackingPage() {
         res = await fetch(`${base}/monthly-report/generate`, {
           method: 'POST',
           credentials: 'include',
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
           body: formData,
         });
       }

@@ -1071,12 +1071,9 @@ export default function DocumentsPage() {
 
   const exportExcel = useCallback(async () => {
     try {
-      const token = localStorage.getItem('ctg_token');
       const base = import.meta.env.VITE_API_URL || '/api';
       const yearParam = yearFilter ? `?year=${yearFilter % 100}` : '';
-      const opts = { credentials: 'include' };
-      if (token) opts.headers = { Authorization: `Bearer ${token}` };
-      const res = await fetch(`${base}/export/documents${yearParam}`, opts);
+      const res = await fetch(`${base}/export/documents${yearParam}`, { credentials: 'include' });
       if (!res.ok) throw new Error('Falha na exportação');
       const blob = await res.blob();
       const link = document.createElement('a');

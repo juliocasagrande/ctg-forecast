@@ -7,7 +7,15 @@ import ExcelJS from 'exceljs';
 const router = Router();
 router.use(requireAuth);
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_, file, cb) => {
+    const name = file.originalname.toLowerCase();
+    const ok = file.mimetype.includes('spreadsheet') || name.endsWith('.xlsx') || name.endsWith('.xls');
+    ok ? cb(null, true) : cb(new Error('Apenas arquivos Excel são aceitos.'));
+  },
+});
 
 function safeError(res, err) {
   console.error(`[LISTS ERROR] ${err.message}`);

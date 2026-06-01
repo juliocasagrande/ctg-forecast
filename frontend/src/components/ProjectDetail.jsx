@@ -571,7 +571,6 @@ export default function ProjectDetail({ onEdit }) {
   };
   const handleExport = async (categories = null, types = null, scope = 'projeto') => {
     try {
-      const token = localStorage.getItem('ctg_token');
       const base  = import.meta.env.VITE_API_URL || '/api';
       const params = new URLSearchParams();
       if (types) types.forEach(t => params.append('types', t));
@@ -582,9 +581,7 @@ export default function ProjectDetail({ onEdit }) {
       const url = isGeral
         ? `${base}/export/planejador${qs}`
         : `${base}/export/project/${id}${qs}`;
-      const fetchOpts = { credentials: 'include' };
-      if (token) fetchOpts.headers = { 'Authorization': `Bearer ${token}` };
-      const res   = await fetch(url, fetchOpts);
+      const res   = await fetch(url, { credentials: 'include' });
       if (!res.ok) throw new Error('Erro ao gerar arquivo');
       const blob     = await res.blob();
       const filename = isGeral

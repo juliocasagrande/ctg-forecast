@@ -45,15 +45,15 @@ router.post('/project/:projectId/bulk', requireProjectAccess, async (req, res) =
   const { role, id: userId } = req.user;
   if (!Array.isArray(entries) || entries.length === 0)
     return res.status(400).json({ error: 'Nenhuma entrada fornecida' });
+  if (role === 'gerente') return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
   const VALID_CATS = ['Viagens', 'Contratos', 'POs'];
   const VALID_TYPES = ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'];
+  const ENGENHEIRO_TYPES = ['Forecast', 'Actual'];
+  const PLANEJADOR_TYPES = ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'];
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const results = [];
-    const ENGENHEIRO_TYPES = ['Forecast', 'Actual'];
-      if (role === 'gerente') return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
-    const PLANEJADOR_TYPES = ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'];
     for (const e of entries) {
       if (role === 'engenheiro' && !ENGENHEIRO_TYPES.includes(e.type)) continue;
       if (role === 'coordenador' && !['Budget','Forecast','Actual','Meta','Pool'].includes(e.type)) continue;
@@ -94,13 +94,12 @@ router.put('/project/:projectId', requireProjectAccess, async (req, res) => {
   try {
     const { category, type, year, month, value, comment } = req.body;
     const { role, id: userId } = req.user;
+    if (role === 'gerente') return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
     const ENGENHEIRO_TYPES = ['Forecast', 'Actual'];
-      if (role === 'gerente') return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
     const PLANEJADOR_TYPES = ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'];
     const VALID_CATS = ['Viagens', 'Contratos', 'POs'];
     if (role === 'engenheiro' && !ENGENHEIRO_TYPES.includes(type))
       return res.status(403).json({ error: 'Engenheiros só podem editar Forecast e Realizado' });
-    if (role === 'gerente') return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
     if (role === 'planejador' && !PLANEJADOR_TYPES.includes(type))
       return res.status(403).json({ error: 'Planejadores só podem editar Budget, Forecast, Realizado, Meta e Pool' });
     // coordenador e admin can edit all types

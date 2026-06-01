@@ -4,7 +4,7 @@
       "type": "stdio",
       "command": "node",
       "args": [
-        "c:\\Users\\jlcasagrande\\.vscode\\extensions\\vexp.vexp-vscode-2.0.24-win32-x64\\dist\\mcp-server.cjs"
+        "c:\\Users\\jlcasagrande\\.vscode\\extensions\\vexp.vexp-vscode-2.0.20-win32-x64\\dist\\mcp-server.cjs"
       ],
       "env": {
         "VEXP_WORKSPACE": "c:\\Users\\jlcasagrande\\OneDrive - CTG Brasil\\CTG Br\\02 - PYTHON\\forecast"

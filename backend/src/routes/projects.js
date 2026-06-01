@@ -136,27 +136,32 @@ router.get('/:id', requireProjectAccess, async (req, res) => {
 
 // POST /api/projects — admin/coordenador/planejador
 router.post('/', requireRole('admin', 'coordenador', 'planejador'), async (req, res) => {
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
     const { code, name, description, si_value, pool_value, plants, engineer_ids } = req.body;
-    const r = await pool.query(
+    const r = await client.query(
       `INSERT INTO projects (code, name, description, si_value, pool_value, plants, created_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
       [code, name, description, si_value||0, pool_value||0, plants||[], req.user.id]
     );
     const project = r.rows[0];
-    // Assign engineers if provided
     if (engineer_ids?.length) {
       for (const uid of engineer_ids) {
-        await pool.query(
+        await client.query(
           'INSERT INTO project_assignments (project_id, user_id, assigned_by) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
           [project.id, uid, req.user.id]
         );
       }
     }
+    await client.query('COMMIT');
     res.status(201).json(project);
   } catch (err) {
+    await client.query('ROLLBACK');
     if (err.code === '23505') return res.status(400).json({ error: 'Código já existe' });
     safeError(res, err);
+  } finally {
+    client.release();
   }
 });
 

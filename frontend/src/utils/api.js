@@ -3,11 +3,12 @@ import axios from 'axios';
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
   headers: { 'Content-Type': 'application/json' },
-  withCredentials: true, // send httpOnly cookies with every request
+  withCredentials: true, // auth via httpOnly cookie
 });
 
-// Auto-set token from localStorage as fallback (migration period)
-// Primary auth is via httpOnly cookie (sent automatically with withCredentials: true)
+// Limpa token legado em localStorage (migração — versões antigas espelhavam o JWT lá).
+try { localStorage.removeItem('ctg_token'); } catch { /* ignore */ }
+
 api.interceptors.request.use(config => {
   if (config.data instanceof FormData) {
     if (typeof config.headers?.delete === 'function') {
@@ -18,13 +19,10 @@ api.interceptors.request.use(config => {
       delete config.headers['content-type'];
     }
   }
-  const token = localStorage.getItem('ctg_token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// Redirect to login on 401, clean up localStorage
-// Skip redirect for /auth/me (session check) and when already on /login
+// Redirect para /login em 401 (exceto durante checagem inicial de sessão)
 api.interceptors.response.use(
   r => r,
   err => {
@@ -32,7 +30,6 @@ api.interceptors.response.use(
       const url = err.config?.url || '';
       const isAuthCheck = url.includes('/auth/me');
       const isOnLogin = window.location.pathname === '/login';
-      localStorage.removeItem('ctg_token');
       if (!isAuthCheck && !isOnLogin) {
         window.location.href = '/login';
       }

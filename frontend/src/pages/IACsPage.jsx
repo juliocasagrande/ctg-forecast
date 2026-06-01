@@ -935,11 +935,8 @@ export default function IACsPage() {
 
   const handleExport = async () => {
     try {
-      const token = localStorage.getItem('ctg_token');
       const base = import.meta.env.VITE_API_URL || '/api';
-      const opts = { credentials: 'include' };
-      if (token) opts.headers = { Authorization: `Bearer ${token}` };
-      const res = await fetch(`${base}/export/iacs`, opts);
+      const res = await fetch(`${base}/export/iacs`, { credentials: 'include' });
       if (!res.ok) throw new Error();
       const blob = await res.blob();
       const link = document.createElement('a');

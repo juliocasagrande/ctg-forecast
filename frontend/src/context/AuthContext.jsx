@@ -17,16 +17,11 @@ export function AuthProvider({ children }) {
       const r = await api.get('/auth/me');
       setUser(r.data);
     } catch {
-      localStorage.removeItem('ctg_token');
-      delete api.defaults.headers.common['Authorization'];
       setUser(null);
     }
   }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem('ctg_token');
-    if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-
     fetchMe().finally(() => setLoading(false));
 
     // Revalida periodicamente para detectar delegações que começam/terminam
@@ -36,9 +31,7 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (email, password) => {
     const r = await api.post('/auth/login', { email, password });
-    const { token, user } = r.data;
-    localStorage.setItem('ctg_token', token);
-    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    const { user } = r.data;
     setUser(user);
 
     // Se a senha é temporária, força troca
@@ -63,17 +56,13 @@ export function AuthProvider({ children }) {
       }
     }
     const r = await api.post('/auth/azure-login', { idToken: result.idToken });
-    const { token, user } = r.data;
-    localStorage.setItem('ctg_token', token);
-    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    const { user } = r.data;
     setUser(user);
     return user;
   }, []);
 
   const logout = useCallback(async () => {
     try { await api.post('/auth/logout'); } catch { /* ignore */ }
-    localStorage.removeItem('ctg_token');
-    delete api.defaults.headers.common['Authorization'];
     setUser(null);
   }, []);
 
