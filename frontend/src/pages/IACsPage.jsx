@@ -10,6 +10,13 @@ import OpenTimeBadge from '../components/ui/OpenTimeBadge.jsx';
 
 /* ─── Constants ────────────────────────────────────────────────────────────── */
 const AREAS = ['Confiabilidade', 'Elétrica', 'Mecânica'];
+const TAB_DOT_COLORS = {
+  'Todos': '#0b5cab',
+  'Meus IACs': '#7C3AED',
+  'Confiabilidade': '#2563EB',
+  'Elétrica': '#B45309',
+  'Mecânica': '#059669',
+};
 
 const STATUS_OPTIONS = [
   { value: '0 - Not started yet',       color: '#94A3B8', bg: '#F1F5F9', text: '#475569' },
@@ -1232,31 +1239,37 @@ export default function IACsPage() {
       </div>
 
       {/* ── Tabs ── */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '2px solid #F1F5F9' }}>
-        {tabs.map(tab => (
-          <button key={tab} onClick={() => {
-            if (tab === 'Meus IACs') {
-              setShowMyIACs(true);
-              setActiveTab('Meus IACs');
-            } else {
-              setShowMyIACs(false);
-              setActiveTab(tab);
-            }
-          }} style={{
-            padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer',
-            fontSize: '0.82rem', fontWeight: activeTab === tab ? 700 : 500,
-            color: activeTab === tab ? '#0b5cab' : '#64748B',
-            borderBottom: activeTab === tab ? '2px solid #0b5cab' : '2px solid transparent',
-            marginBottom: -2, transition: 'all 0.15s',
-          }}>
-            {tab}
-            <span style={{
-              fontSize: '0.68rem', background: activeTab === tab ? '#EFF6FF' : '#F1F5F9',
-              color: activeTab === tab ? '#0b5cab' : '#94A3B8',
-              borderRadius: 10, padding: '1px 6px', marginLeft: 4,
-            }}>{counts[tab] || 0}</span>
-          </button>
-        ))}
+      <div style={{ display: 'flex', gap: 3, marginBottom: 16, background: '#F1F5F9', borderRadius: 12, padding: 4 }}>
+        {tabs.map(tab => {
+          const isActive = activeTab === tab;
+          const dotColor = TAB_DOT_COLORS[tab] || '#94A3B8';
+          return (
+            <button key={tab} onClick={() => {
+              if (tab === 'Meus IACs') {
+                setShowMyIACs(true);
+                setActiveTab('Meus IACs');
+              } else {
+                setShowMyIACs(false);
+                setActiveTab(tab);
+              }
+            }} style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '7px 14px', border: 'none', cursor: 'pointer',
+              borderRadius: 8, transition: 'all 0.15s',
+              background: isActive ? '#fff' : 'transparent',
+              boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+              fontSize: '0.82rem', fontWeight: isActive ? 700 : 500,
+              color: isActive ? '#1E293B' : '#64748B',
+            }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
+              {tab}
+              <span style={{
+                fontSize: '0.72rem', fontWeight: isActive ? 700 : 400,
+                color: isActive ? '#64748B' : '#94A3B8',
+              }}>{counts[tab] || 0}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* ── Filters ── */}

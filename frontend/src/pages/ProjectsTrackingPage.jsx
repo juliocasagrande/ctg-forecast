@@ -8,6 +8,13 @@ import StatusDot from '../components/ui/StatusDot.jsx';
 
 /* ─── Constants ─────────────────────────────────────────────────────────────── */
 const AREAS = ['Confiabilidade', 'Elétrica', 'Mecânica'];
+const TAB_DOT_COLORS = {
+  'Todos': '#0b5cab',
+  'Meus Contratos': '#7C3AED',
+  'Confiabilidade': '#2563EB',
+  'Elétrica': '#B45309',
+  'Mecânica': '#059669',
+};
 const MESES_PT = [
   'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro',
@@ -323,18 +330,50 @@ function UheBarChart({ data, height = 120, filterUHE, onFilterUHE }) {
   const totalWidth = filteredData.length * (barWidth + gap) + 40 + gap + barWidth + 16;
   const totalBarX = filteredData.length * (barWidth + gap) + 20 + gap + 16;
 
+  const makeWavePath = (x, topY, bottomY, w, amp) => {
+    const startX = x - w;
+    const hw = w / 2;
+    let d = `M ${startX} ${bottomY} L ${startX} ${topY}`;
+    for (let k = 0; k < 3; k++) {
+      const x0 = startX + k * w;
+      d += ` C ${x0 + hw * 0.5} ${topY - amp} ${x0 + hw * 1.5} ${topY + amp} ${x0 + w} ${topY}`;
+    }
+    d += ` L ${startX + 3 * w} ${bottomY} Z`;
+    return d;
+  };
+
+  const barsData = filteredData.map((d, i) => {
+    const x = i * (barWidth + gap) + 20;
+    const maxBarH = height - 20;
+    const powerScale = maxVal > 0 && d.valor_contrato > 0 ? Math.pow(d.valor_contrato / maxVal, 0.35) : 0;
+    const barH = Math.max(10, Math.min(maxBarH, Math.round(maxBarH * powerScale)));
+    const remaining = d.valor_contrato > 0 ? d.saldo_contrato / d.valor_contrato : 0;
+    const usedH = barH * remaining;
+    const sigla = UHE_SIGLAS[d.uhe] || d.uhe.replace('UHE ', '').replace('PCH ', '');
+    const isActive = filterUHE === d.uhe;
+    const color = CTG_BAR_COLORS[i % CTG_BAR_COLORS.length];
+    return { d, i, x, maxBarH, barH, remaining, usedH, sigla, isActive, color };
+  });
+
   return (
     <div ref={containerRef} style={{ overflowX: 'auto', position: 'relative' }}>
       <svg viewBox={`0 0 ${totalWidth} ${height + 28}`} style={{ width: '100%', height: height + 28 }}>
-        {filteredData.map((d, i) => {
-          const x = i * (barWidth + gap) + 20;
-          const maxBarH = height - 20;
-          const powerScale = maxVal > 0 && d.valor_contrato > 0 ? Math.pow(d.valor_contrato / maxVal, 0.35) : 0;
-          const barH = Math.max(10, Math.min(maxBarH, Math.round(maxBarH * powerScale)));
-          const remaining = d.valor_contrato > 0 ? d.saldo_contrato / d.valor_contrato : 0;
-          const usedH = barH * remaining;
-          const sigla = UHE_SIGLAS[d.uhe] || d.uhe.replace('UHE ', '').replace('PCH ', '');
-          const isActive = filterUHE === d.uhe;
+        <defs>
+          {barsData.map(({ i, x, barH }) => (
+            <clipPath key={i} id={`clip-bar-${i}`}>
+              <rect x={x} y={height - barH} width={barWidth} height={barH} rx={3} />
+            </clipPath>
+          ))}
+          {(() => {
+            const maxBarH = height - 20;
+            return (
+              <clipPath id="clip-bar-total">
+                <rect x={totalBarX} y={height - maxBarH} width={barWidth} height={maxBarH} rx={3} />
+              </clipPath>
+            );
+          })()}
+        </defs>
+        {barsData.map(({ d, i, x, barH, usedH, sigla, isActive, color }) => {
           return (
             <g
               key={d.uhe}
@@ -347,10 +386,21 @@ function UheBarChart({ data, height = 120, filterUHE, onFilterUHE }) {
               <text x={x + barWidth / 2} y={height - barH - 6} textAnchor="middle" fontSize="10" fill="#475569" fontWeight="700">
                 {fmtM(d.valor_contrato)}
               </text>
-              {/* Full bar (total contract value) */}
+              {/* Full bar background */}
               <rect x={x} y={height - barH} width={barWidth} height={barH} fill="#E8ECF0" rx={3} opacity={!filterUHE || isActive ? 1 : 0.3} />
-              {/* Used portion */}
-              <rect x={x} y={height - usedH} width={barWidth} height={usedH} fill={CTG_BAR_COLORS[i % CTG_BAR_COLORS.length]} rx={3} opacity={!filterUHE || isActive ? 1 : 0.3} />
+              {/* Wave fill */}
+              {usedH > 1 && (
+                <g clipPath={`url(#clip-bar-${i})`} opacity={!filterUHE || isActive ? 1 : 0.3}>
+                  <g>
+                    <animateTransform attributeName="transform" type="translate" from="0 0" to={`${barWidth} 0`} dur="2s" repeatCount="indefinite" />
+                    <path d={makeWavePath(x, height - usedH, height, barWidth, 4)} fill={color} />
+                  </g>
+                  <g>
+                    <animateTransform attributeName="transform" type="translate" from={`${-barWidth * 0.5} 0`} to={`${barWidth * 0.5} 0`} dur="3s" repeatCount="indefinite" />
+                    <path d={makeWavePath(x, height - usedH, height, barWidth, 3)} fill={color} opacity="0.35" />
+                  </g>
+                </g>
+              )}
               {/* Active indicator */}
               {isActive && <rect x={x - 2} y={height - barH - 2} width={barWidth + 4} height={barH + 4} fill="none" stroke={CTG_BAR_COLORS[i % CTG_BAR_COLORS.length]} strokeWidth={2.5} rx={4} />}
               {/* Label */}
@@ -383,8 +433,19 @@ function UheBarChart({ data, height = 120, filterUHE, onFilterUHE }) {
               </text>
               {/* Background */}
               <rect x={totalBarX} y={height - maxBarH} width={barWidth} height={maxBarH} fill="rgba(16,185,129,0.15)" rx={3} />
-              {/* Used portion */}
-              <rect x={totalBarX} y={height - totalUsedH} width={barWidth} height={totalUsedH} fill="rgba(16,185,129,0.55)" rx={3} />
+              {/* Wave fill */}
+              {totalUsedH > 1 && (
+                <g clipPath="url(#clip-bar-total)">
+                  <g>
+                    <animateTransform attributeName="transform" type="translate" from="0 0" to={`${barWidth} 0`} dur="2.2s" repeatCount="indefinite" />
+                    <path d={makeWavePath(totalBarX, height - totalUsedH, height, barWidth, 4)} fill="rgba(16,185,129,0.7)" />
+                  </g>
+                  <g>
+                    <animateTransform attributeName="transform" type="translate" from={`${-barWidth * 0.5} 0`} to={`${barWidth * 0.5} 0`} dur="3.3s" repeatCount="indefinite" />
+                    <path d={makeWavePath(totalBarX, height - totalUsedH, height, barWidth, 3)} fill="rgba(16,185,129,0.35)" />
+                  </g>
+                </g>
+              )}
               <text x={totalBarX + barWidth / 2} y={height + 16} textAnchor="middle" fontSize="11" fill="#059669" fontWeight="700">
                 Total
               </text>
@@ -1657,22 +1718,29 @@ export default function ProjectsTrackingPage() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '2px solid #F1F5F9' }}>
-        {tabs.map(tab => (
-          <button key={tab} onClick={() => handleTabClick(tab)} style={{
-            padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer',
-            fontSize: '0.82rem', fontWeight: activeTab === tab ? 700 : 500,
-            color: activeTab === tab ? '#0b5cab' : '#64748B',
-            borderBottom: activeTab === tab ? '2px solid #0b5cab' : '2px solid transparent',
-            marginBottom: -2, transition: 'all 0.15s',
-          }}>
-            {tab} <span style={{
-              fontSize: '0.68rem', background: activeTab === tab ? '#EFF6FF' : '#F1F5F9',
-              color: activeTab === tab ? '#0b5cab' : '#94A3B8',
-              borderRadius: 10, padding: '1px 6px', marginLeft: 4,
-            }}>{counts[tab] || 0}</span>
-          </button>
-        ))}
+      <div style={{ display: 'flex', gap: 3, marginBottom: 16, background: '#F1F5F9', borderRadius: 12, padding: 4 }}>
+        {tabs.map(tab => {
+          const isActive = activeTab === tab;
+          const dotColor = TAB_DOT_COLORS[tab] || '#94A3B8';
+          return (
+            <button key={tab} onClick={() => handleTabClick(tab)} style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '7px 14px', border: 'none', cursor: 'pointer',
+              borderRadius: 8, transition: 'all 0.15s',
+              background: isActive ? '#fff' : 'transparent',
+              boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+              fontSize: '0.82rem', fontWeight: isActive ? 700 : 500,
+              color: isActive ? '#1E293B' : '#64748B',
+            }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
+              {tab}
+              <span style={{
+                fontSize: '0.72rem', fontWeight: isActive ? 700 : 400,
+                color: isActive ? '#64748B' : '#94A3B8',
+              }}>{counts[tab] || 0}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Filters */}
