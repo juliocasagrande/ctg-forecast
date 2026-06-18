@@ -154,3 +154,69 @@ describe('GET /api/metas', () => {
     expect(descriptions).not.toContain('Meta individual eng mecanica');
   });
 });
+
+describe('PUT /api/metas/:id', () => {
+  it('permite transformar meta individual em coletiva para subordinados da area', async () => {
+    const original = (await query(
+      'SELECT * FROM metas WHERE user_id=$1 AND meta_number=1',
+      [engEletrica.id],
+    )).rows[0];
+
+    const res = await request(app)
+      .put(`/api/metas/${original.id}`)
+      .set('Cookie', cookieHeader(cookies.coord))
+      .send({
+        user_id: engEletrica.id,
+        area: 'eletrica',
+        year: YEAR,
+        meta_number: 2,
+        description: 'Meta agora coletiva',
+        target_value: 100,
+        achieved_value: 0,
+        unit: '',
+        status: 'Em andamento',
+        is_general: true,
+        assigned_area: 'eletrica',
+        assigned_user_ids: [engEletrica.id, engEletrica2.id],
+        assigned_weights: { [engEletrica.id]: 0.1, [engEletrica2.id]: 0.1 },
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.is_general).toBe(true);
+    expect(res.body.user_id).toBeNull();
+    expect(res.body.assigned_area).toBe('eletrica');
+    expect(res.body.assigned_user_ids.map(Number).sort()).toEqual([engEletrica.id, engEletrica2.id].sort());
+  });
+
+  it('permite transformar meta coletiva em individual e remove atribuicoes coletivas', async () => {
+    const original = (await query(
+      'SELECT * FROM metas WHERE is_general=true AND assigned_user_ids IS NOT NULL LIMIT 1',
+    )).rows[0];
+
+    const res = await request(app)
+      .put(`/api/metas/${original.id}`)
+      .set('Cookie', cookieHeader(cookies.coord))
+      .send({
+        user_id: engEletrica2.id,
+        area: 'eletrica',
+        year: YEAR,
+        meta_number: 2,
+        description: 'Meta agora individual',
+        target_value: 100,
+        achieved_value: 0,
+        unit: '',
+        status: 'Em andamento',
+        is_general: false,
+        assigned_area: 'eletrica',
+        assigned_user_ids: [engEletrica.id, engEletrica2.id],
+        assigned_weights: { [engEletrica.id]: 0.1, [engEletrica2.id]: 0.1 },
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.is_general).toBe(false);
+    expect(res.body.user_id).toBe(engEletrica2.id);
+    expect(res.body.assigned_area).toBeNull();
+    expect(res.body.assigned_user_ids).toBeNull();
+    expect(res.body.assigned_weights).toEqual({});
+  });
+});

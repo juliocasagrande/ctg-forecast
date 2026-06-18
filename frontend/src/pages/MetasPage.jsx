@@ -370,7 +370,7 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
     if (!meta?.is_general) return null;
     if (Array.isArray(meta?.assigned_user_ids) && meta.assigned_user_ids.length > 0)
       return new Set(meta.assigned_user_ids.map(Number));
-    return new Set(currentUser?.id ? [currentUser.id] : []);
+    return new Set();
   });
 
   const [form, setForm] = useState({
@@ -406,8 +406,8 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
   const busy = saving || deletingMeta || uploadingEvidence;
   const isReadOnly = !!readOnly;
   const collectiveMembers = members
-    .filter(m => (m.id === currentUser?.id) || (m.role === 'engenheiro' && (!form.assigned_area || m.area === form.assigned_area)))
-    .sort((a, b) => (a.id === currentUser?.id ? -1 : b.id === currentUser?.id ? 1 : a.name.localeCompare(b.name, 'pt-BR')));
+    .filter(m => m.role === 'engenheiro' && (!form.assigned_area || m.area === form.assigned_area))
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   const [assignedWeights, setAssignedWeights] = useState(() => {
     const map = assignedWeightMap(meta);
     const fallback = meta?.weight != null && meta?.weight !== '' ? parseFloat((Number(meta.weight) * 100).toFixed(2)) : '';
@@ -428,7 +428,6 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
       if (!meta?.id) {
         for (const member of collectiveMembers) next.add(member.id);
       }
-      if (!meta?.id && currentUser?.id) next.add(currentUser.id);
       return next;
     });
     setAssignedWeights(prev => {
@@ -449,7 +448,7 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
     setError('');
     try {
       const selectedIds = form.is_general && assignedUserIds
-        ? [...new Set([...(currentUser?.id ? [currentUser.id] : []), ...assignedUserIds])]
+        ? [...new Set([...assignedUserIds])]
         : null;
       const weightMap = form.is_general && selectedIds
         ? Object.fromEntries(selectedIds.map(id => [id, assignedWeights[id] !== '' && assignedWeights[id] != null ? Number(assignedWeights[id]) / 100 : (form.weight !== '' && form.weight != null ? Number(form.weight) / 100 : null)]).filter(([, v]) => Number.isFinite(v) && v >= 0))
@@ -568,7 +567,7 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
                   const targetArea = form.assigned_area || form.area || area;
                   setForm(f => ({ ...f, is_general: checked, assigned_area: targetArea, area: targetArea, user_id: checked ? (currentUser?.id || f.user_id) : f.user_id }));
                   if (checked) {
-                    const eligible = members.filter(m => m.id === currentUser?.id || (m.role === 'engenheiro' && m.area === targetArea));
+                    const eligible = members.filter(m => m.role === 'engenheiro' && m.area === targetArea);
                     setAssignedUserIds(new Set(eligible.map(m => m.id)));
                     const fallback = form.weight !== '' && form.weight != null ? Number(form.weight) : '';
                     setAssignedWeights(prev => {
@@ -603,7 +602,7 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
                   <span style={{ ...label, marginBottom: 3 }}>AREA DA META</span>
                   <select value={form.assigned_area} disabled={isReadOnly} onChange={e => {
                     const nextArea = e.target.value;
-                    const eligible = members.filter(m => m.id === currentUser?.id || (m.role === 'engenheiro' && m.area === nextArea));
+                    const eligible = members.filter(m => m.role === 'engenheiro' && m.area === nextArea);
                     setForm(f => ({ ...f, assigned_area: nextArea, area: nextArea }));
                     setAssignedUserIds(new Set(eligible.map(m => m.id)));
                   }} style={inp}>

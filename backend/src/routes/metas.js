@@ -90,6 +90,12 @@ function normalizeAssignedWeights(value) {
   );
 }
 
+function normalizeBoolean(value, fallback = false) {
+  if (value === true || value === 'true') return true;
+  if (value === false || value === 'false') return false;
+  return fallback;
+}
+
 router.get('/', async (req, res) => {
   const year = parseInt(req.query.year) || new Date().getFullYear();
   const area = req.query.area || null;
@@ -200,7 +206,7 @@ router.put('/:id', async (req, res) => {
   const { role, id: requesterId } = req.user;
   const { id } = req.params;
   const existing = await pool.query(`
-    SELECT m.user_id, m.is_general, COALESCE(m.assigned_area, m.area) AS assigned_area,
+    SELECT m.user_id, m.is_general, m.area, m.year, m.meta_number, COALESCE(m.assigned_area, m.area) AS assigned_area,
            u.role AS owner_role, COALESCE(u.area,'eletrica') AS owner_area
     FROM metas m
     LEFT JOIN users u ON u.id = m.user_id
@@ -214,30 +220,50 @@ router.put('/:id', async (req, res) => {
     return res.status(403).json({ error: 'Sem permissao' });
 
   const {
-    area, year, meta_number, description, kpi, detailed, weight, target_80,
+    user_id, area, year, meta_number, description, kpi, detailed, weight, target_80,
     target_100, target_120, target_value, achieved_value, unit, status, notes,
-    evidence_link, evidence_layout, assigned_area, assigned_user_ids, assigned_weights,
+    evidence_link, evidence_layout, is_general, assigned_area, assigned_user_ids, assigned_weights,
   } = req.body;
-  const targetArea = existingMeta.is_general
+  const targetGeneral = normalizeBoolean(is_general, existingMeta.is_general);
+  const targetArea = targetGeneral
     ? (req.user.role === 'coordenador' ? (req.user.area || 'eletrica') : (assigned_area || area || existingMeta.assigned_area || 'eletrica'))
     : area;
-  const userIds = existingMeta.is_general && Array.isArray(assigned_user_ids) && assigned_user_ids.length > 0
+  const targetUserId = targetGeneral ? null : (user_id || existingMeta.user_id || requesterId);
+
+  if (targetGeneral && !canEditGeneralMeta(req, targetArea))
+    return res.status(403).json({ error: 'Sem permissao para transformar esta meta em coletiva nesta area' });
+
+  if (!targetGeneral) {
+    const target = await pool.query("SELECT role, COALESCE(area,'eletrica') AS area FROM users WHERE id=$1", [targetUserId]);
+    if (!target.rows[0])
+      return res.status(400).json({ error: 'Colaborador da meta nao encontrado' });
+    if (!canEditMeta(req, targetUserId, target.rows[0].role, target.rows[0].area))
+      return res.status(403).json({ error: 'Sem permissao para transformar esta meta em individual para este colaborador' });
+  }
+
+  const conflict = targetGeneral
+    ? await pool.query('SELECT id FROM metas WHERE id<>$1 AND is_general=true AND COALESCE(assigned_area, area)=$2 AND year=$3 AND meta_number=$4', [id, targetArea, year, meta_number])
+    : await pool.query('SELECT id FROM metas WHERE id<>$1 AND user_id=$2 AND year=$3 AND meta_number=$4 AND COALESCE(is_general,false)=false', [id, targetUserId, year, meta_number]);
+  if (conflict.rows.length)
+    return res.status(409).json({ error: `Meta ${meta_number} ja cadastrada para este ano` });
+
+  const userIds = targetGeneral && Array.isArray(assigned_user_ids) && assigned_user_ids.length > 0
     ? assigned_user_ids.map(Number).filter(Boolean)
-    : (existingMeta.is_general && assigned_user_ids === null ? null : undefined);
-  const weightMap = existingMeta.is_general ? normalizeAssignedWeights(assigned_weights) : {};
+    : null;
+  const weightMap = targetGeneral ? normalizeAssignedWeights(assigned_weights) : {};
   const { rows } = await pool.query(`
-    UPDATE metas SET area=$1, year=$2, meta_number=$3, description=$4, kpi=$5,
-           detailed=$6, weight=$7, target_80=$8, target_100=$9, target_120=$10,
-           target_value=$11, achieved_value=$12, unit=$13, status=$14, notes=$15,
-           evidence_link=$16, evidence_layout=$17, assigned_area=$18,
-           assigned_user_ids=$19, assigned_weights=$20::jsonb, updated_at=NOW() WHERE id=$21 RETURNING *`,
+    UPDATE metas SET user_id=$1, area=$2, year=$3, meta_number=$4, description=$5, kpi=$6,
+           detailed=$7, weight=$8, target_80=$9, target_100=$10, target_120=$11,
+           target_value=$12, achieved_value=$13, unit=$14, status=$15, notes=$16,
+           evidence_link=$17, evidence_layout=$18, is_general=$19, assigned_area=$20,
+           assigned_user_ids=$21, assigned_weights=$22::jsonb, updated_at=NOW() WHERE id=$23 RETURNING *`,
     [
-      targetArea, year, meta_number, description, kpi || null, detailed || null,
+      targetUserId, targetGeneral ? targetArea : area, year, meta_number, description, kpi || null, detailed || null,
       weight === '' || weight == null ? null : weight, target_80 || null,
       target_100 || null, target_120 || null, target_value || 0, achieved_value || 0,
       unit || '', normalizeStatus(status), notes || null, evidence_link || null,
-      normalizeEvidenceLayout(evidence_layout), existingMeta.is_general ? targetArea : null,
-      userIds !== undefined ? userIds : null, JSON.stringify(weightMap), id,
+      normalizeEvidenceLayout(evidence_layout), targetGeneral, targetGeneral ? targetArea : null,
+      userIds, JSON.stringify(weightMap), id,
     ]);
   res.json(rows[0]);
 });
