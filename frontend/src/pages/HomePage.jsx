@@ -907,12 +907,12 @@ function PlantColumnChart({ items }) {
                 {hasValue && utilizationPct > 0 && (
                   <svg viewBox="0 0 34 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-hidden="true">
                     <g>
-                      <animateTransform attributeName="transform" type="translate" from="0 0" to="34 0" dur="2s" repeatCount="indefinite" />
-                      <path d={makePlantWavePath(0, waveTop, 100, 34, 4)} fill={barColor} />
+                      <animateTransform attributeName="transform" type="translate" from="0 0" to="34 0" dur="3.6s" repeatCount="indefinite" />
+                      <path d={makePlantWavePath(0, waveTop, 100, 34, 2.2)} fill={barColor} />
                     </g>
                     <g>
-                      <animateTransform attributeName="transform" type="translate" from="-17 0" to="17 0" dur="3s" repeatCount="indefinite" />
-                      <path d={makePlantWavePath(0, waveTop, 100, 34, 3)} fill={barColor} opacity="0.35" />
+                      <animateTransform attributeName="transform" type="translate" from="-17 0" to="17 0" dur="5.2s" repeatCount="indefinite" />
+                      <path d={makePlantWavePath(0, waveTop, 100, 34, 1.6)} fill={barColor} opacity="0.35" />
                     </g>
                   </svg>
                 )}
