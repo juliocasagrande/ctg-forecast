@@ -70,7 +70,7 @@ router.post('/iacs', async (req, res) => {
     const {
       iac_code, type_line, area,
       qty_pp_line_26_priority, qty_pp_line_26_no_priority,
-      opening_date, when_open, project,
+      opening_date, when_open, acceptance_letter_signed, project,
       comments, requester, team_leader, team_leader_user_id, chinese_work_staff,
       status_current, apresentado_work_team,
       organizer, supervisor, evaluation_team,
@@ -81,18 +81,18 @@ router.post('/iacs', async (req, res) => {
       INSERT INTO lists_iacs (
         iac_code, type_line, area,
         qty_pp_line_26_priority, qty_pp_line_26_no_priority,
-        opening_date, when_open, project,
+        opening_date, when_open, acceptance_letter_signed, project,
         comments, requester, team_leader, team_leader_user_id, chinese_work_staff,
         status_current, apresentado_work_team,
         organizer, supervisor, evaluation_team,
         priority, validity, continuidade
       ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22
       ) RETURNING *
     `, [
       iac_code || null, type_line || 'New', area || 'Elétrica',
       qty_pp_line_26_priority || null, qty_pp_line_26_no_priority || null,
-      opening_date || null, when_open || null, project || null,
+      opening_date || null, when_open || null, acceptance_letter_signed || null, project || null,
       comments || null, requester || null, team_leader || null, team_leader_user_id || null, chinese_work_staff || null,
       status_current || '0 - Not started yet', apresentado_work_team || 'Não',
       organizer || null, supervisor || null, evaluation_team || null,
@@ -109,7 +109,7 @@ router.put('/iacs/:id', async (req, res) => {
     const {
       iac_code, type_line, area,
       qty_pp_line_26_priority, qty_pp_line_26_no_priority,
-      opening_date, when_open, project,
+      opening_date, when_open, acceptance_letter_signed, project,
       comments, requester, team_leader, team_leader_user_id, chinese_work_staff,
       status_current, apresentado_work_team,
       organizer, supervisor, evaluation_team,
@@ -120,18 +120,18 @@ router.put('/iacs/:id', async (req, res) => {
       UPDATE lists_iacs SET
         iac_code=$1, type_line=$2, area=$3,
         qty_pp_line_26_priority=$4, qty_pp_line_26_no_priority=$5,
-        opening_date=$6, when_open=$7, project=$8,
-        comments=$9, requester=$10, team_leader=$11, team_leader_user_id=$12, chinese_work_staff=$13,
-        status_current=$14, apresentado_work_team=$15,
-        organizer=$16, supervisor=$17, evaluation_team=$18,
-        priority=$19, validity=$20, continuidade=$21,
+        opening_date=$6, when_open=$7, acceptance_letter_signed=$8, project=$9,
+        comments=$10, requester=$11, team_leader=$12, team_leader_user_id=$13, chinese_work_staff=$14,
+        status_current=$15, apresentado_work_team=$16,
+        organizer=$17, supervisor=$18, evaluation_team=$19,
+        priority=$20, validity=$21, continuidade=$22,
         updated_at=NOW()
-      WHERE id=$22
+      WHERE id=$23
       RETURNING *
     `, [
       iac_code || null, type_line || 'New', area || 'Elétrica',
       qty_pp_line_26_priority || null, qty_pp_line_26_no_priority || null,
-      opening_date || null, when_open || null, project || null,
+      opening_date || null, when_open || null, acceptance_letter_signed || null, project || null,
       comments || null, requester || null, team_leader || null, team_leader_user_id || null, chinese_work_staff || null,
       status_current || '0 - Not started yet', apresentado_work_team || 'Não',
       organizer || null, supervisor || null, evaluation_team || null,
@@ -764,6 +764,7 @@ router.post('/iacs/import', upload.single('file'), async (req, res) => {
       qty_pp_line_26_no_priority: findCol(['Qtty PP LINE 26 NON-PRIORITY', 'qty_pp_line_26_no_priority', 'qty no priority']),
       opening_date: findCol(['Opening Date', 'opening_date', 'opening date', 'data abertura']),
       when_open: findCol(['When Open', 'when_open', 'when open', 'quando']),
+      acceptance_letter_signed: findCol(['Acceptance Letter Signed', 'acceptance_letter_signed', 'acceptance letter signed', 'fechamento']),
       project: findCol(['Project', 'project', 'projeto']),
       comments: findCol(['Comments', 'comments', 'comentários', 'observações']),
       requester: findCol(['Requester', 'requester', 'solicitante']),
@@ -929,6 +930,7 @@ router.post('/iacs/import', upload.single('file'), async (req, res) => {
         qty_pp_line_26_no_priority: parseNum(getCell(colMap.qty_pp_line_26_no_priority)),
         opening_date: parseDate(getCell(colMap.opening_date)),
         when_open: parseDate(getCell(colMap.when_open)),
+        acceptance_letter_signed: parseDate(getCell(colMap.acceptance_letter_signed)),
         project: project,
         comments: getCell(colMap.comments),
         requester: truncate(getCell(colMap.requester), 120),
@@ -950,17 +952,18 @@ router.post('/iacs/import', upload.single('file'), async (req, res) => {
         INSERT INTO lists_iacs (
           iac_code, type_line, area,
           qty_pp_line_26_priority, qty_pp_line_26_no_priority,
-          opening_date, when_open, project,
+          opening_date, when_open, acceptance_letter_signed, project,
           comments, requester, team_leader, team_leader_user_id, chinese_work_staff,
           status_current, apresentado_work_team,
           organizer, supervisor, evaluation_team,
           priority, validity, continuidade, unique_key
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
         ON CONFLICT (unique_key) DO UPDATE SET
           type_line=EXCLUDED.type_line, area=EXCLUDED.area,
           qty_pp_line_26_priority=EXCLUDED.qty_pp_line_26_priority,
           qty_pp_line_26_no_priority=EXCLUDED.qty_pp_line_26_no_priority,
           opening_date=EXCLUDED.opening_date, when_open=EXCLUDED.when_open,
+          acceptance_letter_signed=EXCLUDED.acceptance_letter_signed,
           project=EXCLUDED.project, comments=EXCLUDED.comments,
           requester=EXCLUDED.requester, team_leader=EXCLUDED.team_leader,
           team_leader_user_id=EXCLUDED.team_leader_user_id,
@@ -975,7 +978,7 @@ router.post('/iacs/import', upload.single('file'), async (req, res) => {
       `, [
         data.iac_code, data.type_line, data.area,
         data.qty_pp_line_26_priority, data.qty_pp_line_26_no_priority,
-        data.opening_date, data.when_open, data.project,
+        data.opening_date, data.when_open, data.acceptance_letter_signed, data.project,
         data.comments, data.requester, data.team_leader, data.team_leader_user_id, data.chinese_work_staff,
         data.status_current, data.apresentado_work_team,
         data.organizer, data.supervisor, data.evaluation_team,
@@ -1030,6 +1033,7 @@ router.post('/iacs/import/preview', upload.single('file'), async (req, res) => {
       qty_pp_line_26_no_priority: findCol(['Qtty PP LINE 26 NON-PRIORITY', 'qty_pp_line_26_no_priority', 'qty no priority']),
       opening_date: findCol(['Opening Date', 'opening_date', 'opening date', 'data abertura']),
       when_open: findCol(['When Open', 'when_open', 'when open', 'quando']),
+      acceptance_letter_signed: findCol(['Acceptance Letter Signed', 'acceptance_letter_signed', 'acceptance letter signed', 'fechamento']),
       project: findCol(['Project', 'project', 'projeto']),
       comments: findCol(['Comments', 'comments', 'comentários', 'observações']),
       requester: findCol(['Requester', 'requester', 'solicitante']),

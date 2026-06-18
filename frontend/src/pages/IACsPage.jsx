@@ -7,6 +7,7 @@ import AlertBell from '../components/ui/AlertBell.jsx';
 import ColumnFilterDropdown from '../components/ui/ColumnFilterDropdown.jsx';
 import StatusDot from '../components/ui/StatusDot.jsx';
 import OpenTimeBadge from '../components/ui/OpenTimeBadge.jsx';
+import { isIacOpenedInYear } from '../utils/iacDates.js';
 
 /* ─── Constants ────────────────────────────────────────────────────────────── */
 const AREAS = ['Confiabilidade', 'Elétrica', 'Mecânica'];
@@ -59,7 +60,7 @@ function getAreaColor(area) {
 const EMPTY_IAC = {
   iac_code: '', type_line: 'New', area: 'Elétrica',
   qty_pp_line_26_priority: '', qty_pp_line_26_no_priority: '',
-  opening_date: '', when_open: '', project: '', comments: '',
+  opening_date: '', when_open: '', acceptance_letter_signed: '', project: '', comments: '',
   requester: '', team_leader: '', chinese_work_staff: '',
   status_current: '0 - Not started yet', apresentado_work_team: 'Não',
   organizer: '', supervisor: '', evaluation_team: '',
@@ -534,7 +535,7 @@ function toDateInput(val) {
 /* ─── IAC Modal ──────────────────────────────────────────────────────────────── */
 function IACModal({ item, onClose, onSave, onDelete, isNew, saving, deleting, allUsers, allRequesters, allChineseStaff, allOrganizers, allSupervisors }) {
   const initForm = (src) => src
-    ? { ...src, opening_date: toDateInput(src.opening_date), when_open: toDateInput(src.when_open) }
+    ? { ...src, opening_date: toDateInput(src.opening_date), when_open: toDateInput(src.when_open), acceptance_letter_signed: toDateInput(src.acceptance_letter_signed) }
     : { ...EMPTY_IAC };
   const [form, setForm] = useState(() => initForm(item));
 
@@ -668,6 +669,9 @@ function IACModal({ item, onClose, onSave, onDelete, isNew, saving, deleting, al
               </Field>
               <Field label="When Open">
                 <input type="date" value={form.when_open || ''} onChange={e => set('when_open', e.target.value)} style={fS} />
+              </Field>
+              <Field label="Acceptance Letter Signed">
+                <input type="date" value={form.acceptance_letter_signed || ''} onChange={e => set('acceptance_letter_signed', e.target.value)} style={fS} />
               </Field>
               <Field label="Qtde Priority (PP 26)">
                 <input type="number" min="0" value={form.qty_pp_line_26_priority || ''} onChange={e => set('qty_pp_line_26_priority', e.target.value)} style={fS} />
@@ -948,7 +952,7 @@ export default function IACsPage() {
       const blob = await res.blob();
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = `CTG_IACs_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      link.download = 'iacs.xlsx';
       link.click();
       URL.revokeObjectURL(link.href);
       addToast('Exportação realizada!', 'success');
@@ -1323,13 +1327,14 @@ export default function IACsPage() {
               </div>
               <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
                 <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', fontFamily: 'var(--font-body)', tableLayout: 'fixed', minWidth: 2000 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', fontFamily: 'var(--font-body)', tableLayout: 'fixed', minWidth: 2110 }}>
                     <colgroup>
                       <col style={{ width: 40 }} />
                       <col style={{ width: 140 }} />
                       <col style={{ width: 90 }} />
                       <col style={{ width: 110 }} />
                       <col style={{ width: 90 }} />
+                      <col style={{ width: 105 }} />
                       <col style={{ width: 60 }} />
                       <col style={{ width: 90 }} />
                       <col style={{ width: 220 }} />
@@ -1370,6 +1375,7 @@ export default function IACsPage() {
                           />
                         </th>
                         <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Abertura</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Fechamento</th>
                         <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>META</th>
                         <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>When Open</th>
                         <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Projeto</th>
@@ -1419,9 +1425,12 @@ export default function IACsPage() {
                           <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                             {item.opening_date ? new Date(item.opening_date).toLocaleDateString('pt-BR') : '—'}
                           </td>
+                          <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+                            {item.acceptance_letter_signed ? new Date(item.acceptance_letter_signed).toLocaleDateString('pt-BR') : '—'}
+                          </td>
                           <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                            {(item.iac_code || item.name || '').startsWith('IAC2026')
-                              ? <OpenTimeBadge openingDate={item.opening_date} />
+                            {isIacOpenedInYear(item, 2026)
+                              ? <OpenTimeBadge openingDate={item.opening_date} acceptanceLetterSigned={item.acceptance_letter_signed} />
                               : <span style={{ fontSize: '0.68rem', color: '#94A3B8' }}>—</span>}
                           </td>
                           <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>

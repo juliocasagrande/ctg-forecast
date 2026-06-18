@@ -1,24 +1,17 @@
+import { iacElapsedMonths } from '../../utils/iacDates.js';
+
 /**
- * OpenTimeBadge - Badge de tempo de abertura em meses
- * 
- * Props:
- * - openingDate: string|Date - data de abertura
- * 
- * Cores:
- * - < 5 meses: verde
- * - < 6 meses: laranja
- * - >= 6 meses: vermelho
+ * OpenTimeBadge - Badge de tempo em meses entre abertura e assinatura, ou hoje.
  */
-export default function OpenTimeBadge({ openingDate }) {
-  if (!openingDate) {
+export default function OpenTimeBadge({ openingDate, acceptanceLetterSigned }) {
+  const months = iacElapsedMonths({
+    opening_date: openingDate,
+    acceptance_letter_signed: acceptanceLetterSigned,
+  });
+
+  if (months === null) {
     return <span style={{ fontSize: '0.68rem', color: '#94A3B8' }}>—</span>;
   }
-
-  const opened = new Date(openingDate);
-  const now = new Date();
-  const diffTime = now - opened;
-  const diffDays = diffTime / (1000 * 60 * 60 * 24);
-  const months = Math.floor(diffDays / 30);
 
   let color, bg, border;
   if (months < 5) {

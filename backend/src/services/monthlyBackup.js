@@ -224,6 +224,7 @@ export async function createOperationalBackup({ date = new Date(), overwrite = f
     { header: 'Qtty PP Line 26 Non-Priority', key: 'qty_pp_line_26_no_priority', type: 'number', width: 28 },
     { header: 'Opening Date', key: 'opening_date', type: 'date', width: 14 },
     { header: 'When Open', key: 'when_open', type: 'date', width: 14 },
+    { header: 'Acceptance Letter Signed', key: 'acceptance_letter_signed', type: 'date', width: 24 },
     { header: 'Projeto', key: 'project', width: 38 },
     { header: 'Comentarios', key: 'comments', width: 38 },
     { header: 'Solicitante', key: 'requester', width: 22 },

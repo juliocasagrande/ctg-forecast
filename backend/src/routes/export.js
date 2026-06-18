@@ -1019,16 +1019,18 @@ router.get('/iacs', requireAuth, async (req, res) => {
     const ws = wb.addWorksheet('IACs');
 
     const headers = [
-      'IAC Code', 'Tipo', 'Área', 'Qtty PP Line 26 Priority', 'Qtty PP Line 26 Non-Priority',
-      'Opening Date', 'When Open', 'Projeto', 'Comentários', 'Solicitante',
-      'Team Leader', 'Chinese Work Staff', 'Status Atual', 'Apresentado Work Team',
-      'Organizador', 'Supervisor', 'Equipe de Avaliação', 'Prioridade', 'Validade', 'Continuidade'
+      'Title', 'Type-line', 'Área', 'Qtty PP Line 26 Priority', 'Qtty PP LINE 26 NON-PRIORITY',
+      'Opening Date', 'When Open', 'Acceptance Letter Signed', 'Project', 'Comments',
+      'Requester', 'Team Leader', 'Chinese Work Staff', 'Status_Current', 'Apresentado Work Team',
+      'Organizer', 'Supervisor', 'Evaluation Team', 'Priority', 'Validity', 'Continuidade',
+      'Item Type', 'Path'
     ];
     const keys = [
       'iac_code', 'type_line', 'area', 'qty_pp_line_26_priority', 'qty_pp_line_26_no_priority',
-      'opening_date', 'when_open', 'project', 'comments', 'requester',
+      'opening_date', 'when_open', 'acceptance_letter_signed', 'project', 'comments', 'requester',
       'team_leader', 'chinese_work_staff', 'status_current', 'apresentado_work_team',
-      'organizer', 'supervisor', 'evaluation_team', 'priority', 'validity', 'continuidade'
+      'organizer', 'supervisor', 'evaluation_team', 'priority', 'validity', 'continuidade',
+      'item_type', 'path'
     ];
 
     // Header row
@@ -1052,7 +1054,7 @@ router.get('/iacs', requireAuth, async (req, res) => {
         const cell = ws.getCell(rowIdx + 2, colIdx + 1);
         let val = row[key];
         // Format date
-        if (['opening_date', 'when_open'].includes(key) && val) {
+        if (['opening_date', 'when_open', 'acceptance_letter_signed'].includes(key) && val) {
           val = new Date(val).toLocaleDateString('pt-BR');
         }
         cell.value = val;
@@ -1067,13 +1069,13 @@ router.get('/iacs', requireAuth, async (req, res) => {
     });
 
     // Column widths
-    const widths = [16, 14, 16, 24, 26, 16, 12, 35, 35, 20, 16, 18, 22, 20, 16, 16, 24, 14, 12, 14];
+    const widths = [16, 14, 16, 24, 28, 16, 12, 24, 35, 35, 20, 18, 22, 22, 22, 16, 16, 24, 14, 12, 14, 16, 24];
     widths.forEach((w, i) => ws.getColumn(i + 1).width = w);
 
     // Freeze header row
     ws.views = [{ state: 'frozen', ySplit: 1 }];
 
-    const filename = `CTG_IACs_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    const filename = 'iacs.xlsx';
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
     await wb.xlsx.write(res);

@@ -472,6 +472,7 @@ await client.query(`
         qty_pp_line_26_no_priority  INTEGER,
         opening_date                DATE,
         when_open                   DATE,
+        acceptance_letter_signed     DATE,
         project                     TEXT,
         comments                    TEXT,
         requester                   VARCHAR(120),
@@ -506,6 +507,7 @@ await client.query(`
     // unique_key = iac_code + first 40 chars of project (to handle duplicate IAC codes with different projects)
     await client.query(`
       ALTER TABLE lists_iacs ADD COLUMN IF NOT EXISTS unique_key VARCHAR(100);
+      ALTER TABLE lists_iacs ADD COLUMN IF NOT EXISTS acceptance_letter_signed DATE;
     `);
 
     await client.query(`

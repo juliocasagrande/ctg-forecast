@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import AlertBell from '../components/ui/AlertBell.jsx';
 import api from '../utils/api.js';
 import { formatBRL } from '../utils/format.js';
+import { iacElapsedMonths, isIacOpenedInYear } from '../utils/iacDates.js';
 
 function pct(v) {
   const n = Number(v);
@@ -270,13 +271,6 @@ function moneyAxis(value) {
   if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}M`;
   if (Math.abs(n) >= 1_000) return `${(n / 1_000).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}k`;
   return n.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
-}
-
-function monthDiffFrom(dateValue) {
-  if (!dateValue) return null;
-  const opened = new Date(dateValue);
-  if (Number.isNaN(opened.getTime())) return null;
-  return Math.max(0, Math.floor((Date.now() - opened.getTime()) / (1000 * 60 * 60 * 24 * 30)));
 }
 
 function compactLabel(value, fallback = 'Nao informado') {
@@ -1371,8 +1365,8 @@ export default function HomePage({ year }) {
     color: item.label.startsWith('0') ? '#94A3B8' : item.label.startsWith('1') ? '#3B82F6' : item.label.startsWith('2') ? '#8B5CF6' : item.label.startsWith('3') ? '#F59E0B' : item.label.startsWith('4') ? '#F97316' : item.label.startsWith('5') ? '#0EA5E9' : item.label.startsWith('6') ? '#10B981' : item.label.startsWith('8') || item.label.startsWith('9') ? '#16A34A' : '#64748B',
     bg: item.label.startsWith('0') ? '#F1F5F9' : item.label.startsWith('3') || item.label.startsWith('4') ? '#FFF7ED' : item.label.startsWith('6') || item.label.startsWith('8') || item.label.startsWith('9') ? '#ECFDF5' : '#EFF6FF',
   }));
-  const iac2026 = iacRows.filter(i => (i.iac_code || i.name || '').startsWith('IAC2026'));
-  const iacMonths = iac2026.map(i => monthDiffFrom(i.opening_date)).filter(v => v !== null);
+  const iac2026 = iacRows.filter(i => isIacOpenedInYear(i, 2026));
+  const iacMonths = iac2026.map(i => iacElapsedMonths(i)).filter(v => v !== null);
   const iacAvgMonths = iacMonths.length ? Math.round(iacMonths.reduce((sum, v) => sum + v, 0) / iacMonths.length) : null;
   const iacMetaColor = iacAvgMonths === null ? '#10B981' : iacAvgMonths < 5 ? '#10B981' : iacAvgMonths < 6 ? '#0070B8' : iacAvgMonths < 7 ? '#F59E0B' : '#EF4444';
   const projectNatureData = countBy(projectRows, 'natureza').map(item => ({
