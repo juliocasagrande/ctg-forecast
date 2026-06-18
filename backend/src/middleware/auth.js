@@ -19,6 +19,15 @@ const COOKIE_OPTIONS = {
 export const ADMIN_OVERRIDE_EMAILS = ['julio.casagrande@ctgbr.com.br'];
 
 // Hierarquia de roles para elevação por delegação
+export const MANAGER_ACCESS_OVERRIDE_EMAILS = ['lucas.vitti@ctgbr.com.br'];
+
+export function getEmailAccessOverride(email = '') {
+  const normalized = String(email).toLowerCase();
+  if (ADMIN_OVERRIDE_EMAILS.includes(normalized)) return 'admin';
+  if (MANAGER_ACCESS_OVERRIDE_EMAILS.includes(normalized)) return 'gerente';
+  return null;
+}
+
 const ROLE_RANK = { engenheiro: 1, coordenador: 2, planejador: 3, gerente: 3, gestor: 4, admin: 5 };
 
 export function signToken(payload) {
@@ -90,13 +99,19 @@ export async function requireAuth(req, res, next) {
       }
     }
 
-    if (ADMIN_OVERRIDE_EMAILS.includes(decoded.email)) effectiveRole = 'admin';
+    const emailOverride = getEmailAccessOverride(decoded.email);
+    if (emailOverride) {
+      effectiveRole = emailOverride;
+      if (emailOverride === 'gerente') effectiveArea = null;
+    }
 
     req.user = {
       ...decoded,
       role: effectiveRole,
       area: effectiveArea,
       _originalRole: user.role,
+      _accessOverride: emailOverride,
+      _managerAccessOverride: emailOverride === 'gerente',
       _delegatorIds: delegatorIds, // IDs dos delegadores — permite acesso aos projetos deles
     };
   } catch (dbErr) {
@@ -110,6 +125,9 @@ export async function requireAuth(req, res, next) {
 
 export function requireRole(...roles) {
   return (req, res, next) => {
+    if (req.user?._managerAccessOverride && req.method !== 'GET') {
+      return res.status(403).json({ error: 'Acesso de gerente permitido somente para consulta' });
+    }
     if (!roles.includes(req.user?.role)) {
       return res.status(403).json({ error: 'Acesso não autorizado' });
     }
@@ -120,8 +138,15 @@ export function requireRole(...roles) {
 // Bloqueia gerente de qualquer escrita — usa role original para não bloquear
 // delegados elevados que receberam role de gerente
 export function denyGerente(req, res, next) {
-  if (req.user?.role === 'gerente' && req.user?._originalRole === 'gerente') {
+  if (req.user?._managerAccessOverride || (req.user?.role === 'gerente' && req.user?._originalRole === 'gerente')) {
     return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
+  }
+  next();
+}
+
+export function denyManagerAccessWrite(req, res, next) {
+  if (req.user?._managerAccessOverride && req.method !== 'GET') {
+    return res.status(403).json({ error: 'Acesso de gerente permitido somente para consulta' });
   }
   next();
 }

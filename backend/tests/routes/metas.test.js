@@ -15,6 +15,7 @@ let engEletrica;
 let engEletrica2;
 let engMecanica;
 let coordEletrica;
+let managerOverrideCoord;
 let gerente;
 let overrideEng;
 let cookies;
@@ -73,12 +74,14 @@ beforeAll(async () => {
   engEletrica2 = await createTestUser({ name: 'Eng Eletrica Dois', email: `${PREFIX}.eng2@ctg-test.internal`, role: 'engenheiro', area: 'eletrica' });
   engMecanica = await createTestUser({ name: 'Eng Mecanica', email: `${PREFIX}.mec@ctg-test.internal`, role: 'engenheiro', area: 'mecanica' });
   coordEletrica = await createTestUser({ name: 'Coord Eletrica', email: `${PREFIX}.coord@ctg-test.internal`, role: 'coordenador', area: 'eletrica' });
+  managerOverrideCoord = await createTestUser({ name: 'Lucas Vitti', email: 'lucas.vitti@ctgbr.com.br', role: 'coordenador', area: 'eletrica' });
   gerente = await createTestUser({ name: 'Gerente', email: `${PREFIX}.gerente@ctg-test.internal`, role: 'gerente', area: null });
   overrideEng = await createTestUser({ name: 'Julio Override', email: 'julio.casagrande@ctgbr.com.br', role: 'engenheiro', area: 'eletrica' });
 
   cookies = {
     eng: (await loginAs(app, engEletrica)).cookies,
     coord: (await loginAs(app, coordEletrica)).cookies,
+    managerOverride: (await loginAs(app, managerOverrideCoord)).cookies,
     gerente: (await loginAs(app, gerente)).cookies,
     override: (await loginAs(app, overrideEng)).cookies,
   };
@@ -152,6 +155,36 @@ describe('GET /api/metas', () => {
     expect(descriptions).toContain('Meta coletiva eletrica');
     expect(descriptions).not.toContain('Meta individual eng eletrica');
     expect(descriptions).not.toContain('Meta individual eng mecanica');
+  });
+
+  it('lucas.vitti mantem cargo coordenador, mas ve escopo de gerente sem escrita', async () => {
+    const me = await request(app)
+      .get('/api/auth/me')
+      .set('Cookie', cookieHeader(cookies.managerOverride));
+
+    expect(me.status).toBe(200);
+    expect(me.body.role).toBe('gerente');
+    expect(me.body._originalRole).toBe('coordenador');
+    expect(me.body._managerAccessOverride).toBe(true);
+
+    const res = await request(app)
+      .get('/api/metas')
+      .query({ year: YEAR })
+      .set('Cookie', cookieHeader(cookies.managerOverride));
+
+    expect(res.status).toBe(200);
+    const descriptions = res.body.map(m => m.description);
+    expect(descriptions).toContain('Meta individual eng eletrica');
+    expect(descriptions).toContain('Meta individual eng mecanica');
+    expect(descriptions).toContain('Meta coletiva mecanica');
+
+    const meta = res.body.find(m => m.description === 'Meta individual eng eletrica');
+    const write = await request(app)
+      .put(`/api/metas/${meta.id}`)
+      .set('Cookie', cookieHeader(cookies.managerOverride))
+      .send({ ...meta, achieved_value: 50 });
+
+    expect(write.status).toBe(403);
   });
 });
 

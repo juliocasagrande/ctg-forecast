@@ -1251,7 +1251,7 @@ function AttentionPanel({ total, items, navigate }) {
 
 export default function HomePage({ year }) {
   const { user } = useAuth();
-  const viewRole = user?._originalRole || user?.role;
+  const viewRole = user?._managerAccessOverride ? user?.role : (user?._originalRole || user?.role);
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState({
@@ -1270,7 +1270,7 @@ export default function HomePage({ year }) {
 
   const scope = useMemo(() => {
     if (user?.role === 'engenheiro') return { label: 'Meus dados', area: user?.area || 'eletrica' };
-    if (user?.role === 'coordenador') return { label: areaLabel(user?.area || 'eletrica'), area: user?.area || 'eletrica' };
+    if (user?.role === 'coordenador' && !user?._managerAccessOverride) return { label: areaLabel(user?.area || 'eletrica'), area: user?.area || 'eletrica' };
     return { label: 'Visao geral', area: '' };
   }, [user]);
 
@@ -1294,7 +1294,7 @@ export default function HomePage({ year }) {
         api.get('/delegations/notifications').then(r => r.data).catch(() => []),
       ]);
       if (cancelled) return;
-      const viewRole = user?._originalRole || user?.role;
+      const viewRole = user?._managerAccessOverride ? user?.role : (user?._originalRole || user?.role);
       const ownMetas = viewRole === 'engenheiro' ? metas.filter(m => m.is_general || m.user_id === user.id) : metas;
       const ownVacations = viewRole === 'engenheiro' ? vacations.filter(v => v.user_id === user.id) : vacations;
       const areaMatch = row => areaKey(row.area) === areaKey(scope.area);
@@ -1314,7 +1314,7 @@ export default function HomePage({ year }) {
     }
     load();
     return () => { cancelled = true; };
-  }, [year, scope.area, user?.id, user?.role, user?._originalRole]);
+  }, [year, scope.area, user?.id, user?.role, user?._originalRole, user?._managerAccessOverride]);
 
   const metasDone = data.metas.filter(m => Number(m.achieved_value || 0) >= 100).length;
   const metasAvg = weightedAchievement(data.metas);

@@ -692,7 +692,7 @@ router.get('/alerts', async (req, res) => {
           const docAlertEnabled = cfg.doc_alert_enabled !== 'false';
           if (!docAlertEnabled) return { count: 0, docs: [] };
 
-          const alertRole = req.user._originalRole || role;
+          const alertRole = req.user._managerAccessOverride ? role : (req.user._originalRole || role);
           const alertRoles = (cfg.doc_alert_roles || 'engenheiro,coordenador,planejador,admin').split(',').map(r => r.trim()).filter(Boolean);
           if (!alertRoles.includes(alertRole)) return { count: 0, docs: [] };
 

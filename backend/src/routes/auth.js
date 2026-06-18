@@ -3,10 +3,22 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { pool } from '../db/schema.js';
-import { signToken, requireAuth, setAuthCookie, clearAuthCookie, ADMIN_OVERRIDE_EMAILS } from '../middleware/auth.js';
+import { signToken, requireAuth, setAuthCookie, clearAuthCookie, getEmailAccessOverride } from '../middleware/auth.js';
 
 function effectiveRole(email, role) {
-  return ADMIN_OVERRIDE_EMAILS.includes(email) ? 'admin' : role;
+  return getEmailAccessOverride(email) || role;
+}
+
+function effectiveArea(email, role, area) {
+  return getEmailAccessOverride(email) === 'gerente' ? null : area;
+}
+
+function accessOverrideFields(email) {
+  const override = getEmailAccessOverride(email);
+  return {
+    _accessOverride: override,
+    _managerAccessOverride: override === 'gerente',
+  };
 }
 import { loginLimiter, registerLimiter, forgotPasswordLimiter } from '../middleware/security.js';
 import { logAuthEvent, getClientIP } from '../middleware/audit.js';
@@ -135,8 +147,9 @@ router.post('/login', loginLimiter, async (req, res) => {
     }
 
     const role = effectiveRole(user.email, user.role);
+    const area = effectiveArea(user.email, role, user.area);
     const token = signToken({
-      id: user.id, name: user.name, email: user.email, role, area: user.area,
+      id: user.id, name: user.name, email: user.email, role, area,
     });
 
     setAuthCookie(res, token);
@@ -145,7 +158,7 @@ router.post('/login', loginLimiter, async (req, res) => {
 
     res.json({
       token,
-      user: { id: user.id, name: user.name, email: user.email, role, _originalRole: user.role, area: user.area, avatar_initials: user.avatar_initials, must_change_password: user.must_change_password || false }
+      user: { id: user.id, name: user.name, email: user.email, role, _originalRole: user.role, area, avatar_initials: user.avatar_initials, must_change_password: user.must_change_password || false, ...accessOverrideFields(user.email) }
     });
   } catch (err) {
     safeError(res, err);
@@ -202,14 +215,15 @@ router.post('/azure-login', loginLimiter, async (req, res) => {
     }
 
     const role = effectiveRole(user.email, user.role);
-    const token = signToken({ id: user.id, name: user.name, email: user.email, role, area: user.area });
+    const area = effectiveArea(user.email, role, user.area);
+    const token = signToken({ id: user.id, name: user.name, email: user.email, role, area });
     setAuthCookie(res, token);
 
     await logAuthEvent('login_success', { email: user.email, userId: user.id, ip, userAgent: ua, success: true, detail: 'Azure SSO' });
 
     res.json({
       token,
-      user: { id: user.id, name: user.name, email: user.email, role, _originalRole: user.role, area: user.area, avatar_initials: user.avatar_initials, must_change_password: false },
+      user: { id: user.id, name: user.name, email: user.email, role, _originalRole: user.role, area, avatar_initials: user.avatar_initials, must_change_password: false, ...accessOverrideFields(user.email) },
     });
   } catch (err) {
     safeError(res, err);
@@ -240,6 +254,8 @@ router.get('/me', requireAuth, async (req, res) => {
       area:           req.user.area,           // effective area
       _originalRole:  dbUser.role,             // role real para exibição no perfil
       _hasDelegation: req.user._delegatorIds?.length > 0,
+      _accessOverride: req.user._accessOverride || null,
+      _managerAccessOverride: req.user._managerAccessOverride || false,
       must_change_password: dbUser.must_change_password || false,
       azure_upn: dbUser.azure_upn || null,
     });

@@ -29,13 +29,14 @@ export default function Profile() {
   const [showPwWarning, setShowPwWarning] = useState(forceChange || user?.must_change_password);
 
   const initials = name.split(' ').slice(0,2).map(w=>w[0]?.toUpperCase()||'').join('');
+  const displayRole = user?._originalRole || user?.role;
   const roleColor = {
     admin:       '#001F5B',
     engenheiro:  '#166534',
     coordenador: '#0C5A9E',
     planejador:  '#5B21B6',
     gerente:     '#1E3A5F',
-  }[user?.role] || '#1E3A6E';
+  }[displayRole] || '#1E3A6E';
 
   const handleSaveProfile = async () => {
     if (!name.trim() || !email.trim()) return toast('Preencha nome e email', 'error');
@@ -100,7 +101,7 @@ export default function Profile() {
           <div style={{fontSize:'0.8rem',color:'rgba(255,255,255,0.7)',marginTop:3}}>
             {user?._hasDelegation
               ? <>{ROLE_LABELS[user?._originalRole]} <span style={{opacity:0.6}}>→</span> <strong style={{color:'#fff'}}>{ROLE_LABELS[user?.role]}</strong></>
-              : ROLE_LABELS[user?.role]
+              : ROLE_LABELS[displayRole]
             } · {user?.email}
           </div>
         </div>

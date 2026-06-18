@@ -388,8 +388,8 @@ export default function VacationsPage({ areaFilter: areaFilterProp = '', year: y
   const { user } = useAuth();
   const { isEngenheiro } = useRole();
   const role = user?.role;
-  const viewRole = user?._originalRole || role;
-  const canEditOthers = viewRole === 'admin' || viewRole === 'gestor' || viewRole === 'coordenador' || viewRole === 'gerente';
+  const viewRole = user?._managerAccessOverride ? role : (user?._originalRole || role);
+  const canEditOthers = !user?._managerAccessOverride && (viewRole === 'admin' || viewRole === 'gestor' || viewRole === 'coordenador' || viewRole === 'gerente');
 
   // year and area driven by App.jsx header props
   const year    = yearProp ?? new Date().getFullYear();

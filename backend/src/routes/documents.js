@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { pool } from '../db/schema.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, denyManagerAccessWrite } from '../middleware/auth.js';
 
 const router = Router();
 router.use(requireAuth);
+router.use(denyManagerAccessWrite);
 
 function safeError(res, err) {
   console.error(`[DOCS ERROR] ${err.message}`);

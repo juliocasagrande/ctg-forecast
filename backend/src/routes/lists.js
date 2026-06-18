@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { pool } from '../db/schema.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, denyManagerAccessWrite } from '../middleware/auth.js';
 import multer from 'multer';
 import ExcelJS from 'exceljs';
 
 const router = Router();
 router.use(requireAuth);
+router.use(denyManagerAccessWrite);
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -373,7 +374,7 @@ router.get('/projects-tracking/stale-projects', async (req, res) => {
     }
 
     const intervalDays = parseInt(settingsMap['tracking_alert_interval_days']) || 6;
-    const alertRole = user._originalRole || user.role;
+    const alertRole = user._managerAccessOverride ? user.role : (user._originalRole || user.role);
     const allowedRoles = (settingsMap['tracking_alert_roles'] || 'gerente,coordenador,engenheiro,admin').split(',').map(r => r.trim());
 
     // Check if user's role is in the allowed roles
@@ -433,7 +434,7 @@ router.get('/iacs/stale-iacs', async (req, res) => {
     }
 
     const intervalDays = parseInt(settingsMap['iac_alert_interval_days']) || 6;
-    const alertRole = user._originalRole || user.role;
+    const alertRole = user._managerAccessOverride ? user.role : (user._originalRole || user.role);
     const allowedRoles = (settingsMap['iac_alert_roles'] || 'gerente,coordenador,engenheiro,admin').split(',').map(r => r.trim());
 
     // Check if user's role is in the allowed roles
