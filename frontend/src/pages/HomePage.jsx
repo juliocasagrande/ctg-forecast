@@ -850,6 +850,18 @@ function ValueConsumptionBox({ label, value, realized, color }) {
   );
 }
 
+function makePlantWavePath(x, topY, bottomY, w, amp) {
+  const startX = x - w;
+  const hw = w / 2;
+  let d = `M ${startX} ${bottomY} L ${startX} ${topY}`;
+  for (let k = 0; k < 3; k += 1) {
+    const x0 = startX + k * w;
+    d += ` C ${x0 + hw * 0.5} ${topY - amp} ${x0 + hw * 1.5} ${topY + amp} ${x0 + w} ${topY}`;
+  }
+  d += ` L ${startX + 3 * w} ${bottomY} Z`;
+  return d;
+}
+
 function PlantColumnChart({ items }) {
   const [hovered, setHovered] = useState(null);
   const [tipPos, setTipPos] = useState({ x: 0, y: 0 });
@@ -882,6 +894,7 @@ function PlantColumnChart({ items }) {
           const utilizationPct = hasValue ? Math.min(100, (contratoUtilizado / contratoTotal) * 100) : 0;
           const barColor = utilizationPct >= 100 ? '#EF4444' : utilizationPct >= 80 ? '#F59E0B' : '#10B981';
           const sigla = item.sigla || PROJECT_PLANT_SIGLAS[item.label] || PROJECT_PLANT_SIGLAS[compactLabel(item.label)] || compactLabel(item.label).slice(0, 3).toUpperCase();
+          const waveTop = 100 - utilizationPct;
           return (
             <div
               key={item.label}
@@ -890,8 +903,19 @@ function PlantColumnChart({ items }) {
               style={{ display: 'grid', gridTemplateRows: '12px 1fr 20px', gap: 2, justifyItems: 'center', minWidth: 0, cursor: 'default' }}
             >
               <div style={{ color: hasValue ? 'var(--ctg-navy)' : '#94A3B8', fontSize: '0.58rem', fontWeight: 900, whiteSpace: 'nowrap' }}>{hasValue ? moneyAxis(contratoTotal) : '-'}</div>
-              <div style={{ width: '100%', maxWidth: 34, height: '100%', borderRadius: 4, background: '#E2E8F0', display: 'flex', alignItems: 'flex-end', overflow: 'hidden' }}>
-                <div style={{ width: '100%', height: `${utilizationPct}%`, borderRadius: '4px 4px 0 0', background: hasValue ? barColor : 'transparent', transition: 'height 0.3s ease' }} />
+              <div style={{ width: '100%', maxWidth: 34, height: '100%', borderRadius: 4, background: '#E2E8F0', position: 'relative', overflow: 'hidden' }}>
+                {hasValue && utilizationPct > 0 && (
+                  <svg viewBox="0 0 34 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-hidden="true">
+                    <g>
+                      <animateTransform attributeName="transform" type="translate" from="0 0" to="34 0" dur="2s" repeatCount="indefinite" />
+                      <path d={makePlantWavePath(0, waveTop, 100, 34, 4)} fill={barColor} />
+                    </g>
+                    <g>
+                      <animateTransform attributeName="transform" type="translate" from="-17 0" to="17 0" dur="3s" repeatCount="indefinite" />
+                      <path d={makePlantWavePath(0, waveTop, 100, 34, 3)} fill={barColor} opacity="0.35" />
+                    </g>
+                  </svg>
+                )}
               </div>
               <div style={{ color: 'var(--ctg-navy)', fontSize: '0.58rem', lineHeight: 1, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', alignSelf: 'start', paddingTop: 1 }}>{sigla || item.label}</div>
             </div>
