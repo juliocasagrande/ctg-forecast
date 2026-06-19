@@ -5,13 +5,28 @@ import { requireAuth, requireRole } from '../middleware/auth.js';
 const router = Router();
 router.use(requireAuth);
 
+function sameArea(left, right) {
+  return String(left || 'eletrica').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    === String(right || 'eletrica').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+async function canManageVacationUser(user, targetUserId) {
+  if (['admin', 'planejador', 'gerente'].includes(user.role) || user._allAreasAccess) return true;
+  if (user.role === 'engenheiro') return Number(targetUserId) === Number(user.id);
+  if (user.role !== 'coordenador') return false;
+  const target = await pool.query("SELECT COALESCE(area, 'eletrica') AS area FROM users WHERE id=$1", [targetUserId]);
+  return !!target.rows[0] && sameArea(target.rows[0].area, user.area);
+}
+
 /* ────────────────────────────────────────────────
  * GET /api/vacations?year=2026&area=eletrica
  * Retorna todos os períodos do ano, agrupados por área
  * ──────────────────────────────────────────────── */
 router.get('/', async (req, res) => {
   const year = parseInt(req.query.year) || new Date().getFullYear();
-  const area = req.query.area || null;
+  const area = req.user.role === 'coordenador' && !req.user._allAreasAccess
+    ? (req.user.area || 'eletrica')
+    : (req.query.area || null);
 
   const { rows } = await pool.query(`
     SELECT
@@ -46,13 +61,15 @@ router.get('/', async (req, res) => {
  * Gestor/admin vê todos; engenheiro vê só seu grupo
  * ──────────────────────────────────────────────── */
 router.get('/members', async (req, res) => {
-  const area = req.query.area || null;
+  const area = req.user.role === 'coordenador' && !req.user._allAreasAccess
+    ? (req.user.area || 'eletrica')
+    : (req.query.area || null);
   const { role, id: userId } = req.user;
 
   let query, params;
 
-  if (role === 'admin' || role === 'planejador' || role === 'gerente') {
-    // Admin/Gestor/Planejador/Gerente: vê todos os colaboradores
+  if (role === 'admin' || role === 'planejador' || role === 'gerente' || (role === 'coordenador' && req.user._allAreasAccess)) {
+    // Admin/Gestor/Planejador/Gerente (ou coordenador com acesso a todas as áreas): vê todos os colaboradores
     query = `
       SELECT u.id, u.name, u.avatar_initials, u.role,
              COALESCE(u.area, 'eletrica') AS area
@@ -71,10 +88,8 @@ router.get('/members', async (req, res) => {
              COALESCE(u.area, 'eletrica') AS area
       FROM users u
       WHERE u.active = true
-        AND (
-          (u.role = 'engenheiro' AND COALESCE(u.area, 'eletrica') = $1)
-          OR u.role IN ('coordenador', 'gerente')
-        )
+        AND COALESCE(u.area, 'eletrica') = $1
+        AND u.role IN ('engenheiro', 'coordenador')
       ORDER BY u.name
     `;
     params = [userArea];
@@ -114,13 +129,8 @@ router.post('/', async (req, res) => {
     return res.status(403).json({ error: 'Sem permissão para criar férias de outro usuário' });
   }
 
-  // Coordenador não pode criar/editar férias de gerentes/diretores
-  if (role === 'coordenador') {
-    const targetUser = await pool.query('SELECT role FROM users WHERE id=$1', [user_id]);
-    if (targetUser.rows.length && ['gerente', 'admin'].includes(targetUser.rows[0].role)) {
-      return res.status(403).json({ error: 'Coordenadores não podem alterar férias de gerentes ou diretores' });
-    }
-  }
+  if (!await canManageVacationUser(req.user, user_id))
+    return res.status(403).json({ error: 'Sem permissao para alterar ferias deste usuario' });
 
   // Validate date formats
   const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
@@ -230,9 +240,8 @@ router.put('/:id', async (req, res) => {
   if (!existing.rows.length) return res.status(404).json({ error: 'Período não encontrado' });
 
   const owner = existing.rows[0].user_id;
-  if (role === 'engenheiro' && owner !== requesterId) {
-    return res.status(403).json({ error: 'Sem permissão para editar férias de outro usuário' });
-  }
+  if (!await canManageVacationUser(req.user, owner))
+    return res.status(403).json({ error: 'Sem permissao para editar ferias deste usuario' });
 
   const { area, period_number, start_date, end_date, adp_registered, year, notes } = req.body;
 
@@ -266,9 +275,8 @@ router.delete('/:id', async (req, res) => {
   if (!existing.rows.length) return res.status(404).json({ error: 'Período não encontrado' });
 
   const owner = existing.rows[0].user_id;
-  if (role === 'engenheiro' && owner !== requesterId) {
-    return res.status(403).json({ error: 'Sem permissão' });
-  }
+  if (!await canManageVacationUser(req.user, owner))
+    return res.status(403).json({ error: 'Sem permissao' });
 
   await pool.query('DELETE FROM vacation_periods WHERE id = $1', [id]);
   res.json({ ok: true });

@@ -23,6 +23,14 @@ function requireMonthlyReportAccess(req, res, next) {
   next();
 }
 
+function normalizedArea(area) {
+  return String(area || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+}
+
+function canSeeReportArea(user, area) {
+  return user.role !== 'coordenador' || user._allAreasAccess || normalizedArea(area) === normalizedArea(user.area || 'eletrica');
+}
+
 // ── Upload em memória ─────────────────────────────────────────────────────────
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -330,7 +338,8 @@ router.post(
         return vals.some(v => v && v !== '-' && v !== '0' && v !== 'R$ 0,00' && v !== 'R$ -');
       });
       // Use filtered rows but fall back to all rows if none have financial data
-      const dataRows = rowsWithData.length > 0 ? rowsWithData : rows;
+      const dataRows = (rowsWithData.length > 0 ? rowsWithData : rows)
+        .filter(row => canSeeReportArea(req.user, row.AREA));
 
       if (!dataRows.length)
         return res.status(400).json({ error: 'Nenhum dado encontrado na planilha.' });
@@ -619,7 +628,7 @@ router.get(
       }
 
       // Fetch data from lists_projects_tracking
-      const { rows } = await pool.query(`
+      const { rows: rawRows } = await pool.query(`
         SELECT
           uhe,
           area,
@@ -645,6 +654,8 @@ router.get(
         FROM lists_projects_tracking
         ORDER BY uhe, area
       `);
+
+      const rows = rawRows.filter(row => canSeeReportArea(req.user, row.area));
 
       if (!rows.length) {
         return res.status(400).json({ error: 'Nenhum dado encontrado no banco.' });

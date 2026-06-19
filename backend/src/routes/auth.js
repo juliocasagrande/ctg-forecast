@@ -5,19 +5,23 @@ import jwt from 'jsonwebtoken';
 import { pool } from '../db/schema.js';
 import { signToken, requireAuth, setAuthCookie, clearAuthCookie, getEmailAccessOverride } from '../middleware/auth.js';
 
+// 'admin' eleva o cargo de fato; 'gerente' mantém o cargo real (coordenador) e
+// apenas concede acesso a todas as áreas — ver MANAGER_ACCESS_OVERRIDE_EMAILS.
 function effectiveRole(email, role) {
-  return getEmailAccessOverride(email) || role;
+  return getEmailAccessOverride(email) === 'admin' ? 'admin' : role;
 }
 
 function effectiveArea(email, role, area) {
-  return getEmailAccessOverride(email) === 'gerente' ? null : area;
+  return area;
 }
 
 function accessOverrideFields(email) {
   const override = getEmailAccessOverride(email);
+  const allAreasAccess = override === 'gerente';
   return {
     _accessOverride: override,
-    _managerAccessOverride: override === 'gerente',
+    _managerAccessOverride: allAreasAccess,
+    _allAreasAccess: allAreasAccess,
   };
 }
 import { loginLimiter, registerLimiter, forgotPasswordLimiter } from '../middleware/security.js';
@@ -256,6 +260,7 @@ router.get('/me', requireAuth, async (req, res) => {
       _hasDelegation: req.user._delegatorIds?.length > 0,
       _accessOverride: req.user._accessOverride || null,
       _managerAccessOverride: req.user._managerAccessOverride || false,
+      _allAreasAccess: req.user._allAreasAccess || false,
       must_change_password: dbUser.must_change_password || false,
       azure_upn: dbUser.azure_upn || null,
     });

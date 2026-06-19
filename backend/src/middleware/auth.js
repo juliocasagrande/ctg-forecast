@@ -18,7 +18,8 @@ const COOKIE_OPTIONS = {
 // Emails que recebem acesso equivalente a admin independente do role no banco
 export const ADMIN_OVERRIDE_EMAILS = ['julio.casagrande@ctgbr.com.br'];
 
-// Hierarquia de roles para elevação por delegação
+// Emails que mantêm seu cargo real (coordenador) mas recebem acesso de leitura/escrita
+// a todas as áreas (não só a sua), nas visões gerais de dados (forecast, projetos, etc.)
 export const MANAGER_ACCESS_OVERRIDE_EMAILS = ['lucas.vitti@ctgbr.com.br'];
 
 export function getEmailAccessOverride(email = '') {
@@ -99,11 +100,15 @@ export async function requireAuth(req, res, next) {
       }
     }
 
+    // 'admin' eleva o cargo de fato (acesso total). 'gerente' aqui NÃO substitui o
+    // cargo real — apenas marca acesso a todas as áreas, mantendo o usuário como
+    // coordenador (com seus poderes normais de edição/importação/exportação) e sua
+    // área real (usada, por ex., para escopo de metas).
     const emailOverride = getEmailAccessOverride(decoded.email);
-    if (emailOverride) {
-      effectiveRole = emailOverride;
-      if (emailOverride === 'gerente') effectiveArea = null;
+    if (emailOverride === 'admin') {
+      effectiveRole = 'admin';
     }
+    const allAreasAccess = emailOverride === 'gerente';
 
     req.user = {
       ...decoded,
@@ -111,7 +116,8 @@ export async function requireAuth(req, res, next) {
       area: effectiveArea,
       _originalRole: user.role,
       _accessOverride: emailOverride,
-      _managerAccessOverride: emailOverride === 'gerente',
+      _managerAccessOverride: allAreasAccess,
+      _allAreasAccess: allAreasAccess,
       _delegatorIds: delegatorIds, // IDs dos delegadores — permite acesso aos projetos deles
     };
   } catch (dbErr) {
@@ -159,7 +165,12 @@ export async function requireProjectAccess(req, res, next) {
   }
 
   // Coordenador: acessa projetos com engenheiros da sua área
+  // (ou de qualquer área, se tiver acesso a todas as áreas)
   if (role === 'coordenador') {
+    if (req.user._allAreasAccess) {
+      // Special permission covers every project across all areas.
+      return next();
+    }
     const r = await pool.query(`
       SELECT 1 FROM project_assignments pa
       JOIN users u ON u.id = pa.user_id

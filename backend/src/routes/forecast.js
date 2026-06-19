@@ -211,7 +211,7 @@ router.get('/dashboard', async (req, res) => {
     const yrEnd   = parseInt(yearEnd   || year || currentYear);
     const { role, id: userId, area: userArea } = req.user;
     const isEng  = role === 'engenheiro';
-    const isCoord = role === 'coordenador';
+    const isCoord = role === 'coordenador' && !req.user._allAreasAccess;
     const joinClause = isEng
       ? `INNER JOIN project_assignments pa ON pa.project_id=p.id AND pa.user_id=$3`
       : isCoord

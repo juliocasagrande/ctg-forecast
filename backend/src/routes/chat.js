@@ -53,9 +53,9 @@ async function fetchWithKeyRotation(url, options) {
 // ─── Helpers: buscar dados respeitando permissões ───────────────────────────────
 
 // Busca projetos que o usuário tem permissão para ver
-async function getAllowedProjects(userId, role, area) {
-  // Superiores veem todos os projetos
-  if (['admin', 'gestor', 'planejador'].includes(role)) {
+async function getAllowedProjects(userId, role, area, allAreasAccess = false) {
+  // Superiores veem todos os projetos (coordenador com acesso a todas as áreas também)
+  if (['admin', 'gestor', 'planejador'].includes(role) || (role === 'coordenador' && allAreasAccess)) {
     const r = await pool.query(`
       SELECT p.id, p.code, p.name, p.plants, p.si_value, p.pool_value
       FROM projects p
@@ -178,8 +178,8 @@ async function getProjectsFinancials(projectIds) {
 }
 
 // Busca resumo dos projetos do usuário (para contexto do chat)
-async function getProjectsSummary(userId, role, area) {
-  const projects = await getAllowedProjects(userId, role, area);
+async function getProjectsSummary(userId, role, area, allAreasAccess = false) {
+  const projects = await getAllowedProjects(userId, role, area, allAreasAccess);
   if (projects.length === 0) return 'Nenhum projeto atribuído no momento.';
 
   const projectIds   = projects.map(p => p.id);
@@ -315,7 +315,7 @@ router.post('/', async (req, res) => {
     const userName = req.user.name;
 
     const [projectsSummary, projectsCount] = await Promise.all([
-      getProjectsSummary(userId, userRole, userArea),
+      getProjectsSummary(userId, userRole, userArea, req.user._allAreasAccess),
       pool.query('SELECT COUNT(*) FROM projects').then(r => parseInt(r.rows[0].count)),
     ]);
 

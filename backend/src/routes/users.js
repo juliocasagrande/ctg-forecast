@@ -87,7 +87,14 @@ router.get('/engineers', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'Acesso não autorizado' });
 
     if (role === 'coordenador') {
-      // Coordenador vê só engenheiros da sua área
+      // Coordenador vê só engenheiros da sua área (ou de todas, com acesso total)
+      if (req.user._allAreasAccess) {
+        const r = await pool.query(
+          `SELECT id, name, email, area, avatar_initials FROM users
+           WHERE role='engenheiro' AND active=true ORDER BY name`
+        );
+        return res.json(r.rows);
+      }
       const r = await pool.query(
         `SELECT id, name, email, area, avatar_initials FROM users
          WHERE role='engenheiro' AND area=$1 AND active=true ORDER BY name`,

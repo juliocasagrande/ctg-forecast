@@ -19,10 +19,11 @@ router.get('/', async (req, res) => {
   try {
     const { role, id: userId, area: userArea } = req.user;
     // Engenheiro: só projetos designados.
-    // Coordenador: projetos com pelo menos um engenheiro da sua área.
+    // Coordenador: projetos com pelo menos um engenheiro da sua área
+    // (ou de todas as áreas, se tiver acesso total — ver _allAreasAccess).
     // Todos os outros (incluindo gerente): vê tudo.
     const isEng   = role === 'engenheiro';
-    const isCoord = role === 'coordenador';
+    const isCoord = role === 'coordenador' && !req.user._allAreasAccess;
     const engJoin = isEng
       ? `INNER JOIN project_assignments pa_self ON pa_self.project_id = p.id AND pa_self.user_id = $1`
       : isCoord
