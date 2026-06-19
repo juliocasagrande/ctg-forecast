@@ -1,12 +1,11 @@
 import { Router } from 'express';
 import { pool } from '../db/schema.js';
-import { requireAuth, denyManagerAccessWrite } from '../middleware/auth.js';
+import { requireAuth } from '../middleware/auth.js';
 import multer from 'multer';
 import ExcelJS from 'exceljs';
 
 const router = Router();
 router.use(requireAuth);
-router.use(denyManagerAccessWrite);
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },

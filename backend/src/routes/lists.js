@@ -1,12 +1,26 @@
 import { Router } from 'express';
 import { pool } from '../db/schema.js';
-import { requireAuth, denyManagerAccessWrite } from '../middleware/auth.js';
+import { requireAuth } from '../middleware/auth.js';
 import multer from 'multer';
 import ExcelJS from 'exceljs';
 
 const router = Router();
 router.use(requireAuth);
-router.use(denyManagerAccessWrite);
+
+let iacSchemaReady;
+
+async function ensureIacSchema() {
+  if (!iacSchemaReady) {
+    iacSchemaReady = pool.query(`
+      ALTER TABLE lists_iacs ADD COLUMN IF NOT EXISTS acceptance_letter_signed DATE;
+      ALTER TABLE lists_iacs ADD COLUMN IF NOT EXISTS team_leader_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+    `).catch(err => {
+      iacSchemaReady = null;
+      throw err;
+    });
+  }
+  await iacSchemaReady;
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -40,6 +54,7 @@ function areaVariants(area) {
 // GET /api/lists/iacs
 router.get('/iacs', async (req, res) => {
   try {
+    await ensureIacSchema();
     const r = await pool.query(`
       SELECT * FROM lists_iacs
       ORDER BY
@@ -67,6 +82,7 @@ router.get('/iacs', async (req, res) => {
 // POST /api/lists/iacs
 router.post('/iacs', async (req, res) => {
   try {
+    await ensureIacSchema();
     const {
       iac_code, type_line, area,
       qty_pp_line_26_priority, qty_pp_line_26_no_priority,
@@ -105,6 +121,7 @@ router.post('/iacs', async (req, res) => {
 // PUT /api/lists/iacs/:id
 router.put('/iacs/:id', async (req, res) => {
   try {
+    await ensureIacSchema();
     const { id } = req.params;
     const {
       iac_code, type_line, area,
@@ -423,6 +440,7 @@ router.get('/projects-tracking/stale-projects', async (req, res) => {
 // GET /api/lists/iacs/stale-iacs — IACs not updated in X days (for AlertBell)
 router.get('/iacs/stale-iacs', async (req, res) => {
   try {
+    await ensureIacSchema();
     const { user } = req;
     // Get alert interval from settings
     const settings = await pool.query("SELECT key, value FROM system_settings WHERE key IN ('iac_alert_interval_days', 'iac_alert_enabled', 'iac_alert_roles')");
@@ -730,6 +748,7 @@ function resolveUserName(spreadsheetName, userNameMap, users) {
 router.post('/iacs/import', upload.single('file'), async (req, res) => {
   const client = await pool.connect();
   try {
+    await ensureIacSchema();
     if (!req.file) return res.status(400).json({ error: 'Arquivo não enviado' });
 
     const usersResult = await pool.query('SELECT id, name FROM users WHERE active = true');
@@ -1000,6 +1019,7 @@ router.post('/iacs/import', upload.single('file'), async (req, res) => {
 // POST /api/lists/iacs/import/preview — parse and return summary without saving
 router.post('/iacs/import/preview', upload.single('file'), async (req, res) => {
   try {
+    await ensureIacSchema();
     if (!req.file) return res.status(400).json({ error: 'Arquivo não enviado' });
 
     const workbook = new ExcelJS.Workbook();

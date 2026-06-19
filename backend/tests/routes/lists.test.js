@@ -58,10 +58,12 @@ describe('POST /api/lists/iacs', () => {
         project: 'Projeto Teste',
         priority: 'Non Priority',
         status_current: '0 - Not started yet',
+        acceptance_letter_signed: '2026-03-06',
       });
 
     expect(res.status).toBe(201);
     expect(res.body).toHaveProperty('id');
+    expect(res.body.acceptance_letter_signed).toBeTruthy();
     createdIacId = res.body.id;
   });
 });
@@ -73,9 +75,14 @@ describe('PUT /api/lists/iacs/:id', () => {
     const res = await request(app)
       .put(`/api/lists/iacs/${createdIacId}`)
       .set('Cookie', cookieHeader(adminCookies))
-      .send({ status_current: '1 - In progress', priority: 'Priority' });
+      .send({
+        status_current: '1 - In progress',
+        priority: 'Priority',
+        acceptance_letter_signed: '2026-03-07',
+      });
 
     expect(res.status).toBe(200);
+    expect(res.body.acceptance_letter_signed).toBeTruthy();
   });
 });
 

@@ -157,7 +157,7 @@ describe('GET /api/metas', () => {
     expect(descriptions).not.toContain('Meta individual eng mecanica');
   });
 
-  it('lucas.vitti mantem cargo coordenador, mas ve escopo de gerente sem escrita', async () => {
+  it('lucas.vitti mantem cargo coordenador, mas ve escopo de gerente e pode editar', async () => {
     const me = await request(app)
       .get('/api/auth/me')
       .set('Cookie', cookieHeader(cookies.managerOverride));
@@ -184,7 +184,7 @@ describe('GET /api/metas', () => {
       .set('Cookie', cookieHeader(cookies.managerOverride))
       .send({ ...meta, achieved_value: 50 });
 
-    expect(write.status).toBe(403);
+    expect(write.status).toBe(200);
   });
 });
 

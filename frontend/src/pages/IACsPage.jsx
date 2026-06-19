@@ -1105,7 +1105,11 @@ export default function IACsPage() {
         addToast('IAC atualizado!', 'success');
       }
       setSelected(null); setIsNew(false);
-    } catch { addToast('Erro ao salvar.', 'error'); }
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Erro ao salvar.';
+      addToast(msg, 'error');
+      console.error('[IAC SAVE ERROR]', err);
+    }
     finally { setSaving(false); }
   };
 

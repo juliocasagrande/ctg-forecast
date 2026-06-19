@@ -1,10 +1,9 @@
 import { Router } from 'express';
 import { pool } from '../db/schema.js';
-import { requireAuth, requireRole, denyManagerAccessWrite } from '../middleware/auth.js';
+import { requireAuth, requireRole } from '../middleware/auth.js';
 
 const router = Router();
 router.use(requireAuth);
-router.use(denyManagerAccessWrite);
 
 /* ────────────────────────────────────────────────
  * GET /api/vacations?year=2026&area=eletrica

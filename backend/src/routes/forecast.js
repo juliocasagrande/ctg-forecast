@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { pool } from '../db/schema.js';
-import { requireAuth, requireRole, requireProjectAccess, denyGerente } from '../middleware/auth.js';
+import { requireAuth, requireRole, requireProjectAccess } from '../middleware/auth.js';
 
 const router = Router();
 

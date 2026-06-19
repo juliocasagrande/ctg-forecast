@@ -125,30 +125,11 @@ export async function requireAuth(req, res, next) {
 
 export function requireRole(...roles) {
   return (req, res, next) => {
-    if (req.user?._managerAccessOverride && req.method !== 'GET') {
-      return res.status(403).json({ error: 'Acesso de gerente permitido somente para consulta' });
-    }
     if (!roles.includes(req.user?.role)) {
       return res.status(403).json({ error: 'Acesso não autorizado' });
     }
     next();
   };
-}
-
-// Bloqueia gerente de qualquer escrita — usa role original para não bloquear
-// delegados elevados que receberam role de gerente
-export function denyGerente(req, res, next) {
-  if (req.user?._managerAccessOverride || (req.user?.role === 'gerente' && req.user?._originalRole === 'gerente')) {
-    return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
-  }
-  next();
-}
-
-export function denyManagerAccessWrite(req, res, next) {
-  if (req.user?._managerAccessOverride && req.method !== 'GET') {
-    return res.status(403).json({ error: 'Acesso de gerente permitido somente para consulta' });
-  }
-  next();
 }
 
 /**

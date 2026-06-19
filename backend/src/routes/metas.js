@@ -1,11 +1,10 @@
 import { Router } from 'express';
 import { pool } from '../db/schema.js';
-import { requireAuth, denyManagerAccessWrite } from '../middleware/auth.js';
+import { requireAuth } from '../middleware/auth.js';
 import multer from 'multer';
 
 const router = Router();
 router.use(requireAuth);
-router.use(denyManagerAccessWrite);
 
 const upload = multer({
   storage: multer.memoryStorage(),
