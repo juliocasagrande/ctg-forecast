@@ -814,17 +814,19 @@ router.get('/projects-tracking', requireAuth, async (req, res) => {
       return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
     };
 
-    r.rows.forEach((row, rowIdx) => {
+    const MONEY_KEYS = ['valor_contrato', 'realizado_contrato', 'saldo_contrato',
+                        'valor_si', 'realizado_si', 'saldo_si'];
+
+    let currentRow = 2;
+    r.rows.forEach((row) => {
+      // Main project row
       keys.forEach((key, colIdx) => {
-        const cell = ws.getCell(rowIdx + 2, colIdx + 1);
+        const cell = ws.getCell(currentRow, colIdx + 1);
         let val = row[key];
-        // Format currency columns
-        if (['valor_contrato', 'realizado_contrato', 'saldo_contrato',
-             'valor_si', 'realizado_si', 'saldo_si'].includes(key)) {
+        if (MONEY_KEYS.includes(key)) {
           val = parseNum(val);
           cell.numFmt = '#,##0.00';
         }
-        // Format date
         if (key === 'vencimento' && val) {
           val = new Date(val).toLocaleDateString('pt-BR');
         }
@@ -836,6 +838,46 @@ router.get('/projects-tracking', requireAuth, async (req, res) => {
           left: { style: 'thin', color: { argb: 'E2E8F0' } },
           right: { style: 'thin', color: { argb: 'E2E8F0' } }
         };
+      });
+      currentRow += 1;
+
+      // Sub-rows: per-usina breakdown detail (one row per usina that appears in
+      // any of the 4 breakdown columns), indented under the project's main row.
+      const byUhe = {};
+      const addBreakdown = (arr, field) => {
+        (Array.isArray(arr) ? arr : []).forEach(({ uhe, valor }) => {
+          if (!uhe) return;
+          if (!byUhe[uhe]) byUhe[uhe] = {};
+          byUhe[uhe][field] = parseNum(valor);
+        });
+      };
+      addBreakdown(row.valor_contrato_breakdown, 'valor_contrato');
+      addBreakdown(row.realizado_contrato_breakdown, 'realizado_contrato');
+      addBreakdown(row.valor_si_breakdown, 'valor_si');
+      addBreakdown(row.realizado_si_breakdown, 'realizado_si');
+
+      Object.entries(byUhe).forEach(([uhe, detail]) => {
+        keys.forEach((key, colIdx) => {
+          const cell = ws.getCell(currentRow, colIdx + 1);
+          if (key === 'uhe') {
+            cell.value = `   ↳ ${uhe}`;
+          } else if (MONEY_KEYS.includes(key) && key in detail) {
+            cell.value = detail[key];
+            cell.numFmt = '#,##0.00';
+          } else {
+            cell.value = '';
+          }
+          cell.font = { italic: true, size: 9, color: { argb: '64748B' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F8FAFC' } };
+          cell.alignment = { vertical: 'middle' };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'E2E8F0' } },
+            bottom: { style: 'thin', color: { argb: 'E2E8F0' } },
+            left: { style: 'thin', color: { argb: 'E2E8F0' } },
+            right: { style: 'thin', color: { argb: 'E2E8F0' } }
+          };
+        });
+        currentRow += 1;
       });
     });
 

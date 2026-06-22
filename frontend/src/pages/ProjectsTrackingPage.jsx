@@ -27,6 +27,7 @@ const UHE_LIST = [
   'UHE Garibaldi', 'UHE Ilha Solteira', 'UHE Jupiá', 'UHE Jurumirim',
   'UHE Rosana', 'UHE Salto', 'UHE Salto Grande', 'UHE Taquaruçu',
 ];
+const UHE_LIST_NO_GERAL = UHE_LIST.filter(u => u !== 'Geral');
 
 // UHE color mapping for badges (pastel)
 const UHE_COLORS = {
@@ -89,6 +90,10 @@ const EMPTY_PROJECT = {
   fornecedor: '',
   natureza: 'OPEX',
   aditivo_em_andamento: 'NÃO',
+  valor_contrato_breakdown: [],
+  realizado_contrato_breakdown: [],
+  valor_si_breakdown: [],
+  realizado_si_breakdown: [],
 };
 
 /* ─── Helpers ───────────────────────────────────────────────────────────────── */
@@ -110,6 +115,49 @@ function fmtBRL(v) {
   const n = parseFloat(s);
   if (isNaN(n)) return v;
   return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 2 });
+}
+
+const FINANCIAL_KEYS = ['valor_contrato', 'realizado_contrato', 'saldo_contrato', 'valor_si', 'realizado_si', 'saldo_si'];
+const BREAKDOWN_KEYS = ['valor_contrato_breakdown', 'realizado_contrato_breakdown', 'valor_si_breakdown', 'realizado_si_breakdown'];
+
+// Money mask: converts raw typed digits into a formatted "R$ X.XXX,XX" string
+function maskBRL(raw) {
+  const digits = String(raw ?? '').replace(/\D/g, '');
+  if (!digits) return '';
+  const num = parseInt(digits, 10) / 100;
+  return num.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function fmtBRLNum(n) {
+  return n ? n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
+}
+
+// Translucent green/red background for saldo displays: green when >= 0, red when negative.
+function saldoBgStyle(value) {
+  return value < 0
+    ? { background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)' }
+    : { background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)' };
+}
+
+function sumBreakdownRows(rows) {
+  return (rows || []).reduce((s, r) => s + (parseNum(r.valor) || 0), 0);
+}
+
+// Per-usina saldo can only be deduced when valor and realizado were broken down
+// across the exact same set of usinas — otherwise we don't know which usina a
+// given realizado amount should be subtracted from. Returns null when the sets
+// don't match (caller falls back to a single aggregate saldo).
+function breakdownSaldoDetail(valorRows, realizadoRows) {
+  const valorUhes = (valorRows || []).map(r => r.uhe).slice().sort();
+  const realizadoUhes = (realizadoRows || []).map(r => r.uhe).slice().sort();
+  const matches = valorUhes.length > 0
+    && valorUhes.length === realizadoUhes.length
+    && valorUhes.every((u, i) => u === realizadoUhes[i]);
+  if (!matches) return null;
+  return valorRows.map(vr => {
+    const rr = realizadoRows.find(r => r.uhe === vr.uhe);
+    return { uhe: vr.uhe, saldo: parseNum(vr.valor) - parseNum(rr.valor) };
+  });
 }
 
 function parseNum(v) {
@@ -551,6 +599,101 @@ function Field({ label, required, children }) {
   );
 }
 
+/* ─── UHE Breakdown Editor (per-usina value rows) ────────────────────────────── */
+function UheBreakdownEditor({ label, rows, onChange, options }) {
+  const usedUhes = rows.map(r => r.uhe);
+  const availableOptions = options.filter(u => !usedUhes.includes(u));
+  const total = sumBreakdownRows(rows);
+
+  const updateRow = (idx, patch) => onChange(rows.map((r, i) => i === idx ? { ...r, ...patch } : r));
+  const addRow = () => { if (availableOptions.length > 0) onChange([...rows, { uhe: availableOptions[0], valor: '' }]); };
+  const removeRow = (idx) => onChange(rows.filter((_, i) => i !== idx));
+
+  return (
+    <div>
+      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748B', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        {label}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {rows.map((r, idx) => (
+          <div key={idx} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <select
+              value={r.uhe}
+              onChange={e => updateRow(idx, { uhe: e.target.value })}
+              style={{ ...fS, flex: '0 0 150px' }}
+            >
+              <option value={r.uhe}>{r.uhe}</option>
+              {availableOptions.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+            <input
+              value={r.valor || ''}
+              onChange={e => updateRow(idx, { valor: maskBRL(e.target.value) })}
+              onFocus={e => e.target.select()}
+              placeholder="R$ 0,00"
+              inputMode="numeric"
+              style={{ ...fS, flex: 1 }}
+            />
+            <button
+              type="button"
+              onClick={() => removeRow(idx)}
+              title="Remover usina"
+              style={{
+                flexShrink: 0, width: 28, height: 28, borderRadius: 6, border: '1.5px solid #FCA5A5',
+                background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', fontSize: '0.8rem',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >✕</button>
+          </div>
+        ))}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <button
+            type="button"
+            onClick={addRow}
+            disabled={availableOptions.length === 0}
+            style={{
+              padding: '5px 12px', borderRadius: 6, border: '1.5px dashed #0b5cab',
+              background: '#EFF6FF', color: '#0b5cab', fontSize: '0.75rem', fontWeight: 600,
+              cursor: availableOptions.length === 0 ? 'not-allowed' : 'pointer',
+              opacity: availableOptions.length === 0 ? 0.5 : 1,
+            }}
+          >+ Adicionar usina</button>
+          <span style={{ fontSize: '0.78rem', color: '#64748B' }}>
+            Total: <strong style={{ color: '#1E293B' }}>{fmtBRLNum(total) || 'R$ 0,00'}</strong>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Saldo Breakdown Display (read-only, per-usina) ─────────────────────────── */
+function SaldoBreakdownDisplay({ detail, total }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {detail.map(d => (
+        <div key={d.uhe} style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '7px 10px', borderRadius: 6, ...saldoBgStyle(d.saldo),
+        }}>
+          <span style={{ fontSize: '0.82rem', color: '#475569' }}>{d.uhe}</span>
+          <strong style={{ fontSize: '0.85rem', color: d.saldo < 0 ? '#DC2626' : '#065F46' }}>
+            {fmtBRLNum(d.saldo) || 'R$ 0,00'}
+          </strong>
+        </div>
+      ))}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '7px 10px', marginTop: 2, borderRadius: 6, ...saldoBgStyle(total),
+      }}>
+        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#1E293B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Total</span>
+        <strong style={{ fontSize: '0.88rem', color: total < 0 ? '#DC2626' : '#065F46' }}>
+          {fmtBRLNum(total) || 'R$ 0,00'}
+        </strong>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Field Row (2-col) ─────────────────────────────────────────────────────── */
 function FieldRow({ label, children, required }) {
   return (
@@ -589,25 +732,80 @@ function fmtDateBR(val) {
 
 /* ─── Project Modal (restyled to match DocumentsPage) ───────────────────────── */
 function ProjectModal({ item, onClose, onSave, onDelete, isNew, saving, deleting, allUsers }) {
-  const initForm = (src) => src ? { ...src, vencimento: toDateInput(src.vencimento) } : { ...EMPTY_PROJECT };
+  const initForm = (src) => {
+    if (!src) return { ...EMPTY_PROJECT };
+    const next = { ...src, vencimento: toDateInput(src.vencimento) };
+    for (const k of FINANCIAL_KEYS) {
+      const n = parseNum(src[k]);
+      next[k] = n ? n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
+    }
+    for (const k of BREAKDOWN_KEYS) {
+      next[k] = Array.isArray(src[k])
+        ? src[k].map(r => ({ uhe: r.uhe, valor: fmtBRLNum(parseNum(r.valor)) }))
+        : [];
+    }
+    return next;
+  };
   const [form, setForm] = useState(() => initForm(item));
+  const [contratoDetalhado, setContratoDetalhado] = useState(() =>
+    !!(item?.valor_contrato_breakdown?.length || item?.realizado_contrato_breakdown?.length));
+  const [siDetalhado, setSiDetalhado] = useState(() =>
+    !!(item?.valor_si_breakdown?.length || item?.realizado_si_breakdown?.length));
 
-  useEffect(() => { setForm(initForm(item)); }, [item]);
+  useEffect(() => {
+    setForm(initForm(item));
+    setContratoDetalhado(!!(item?.valor_contrato_breakdown?.length || item?.realizado_contrato_breakdown?.length));
+    setSiDetalhado(!!(item?.valor_si_breakdown?.length || item?.realizado_si_breakdown?.length));
+  }, [item]);
   const [checkedIn, setCheckedIn] = useState(false);
   const [lastEdited, setLastEdited] = useState(null);
   const toast = useToast().toast;
   const { user } = useAuth();
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
 
-  // Auto-calculate saldo when valor or realized changes (only on blur)
+  // Toggle detailed per-usina distribution for a block ('contrato' or 'si').
+  // Seeds breakdown rows from the flat total when turning on; collapses rows back
+  // into the flat total when turning off (preserving the values either way).
+  const toggleDetalhado = (block, checked) => {
+    const setFlag = block === 'contrato' ? setContratoDetalhado : setSiDetalhado;
+    const valorKey = block === 'contrato' ? 'valor_contrato' : 'valor_si';
+    const realizadoKey = block === 'contrato' ? 'realizado_contrato' : 'realizado_si';
+    const valorBreakKey = `${valorKey}_breakdown`;
+    const realizadoBreakKey = `${realizadoKey}_breakdown`;
+    const defaultUhe = block === 'contrato' ? UHE_LIST[0] : UHE_LIST_NO_GERAL[0];
+
+    setFlag(checked);
+    setForm(prev => {
+      if (checked) {
+        const valorRows = prev[valorBreakKey]?.length
+          ? prev[valorBreakKey]
+          : (parseNum(prev[valorKey]) > 0 ? [{ uhe: defaultUhe, valor: prev[valorKey] }] : []);
+        const realizadoRows = prev[realizadoBreakKey]?.length
+          ? prev[realizadoBreakKey]
+          : (parseNum(prev[realizadoKey]) > 0 ? [{ uhe: defaultUhe, valor: prev[realizadoKey] }] : []);
+        return { ...prev, [valorBreakKey]: valorRows, [realizadoBreakKey]: realizadoRows };
+      }
+      const totalValor = sumBreakdownRows(prev[valorBreakKey]);
+      const totalRealizado = sumBreakdownRows(prev[realizadoBreakKey]);
+      return {
+        ...prev,
+        [valorKey]: totalValor ? fmtBRLNum(totalValor) : prev[valorKey],
+        [realizadoKey]: totalRealizado ? fmtBRLNum(totalRealizado) : prev[realizadoKey],
+        [valorBreakKey]: [],
+        [realizadoBreakKey]: [],
+      };
+    });
+  };
+
+  // Auto-calculate saldo (formatted as BRL) whenever valor or realizado changes
   const calcSaldo = useCallback(() => {
     setForm(prev => {
       const vc = parseNum(prev.valor_contrato);
       const rc = parseNum(prev.realizado_contrato);
       const vs = parseNum(prev.valor_si);
       const rs = parseNum(prev.realizado_si);
-      const newSaldoC = vc > 0 || rc > 0 ? (vc - rc).toFixed(2) : '';
-      const newSaldoSI = vs > 0 || rs > 0 ? (vs - rs).toFixed(2) : '';
+      const newSaldoC = vc > 0 || rc > 0 ? (vc - rc).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
+      const newSaldoSI = vs > 0 || rs > 0 ? (vs - rs).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
       return {
         ...prev,
         saldo_contrato: newSaldoC,
@@ -648,6 +846,44 @@ function ProjectModal({ item, onClose, onSave, onDelete, isNew, saving, deleting
     if (diff === 1) return 'Ontem';
     if (diff < 7) return `${diff} dias atrás`;
     return lastEdited.toLocaleDateString('pt-BR');
+  };
+
+  // Derived totals: when a block is in "distribuição detalhada" mode, the total
+  // comes from summing the per-usina rows; otherwise it's the flat field itself.
+  const contratoTotalValor = contratoDetalhado ? sumBreakdownRows(form.valor_contrato_breakdown) : parseNum(form.valor_contrato);
+  const contratoTotalRealizado = contratoDetalhado ? sumBreakdownRows(form.realizado_contrato_breakdown) : parseNum(form.realizado_contrato);
+  const contratoSaldo = contratoTotalValor - contratoTotalRealizado;
+
+  const siTotalValor = siDetalhado ? sumBreakdownRows(form.valor_si_breakdown) : parseNum(form.valor_si);
+  const siTotalRealizado = siDetalhado ? sumBreakdownRows(form.realizado_si_breakdown) : parseNum(form.realizado_si);
+  const siSaldo = siTotalValor - siTotalRealizado;
+
+  // When the valor/realizado breakdowns share the exact same usinas, show saldo
+  // per usina too (in addition to the total) instead of just the aggregate.
+  const contratoSaldoDetail = contratoDetalhado
+    ? breakdownSaldoDetail(form.valor_contrato_breakdown, form.realizado_contrato_breakdown)
+    : null;
+  const siSaldoDetail = siDetalhado
+    ? breakdownSaldoDetail(form.valor_si_breakdown, form.realizado_si_breakdown)
+    : null;
+
+  // Build the payload sent to onSave: collapses breakdown rows into the flat
+  // totals + numeric breakdown arrays (or null when a block isn't detailed).
+  const buildPayload = () => {
+    const toNumRows = (rows) => rows.map(r => ({ uhe: r.uhe, valor: parseNum(r.valor) }));
+    return {
+      ...form,
+      valor_contrato: fmtBRLNum(contratoTotalValor),
+      realizado_contrato: fmtBRLNum(contratoTotalRealizado),
+      saldo_contrato: fmtBRLNum(contratoSaldo),
+      valor_contrato_breakdown: contratoDetalhado ? toNumRows(form.valor_contrato_breakdown) : null,
+      realizado_contrato_breakdown: contratoDetalhado ? toNumRows(form.realizado_contrato_breakdown) : null,
+      valor_si: fmtBRLNum(siTotalValor),
+      realizado_si: fmtBRLNum(siTotalRealizado),
+      saldo_si: fmtBRLNum(siSaldo),
+      valor_si_breakdown: siDetalhado ? toNumRows(form.valor_si_breakdown) : null,
+      realizado_si_breakdown: siDetalhado ? toNumRows(form.realizado_si_breakdown) : null,
+    };
   };
 
   return (
@@ -781,64 +1017,154 @@ function ProjectModal({ item, onClose, onSave, onDelete, isNew, saving, deleting
           </Field>
 
           <div style={{ borderTop: '1px solid #F1F5F9', margin: '4px 0' }} />
-          <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94A3B8' }}>Valores Financeiros</div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-            {[
-              { key: 'valor_contrato', label: 'Valor Contrato' },
-              { key: 'realizado_contrato', label: 'Realizado Contrato' },
-              { key: 'saldo_contrato', label: 'Saldo Contrato', readOnly: true },
-              { key: 'valor_si', label: 'Valor SI' },
-              { key: 'realizado_si', label: 'Realizado SI' },
-              { key: 'saldo_si', label: 'Saldo SI', readOnly: true },
-            ].map(f => {
-              // Check if saldo is negative for styling
-              const isNegativeSaldo = f.readOnly && parseNum(form[f.key]) < 0;
+          {/* Contrato block */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94A3B8' }}>
+              Valores Financeiros — Contrato
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', color: '#475569', cursor: 'pointer' }}>
+              <input type="checkbox" checked={contratoDetalhado} onChange={e => toggleDetalhado('contrato', e.target.checked)} />
+              Distribuição detalhada por usina
+            </label>
+          </div>
 
-              return (
-                <Field key={f.key} label={f.label}>
+          {contratoDetalhado ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <UheBreakdownEditor
+                  label="Valor Contrato"
+                  rows={form.valor_contrato_breakdown}
+                  onChange={rows => set('valor_contrato_breakdown', rows)}
+                  options={UHE_LIST}
+                />
+                <UheBreakdownEditor
+                  label="Realizado Contrato"
+                  rows={form.realizado_contrato_breakdown}
+                  onChange={rows => set('realizado_contrato_breakdown', rows)}
+                  options={UHE_LIST}
+                />
+              </div>
+              {contratoSaldoDetail ? (
+                <Field label="Saldo Contrato (por usina)">
+                  <SaldoBreakdownDisplay detail={contratoSaldoDetail} total={contratoSaldo} />
+                </Field>
+              ) : (
+                <Field label="Saldo Contrato (total)">
                   <input
-                    value={form[f.key] || ''}
-                    onChange={e => {
-                      if (!f.readOnly) set(f.key, e.target.value);
-                    }}
-                    onBlur={e => {
-                      if (f.readOnly) return;
-                      // Format on blur: convert to plain number for storage
-                      const raw = e.target.value.replace(/[^\d.,]/g, '');
-                      if (raw) {
-                        const num = parseNum(raw);
-                        if (num > 0) {
-                          set(f.key, num.toFixed(2));
-                        } else {
-                          set(f.key, '');
-                        }
-                      } else {
-                        set(f.key, '');
-                      }
-                      // Recalculate saldo after any financial field loses focus
-                      calcSaldo();
-                    }}
-                    onFocus={e => {
-                      if (!f.readOnly) e.target.select();
-                    }}
-                    placeholder={f.readOnly ? 'Calculado automaticamente' : 'Ex: 2903969.35 ou 2.903.969,35'}
-                    style={{
-                      ...fS,
-                      ...(f.readOnly
-                        ? {
-                            background: '#F8FAFC',
-                            color: isNegativeSaldo ? '#DC2626' : '#64748B',
-                            fontWeight: isNegativeSaldo ? 700 : 400,
-                          }
-                        : {}),
-                    }}
-                    readOnly={f.readOnly}
+                    readOnly
+                    value={fmtBRLNum(contratoSaldo) || 'R$ 0,00'}
+                    style={{ ...fS, ...saldoBgStyle(contratoSaldo), color: contratoSaldo < 0 ? '#DC2626' : '#065F46', fontWeight: 700 }}
                   />
                 </Field>
-              );
-            })}
+              )}
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+              {[
+                { key: 'valor_contrato', label: 'Valor Contrato' },
+                { key: 'realizado_contrato', label: 'Realizado Contrato' },
+                { key: 'saldo_contrato', label: 'Saldo Contrato', readOnly: true },
+              ].map(f => {
+                const isNegativeSaldo = f.readOnly && parseNum(form[f.key]) < 0;
+                return (
+                  <Field key={f.key} label={f.label}>
+                    <input
+                      value={form[f.key] || ''}
+                      onChange={e => {
+                        if (f.readOnly) return;
+                        set(f.key, maskBRL(e.target.value));
+                        calcSaldo();
+                      }}
+                      onFocus={e => { if (!f.readOnly) e.target.select(); }}
+                      placeholder={f.readOnly ? 'Calculado automaticamente' : 'R$ 0,00'}
+                      inputMode={f.readOnly ? undefined : 'numeric'}
+                      style={{
+                        ...fS,
+                        ...(f.readOnly ? { ...saldoBgStyle(parseNum(form[f.key])), color: isNegativeSaldo ? '#DC2626' : '#065F46', fontWeight: 700 } : {}),
+                      }}
+                      readOnly={f.readOnly}
+                    />
+                  </Field>
+                );
+              })}
+            </div>
+          )}
+
+          <div style={{ borderTop: '1px solid #F1F5F9', margin: '4px 0' }} />
+
+          {/* SI block */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94A3B8' }}>
+              Valores Financeiros — SI
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', color: '#475569', cursor: 'pointer' }}>
+              <input type="checkbox" checked={siDetalhado} onChange={e => toggleDetalhado('si', e.target.checked)} />
+              Distribuição detalhada por usina
+            </label>
           </div>
+
+          {siDetalhado ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <UheBreakdownEditor
+                  label="Valor SI"
+                  rows={form.valor_si_breakdown}
+                  onChange={rows => set('valor_si_breakdown', rows)}
+                  options={UHE_LIST_NO_GERAL}
+                />
+                <UheBreakdownEditor
+                  label="Realizado SI"
+                  rows={form.realizado_si_breakdown}
+                  onChange={rows => set('realizado_si_breakdown', rows)}
+                  options={UHE_LIST_NO_GERAL}
+                />
+              </div>
+              {siSaldoDetail ? (
+                <Field label="Saldo SI (por usina)">
+                  <SaldoBreakdownDisplay detail={siSaldoDetail} total={siSaldo} />
+                </Field>
+              ) : (
+                <Field label="Saldo SI (total)">
+                  <input
+                    readOnly
+                    value={fmtBRLNum(siSaldo) || 'R$ 0,00'}
+                    style={{ ...fS, ...saldoBgStyle(siSaldo), color: siSaldo < 0 ? '#DC2626' : '#065F46', fontWeight: 700 }}
+                  />
+                </Field>
+              )}
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+              {[
+                { key: 'valor_si', label: 'Valor SI' },
+                { key: 'realizado_si', label: 'Realizado SI' },
+                { key: 'saldo_si', label: 'Saldo SI', readOnly: true },
+              ].map(f => {
+                const isNegativeSaldo = f.readOnly && parseNum(form[f.key]) < 0;
+                return (
+                  <Field key={f.key} label={f.label}>
+                    <input
+                      value={form[f.key] || ''}
+                      onChange={e => {
+                        if (f.readOnly) return;
+                        set(f.key, maskBRL(e.target.value));
+                        calcSaldo();
+                      }}
+                      onFocus={e => { if (!f.readOnly) e.target.select(); }}
+                      placeholder={f.readOnly ? 'Calculado automaticamente' : 'R$ 0,00'}
+                      inputMode={f.readOnly ? undefined : 'numeric'}
+                      style={{
+                        ...fS,
+                        ...(f.readOnly ? { ...saldoBgStyle(parseNum(form[f.key])), color: isNegativeSaldo ? '#DC2626' : '#065F46', fontWeight: 700 } : {}),
+                      }}
+                      readOnly={f.readOnly}
+                    />
+                  </Field>
+                );
+              })}
+            </div>
+          )}
 
           <Field label="Resumo">
             <textarea value={form.resumo || ''} onChange={e => set('resumo', e.target.value)} placeholder="Resumo das atividades recentes..." style={{ ...fS, resize: 'vertical', minHeight: 180 }} rows={6} />
@@ -855,7 +1181,7 @@ function ProjectModal({ item, onClose, onSave, onDelete, isNew, saving, deleting
             }}>{deleting ? 'Excluindo...' : 'Excluir'}</button>
           )}
           <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-primary" onClick={() => onSave(form)} disabled={saving} style={{
+          <button className="btn btn-primary" onClick={() => onSave(buildPayload())} disabled={saving} style={{
             opacity: saving ? 0.6 : 1, cursor: saving ? 'not-allowed' : 'pointer',
           }}>{saving ? 'Salvando...' : 'Salvar'}</button>
         </div>
@@ -1623,19 +1949,37 @@ export default function ProjectsTrackingPage() {
   [filtered, getSaldoSI]);
 
   // UHE chart data
+  // UHE chart data — when a project has a per-usina breakdown (valor/realizado),
+  // each piece is counted under its own usina instead of being lumped under the
+  // project's single `uhe` field. Saldo per usina is derived from the resulting
+  // valor/realizado totals (it's never read from a per-usina breakdown directly,
+  // since valor and realizado breakdowns aren't guaranteed to cover the same set
+  // of usinas).
   const uheData = useMemo(() => {
     const map = {};
+    const ensure = (uhe) => {
+      if (!map[uhe]) map[uhe] = { uhe, valor_contrato: 0, realizado_contrato: 0, valor_si: 0, realizado_si: 0, count: 0 };
+      return map[uhe];
+    };
+    const distribute = (item, breakdownKey, flatKey, field) => {
+      const rows = Array.isArray(item[breakdownKey]) ? item[breakdownKey] : [];
+      if (rows.length > 0) {
+        for (const r of rows) ensure(r.uhe)[field] += parseNum(r.valor) || 0;
+      } else {
+        ensure(item.uhe || 'Geral')[field] += parseNum(item[flatKey]) || 0;
+      }
+    };
     for (const item of filtered) {
-      const uhe = item.uhe || 'Geral';
-      if (!map[uhe]) map[uhe] = { uhe, valor_contrato: 0, saldo_contrato: 0, valor_si: 0, saldo_si: 0, count: 0 };
-      map[uhe].valor_contrato += parseNum(item.valor_contrato) || 0;
-      map[uhe].saldo_contrato += getSaldoContrato(item);
-      map[uhe].valor_si += parseNum(item.valor_si) || 0;
-      map[uhe].saldo_si += getSaldoSI(item);
-      map[uhe].count += 1;
+      ensure(item.uhe || 'Geral').count += 1;
+      distribute(item, 'valor_contrato_breakdown', 'valor_contrato', 'valor_contrato');
+      distribute(item, 'realizado_contrato_breakdown', 'realizado_contrato', 'realizado_contrato');
+      distribute(item, 'valor_si_breakdown', 'valor_si', 'valor_si');
+      distribute(item, 'realizado_si_breakdown', 'realizado_si', 'realizado_si');
     }
-    return Object.values(map).sort((a, b) => b.valor_contrato - a.valor_contrato);
-  }, [filtered, getSaldoContrato, getSaldoSI]);
+    return Object.values(map)
+      .map(d => ({ ...d, saldo_contrato: d.valor_contrato - d.realizado_contrato, saldo_si: d.valor_si - d.realizado_si }))
+      .sort((a, b) => b.valor_contrato - a.valor_contrato);
+  }, [filtered]);
 
   // When switching to "Meus Contratos" tab, set showMyContracts
   const handleTabClick = (tab) => {

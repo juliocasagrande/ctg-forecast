@@ -244,6 +244,8 @@ router.post('/projects-tracking', async (req, res) => {
       cronograma, aditivos, reajustes,
       valor_contrato, realizado_contrato, saldo_contrato,
       valor_si, realizado_si, saldo_si,
+      valor_contrato_breakdown, realizado_contrato_breakdown,
+      valor_si_breakdown, realizado_si_breakdown,
       fornecedor, natureza, aditivo_em_andamento,
     } = req.body;
 
@@ -254,10 +256,12 @@ router.post('/projects-tracking', async (req, res) => {
         cronograma, aditivos, reajustes,
         valor_contrato, realizado_contrato, saldo_contrato,
         valor_si, realizado_si, saldo_si,
+        valor_contrato_breakdown, realizado_contrato_breakdown,
+        valor_si_breakdown, realizado_si_breakdown,
         fornecedor, natureza, aditivo_em_andamento
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
-        $16,$17,$18,$19,$20,$21,$22,$23,$24
+        $16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28
       ) RETURNING *
     `, [
       area || 'Elétrica', uhe || 'Geral', pp_contrato || null,
@@ -268,6 +272,10 @@ router.post('/projects-tracking', async (req, res) => {
       cronograma || null, aditivos || null, reajustes || null,
       valor_contrato || null, realizado_contrato || null, saldo_contrato || null,
       valor_si || null, realizado_si || null, saldo_si || null,
+      valor_contrato_breakdown ? JSON.stringify(valor_contrato_breakdown) : null,
+      realizado_contrato_breakdown ? JSON.stringify(realizado_contrato_breakdown) : null,
+      valor_si_breakdown ? JSON.stringify(valor_si_breakdown) : null,
+      realizado_si_breakdown ? JSON.stringify(realizado_si_breakdown) : null,
       fornecedor || null, natureza || 'OPEX', aditivo_em_andamento || 'NÃO',
     ]);
     res.status(201).json(r.rows[0]);
@@ -284,6 +292,8 @@ router.put('/projects-tracking/:id', async (req, res) => {
       cronograma, aditivos, reajustes,
       valor_contrato, realizado_contrato, saldo_contrato,
       valor_si, realizado_si, saldo_si,
+      valor_contrato_breakdown, realizado_contrato_breakdown,
+      valor_si_breakdown, realizado_si_breakdown,
       fornecedor, natureza, aditivo_em_andamento,
     } = req.body;
 
@@ -295,9 +305,11 @@ router.put('/projects-tracking/:id', async (req, res) => {
         cronograma=$13, aditivos=$14, reajustes=$15,
         valor_contrato=$16, realizado_contrato=$17, saldo_contrato=$18,
         valor_si=$19, realizado_si=$20, saldo_si=$21,
-        fornecedor=$22, natureza=$23, aditivo_em_andamento=$24,
+        valor_contrato_breakdown=$22, realizado_contrato_breakdown=$23,
+        valor_si_breakdown=$24, realizado_si_breakdown=$25,
+        fornecedor=$26, natureza=$27, aditivo_em_andamento=$28,
         updated_at=NOW()
-      WHERE id=$25
+      WHERE id=$29
       RETURNING *
     `, [
       area || 'Elétrica', uhe || 'Geral', pp_contrato || null,
@@ -308,6 +320,10 @@ router.put('/projects-tracking/:id', async (req, res) => {
       cronograma || null, aditivos || null, reajustes || null,
       valor_contrato || null, realizado_contrato || null, saldo_contrato || null,
       valor_si || null, realizado_si || null, saldo_si || null,
+      valor_contrato_breakdown ? JSON.stringify(valor_contrato_breakdown) : null,
+      realizado_contrato_breakdown ? JSON.stringify(realizado_contrato_breakdown) : null,
+      valor_si_breakdown ? JSON.stringify(valor_si_breakdown) : null,
+      realizado_si_breakdown ? JSON.stringify(realizado_si_breakdown) : null,
       fornecedor || null, natureza || 'OPEX', aditivo_em_andamento || 'NÃO',
       id,
     ]);

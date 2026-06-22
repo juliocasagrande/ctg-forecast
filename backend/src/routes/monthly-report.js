@@ -535,6 +535,8 @@ tr.due-2 td:first-child{border-left:6px solid #ef4444;}tr.due-6 td:first-child{b
 .kv{display:grid;grid-template-columns:160px 1fr;column-gap:14px;row-gap:8px;margin:6px 0 4px;align-items:start;}
 .kv .k{color:var(--muted);font-weight:600;padding:3px 0;}.kv .v{padding:3px 0;overflow-wrap:anywhere;word-break:break-word;}
 .kv>:nth-child(n+3){border-top:1px dashed var(--line);}
+.kv .k.sub{font-size:.78rem;font-weight:400;font-style:italic;color:var(--muted);padding-left:1.1em;}
+.kv .v.sub{font-size:.78rem;font-style:italic;color:var(--muted);}
 .subcard{border-radius:8px;padding:.5rem 1rem;}.subcard-header{font-weight:700;margin-bottom:.5rem;font-size:.95rem;}
 .cards-4{--c1:29fr;--c2:29fr;--c3:24fr;--c4:18fr;display:grid;grid-template-columns:minmax(0,var(--c1)) minmax(0,var(--c2)) minmax(0,var(--c3)) minmax(0,var(--c4));gap:16px;margin-top:.75rem;width:100%;min-width:0;align-items:stretch;}
 .cards-4>.subcard{min-width:0;overflow:hidden;}
@@ -644,6 +646,10 @@ router.get(
           valor_si as si,
           realizado_si as realsi,
           saldo_si as saldo_si,
+          valor_contrato_breakdown as val_breakdown,
+          realizado_contrato_breakdown as real_breakdown,
+          valor_si_breakdown as si_breakdown,
+          realizado_si_breakdown as realsi_breakdown,
           resumo,
           natureza as nat,
           empresa,
@@ -782,6 +788,29 @@ router.get(
         return '';
       }
 
+      // Renders per-usina sub-rows under a Valor/Realizado/Saldo line in a `.kv` block
+      function breakdownKvRows(breakdown) {
+        if (!breakdown || !breakdown.length) return '';
+        return breakdown.map(({ uhe, valor }) => `
+        <div class='k sub'>↳ ${uhe}</div><div class='v sub'>${moneyOrRaw(valor)}</div>`).join('');
+      }
+
+      // Per-usina saldo can only be deduced when valor and realizado were broken
+      // down across the exact same set of usinas — otherwise we don't know which
+      // usina a given realizado amount should be subtracted from.
+      function saldoBreakdown(valorRows, realizadoRows) {
+        const valorUhes = (valorRows || []).map(r => r.uhe).slice().sort();
+        const realizadoUhes = (realizadoRows || []).map(r => r.uhe).slice().sort();
+        const matches = valorUhes.length > 0
+          && valorUhes.length === realizadoUhes.length
+          && valorUhes.every((u, i) => u === realizadoUhes[i]);
+        if (!matches) return [];
+        return valorRows.map(vr => {
+          const rr = realizadoRows.find(r => r.uhe === vr.uhe);
+          return { uhe: vr.uhe, valor: (moneyToFloat(vr.valor) ?? 0) - (moneyToFloat(rr.valor) ?? 0) };
+        });
+      }
+
       // Parse dates and prepare data rows
       const dataRows = rows.map(r => ({
         UHE: r.uhe || '-',
@@ -798,6 +827,10 @@ router.get(
         SI: r.si ?? '-',
         REALSI: r.realsi ?? '-',
         SALDO_SI: r.saldo_si ?? '-',
+        VAL_BREAKDOWN: Array.isArray(r.val_breakdown) ? r.val_breakdown : [],
+        REAL_BREAKDOWN: Array.isArray(r.real_breakdown) ? r.real_breakdown : [],
+        SI_BREAKDOWN: Array.isArray(r.si_breakdown) ? r.si_breakdown : [],
+        REALSI_BREAKDOWN: Array.isArray(r.realsi_breakdown) ? r.realsi_breakdown : [],
         RESUMO: r.resumo || '-',
         NAT: r.nat || '-',
         EMPRESA: r.empresa || '-',
@@ -871,6 +904,8 @@ router.get(
             const cls = areaClass(row.AREA);
             const siCls = saldoClass(row.SI, row.SALDO_SI);
             const cor = { el:'#0ea5e9', mec:'#f59e0b', con:'#10b981', civil:'#ef4444', auto:'#8b5cf6' }[cls] || '#0b5cab';
+            const saldoContratoDetail = saldoBreakdown(row.VAL_BREAKDOWN, row.REAL_BREAKDOWN);
+            const saldoSiDetail = saldoBreakdown(row.SI_BREAKDOWN, row.REALSI_BREAKDOWN);
             sections.push(`
 <div class='card ${cls}' data-kind="card" data-uhe="${row.UHE}" data-area="${row.AREA}">
   <div class='meta'>
@@ -893,17 +928,17 @@ router.get(
     <div class='subcard' style="border:1.5px solid ${cor}55;">
       <div class='subcard-header'>Contrato</div>
       <div class='kv'>
-        <div class='k'><i class='fas fa-dollar-sign'></i> Valor</div><div class='v'>${moneyOrRaw(row.VAL)}</div>
-        <div class='k'><i class='fas fa-check-circle'></i> Realizado</div><div class='v'>${moneyOrRaw(row.REAL)}</div>
-        <div class='k'><i class='fas fa-balance-scale'></i> Saldo</div><div class='v'>${moneyOrRaw(row.SALDO)}</div>
+        <div class='k'><i class='fas fa-dollar-sign'></i> Valor</div><div class='v'>${moneyOrRaw(row.VAL)}</div>${breakdownKvRows(row.VAL_BREAKDOWN)}
+        <div class='k'><i class='fas fa-check-circle'></i> Realizado</div><div class='v'>${moneyOrRaw(row.REAL)}</div>${breakdownKvRows(row.REAL_BREAKDOWN)}
+        <div class='k'><i class='fas fa-balance-scale'></i> Saldo</div><div class='v'>${moneyOrRaw(row.SALDO)}</div>${breakdownKvRows(saldoContratoDetail)}
       </div>
     </div>
     <div class='subcard' style="border:1.5px solid ${cor}55;">
       <div class='subcard-header'>SI</div>
       <div class='kv'>
-        <div class='k'><i class='fas fa-wallet'></i> Valor</div><div class='v'>${moneyOrRaw(row.SI)}</div>
-        <div class='k'><i class='fas fa-check-circle'></i> Realizado</div><div class='v'>${moneyOrRaw(row.REALSI)}</div>
-        <div class='k'><i class='fas fa-balance-scale'></i> Saldo</div><div class='v ${siCls}'>${moneyOrRaw(row.SALDO_SI)}</div>
+        <div class='k'><i class='fas fa-wallet'></i> Valor</div><div class='v'>${moneyOrRaw(row.SI)}</div>${breakdownKvRows(row.SI_BREAKDOWN)}
+        <div class='k'><i class='fas fa-check-circle'></i> Realizado</div><div class='v'>${moneyOrRaw(row.REALSI)}</div>${breakdownKvRows(row.REALSI_BREAKDOWN)}
+        <div class='k'><i class='fas fa-balance-scale'></i> Saldo</div><div class='v ${siCls}'>${moneyOrRaw(row.SALDO_SI)}</div>${breakdownKvRows(saldoSiDetail)}
       </div>
     </div>
     <div class='subcard' style="border:1.5px solid ${cor}55;">

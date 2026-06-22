@@ -578,6 +578,18 @@ await client.query(`
     await client.query(`
       ALTER TABLE lists_projects_tracking ADD COLUMN IF NOT EXISTS unique_key VARCHAR(100);
     `);
+
+    // Per-usina breakdown for projects spanning multiple plants (e.g. UHE "Geral").
+    // Each column holds a JSON array of { uhe, valor } entries; the flat
+    // valor_contrato/realizado_contrato/valor_si/realizado_si columns above always
+    // keep the clean aggregate total so existing SUM()/parseFloat() consumers
+    // (chat, monthly report, export, dashboard) keep working unchanged.
+    await client.query(`
+      ALTER TABLE lists_projects_tracking ADD COLUMN IF NOT EXISTS valor_contrato_breakdown JSONB;
+      ALTER TABLE lists_projects_tracking ADD COLUMN IF NOT EXISTS realizado_contrato_breakdown JSONB;
+      ALTER TABLE lists_projects_tracking ADD COLUMN IF NOT EXISTS valor_si_breakdown JSONB;
+      ALTER TABLE lists_projects_tracking ADD COLUMN IF NOT EXISTS realizado_si_breakdown JSONB;
+    `);
     
     await client.query(`
       DO $$
