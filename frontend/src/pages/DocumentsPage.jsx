@@ -49,7 +49,14 @@ const TYPE_META   = Object.fromEntries(DOC_TYPES.map(t => [t.value, t]));
 const CURRENT_YEAR       = new Date().getFullYear();
 const CURRENT_YEAR_SHORT = CURRENT_YEAR % 100;
 
-/* ─── Helpers ────────────────────────────────────────────────────────────────── */ 
+/* ─── Helpers ────────────────────────────────────────────────────────────────── */
+function fmtDateBR(val) {
+  if (!val) return '—';
+  const match = String(val).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return '—';
+  const [, y, m, d] = match;
+  return `${d}/${m}/${y}`;
+}
 function buildCode(type, area, seq, year, revision) {
   if (!type || !area || !seq || !year) return '';
   const seqStr = String(seq).padStart(3, '0');
@@ -607,7 +614,7 @@ function generateHTMLReport(docs, stats, year) {
     const link = d.document_link ? `<a href="${d.document_link}" style="color:#0066B3;text-decoration:none">Acessar</a>` : '—';
     return `<tr style="background:${i%2===0?'#fff':'#F8FAFC'}">
       <td style="font-family:monospace;font-size:0.82rem;font-weight:700;color:#001F5B">${d.code}</td>
-      <td>${d.plant||'—'}</td><td>${d.responsible}</td><td>${new Date(d.date).toLocaleDateString('pt-BR')}</td>
+      <td>${d.plant||'—'}</td><td>${d.responsible}</td><td>${fmtDateBR(d.date)}</td>
       <td>${d.subject}</td>
       <td><span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:0.72rem;font-weight:700;background:${sm.bg};color:${sm.text};border:1px solid ${sm.color}33">${d.status}</span></td>
       <td style="text-align:center">${link}</td></tr>`;
@@ -931,7 +938,7 @@ function ImportDocxModal({ open, onClose, onImported, allUsers }) {
                           {r.responsible || '—'}
                           {r._resolved && <span style={{ marginLeft: 4, fontSize: '0.65rem', color: '#10B981' }}>✓</span>}
                         </td>
-                        <td style={{ padding: '7px 10px', whiteSpace: 'nowrap' }}>{r.date ? new Date(r.date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</td>
+                        <td style={{ padding: '7px 10px', whiteSpace: 'nowrap' }}>{fmtDateBR(r.date)}</td>
                         <td style={{ padding: '7px 10px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.subject}</td>
                         <td style={{ padding: '7px 10px', whiteSpace: 'nowrap', fontSize: '0.7rem', color: '#64748B' }}>{r.status}</td>
                       </tr>
@@ -1144,7 +1151,7 @@ export default function DocumentsPage() {
       data = data.filter(d => colFilterResponsible.includes(d.responsible));
     }
     if (colFilterDate.length > 0) {
-      data = data.filter(d => colFilterDate.includes(d.date ? new Date(d.date).toLocaleDateString('pt-BR') : '—'));
+      data = data.filter(d => colFilterDate.includes(fmtDateBR(d.date)));
     }
     if (colFilterSubject.length > 0) {
       data = data.filter(d => colFilterSubject.includes(d.subject || '—'));
@@ -1382,7 +1389,7 @@ export default function DocumentsPage() {
                     Data
                     <ColumnFilterDropdown
                       column="Data"
-                      uniqueValues={[...new Set(docs.map(d => d.date ? new Date(d.date).toLocaleDateString('pt-BR') : '—').filter(Boolean))]}
+                      uniqueValues={[...new Set(docs.map(d => fmtDateBR(d.date)).filter(Boolean))]}
                       selectedValues={colFilterDate}
                       onChange={setColFilterDate}
                     />
@@ -1451,7 +1458,7 @@ export default function DocumentsPage() {
                       </td>
                       <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B' }}>{latest.plant||'—'}</td>
                       <td style={{ ...TD, fontSize:'0.82rem' }}>{latest.responsible}</td>
-                      <td style={{ ...TD, fontSize:'0.82rem', whiteSpace:'nowrap' }}>{new Date(latest.date).toLocaleDateString('pt-BR')}</td>
+                      <td style={{ ...TD, fontSize:'0.82rem', whiteSpace:'nowrap' }}>{fmtDateBR(latest.date)}</td>
                       <td style={{ ...TD, fontSize:'0.82rem', maxWidth:240 }}>
                         <span style={{ display:'-webkit-box', WebkitLineClamp:1, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{latest.subject}</span>
                       </td>
@@ -1512,7 +1519,7 @@ export default function DocumentsPage() {
                           </td>
                           <td style={{ ...TD, fontSize:'0.75rem', color:'#94A3B8' }}>{rev.plant||'—'}</td>
                           <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B' }}>{rev.responsible}</td>
-                          <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B', whiteSpace:'nowrap' }}>{new Date(rev.date).toLocaleDateString('pt-BR')}</td>
+                          <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B', whiteSpace:'nowrap' }}>{fmtDateBR(rev.date)}</td>
                           <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B', maxWidth:280 }}>
                             <span style={{ display:'-webkit-box', WebkitLineClamp:1, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{rev.subject}</span>
                           </td>

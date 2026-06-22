@@ -580,6 +580,12 @@ function toDateInput(val) {
   if (isNaN(d.getTime())) return '';
   return d.toISOString().slice(0, 10);
 }
+function fmtDateBR(val) {
+  const iso = toDateInput(val);
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
 
 /* ─── Project Modal (restyled to match DocumentsPage) ───────────────────────── */
 function ProjectModal({ item, onClose, onSave, onDelete, isNew, saving, deleting, allUsers }) {
@@ -1995,7 +2001,7 @@ export default function ProjectsTrackingPage() {
                           {item.resumo || '—'}
                         </td>
                         <td style={{ padding: '10px 12px', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
-                          {item.vencimento ? new Date(item.vencimento).toLocaleDateString('pt-BR') : (item.vencimento_txt || '—')}
+                          {item.vencimento ? fmtDateBR(item.vencimento) : (item.vencimento_txt || '—')}
                         </td>
                         <td style={{ padding: '10px 12px', color: '#0F172A', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                           {fmtBRL(item.valor_contrato)}

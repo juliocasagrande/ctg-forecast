@@ -531,6 +531,12 @@ function toDateInput(val) {
   if (isNaN(d.getTime())) return '';
   return d.toISOString().slice(0, 10);
 }
+function fmtDateBR(val) {
+  const iso = toDateInput(val);
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
 
 /* ─── IAC Modal ──────────────────────────────────────────────────────────────── */
 function IACModal({ item, onClose, onSave, onDelete, isNew, saving, deleting, allUsers, allRequesters, allChineseStaff, allOrganizers, allSupervisors }) {
@@ -1427,10 +1433,10 @@ export default function IACsPage() {
                           <td style={{ padding: '10px 12px' }}><TypeBadge value={item.type_line} /></td>
                           <td style={{ padding: '10px 12px' }}><AreaBadge area={item.area} /></td>
                           <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
-                            {item.opening_date ? new Date(item.opening_date).toLocaleDateString('pt-BR') : '—'}
+                            {item.opening_date ? fmtDateBR(item.opening_date) : '—'}
                           </td>
                           <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
-                            {item.acceptance_letter_signed ? new Date(item.acceptance_letter_signed).toLocaleDateString('pt-BR') : '—'}
+                            {item.acceptance_letter_signed ? fmtDateBR(item.acceptance_letter_signed) : '—'}
                           </td>
                           <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                             {isIacOpenedInYear(item, 2026)
@@ -1438,7 +1444,7 @@ export default function IACsPage() {
                               : <span style={{ fontSize: '0.68rem', color: '#94A3B8' }}>—</span>}
                           </td>
                           <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
-                            {item.when_open ? new Date(item.when_open).toLocaleDateString('pt-BR') : '—'}
+                            {item.when_open ? fmtDateBR(item.when_open) : '—'}
                           </td>
                           <td style={{ padding: '10px 12px', color: '#475569', maxWidth: 260 }}>
                             <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.project || '—'}</div>
