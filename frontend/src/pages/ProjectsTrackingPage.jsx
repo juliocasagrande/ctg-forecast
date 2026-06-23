@@ -2058,7 +2058,7 @@ export default function ProjectsTrackingPage() {
         {/* Right: Chart (last — aligns with table) */}
         <div style={{ flex: 1, borderLeft: '2px solid #E2E8F0', paddingLeft: 10, display: 'flex', flexDirection: 'column' }}>
           <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748B', marginBottom: 2 }}>
-            Por Usina
+            Por Usina - Contrato
             {filterUHE && (
               <span style={{ background: '#EFF6FF', color: '#0b5cab', borderRadius: 10, padding: '1px 7px', fontSize: '0.62rem', marginLeft: 6, fontWeight: 700 }}>
                 Filtrado ×
