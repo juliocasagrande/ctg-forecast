@@ -332,7 +332,7 @@ body{background:white;font-size:11px}
 .goal-head{grid-column:1 / -1;margin:0;padding-bottom:6px}.goal-kicker{font-size:9px}h2{font-size:14px;line-height:1.2;margin-top:2px}.status{font-size:10px;padding:3px 8px}
 .meta-grid{grid-template-columns:1.35fr 1fr 1fr;gap:6px;margin:0}.meta-grid div{padding:8px 9px}.meta-grid span{font-size:9px}.meta-grid strong{font-size:12px;line-height:1.2}
 .evidence-link,.evidence-empty{margin:0;font-size:10px}.detail-block{margin:0}.section-label{font-size:9px;margin-bottom:3px}.detail{font-size:10px;line-height:1.32;max-height:22mm;overflow:hidden}
-.targets{grid-template-columns:repeat(3,1fr);gap:5px;margin:0 0 6px}.targets div{padding:6px 7px;font-size:9px;line-height:1.22;max-height:25mm;overflow:hidden}.targets span{font-size:10px;margin-bottom:2px}
+.targets{grid-template-columns:repeat(3,1fr);gap:5px;margin:0 0 6px}.targets div{padding:6px 7px;font-size:9px;line-height:1.22;max-height:34mm;overflow:hidden}.targets span{font-size:10px;margin-bottom:2px}
 .progress{margin:0 0 6px;height:7px}.notes{margin:0;padding:7px 8px;font-size:10px;line-height:1.28;max-height:18mm;overflow:hidden}
 figure{margin:0;min-height:0;height:108mm}
 .missing{height:100%;min-height:0}

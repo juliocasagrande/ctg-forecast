@@ -771,7 +771,12 @@ router.get('/projects-tracking', requireAuth, async (req, res) => {
     `);
 
     const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet('Projetos');
+    wb.creator = 'CTG Brasil';
+    wb.created = new Date();
+    const ws = wb.addWorksheet('Projetos', {
+      views: [{ state: 'frozen', xSplit: 3, ySplit: 1, showGridLines: false }],
+      properties: { tabColor: { argb: '001F5B' }, defaultRowHeight: 18 },
+    });
 
     const headers = [
       'Área', 'UHE', 'PP/Contrato', 'Projeto/Atividade', 'Projeto', 'Status',
@@ -788,7 +793,27 @@ router.get('/projects-tracking', requireAuth, async (req, res) => {
       'fornecedor', 'natureza', 'aditivo_em_andamento', 'resumo'
     ];
 
+    // Badge colors mirroring the app's UI (frontend/src/pages/ProjectsTrackingPage.jsx)
+    const AREA_COLORS = {
+      'Confiabilidade': { bg: 'DBEAFE', text: '1D4ED8' },
+      'Elétrica':       { bg: 'FEF3C7', text: 'B45309' },
+      'Mecânica':       { bg: 'D1FAE5', text: '059669' },
+    };
+    const STATUS_COLORS = {
+      'Em andamento':                  { bg: 'E0F2FE', text: '0369A1' },
+      'Em fase de encerramento':       { bg: 'FEF3C7', text: '92400E' },
+      'Encerrado':                     { bg: 'F1F5F9', text: '475569' },
+      'Paralisado':                    { bg: 'FEE2E2', text: '991B1B' },
+      'Capitalizado Parcialmente':     { bg: 'EDE9FE', text: '5B21B6' },
+      'Capitalizado Integralmente':    { bg: 'D1FAE5', text: '065F46' },
+    };
+    const ADITIVO_COLORS = {
+      'SIM': { bg: 'D1FAE5', text: '065F46' },
+      'NÃO': { bg: 'F1F5F9', text: '64748B' },
+    };
+
     // Header row
+    ws.getRow(1).height = 22;
     headers.forEach((h, i) => {
       const cell = ws.getCell(1, i + 1);
       cell.value = h;
@@ -802,6 +827,7 @@ router.get('/projects-tracking', requireAuth, async (req, res) => {
         right: { style: 'thin', color: { argb: 'D1D5DB' } }
       };
     });
+    ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers.length } };
 
     // Data rows
     const parseNum = (v) => {
@@ -818,14 +844,20 @@ router.get('/projects-tracking', requireAuth, async (req, res) => {
                         'valor_si', 'realizado_si', 'saldo_si'];
 
     let currentRow = 2;
+    let bandIndex = 0;
+    const totals = { valor_contrato: 0, realizado_contrato: 0, saldo_contrato: 0,
+                      valor_si: 0, realizado_si: 0, saldo_si: 0 };
     r.rows.forEach((row) => {
       // Main project row
+      const bandFill = bandIndex % 2 === 1 ? 'F8FAFC' : 'FFFFFF';
+      bandIndex += 1;
       keys.forEach((key, colIdx) => {
         const cell = ws.getCell(currentRow, colIdx + 1);
         let val = row[key];
         if (MONEY_KEYS.includes(key)) {
           val = parseNum(val);
-          cell.numFmt = '#,##0.00';
+          cell.numFmt = 'R$ #,##0.00';
+          totals[key] += val;
         }
         if (key === 'vencimento' && val) {
           val = new Date(val).toLocaleDateString('pt-BR');
@@ -838,6 +870,15 @@ router.get('/projects-tracking', requireAuth, async (req, res) => {
           left: { style: 'thin', color: { argb: 'E2E8F0' } },
           right: { style: 'thin', color: { argb: 'E2E8F0' } }
         };
+        const badge = (key === 'area' && AREA_COLORS[val])
+          || (key === 'status' && STATUS_COLORS[val])
+          || (key === 'aditivo_em_andamento' && ADITIVO_COLORS[val]);
+        if (badge) {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: badge.bg } };
+          cell.font = { color: { argb: badge.text }, bold: true, size: 9.5 };
+        } else {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bandFill } };
+        }
       });
       currentRow += 1;
 
@@ -863,7 +904,7 @@ router.get('/projects-tracking', requireAuth, async (req, res) => {
             cell.value = `   ↳ ${uhe}`;
           } else if (MONEY_KEYS.includes(key) && key in detail) {
             cell.value = detail[key];
-            cell.numFmt = '#,##0.00';
+            cell.numFmt = 'R$ #,##0.00';
           } else {
             cell.value = '';
           }
@@ -881,13 +922,32 @@ router.get('/projects-tracking', requireAuth, async (req, res) => {
       });
     });
 
+    // Totals row
+    const totalsLabelCol = keys.indexOf('projeto_atividade') + 1;
+    const totalsRow = ws.getRow(currentRow);
+    totalsRow.height = 20;
+    ws.getCell(currentRow, totalsLabelCol).value = 'TOTAL';
+    keys.forEach((key, colIdx) => {
+      const cell = ws.getCell(currentRow, colIdx + 1);
+      if (MONEY_KEYS.includes(key)) {
+        cell.value = totals[key];
+        cell.numFmt = 'R$ #,##0.00';
+      }
+      cell.font = { bold: true, size: 10, color: { argb: '001F5B' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'E2E8F0' } };
+      cell.border = {
+        top: { style: 'double', color: { argb: '001F5B' } },
+        bottom: { style: 'thin', color: { argb: 'D1D5DB' } },
+        left: { style: 'thin', color: { argb: 'D1D5DB' } },
+        right: { style: 'thin', color: { argb: 'D1D5DB' } }
+      };
+    });
+    currentRow += 1;
+
     // Column widths
     const widths = [12, 16, 12, 35, 14, 18, 20, 18, 12, 16, 16, 14,
                      16, 18, 14, 10, 14, 12, 22, 14, 16, 35];
     widths.forEach((w, i) => ws.getColumn(i + 1).width = w);
-
-    // Freeze header row
-    ws.views = [{ state: 'frozen', ySplit: 1 }];
 
     const filename = `CTG_Acompanhamento_Projetos_${new Date().toISOString().slice(0, 10)}.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
