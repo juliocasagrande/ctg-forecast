@@ -101,14 +101,12 @@ function loadForMode(demands, mode, base = new Date()) {
 function timelineRange(demands) {
   const now = new Date();
   const dates = demands.flatMap(demand => [demandStart(demand), demandEnd(demand)]).filter(Boolean);
-  if (!dates.length) {
-    return {
-      start: new Date(now.getFullYear(), now.getMonth() - 1, 1, 12),
-      end: new Date(now.getFullYear(), now.getMonth() + 2, 0, 12),
-    };
-  }
-  const min = Math.min(...dates.map(Number), +now);
-  const max = Math.max(...dates.map(Number), +now);
+  // Piso minimo de navegacao: sempre permite arrastar alguns meses para tras/frente
+  // do mes atual, mesmo sem demandas cadastradas nesse intervalo.
+  const floorMin = +new Date(now.getFullYear(), now.getMonth() - 2, 1, 12);
+  const floorMax = +new Date(now.getFullYear(), now.getMonth() + 3, 0, 12);
+  const min = Math.min(floorMin, ...dates.map(Number));
+  const max = Math.max(floorMax, ...dates.map(Number));
   return {
     start: new Date(new Date(min).getFullYear(), new Date(min).getMonth(), 1, 12),
     end: new Date(new Date(max).getFullYear(), new Date(max).getMonth() + 1, 0, 12),
