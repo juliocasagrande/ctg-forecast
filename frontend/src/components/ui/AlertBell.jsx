@@ -23,6 +23,7 @@ export default function AlertBell() {
   const [pmsAlerts, setPmsAlerts] = useState([]);
   const [open, setOpen] = useState(false);
   const [dismissing, setDismissing] = useState(new Set());
+  const [markingAllSection, setMarkingAllSection] = useState(null);
   const ref = useRef(null);
   const btnRef = useRef(null);
   const [dropPos, setDropPos] = useState({ top: 0, right: 0 });
@@ -99,6 +100,17 @@ export default function AlertBell() {
   };
 
   const isDismissing = (type, key) => dismissing.has(`${type}|${key}`);
+
+  const dismissAll = async (sectionKey, items) => {
+    setMarkingAllSection(sectionKey);
+    try {
+      await Promise.all(items.map(([alertType, alertKey]) =>
+        api.post('/forecast/alerts/dismiss', { alert_type: alertType, alert_key: String(alertKey) }).catch(() => {})
+      ));
+      await fetchAlerts();
+    } catch {}
+    setMarkingAllSection(null);
+  };
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
@@ -290,7 +302,11 @@ export default function AlertBell() {
 
                 {/* Férias sem ADP */}
                 {alerts.vacation_adp?.count > 0 && (
-                  <Section icon={<VacIcon />} title="Férias sem registro ADP" count={alerts.vacation_adp.count} color="#7C3AED">
+                  <Section
+                    icon={<VacIcon />} title="Férias sem registro ADP" count={alerts.vacation_adp.count} color="#7C3AED"
+                    onMarkAllSeen={() => dismissAll('vacation_adp', alerts.vacation_adp.periods.map(v => ['vacation_adp', v.id]))}
+                    markingAll={markingAllSection === 'vacation_adp'}
+                  >
                     {alerts.vacation_adp.periods.map(v => (
                       <AlertRow
                         key={v.id}
@@ -307,7 +323,11 @@ export default function AlertBell() {
 
                 {/* Demandas atrasadas */}
                 {workloadLate.length > 0 && (
-                  <Section icon={<WarningIcon />} title="Demandas atrasadas" count={workloadLate.length} color="#DC2626">
+                  <Section
+                    icon={<WarningIcon />} title="Demandas atrasadas" count={workloadLate.length} color="#DC2626"
+                    onMarkAllSeen={() => dismissAll('workload_late', workloadLate.map(d => ['workload_late', d.id]))}
+                    markingAll={markingAllSection === 'workload_late'}
+                  >
                     {workloadLate.map(d => (
                       <AlertRow
                         key={d.id}
@@ -323,7 +343,11 @@ export default function AlertBell() {
                 )}
                 {/* Documentos não publicados */}
                 {alerts.doc_unpublished?.count > 0 && (
-                  <Section icon={<DocIcon />} title="Documentos não publicados" count={alerts.doc_unpublished.count} color="#F59E0B">
+                  <Section
+                    icon={<DocIcon />} title="Documentos não publicados" count={alerts.doc_unpublished.count} color="#F59E0B"
+                    onMarkAllSeen={() => dismissAll('doc_unpublished', alerts.doc_unpublished.docs.map(d => ['doc_unpublished', d.id]))}
+                    markingAll={markingAllSection === 'doc_unpublished'}
+                  >
                     {alerts.doc_unpublished.docs.map(d => (
                       <AlertRow
                         key={d.id}
@@ -340,7 +364,11 @@ export default function AlertBell() {
 
                 {/* Documentos PMS vencendo/vencidos */}
                 {pmsAlerts.length > 0 && (
-                  <Section icon={<DocIcon />} title="Documentos PMS vencendo/vencidos" count={pmsAlerts.length} color="#DC2626">
+                  <Section
+                    icon={<DocIcon />} title="Documentos PMS vencendo/vencidos" count={pmsAlerts.length} color="#DC2626"
+                    onMarkAllSeen={() => dismissAll('pms_expiring', pmsAlerts.map(d => ['pms_expiring', d.id]))}
+                    markingAll={markingAllSection === 'pms_expiring'}
+                  >
                     {pmsAlerts.map(d => (
                       <AlertRow
                         key={d.id}
@@ -357,7 +385,11 @@ export default function AlertBell() {
 
                 {/* Acompanhamento de Projetos sem atualização */}
                 {stalePT.length > 0 && (
-                  <Section icon={<TrackIcon />} title="Projetos sem atualização" count={stalePT.length} color="#EF4444">
+                  <Section
+                    icon={<TrackIcon />} title="Projetos sem atualização" count={stalePT.length} color="#EF4444"
+                    onMarkAllSeen={() => dismissAll('stale_tracking', stalePT.map(p => ['stale_tracking', p.id]))}
+                    markingAll={markingAllSection === 'stale_tracking'}
+                  >
                     {stalePT.map(p => (
                       <AlertRow
                         key={p.id}
@@ -374,7 +406,11 @@ export default function AlertBell() {
 
                 {/* IACs sem atualização */}
                 {staleIACs.length > 0 && (
-                  <Section icon={<IACIcon />} title="IACs sem atualização" count={staleIACs.length} color="#F97316">
+                  <Section
+                    icon={<IACIcon />} title="IACs sem atualização" count={staleIACs.length} color="#F97316"
+                    onMarkAllSeen={() => dismissAll('stale_iacs', staleIACs.map(iac => ['stale_iacs', iac.id]))}
+                    markingAll={markingAllSection === 'stale_iacs'}
+                  >
                     {staleIACs.map(iac => (
                       <AlertRow
                         key={iac.id}
@@ -391,7 +427,11 @@ export default function AlertBell() {
 
                 {/* Delegações recebidas ativas */}
                 {alerts.delegation_received?.count > 0 && (
-                  <Section icon={<DelegIcon />} title="Delegações recebidas" count={alerts.delegation_received.count} color="#0891B2">
+                  <Section
+                    icon={<DelegIcon />} title="Delegações recebidas" count={alerts.delegation_received.count} color="#0891B2"
+                    onMarkAllSeen={() => dismissAll('delegation_received', alerts.delegation_received.delegations.map(d => ['delegation_received', d.id]))}
+                    markingAll={markingAllSection === 'delegation_received'}
+                  >
                     {alerts.delegation_received.delegations.map(d => (
                       <AlertRow
                         key={d.id}
@@ -431,7 +471,7 @@ export default function AlertBell() {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function Section({ icon, title, count, color, children }) {
+function Section({ icon, title, count, color, children, onMarkAllSeen, markingAll }) {
   return (
     <div style={{ borderBottom: '1px solid var(--border)' }}>
       <div style={{
@@ -446,6 +486,19 @@ function Section({ icon, title, count, color, children }) {
           background: color + '20', color,
           borderRadius: 10, padding: '1px 6px',
         }}>{count}</span>
+        {onMarkAllSeen && (
+          <button
+            onClick={onMarkAllSeen}
+            disabled={markingAll}
+            title="Marcar seção como vista"
+            style={{
+              background: 'none', border: 'none', cursor: markingAll ? 'wait' : 'pointer',
+              fontSize: '0.62rem', fontWeight: 600, color: 'var(--text-muted)',
+              fontFamily: 'var(--font-body)', padding: 0, textDecoration: 'underline',
+              flexShrink: 0,
+            }}
+          >{markingAll ? '...' : 'Marcar vistos'}</button>
+        )}
       </div>
       {children}
     </div>
