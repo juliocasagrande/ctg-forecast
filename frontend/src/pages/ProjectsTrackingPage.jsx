@@ -4,7 +4,11 @@ import api from '../utils/api.js';
 import { useToast } from '../components/ui/Toast.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import ColumnFilterDropdown from '../components/ui/ColumnFilterDropdown.jsx';
+import ColumnResizeHandle from '../components/ui/ColumnResizeHandle.jsx';
 import StatusDot from '../components/ui/StatusDot.jsx';
+import useColumnWidths from '../hooks/useColumnWidths.js';
+
+const PROJECTS_COL_WIDTHS = [40, 46, 130, 110, 280, 180, 160, 170, 220, 100, 120, 110, 110, 100, 100, 100, 150, 100, 90];
 
 /* ─── Constants ─────────────────────────────────────────────────────────────── */
 const AREAS = ['Confiabilidade', 'Elétrica', 'Mecânica'];
@@ -1584,6 +1588,9 @@ export default function ProjectsTrackingPage() {
   const [colFilterNatureza, setColFilterNatureza] = useState([]);
   const [colFilterAditivo, setColFilterAditivo] = useState([]);
 
+  // Temporary column widths (drag-to-resize), reset on reload/navigation — never persisted
+  const { widths: colWidths, handleResizeStart } = useColumnWidths(PROJECTS_COL_WIDTHS);
+
   const fetchItems = async () => {
     setLoading(true);
     try {
@@ -2174,39 +2181,21 @@ export default function ProjectsTrackingPage() {
                 <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", tableLayout: 'fixed', minWidth: 2200 }}>
                   <colgroup>
-                    <col style={{ width: 40 }} />
-                    <col style={{ width: 46 }} />
-                    <col style={{ width: 130 }} />
-                    <col style={{ width: 110 }} />
-                    <col style={{ width: 280 }} />
-                    <col style={{ width: 180 }} />
-                    <col style={{ width: 160 }} />
-                    <col style={{ width: 170 }} />
-                    <col style={{ width: 220 }} />
-                    <col style={{ width: 100 }} />
-                    <col style={{ width: 120 }} />
-                    <col style={{ width: 110 }} />
-                    <col style={{ width: 110 }} />
-                    <col style={{ width: 100 }} />
-                    <col style={{ width: 100 }} />
-                    <col style={{ width: 100 }} />
-                    <col style={{ width: 150 }} />
-                    <col style={{ width: 100 }} />
-                    <col style={{ width: 90 }} />
+                    {colWidths.map((w, i) => <col key={i} style={{ width: w }} />)}
                   </colgroup>
                   <thead>
                     <tr style={{ background: '#F8FAFC', borderBottom: '2px solid #E2E8F0' }}>
                       <th style={{
-                        padding: '10px 12px', textAlign: 'center',
+                        position: 'relative', padding: '10px 12px', textAlign: 'center',
                         fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
-                      }}>●</th>
+                      }}>●<ColumnResizeHandle onResizeStart={handleResizeStart(0)} /></th>
                       <th style={{
-                        padding: '10px 12px', textAlign: 'center',
+                        position: 'relative', padding: '10px 12px', textAlign: 'center',
                         fontSize: '0.75rem', fontWeight: 700, color: '#64748B', whiteSpace: 'nowrap',
-                      }}>🔗</th>
+                      }}>🔗<ColumnResizeHandle onResizeStart={handleResizeStart(1)} /></th>
                       <th style={{
-                        padding: '10px 12px', textAlign: 'left',
+                        position: 'relative', padding: '10px 12px', textAlign: 'left',
                         fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
                       }}>
@@ -2217,24 +2206,25 @@ export default function ProjectsTrackingPage() {
                           selectedValues={colFilterUHE}
                           onChange={setColFilterUHE}
                         />
+                        <ColumnResizeHandle onResizeStart={handleResizeStart(2)} />
                       </th>
                       <th style={{
-                        padding: '10px 12px', textAlign: 'left',
+                        position: 'relative', padding: '10px 12px', textAlign: 'left',
                         fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
-                      }}>PP/Contrato</th>
+                      }}>PP/Contrato<ColumnResizeHandle onResizeStart={handleResizeStart(3)} /></th>
                       <th style={{
-                        padding: '10px 12px', textAlign: 'left',
+                        position: 'relative', padding: '10px 12px', textAlign: 'left',
                         fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
-                      }}>Projeto/Atividade</th>
+                      }}>Projeto/Atividade<ColumnResizeHandle onResizeStart={handleResizeStart(4)} /></th>
                       <th style={{
-                        padding: '10px 12px', textAlign: 'left',
+                        position: 'relative', padding: '10px 12px', textAlign: 'left',
                         fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
-                      }}>Projeto</th>
+                      }}>Projeto<ColumnResizeHandle onResizeStart={handleResizeStart(5)} /></th>
                       <th style={{
-                        padding: '10px 12px', textAlign: 'left',
+                        position: 'relative', padding: '10px 12px', textAlign: 'left',
                         fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
                       }}>
@@ -2245,9 +2235,10 @@ export default function ProjectsTrackingPage() {
                           selectedValues={colFilterStatus}
                           onChange={setColFilterStatus}
                         />
+                        <ColumnResizeHandle onResizeStart={handleResizeStart(6)} />
                       </th>
                       <th style={{
-                        padding: '10px 12px', textAlign: 'left',
+                        position: 'relative', padding: '10px 12px', textAlign: 'left',
                         fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
                       }}>
@@ -2258,54 +2249,55 @@ export default function ProjectsTrackingPage() {
                           selectedValues={colFilterGestor}
                           onChange={setColFilterGestor}
                         />
+                        <ColumnResizeHandle onResizeStart={handleResizeStart(7)} />
                       </th>
                       <th style={{
-                        padding: '10px 12px', textAlign: 'left',
+                        position: 'relative', padding: '10px 12px', textAlign: 'left',
                         fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
-                      }}>Resumo</th>
+                      }}>Resumo<ColumnResizeHandle onResizeStart={handleResizeStart(8)} /></th>
                       <th style={{
-                        padding: '10px 12px', textAlign: 'left',
+                        position: 'relative', padding: '10px 12px', textAlign: 'left',
                         fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
-                      }}>Vencimento</th>
+                      }}>Vencimento<ColumnResizeHandle onResizeStart={handleResizeStart(9)} /></th>
                       <th style={{
-                        padding: '10px 12px', textAlign: 'left',
+                        position: 'relative', padding: '10px 12px', textAlign: 'left',
                         fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
-                      }}>Val. Contrato</th>
+                      }}>Val. Contrato<ColumnResizeHandle onResizeStart={handleResizeStart(10)} /></th>
                       <th style={{
-                        padding: '10px 12px', textAlign: 'left',
+                        position: 'relative', padding: '10px 12px', textAlign: 'left',
                         fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
-                      }}>Realizado</th>
+                      }}>Realizado<ColumnResizeHandle onResizeStart={handleResizeStart(11)} /></th>
                       <th style={{
-                        padding: '10px 12px', textAlign: 'left',
+                        position: 'relative', padding: '10px 12px', textAlign: 'left',
                         fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
-                      }}>Saldo</th>
+                      }}>Saldo<ColumnResizeHandle onResizeStart={handleResizeStart(12)} /></th>
                       <th style={{
-                        padding: '10px 12px', textAlign: 'left',
+                        position: 'relative', padding: '10px 12px', textAlign: 'left',
                         fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
-                      }}>Val. SI</th>
+                      }}>Val. SI<ColumnResizeHandle onResizeStart={handleResizeStart(13)} /></th>
                       <th style={{
-                        padding: '10px 12px', textAlign: 'left',
+                        position: 'relative', padding: '10px 12px', textAlign: 'left',
                         fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
-                      }}>Real. SI</th>
+                      }}>Real. SI<ColumnResizeHandle onResizeStart={handleResizeStart(14)} /></th>
                       <th style={{
-                        padding: '10px 12px', textAlign: 'left',
+                        position: 'relative', padding: '10px 12px', textAlign: 'left',
                         fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
-                      }}>Saldo SI</th>
+                      }}>Saldo SI<ColumnResizeHandle onResizeStart={handleResizeStart(15)} /></th>
                       <th style={{
-                        padding: '10px 12px', textAlign: 'left',
+                        position: 'relative', padding: '10px 12px', textAlign: 'left',
                         fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
-                      }}>Fornecedor</th>
+                      }}>Fornecedor<ColumnResizeHandle onResizeStart={handleResizeStart(16)} /></th>
                       <th style={{
-                        padding: '10px 12px', textAlign: 'left',
+                        position: 'relative', padding: '10px 12px', textAlign: 'left',
                         fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
                       }}>
@@ -2316,9 +2308,10 @@ export default function ProjectsTrackingPage() {
                           selectedValues={colFilterNatureza}
                           onChange={setColFilterNatureza}
                         />
+                        <ColumnResizeHandle onResizeStart={handleResizeStart(17)} />
                       </th>
                       <th style={{
-                        padding: '10px 12px', textAlign: 'left',
+                        position: 'relative', padding: '10px 12px', textAlign: 'left',
                         fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
                       }}>

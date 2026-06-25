@@ -1212,14 +1212,39 @@ function CompactActionList({ title, items }) {
   );
 }
 
-function ScopeToggle({ value, onChange }) {
-  const options = [
-    { key: 'mine', label: 'Meus dados' },
-    { key: 'area', label: 'Minha área' },
-    { key: 'all', label: 'Todos' },
-  ];
+const AREA_ORDER = ['eletrica', 'mecanica', 'confiabilidade', 'modernizacao'];
+const MANAGEMENT_SCOPE_ROLES = ['gerente', 'admin', 'gestor', 'planejador'];
+
+function scopeOptionsFor(viewRole, userArea) {
+  if (viewRole === 'engenheiro') {
+    return [
+      { key: 'mine', label: 'Meus dados' },
+      { key: 'area', label: 'Minha área' },
+      { key: 'all', label: 'Todos' },
+    ];
+  }
+  if (viewRole === 'coordenador') {
+    const own = userArea || 'eletrica';
+    const idx = AREA_ORDER.indexOf(own);
+    const rotated = idx >= 0 ? [...AREA_ORDER.slice(idx), ...AREA_ORDER.slice(0, idx)] : AREA_ORDER;
+    return [
+      ...rotated.map((area, i) => ({ key: area, label: i === 0 ? 'Minha área' : areaLabel(area) })),
+      { key: 'all', label: 'Todos' },
+    ];
+  }
+  if (MANAGEMENT_SCOPE_ROLES.includes(viewRole)) {
+    return [
+      { key: 'all', label: 'Todos' },
+      ...AREA_ORDER.map(area => ({ key: area, label: areaLabel(area) })),
+    ];
+  }
+  return null;
+}
+
+function ScopeToggle({ options, value, onChange }) {
+  const compact = options.length > 3;
   return (
-    <div style={{ display: 'inline-flex', gap: 2, background: '#EEF2F7', borderRadius: 8, padding: 3, flexShrink: 0 }}>
+    <div style={{ display: 'inline-flex', gap: 2, background: '#EEF2F7', borderRadius: 8, padding: 3, flexShrink: 1, minWidth: 0, overflowX: 'auto' }}>
       {options.map(opt => {
         const active = value === opt.key;
         return (
@@ -1230,14 +1255,15 @@ function ScopeToggle({ value, onChange }) {
             style={{
               border: 0,
               borderRadius: 6,
-              padding: '4px 10px',
+              padding: compact ? '4px 8px' : '4px 10px',
               lineHeight: 1,
-              fontSize: '0.74rem',
+              fontSize: compact ? '0.68rem' : '0.74rem',
               fontWeight: 800,
               cursor: 'pointer',
               background: active ? '#0070B8' : 'transparent',
               color: active ? '#fff' : '#6b7a90',
               whiteSpace: 'nowrap',
+              flexShrink: 0,
             }}
           >
             {opt.label}
@@ -1299,21 +1325,26 @@ export default function HomePage({ year }) {
   });
   const [selectedPlants, setSelectedPlants] = useState([]);
 
-  const canToggleScope = viewRole === 'engenheiro' || viewRole === 'coordenador';
-  const defaultViewMode = viewRole === 'engenheiro' ? 'mine' : viewRole === 'coordenador' ? 'area' : 'all';
+  const scopeOptions = scopeOptionsFor(viewRole, user?.area);
+  const canToggleScope = Boolean(scopeOptions);
+  const defaultViewMode = viewRole === 'engenheiro' ? 'mine' : viewRole === 'coordenador' ? (user?.area || 'eletrica') : 'all';
   const [viewMode, setViewMode] = useState(defaultViewMode);
 
   useEffect(() => {
     setViewMode(defaultViewMode);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewRole]);
+  }, [viewRole, user?.area]);
 
   const scope = useMemo(() => {
     if (!canToggleScope) return { label: 'Visao geral', area: '', ownOnly: false };
-    if (viewMode === 'mine') return { label: 'Meus dados', area: user?.area || 'eletrica', ownOnly: true };
-    if (viewMode === 'area') return { label: areaLabel(user?.area || 'eletrica'), area: user?.area || 'eletrica', ownOnly: false };
-    return { label: 'Todos os dados', area: '', ownOnly: false };
-  }, [canToggleScope, viewMode, user?.area]);
+    if (viewRole === 'engenheiro') {
+      if (viewMode === 'mine') return { label: 'Meus dados', area: user?.area || 'eletrica', ownOnly: true };
+      if (viewMode === 'area') return { label: areaLabel(user?.area || 'eletrica'), area: user?.area || 'eletrica', ownOnly: false };
+      return { label: 'Todos os dados', area: '', ownOnly: false };
+    }
+    if (viewMode === 'all') return { label: 'Todos os dados', area: '', ownOnly: false };
+    return { label: areaLabel(viewMode), area: viewMode, ownOnly: false };
+  }, [canToggleScope, viewRole, viewMode, user?.area]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1514,7 +1545,7 @@ export default function HomePage({ year }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 290px', gridTemplateRows: 'auto auto', gap: 10, flexShrink: 0 }}>
           <HomeCard
             title="Resumo operacional"
-            titleExtra={canToggleScope ? <ScopeToggle value={viewMode} onChange={setViewMode} /> : null}
+            titleExtra={canToggleScope ? <ScopeToggle options={scopeOptions} value={viewMode} onChange={setViewMode} /> : null}
             style={{ gridColumn: '1', gridRow: '1' }}
           >
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
