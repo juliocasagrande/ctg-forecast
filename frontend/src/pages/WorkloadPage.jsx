@@ -101,8 +101,14 @@ function loadForMode(demands, mode, base = new Date()) {
 function timelineRange(demands) {
   const now = new Date();
   const dates = demands.flatMap(demand => [demandStart(demand), demandEnd(demand)]).filter(Boolean);
-  const min = Math.min(...dates.map(Number), +new Date(now.getFullYear(), now.getMonth() - 3, 1, 12));
-  const max = Math.max(...dates.map(Number), +new Date(now.getFullYear(), now.getMonth() + 6, 0, 12));
+  if (!dates.length) {
+    return {
+      start: new Date(now.getFullYear(), now.getMonth() - 1, 1, 12),
+      end: new Date(now.getFullYear(), now.getMonth() + 2, 0, 12),
+    };
+  }
+  const min = Math.min(...dates.map(Number), +now);
+  const max = Math.max(...dates.map(Number), +now);
   return {
     start: new Date(new Date(min).getFullYear(), new Date(min).getMonth(), 1, 12),
     end: new Date(new Date(max).getFullYear(), new Date(max).getMonth() + 1, 0, 12),
@@ -192,6 +198,19 @@ function DemandDrawer({ demand, member, members, canPickMember, onSave, onDelete
 function Timeline({ groups, range, today, expanded, onExpand, onEdit, canManage, onNew, loadMode }) {
   const scrollerRef = useRef(null);
   const dragRef = useRef({ active: false, moved: false, startX: 0, startY: 0, scrollLeft: 0, scrollTop: 0, pointerId: null });
+  const [viewportWidth, setViewportWidth] = useState(0);
+
+  useEffect(() => {
+    const node = scrollerRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(entries => {
+      const width = entries[0]?.contentRect.width;
+      if (width) setViewportWidth(width);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
   const columns = useMemo(() => {
     const list = [];
     if (loadMode === 'week') {
@@ -199,7 +218,7 @@ function Timeline({ groups, range, today, expanded, onExpand, onEdit, canManage,
       while (cursor <= range.end) {
         const start = new Date(cursor);
         const end = endOfWeek(cursor);
-        list.push({ start, end, label: `${start.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}`, sub: `${end.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}`, width: WEEK_WIDTH });
+        list.push({ start, end, label: `${start.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}`, sub: `${end.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}` });
         cursor = new Date(+cursor + 7 * DAY);
       }
       return list;
@@ -208,13 +227,15 @@ function Timeline({ groups, range, today, expanded, onExpand, onEdit, canManage,
     while (cursor <= range.end) {
       const start = new Date(cursor);
       const end = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0, 12);
-      list.push({ start, end, label: cursor.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase(), sub: String(cursor.getFullYear()), width: MONTH_WIDTH });
+      list.push({ start, end, label: cursor.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase(), sub: String(cursor.getFullYear()) });
       cursor.setMonth(cursor.getMonth() + 1);
     }
     return list;
   }, [loadMode, range]);
 
-  const totalWidth = columns.reduce((sum, col) => sum + col.width, 0);
+  const baseWidth = loadMode === 'week' ? WEEK_WIDTH : MONTH_WIDTH;
+  const colWidth = columns.length && viewportWidth ? Math.max(baseWidth, (viewportWidth - LEFT_WIDTH) / columns.length) : baseWidth;
+  const totalWidth = colWidth * columns.length;
   const rangeStart = columns[0]?.start || range.start;
   const rangeEnd = columns[columns.length - 1]?.end || range.end;
   const px = date => Math.max(0, Math.min(totalWidth, (+date - +rangeStart) / (+rangeEnd - +rangeStart) * totalWidth));
@@ -226,7 +247,7 @@ function Timeline({ groups, range, today, expanded, onExpand, onEdit, canManage,
     const current = loadMode === 'week' ? startOfWeek(new Date()) : new Date(new Date().getFullYear(), new Date().getMonth(), 1, 12);
     const left = px(current);
     node.scrollLeft = Math.max(0, left - 12);
-  }, [columns, loadMode]);
+  }, [columns, loadMode, colWidth]);
 
   function handleWheel(event) {
     if (Math.abs(event.deltaX) > Math.abs(event.deltaY) || event.shiftKey) {
@@ -239,8 +260,7 @@ function Timeline({ groups, range, today, expanded, onExpand, onEdit, canManage,
     if (event.button !== 0) return;
     const node = scrollerRef.current;
     if (!node) return;
-    dragRef.current = { active: true, moved: false, startX: event.clientX, startY: event.clientY, scrollLeft: node.scrollLeft, scrollTop: node.scrollTop, pointerId: event.pointerId };
-    node.setPointerCapture?.(event.pointerId);
+    dragRef.current = { active: true, moved: false, captured: false, startX: event.clientX, startY: event.clientY, scrollLeft: node.scrollLeft, scrollTop: node.scrollTop, pointerId: event.pointerId };
   }
 
   function handlePointerMove(event) {
@@ -249,16 +269,24 @@ function Timeline({ groups, range, today, expanded, onExpand, onEdit, canManage,
     if (!drag.active || !node) return;
     const dx = event.clientX - drag.startX;
     const dy = event.clientY - drag.startY;
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) drag.moved = true;
+    if (!drag.moved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+      drag.moved = true;
+      if (!drag.captured) {
+        node.setPointerCapture?.(drag.pointerId);
+        drag.captured = true;
+      }
+    }
+    if (!drag.moved) return;
     node.scrollLeft = drag.scrollLeft - dx;
     node.scrollTop = drag.scrollTop - dy;
   }
 
-  function stopDrag(event) {
+  function stopDrag() {
     const node = scrollerRef.current;
-    if (node && dragRef.current.pointerId != null) node.releasePointerCapture?.(dragRef.current.pointerId);
+    if (node && dragRef.current.captured && dragRef.current.pointerId != null) node.releasePointerCapture?.(dragRef.current.pointerId);
     const moved = dragRef.current.moved;
     dragRef.current.active = false;
+    dragRef.current.captured = false;
     window.setTimeout(() => { dragRef.current.moved = false; }, moved ? 80 : 0);
   }
 
@@ -277,8 +305,8 @@ function Timeline({ groups, range, today, expanded, onExpand, onEdit, canManage,
         <div style={{ width: LEFT_WIDTH, flexShrink: 0, padding: '0 14px', display: 'flex', alignItems: 'center', borderRight: '1px solid #e0e7ef', fontSize: '.6rem', letterSpacing: '.08em', color: '#8592a7', fontWeight: 800, position: 'sticky', left: 0, zIndex: 11, background: '#fff' }}>COLABORADOR / CARGA</div>
         <div style={{ width: totalWidth, position: 'relative', height: '100%' }}>
           {columns.map((col, index) => {
-            const left = columns.slice(0, index).reduce((sum, item) => sum + item.width, 0);
-            return <div key={`${col.label}-${col.sub}-${index}`} style={{ position: 'absolute', left, width: col.width, height: '100%', borderRight: '1px solid #eef1f5', display: 'grid', placeItems: 'center', alignContent: 'center' }}><b style={{ fontSize: '.64rem', color: '#718098' }}>{col.label}</b><span style={{ fontSize: '.56rem', color: '#a8b3c3' }}>{col.sub}</span></div>;
+            const left = index * colWidth;
+            return <div key={`${col.label}-${col.sub}-${index}`} style={{ position: 'absolute', left, width: colWidth, height: '100%', borderRight: '1px solid #eef1f5', display: 'grid', placeItems: 'center', alignContent: 'center' }}><b style={{ fontSize: '.64rem', color: '#718098' }}>{col.label}</b><span style={{ fontSize: '.56rem', color: '#a8b3c3' }}>{col.sub}</span></div>;
           })}
           <div style={{ position: 'absolute', left: todayLeft, top: 0, bottom: 0, width: 2, background: 'rgba(230,83,77,.6)' }}><span style={{ position: 'absolute', left: -15, background: '#e6534d', color: '#fff', padding: '2px 5px', fontSize: '.52rem', fontWeight: 800, borderRadius: '0 0 4px 4px' }}>HOJE</span></div>
         </div>
@@ -290,7 +318,7 @@ function Timeline({ groups, range, today, expanded, onExpand, onEdit, canManage,
           const rowHeight = isOpen ? Math.max(54, 16 + demands.length * 24) : 54;
           return <div key={member.id} style={{ height: rowHeight, display: 'flex', borderBottom: '1px solid #edf1f5' }}>
             <button onClick={() => onExpand(member.id)} style={{ width: LEFT_WIDTH, flexShrink: 0, border: 0, borderLeft: `4px solid ${loadTone(totalLoad)}`, borderRight: '1px solid #e0e7ef', background: '#fff', textAlign: 'left', padding: '0 12px', display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', fontFamily: 'inherit', position: 'sticky', left: 0, zIndex: 5 }}><Avatar member={member} /><span style={{ minWidth: 0, flex: 1 }}><b style={{ display: 'block', color: '#16335c', fontSize: '.78rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member.name}</b><span style={{ fontSize: '.63rem', color: '#8290a4' }}>{roleLabel(member.role)}</span></span><span style={{ textAlign: 'right', color: loadTone(totalLoad), fontWeight: 800, fontSize: '.8rem' }}>{totalLoad}%<i style={{ display: 'block', height: 4, width: 34, marginTop: 4, borderRadius: 4, background: '#e5e9f0', overflow: 'hidden' }}><i style={{ display: 'block', width: `${Math.min(100, totalLoad)}%`, height: '100%', background: loadTone(totalLoad) }} /></i></span></button>
-            <div style={{ width: totalWidth, position: 'relative', backgroundImage: 'linear-gradient(to right, transparent calc(100% - 1px), #eef1f5 calc(100% - 1px))', backgroundSize: `${loadMode === 'week' ? WEEK_WIDTH : MONTH_WIDTH}px 100%` }}>
+            <div style={{ width: totalWidth, position: 'relative', backgroundImage: 'linear-gradient(to right, transparent calc(100% - 1px), #eef1f5 calc(100% - 1px))', backgroundSize: `${colWidth}px 100%` }}>
               <div style={{ position: 'absolute', left: todayLeft, top: 0, bottom: 0, width: 2, background: 'rgba(230,83,77,.25)' }} />
               {demands.map((demand, index) => {
                 const start = demandStart(demand);
@@ -360,7 +388,7 @@ export default function WorkloadPage() {
   }).filter(group => group.people.length);
 
   const allLoads = members.map(personLoad);
-  const range = useMemo(() => timelineRange(demands), [demands]);
+  const range = useMemo(() => timelineRange(visibleDemands), [visibleDemands]);
   const statusButtons = [{ key: '', label: 'Todos' }, ...STATUS_OPTIONS.map(key => ({ key, label: STATUS_META[key].label }))];
   const openNew = member => setModal({ demand: null, member: member || (canManageOthers ? null : members.find(m => m.id === user?.id)) });
 
@@ -368,7 +396,7 @@ export default function WorkloadPage() {
     <div style={{ height: 58, padding: '0 22px', background: 'linear-gradient(105deg,#15716c,#35ad78)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
       <div style={{ padding: 3, borderRadius: 8, background: 'rgba(255,255,255,.16)', display: 'flex', gap: 2 }}><button style={{ border: 0, borderRadius: 6, background: '#fff', color: '#15716c', padding: '5px 12px', font: 'inherit', fontSize: '.72rem', fontWeight: 800 }}>Por Funcao</button></div>
       <div style={{ padding: 3, borderRadius: 8, background: 'rgba(255,255,255,.16)', display: 'flex', gap: 2 }}><button onClick={() => setLoadMode('week')} style={{ border: 0, borderRadius: 6, background: loadMode === 'week' ? '#fff' : 'transparent', color: loadMode === 'week' ? '#15716c' : '#fff', padding: '5px 10px', font: 'inherit', fontSize: '.72rem', fontWeight: 800, cursor: 'pointer' }}>Semanal</button><button onClick={() => setLoadMode('month')} style={{ border: 0, borderRadius: 6, background: loadMode === 'month' ? '#fff' : 'transparent', color: loadMode === 'month' ? '#15716c' : '#fff', padding: '5px 10px', font: 'inherit', fontSize: '.72rem', fontWeight: 800, cursor: 'pointer' }}>Mensal</button></div>
-      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar colaborador..." style={{ height: 32, width: 190, padding: '0 10px', border: '1px solid rgba(255,255,255,.32)', borderRadius: 8, background: 'rgba(255,255,255,.14)', color: '#fff', font: 'inherit', fontSize: '.75rem', outline: 'none' }} />
+      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar colaborador..." className="workload-search" style={{ height: 32, width: 190, padding: '0 10px', border: '1px solid rgba(255,255,255,.32)', borderRadius: 8, background: 'rgba(255,255,255,.14)', color: '#fff', font: 'inherit', fontSize: '.75rem', outline: 'none' }} />
       {statusButtons.map(option => { const meta = option.key ? STATUS_META[option.key] : null; const active = statusFilter === option.key; return <button key={option.key} onClick={() => setStatusFilter(option.key)} style={{ border: active && meta ? `1px solid ${meta.color}` : 0, borderRadius: 6, padding: '5px 10px', background: active ? (meta ? meta.color : 'rgba(255,255,255,.92)') : (meta ? meta.soft : 'rgba(255,255,255,.14)'), color: active ? (meta ? '#fff' : '#16335c') : (meta ? meta.text : '#fff'), font: 'inherit', fontSize: '.7rem', fontWeight: 800, cursor: 'pointer' }}>{option.label}</button>; })}
       <button onClick={() => openNew()} style={{ marginLeft: 'auto', height: 32, padding: '0 14px', border: '1px solid rgba(255,255,255,.36)', borderRadius: 8, background: 'rgba(255,255,255,.16)', color: '#fff', font: 'inherit', fontSize: '.78rem', fontWeight: 800, cursor: 'pointer' }}>+ Nova Demanda</button>
     </div>

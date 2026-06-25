@@ -94,6 +94,7 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
 .schedule-meta-chip-usina svg{color:#FCA5A5;flex-shrink:0;}
 .schedule-meta-chip input{background:transparent;border:none;outline:none;color:#fff;font-size:.74rem;font-weight:600;min-width:60px;width:auto;padding:0;}
 .schedule-meta-chip input::placeholder{color:rgba(255,255,255,.6);}
+.workload-search::placeholder{color:rgba(255,255,255,.75);}
 .schedule-meta-chip:last-of-type input{min-width:80px;flex:1;}
 .schedule-delete-project-btn{background:rgba(255,255,255,.92);border:1px solid rgba(254,202,202,.9);color:#991B1B;font-weight:900;border-radius:10px;}
 .schedule-delete-project-btn:hover{background:#FEE2E2;border-color:#FCA5A5;color:#7F1D1D;transform:translateY(-1px);}
