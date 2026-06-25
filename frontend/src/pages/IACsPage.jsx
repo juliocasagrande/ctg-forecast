@@ -1007,7 +1007,11 @@ export default function IACsPage() {
   };
 
   /* ── Derived state ── */
-  const filtered = useMemo(() => {
+  // Aplica todos os filtros, exceto a dimensão de gráfico indicada em `skip` — assim o
+  // próprio gráfico clicado continua mostrando todas as categorias (para dar pra trocar a
+  // seleção), enquanto os demais elementos da página (tabela, KPIs, outro gráfico) refletem
+  // o cruzamento.
+  const applyFilters = useCallback((skip) => {
     let data = [...items];
     if (showMyIACs) {
       const myId = user?.id;
@@ -1021,8 +1025,8 @@ export default function IACsPage() {
       );
     }
     if (activeTab !== 'Todos' && activeTab !== 'Meus IACs') data = data.filter(i => i.area === activeTab);
-    if (filterStatus) data = data.filter(i => i.status_current === filterStatus);
-    if (filterPriority) data = data.filter(i => i.priority === filterPriority);
+    if (skip !== 'status' && filterStatus) data = data.filter(i => i.status_current === filterStatus);
+    if (skip !== 'priority' && filterPriority) data = data.filter(i => i.priority === filterPriority);
     // Column filters
     if (colFilterArea.length > 0 && colFilterArea.length < AREAS.length) {
       data = data.filter(i => colFilterArea.includes(i.area));
@@ -1048,6 +1052,11 @@ export default function IACsPage() {
         (i.team_leader || '').toLowerCase().includes(q)
       );
     }
+    return data;
+  }, [items, search, filterStatus, filterPriority, activeTab, showMyIACs, user, colFilterArea, colFilterType, colFilterPriority, colFilterStatus2, colFilterApresentado]);
+
+  const filtered = useMemo(() => {
+    const data = applyFilters(null);
     // Sort alphabetically by status, then by iac_code
     data.sort((a, b) => {
       const statusA = (a.status_current || '').toLowerCase();
@@ -1056,7 +1065,10 @@ export default function IACsPage() {
       return (a.iac_code || '').localeCompare(b.iac_code || '');
     });
     return data;
-  }, [items, search, filterStatus, filterPriority, activeTab, showMyIACs, user, colFilterArea, colFilterType, colFilterPriority, colFilterStatus2, colFilterApresentado]);
+  }, [applyFilters]);
+
+  const statusChartItems   = useMemo(() => applyFilters('status'),   [applyFilters]);
+  const priorityChartItems = useMemo(() => applyFilters('priority'), [applyFilters]);
 
   const grouped = useMemo(() => {
     const map = {};
@@ -1110,15 +1122,15 @@ export default function IACsPage() {
   [items]);
 
   const statusBarData = useMemo(() =>
-    STATUS_OPTIONS.map(s => ({ status: s.value, count: filtered.filter(i => i.status_current === s.value).length })),
-  [filtered]);
+    STATUS_OPTIONS.map(s => ({ status: s.value, count: statusChartItems.filter(i => i.status_current === s.value).length })),
+  [statusChartItems]);
 
   const priorityData = useMemo(() =>
     PRIORITY_OPTIONS.map(p => {
       const c = PRIORITY_COLORS[p] || PRIORITY_COLORS['Non Priority'];
-      return { label: p, value: filtered.filter(i => i.priority === p).length, ...c };
+      return { label: p, value: priorityChartItems.filter(i => i.priority === p).length, ...c };
     }),
-  [filtered]);
+  [priorityChartItems]);
 
   /* ── CRUD ── */
   const handleSave = async (form) => {

@@ -1784,7 +1784,11 @@ export default function ProjectsTrackingPage() {
     return values.sort();
   }, [preFiltered]);
 
-  const filtered = useMemo(() => {
+  // Aplica todos os filtros, exceto a dimensão de gráfico indicada em `skip` — assim o
+  // próprio gráfico clicado continua mostrando todas as categorias (para dar pra trocar a
+  // seleção), enquanto os demais elementos da página (tabela, outro gráfico) refletem o
+  // cruzamento.
+  const applyFilters = useCallback((skip) => {
     let data = [...items];
     if (showMyContracts) {
       const myId = user?.id;
@@ -1798,9 +1802,9 @@ export default function ProjectsTrackingPage() {
     if (activeTab !== 'Todos' && activeTab !== 'Meus Contratos' && AREAS.includes(activeTab)) {
       data = data.filter(i => i.area === activeTab);
     }
-    if (filterUHE) data = data.filter(i => i.uhe === filterUHE);
+    if (skip !== 'uhe' && filterUHE) data = data.filter(i => i.uhe === filterUHE);
     if (filterStatus) data = data.filter(i => i.status === filterStatus);
-    if (filterNatureza) data = data.filter(i => i.natureza === filterNatureza);
+    if (skip !== 'natureza' && filterNatureza) data = data.filter(i => i.natureza === filterNatureza);
     // Column filters
     if (colFilterUHE.length > 0 && colFilterUHE.length < UHE_LIST.length) {
       data = data.filter(i => colFilterUHE.includes(i.uhe));
@@ -1829,6 +1833,10 @@ export default function ProjectsTrackingPage() {
     }
     return data;
   }, [items, search, filterStatus, filterNatureza, filterUHE, activeTab, showMyContracts, user, colFilterUHE, colFilterStatus, colFilterGestor, colFilterNatureza, colFilterAditivo]);
+
+  const filtered = useMemo(() => applyFilters(null), [applyFilters]);
+  const uheChartItems      = useMemo(() => applyFilters('uhe'),      [applyFilters]);
+  const naturezaChartItems = useMemo(() => applyFilters('natureza'), [applyFilters]);
 
   const grouped = useMemo(() => {
     const map = {};
@@ -2009,7 +2017,7 @@ export default function ProjectsTrackingPage() {
         ensure(item.uhe || 'Geral')[field] += parseNum(item[flatKey]) || 0;
       }
     };
-    for (const item of filtered) {
+    for (const item of uheChartItems) {
       ensure(item.uhe || 'Geral').count += 1;
       distribute(item, 'valor_contrato_breakdown', 'valor_contrato', 'valor_contrato');
       distribute(item, 'realizado_contrato_breakdown', 'realizado_contrato', 'realizado_contrato');
@@ -2019,7 +2027,7 @@ export default function ProjectsTrackingPage() {
     return Object.values(map)
       .map(d => ({ ...d, saldo_contrato: d.valor_contrato - d.realizado_contrato, saldo_si: d.valor_si - d.realizado_si }))
       .sort((a, b) => b.valor_contrato - a.valor_contrato);
-  }, [filtered]);
+  }, [uheChartItems]);
 
   // When switching to "Meus Contratos" tab, set showMyContracts
   const handleTabClick = (tab) => {
@@ -2086,9 +2094,9 @@ export default function ProjectsTrackingPage() {
           <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748B', marginBottom: 4 }}>Natureza</div>
           <DonutChart
             data={[
-              { label: 'CAPEX', value: filtered.filter(i => i.natureza === 'CAPEX').length, color: '#0050B3' },
-              { label: 'OPEX', value: filtered.filter(i => i.natureza === 'OPEX').length, color: '#00AEEF' },
-              { label: 'Guarda-chuva', value: filtered.filter(i => i.natureza === 'Guarda-chuva').length, color: '#97DDF7' },
+              { label: 'CAPEX', value: naturezaChartItems.filter(i => i.natureza === 'CAPEX').length, color: '#0050B3' },
+              { label: 'OPEX', value: naturezaChartItems.filter(i => i.natureza === 'OPEX').length, color: '#00AEEF' },
+              { label: 'Guarda-chuva', value: naturezaChartItems.filter(i => i.natureza === 'Guarda-chuva').length, color: '#97DDF7' },
             ]}
             uheData={uheData}
             filteredItems={filtered}
