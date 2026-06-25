@@ -3,8 +3,11 @@ import { useAuth } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
 import { useToast } from '../components/ui/Toast.jsx';
 import ColumnFilterDropdown from '../components/ui/ColumnFilterDropdown.jsx';
+import ColumnResizeHandle from '../components/ui/ColumnResizeHandle.jsx';
+import useColumnWidths from '../hooks/useColumnWidths.js';
 
 /* ─── Constants ──────────────────────────────────────────────────────────────── */
+const PMS_COL_WIDTHS = [40, 150, 80, 180, 160, 140, 320, 130, 110]; // 🔗 Código Usina Área Responsável Validade Título Status Ações
 const TYPES = [
   { value: 'POL', label: 'Políticas PMS' },
   { value: 'IM',  label: 'Instruções de Manutenção' },
@@ -39,10 +42,14 @@ function fmtDateBR(val) {
   const [, y, m, d] = match;
   return `${d}/${m}/${y}`;
 }
-function externalLink(url) {
-  if (!url) return '';
-  const trimmed = url.trim();
-  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+function externalLink(path) {
+  const value = String(path || '').trim();
+  if (!value) return '';
+  if (/^[A-Za-z]:[\\/]/.test(value)) return `file:///${value.replace(/\\/g, '/')}`;
+  if (value.startsWith('\\')) return `file:${value.replace(/\\/g, '/')}`;
+  if (/^[a-z][a-z\d+.-]*:/i.test(value)) return value;
+  if (/^(?:www\.)?[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(?:[/?#]|$)/i.test(value)) return `https://${value}`;
+  return value;
 }
 
 /* ─── Badges ─────────────────────────────────────────────────────────────────── */
@@ -137,53 +144,64 @@ function HBarChart({ data, title, activeFilter, onFilter }) {
     </div>
   );
 }
-function DonutChart({ data, title, activeFilter, onFilter }) {
+/* ─── MiniDonut / StatsOverviewCard — donut com % real + legenda clicável ───── */
+const CTG_BLUE = '#0066B3';
+function MiniDonut({ data, highlightKey, highlightLabel, activeFilter, onFilter }) {
   const total = data.reduce((s,d) => s+d.value, 0);
-  const r=32, cx=45, cy=45, circ=2*Math.PI*r;
-  let off=0;
-  const slices = data.filter(d=>d.value>0).map(d => { const dash=(d.value/total)*circ; const s={...d,dash,offset:off}; off+=dash; return s; });
+  const highlight = data.find(d => d.filterKey === highlightKey);
+  const pct = total ? (highlight?.value || 0) / total * 100 : 0;
+  const pctLabel = pct.toLocaleString('pt-BR', { minimumFractionDigits:1, maximumFractionDigits:1 });
+  const size = 150, r = 58, cx = size/2, cy = size/2, strokeW = 18, circ = 2*Math.PI*r;
+  const dash = (pct/100) * circ;
+  const isActive = activeFilter === highlightKey;
   const clickable = !!onFilter;
   return (
-    <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:10, padding:'14px 16px', flex:1, minWidth:0 }}>
-      <div style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#94A3B8', marginBottom:10 }}>{title}</div>
-      {total===0 ? <div style={{ fontSize:'0.78rem', color:'#CBD5E1', textAlign:'center', padding:'16px 0' }}>Sem dados</div>
-        : <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-            <svg width={90} height={90} viewBox="0 0 90 90" style={{ flexShrink:0 }}>
-              <circle cx={cx} cy={cy} r={r} fill="none" stroke="#F1F5F9" strokeWidth={14}/>
-              {slices.map((s,i) => {
-                const isActive = activeFilter === s.filterKey;
-                return (
-                  <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={s.color} strokeWidth={14}
-                    strokeDasharray={`${s.dash} ${circ-s.dash}`} strokeDashoffset={-s.offset+circ/4}
-                    opacity={activeFilter && !isActive ? 0.3 : 1}
-                    style={{ cursor: clickable ? 'pointer' : 'default', transition:'opacity 0.15s' }}
-                    onClick={() => clickable && onFilter(isActive ? '' : s.filterKey)}
-                  />
-                );
-              })}
-              <text x={cx} y={cy+1} textAnchor="middle" dominantBaseline="middle" style={{ fontSize:'0.8rem', fontWeight:700, fill:'#1E293B' }}>{total}</text>
-            </svg>
-            <div style={{ display:'flex', flexDirection:'column', gap:5, flex:1, minWidth:0 }}>
-              {slices.map((s,i) => {
-                const isActive = activeFilter === s.filterKey;
-                return (
-                  <div key={i}
-                    onClick={() => clickable && onFilter(isActive ? '' : s.filterKey)}
-                    style={{ display:'flex', alignItems:'center', gap:5, cursor: clickable ? 'pointer' : 'default',
-                      opacity: activeFilter && !isActive ? 0.4 : 1, transition:'opacity 0.15s',
-                    }}
-                  >
-                    <span style={{ width:8, height:8, borderRadius:'50%', background:s.color, flexShrink:0 }}/>
-                    <span style={{ fontSize:'0.68rem', color:'#475569', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontWeight: isActive ? 700 : 400 }}>{s.label}</span>
-                    <span style={{ fontSize:'0.68rem', fontWeight:700, color:'#1E293B', flexShrink:0 }}>{s.value}</span>
-                  </div>
-                );
-              })}
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:10, flex:1, minWidth:0 }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {dash > 0 && (
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke={CTG_BLUE} strokeWidth={strokeW}
+            strokeDasharray={`${dash} ${circ-dash}`} strokeDashoffset={circ/4}
+            opacity={activeFilter && !isActive ? 0.35 : 1}
+            style={{ cursor: clickable ? 'pointer' : 'default', transition:'opacity 0.15s' }}
+            onClick={() => clickable && onFilter(isActive ? '' : highlightKey)}
+          />
+        )}
+        <text x={cx} y={cy-6} textAnchor="middle" style={{ fontSize:'1.3rem', fontWeight:800, fill:'#0F172A' }}>{pctLabel}%</text>
+        <text x={cx} y={cy+15} textAnchor="middle" style={{ fontSize:'0.6rem', fontWeight:700, letterSpacing:'0.04em', fill:'#94A3B8' }}>{highlightLabel.toUpperCase()}</text>
+      </svg>
+      <div style={{ display:'flex', flexDirection:'column', gap:6, width:'100%' }}>
+        {data.filter(d=>d.value>0).map((d,i) => {
+          const isItemActive = activeFilter === d.filterKey;
+          return (
+            <div key={i}
+              onClick={() => clickable && onFilter(isItemActive ? '' : d.filterKey)}
+              style={{ display:'flex', alignItems:'center', gap:6, cursor: clickable ? 'pointer' : 'default', opacity: activeFilter && !isItemActive ? 0.5 : 1, transition:'opacity 0.15s' }}
+            >
+              <span style={{ width:8, height:8, borderRadius:'50%', background:d.color, flexShrink:0 }}/>
+              <span style={{ fontSize:'0.74rem', color:'#475569', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.label}</span>
+              <span style={{ fontSize:'0.74rem', fontWeight:700, color:'#1E293B', flexShrink:0 }}>{d.value.toLocaleString('pt-BR')}</span>
             </div>
-          </div>}
+          );
+        })}
+      </div>
     </div>
   );
 }
+function StatsOverviewCard({ blocks }) {
+  return (
+    <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:10, padding:'16px 20px', width:'100%', height:'100%', boxSizing:'border-box', display:'flex', flexDirection:'column', justifyContent:'center' }}>
+      <div style={{ display:'flex', gap:18, alignItems:'center' }}>
+        {blocks.map((b,i) => (
+          <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:8, minWidth:0 }}>
+            <div style={{ fontSize:'0.62rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#94A3B8' }}>{b.title}</div>
+            <MiniDonut {...b}/>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const PLANT_BLUES = ['#001F5B','#003A8C','#0050B3','#0066B3','#0070CC','#0082E6','#0091EA','#00AEEF','#29BAF0','#64CCF4','#97DDF7','#BFECFA','#D6F4FF','#E8F8FF'];
 function VBarChart({ data, title, activeFilter, onFilter }) {
   const max = Math.max(...data.map(d => d.value), 1);
@@ -723,6 +741,8 @@ export default function PMSPage() {
   const [colFilterResp, setColFilterResp]       = useState([]);
   const [colFilterStatus, setColFilterStatus]   = useState([]);
 
+  const { widths: colWidths, handleResizeStart } = useColumnWidths(PMS_COL_WIDTHS);
+
   const SUPERIOR_ROLES = ['admin','gerente','coordenador'];
   const isSuperior = SUPERIOR_ROLES.includes(user?.role);
 
@@ -774,18 +794,22 @@ export default function PMSPage() {
   const openNew  = () => setDocModal({ open:true, doc:null });
   const openEdit = (doc) => setDocModal({ open:true, doc });
 
-  const filtered = useMemo(() => {
+  // Aplica todos os filtros (busca, dropdowns, colunas e gráficos), exceto a dimensão de
+  // gráfico indicada em `skip` — assim o próprio gráfico clicado continua mostrando todas
+  // as categorias (para dar pra trocar a seleção), enquanto os demais elementos da página
+  // (tabela, KPIs, outros gráficos) refletem o cruzamento.
+  const applyFilters = useCallback((skip) => {
     let data = [...docs];
     if (myDocsOnly) data = data.filter(d => isOwner(d));
-    if (typeFilter) data = data.filter(d => d.type === typeFilter);
+    if (skip !== 'type' && typeFilter) data = data.filter(d => d.type === typeFilter);
     if (statusFilter) data = data.filter(d => d.status === statusFilter);
-    if (plantFilter) data = data.filter(d => d.plant === plantFilter);
-    if (validadeFilter) data = data.filter(d => d.validade_status === validadeFilter);
-    if (chartTypeFilter) data = data.filter(d => d.type === chartTypeFilter);
-    if (chartValidadeFilter) data = data.filter(d => d.validade_status === chartValidadeFilter);
-    if (chartPlantFilter) data = data.filter(d => d.plant === chartPlantFilter);
-    if (chartLangFilter === 'with_en') data = data.filter(d => d.has_en);
-    else if (chartLangFilter === 'without_en') data = data.filter(d => !d.has_en);
+    if (skip !== 'plant' && plantFilter) data = data.filter(d => d.plant === plantFilter);
+    if (skip !== 'validade' && validadeFilter) data = data.filter(d => d.validade_status === validadeFilter);
+    if (skip !== 'type' && chartTypeFilter) data = data.filter(d => d.type === chartTypeFilter);
+    if (skip !== 'validade' && chartValidadeFilter) data = data.filter(d => d.validade_status === chartValidadeFilter);
+    if (skip !== 'plant' && chartPlantFilter) data = data.filter(d => d.plant === chartPlantFilter);
+    if (skip !== 'lang' && chartLangFilter === 'with_en') data = data.filter(d => d.has_en);
+    else if (skip !== 'lang' && chartLangFilter === 'without_en') data = data.filter(d => !d.has_en);
     if (colFilterCode.length)   data = data.filter(d => colFilterCode.includes(d.code));
     if (colFilterArea.length)   data = data.filter(d => colFilterArea.includes(d.area));
     if (colFilterResp.length)   data = data.filter(d => colFilterResp.includes(d.responsible));
@@ -804,6 +828,23 @@ export default function PMSPage() {
   }, [docs, typeFilter, statusFilter, plantFilter, validadeFilter, search, myDocsOnly, user,
       colFilterCode, colFilterArea, colFilterResp, colFilterStatus, chartTypeFilter, chartValidadeFilter, chartPlantFilter, chartLangFilter]);
 
+  const dedupeLatest = (arr) => {
+    const map = new Map();
+    arr.forEach(d => {
+      const key = d.base_code || d.code;
+      const cur = map.get(key);
+      if (!cur || (d.revision ?? -1) > (cur.revision ?? -1)) map.set(key, d);
+    });
+    return Array.from(map.values());
+  };
+
+  const filtered          = useMemo(() => applyFilters(null),      [applyFilters]);
+  const kpiDocs           = useMemo(() => dedupeLatest(filtered),  [filtered]);
+  const typeChartDocs     = useMemo(() => dedupeLatest(applyFilters('type')),     [applyFilters]);
+  const plantChartDocs    = useMemo(() => dedupeLatest(applyFilters('plant')),    [applyFilters]);
+  const validadeChartDocs = useMemo(() => dedupeLatest(applyFilters('validade')), [applyFilters]);
+  const langChartDocs     = useMemo(() => dedupeLatest(applyFilters('lang')),     [applyFilters]);
+
   const groups = useMemo(() => {
     const map = new Map();
     filtered.forEach(d => {
@@ -815,33 +856,21 @@ export default function PMSPage() {
     return Array.from(map.entries()).map(([key, items]) => ({ key, items, latest: items[0] }));
   }, [filtered]);
 
-  /* Considera apenas a revisão mais recente de cada documento para os KPIs/gráficos */
-  const latestDocs = useMemo(() => {
-    const map = new Map();
-    docs.forEach(d => {
-      const key = d.base_code || d.code;
-      const cur = map.get(key);
-      if (!cur || (d.revision ?? -1) > (cur.revision ?? -1)) map.set(key, d);
-    });
-    return Array.from(map.values());
-  }, [docs]);
+  /* KPIs — refletem o cruzamento total (todos os filtros, incluindo gráficos) */
+  const totalAll   = kpiDocs.length;
+  const published  = kpiDocs.filter(d => d.status === 'Publicado').length;
+  const expiring   = kpiDocs.filter(d => d.validade_status === 'Alerta').length;
+  const expired    = kpiDocs.filter(d => d.validade_status === 'Vencido').length;
+  const myDocsCount = kpiDocs.filter(d => isOwner(d)).length;
 
-  /* KPIs */
-  const totalAll   = latestDocs.length;
-  const published  = latestDocs.filter(d => d.status === 'Publicado').length;
-  const expiring   = latestDocs.filter(d => d.validade_status === 'Alerta').length;
-  const expired    = latestDocs.filter(d => d.validade_status === 'Vencido').length;
-  const myDocsCount = latestDocs.filter(d => isOwner(d)).length;
-  const withEnCount = latestDocs.filter(d => d.has_en).length;
-  const enPct = totalAll ? Math.round((withEnCount / totalAll) * 100) : 0;
-
-  /* Charts */
-  const typeChartData     = TYPES.map(t => ({ label:t.value, value:latestDocs.filter(d=>d.type===t.value).length, color:TYPE_COLORS[t.value], filterKey:t.value }));
-  const validadeChartData = VALIDADE.map(v => ({ label:v.value, value:latestDocs.filter(d=>d.validade_status===v.value).length, color:v.color, filterKey:v.value }));
-  const plantChartData    = PLANTS.map(p => ({ label:p, value:latestDocs.filter(d=>d.plant===p).length, color:'#0066B3', filterKey:p })).filter(d=>d.value>0);
+  /* Charts — cada um reflete os demais filtros, exceto a própria dimensão */
+  const typeChartData     = TYPES.map(t => ({ label:t.value, value:typeChartDocs.filter(d=>d.type===t.value).length, color:TYPE_COLORS[t.value], filterKey:t.value }));
+  const validadeChartData = VALIDADE.map(v => ({ label:v.value, value:validadeChartDocs.filter(d=>d.validade_status===v.value).length, color:v.color, filterKey:v.value }));
+  const plantChartData    = PLANTS.map(p => ({ label:p, value:plantChartDocs.filter(d=>d.plant===p).length, color:'#0066B3', filterKey:p })).filter(d=>d.value>0);
+  const langWithEn = langChartDocs.filter(d => d.has_en).length;
   const langChartData     = [
-    { label:'Com Inglês', value: withEnCount, color:'#10B981', filterKey:'with_en' },
-    { label:'Só Português', value: totalAll - withEnCount, color:'#94A3B8', filterKey:'without_en' },
+    { label:'Com Inglês', value: langWithEn, color:'#10B981', filterKey:'with_en' },
+    { label:'Só Português', value: langChartDocs.length - langWithEn, color:'#94A3B8', filterKey:'without_en' },
   ];
   const plantsUsed = PLANTS.filter(p => docs.some(d => d.plant === p));
   const areasUsed   = [...new Set(docs.map(d => d.area).filter(Boolean))];
@@ -849,42 +878,50 @@ export default function PMSPage() {
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:16, padding:'0 2px' }}>
 
-      {/* KPI Cards */}
-      <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
-        <StatCard label="Total Geral"      value={totalAll}   color="#001F5B"/>
-        <StatCard label="Publicados"       value={published}  color="#10B981"/>
-        <StatCard label="Vencendo (30d)"   value={expiring}   color={expiring>0?'#F59E0B':'#94A3B8'} sub={expiring>0?'Atenção':'Tudo ok'}/>
-        <StatCard label="Vencidos"         value={expired}    color={expired>0?'#EF4444':'#94A3B8'} sub={expired>0?'Ação necessária':'Tudo ok'}/>
-        <StatCard label="Meus documentos"  value={myDocsCount} color="#8B5CF6"/>
-        <StatCard label="Com versão EN"    value={`${enPct}%`} color={enPct<50?'#F59E0B':'#0891B2'} sub={`${withEnCount} de ${totalAll} documentos`}/>
-      </div>
+      {/* KPI Cards + Visão geral (validade / idioma) */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 360px', gap:10, alignItems:'stretch' }}>
+        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          {/* Linha 1: KPI cards */}
+          <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'stretch' }}>
+            <StatCard label="Total Geral"      value={totalAll}   color="#001F5B"/>
+            <StatCard label="Publicados"       value={published}  color="#10B981"/>
+            <StatCard label="Vencendo (30d)"   value={expiring}   color={expiring>0?'#F59E0B':'#94A3B8'} sub={expiring>0?'Atenção':'Tudo ok'}/>
+            <StatCard label="Vencidos"         value={expired}    color={expired>0?'#EF4444':'#94A3B8'} sub={expired>0?'Ação necessária':'Tudo ok'}/>
+          </div>
+          {/* Linha 2: gráficos por tipo/usina */}
+          <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'stretch', flex:1 }}>
+            <div style={{ flex:'1 1 220px', minWidth:200, display:'flex' }}>
+              <HBarChart title="Documentos por Tipo" data={typeChartData}
+                activeFilter={chartTypeFilter}
+                onFilter={(key) => { setChartTypeFilter(key); if (key) { setChartValidadeFilter(''); setChartPlantFilter(''); setChartLangFilter(''); } }}
+              />
+            </div>
+            <div style={{ flex:'2 1 400px', minWidth:280, display:'flex' }}>
+              <VBarChart title="Documentos por Usina" data={plantChartData}
+                activeFilter={chartPlantFilter}
+                onFilter={(key) => { setChartPlantFilter(key); if (key) { setChartTypeFilter(''); setChartValidadeFilter(''); setChartLangFilter(''); } }}
+              />
+            </div>
+          </div>
+        </div>
 
-      {/* Charts */}
-      <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'stretch' }}>
-        <div style={{ flex:'1 1 180px', minWidth:160, display:'flex' }}>
-          <HBarChart title="Documentos por Tipo" data={typeChartData}
-            activeFilter={chartTypeFilter}
-            onFilter={(key) => { setChartTypeFilter(key); if (key) { setChartValidadeFilter(''); setChartPlantFilter(''); setChartLangFilter(''); } }}
-          />
-        </div>
-        <div style={{ flex:'2 1 320px', minWidth:220, display:'flex' }}>
-          <VBarChart title="Documentos por Usina" data={plantChartData}
-            activeFilter={chartPlantFilter}
-            onFilter={(key) => { setChartPlantFilter(key); if (key) { setChartTypeFilter(''); setChartValidadeFilter(''); setChartLangFilter(''); } }}
-          />
-        </div>
-        <div style={{ flex:'1 1 180px', minWidth:160, display:'flex' }}>
-          <DonutChart title="Status de Validade" data={validadeChartData}
-            activeFilter={chartValidadeFilter}
-            onFilter={(key) => { setChartValidadeFilter(key); if (key) { setChartTypeFilter(''); setChartPlantFilter(''); setChartLangFilter(''); } }}
-          />
-        </div>
-        <div style={{ flex:'1 1 180px', minWidth:160, display:'flex' }}>
-          <DonutChart title="Relação Português / Inglês" data={langChartData}
-            activeFilter={chartLangFilter}
-            onFilter={(key) => { setChartLangFilter(key); if (key) { setChartTypeFilter(''); setChartPlantFilter(''); setChartValidadeFilter(''); } }}
-          />
-        </div>
+        {/* Coluna individual: visão geral (mesma altura das duas linhas à esquerda) */}
+        <StatsOverviewCard
+          blocks={[
+            {
+              title: 'Status de Validade', data: validadeChartData,
+              highlightKey: 'Em dia', highlightLabel: 'Em dia',
+              activeFilter: chartValidadeFilter,
+              onFilter: (key) => { setChartValidadeFilter(key); if (key) { setChartTypeFilter(''); setChartPlantFilter(''); setChartLangFilter(''); } },
+            },
+            {
+              title: 'Relação de Idioma', data: langChartData,
+              highlightKey: 'with_en', highlightLabel: 'Com Inglês',
+              activeFilter: chartLangFilter,
+              onFilter: (key) => { setChartLangFilter(key); if (key) { setChartTypeFilter(''); setChartPlantFilter(''); setChartValidadeFilter(''); } },
+            },
+          ]}
+        />
       </div>
 
       {/* Filter bar */}
@@ -954,35 +991,44 @@ export default function PMSPage() {
             <button onClick={openNew} style={{ marginTop:12, padding:'8px 18px', border:'none', borderRadius:8, background:'#001F5B', color:'#fff', fontSize:'0.82rem', fontWeight:700, cursor:'pointer' }}>+ Registrar Documento</button>
           </div>
         ) : (
-          <table style={{ width:'100%', borderCollapse:'collapse' }}>
+          <div style={{ overflowX:'auto' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed', minWidth: PMS_COL_WIDTHS.reduce((s,w)=>s+w,0) }}>
+            <colgroup>
+              {colWidths.map((w, i) => <col key={i} style={{ width:w }} />)}
+            </colgroup>
             <thead style={{ position:'sticky', top:0, zIndex:2 }}>
-              <tr style={{ background:'#001F5B' }}>
+              <tr style={{ background:'#F8FAFC', borderBottom:'2px solid #E2E8F0' }}>
+                <th style={{ ...TH, textAlign:'center' }}>🔗<ColumnResizeHandle onResizeStart={handleResizeStart(0)} /></th>
                 <th style={TH}>
                   <div style={{ display:'flex', alignItems:'center' }}>
                     Código
                     <ColumnFilterDropdown column="Código" uniqueValues={[...new Set(docs.map(d => d.code).filter(Boolean))]} selectedValues={colFilterCode} onChange={setColFilterCode}/>
                   </div>
+                  <ColumnResizeHandle onResizeStart={handleResizeStart(1)} />
                 </th>
-                <th style={TH}>Usina</th>
+                <th style={TH}>Usina<ColumnResizeHandle onResizeStart={handleResizeStart(2)} /></th>
                 <th style={TH}>
                   <div style={{ display:'flex', alignItems:'center' }}>
                     Área
                     <ColumnFilterDropdown column="Área" uniqueValues={areasUsed} selectedValues={colFilterArea} onChange={setColFilterArea}/>
                   </div>
+                  <ColumnResizeHandle onResizeStart={handleResizeStart(3)} />
                 </th>
                 <th style={TH}>
                   <div style={{ display:'flex', alignItems:'center' }}>
                     Responsável
                     <ColumnFilterDropdown column="Responsável" uniqueValues={[...new Set(docs.map(d => d.responsible).filter(Boolean))]} selectedValues={colFilterResp} onChange={setColFilterResp}/>
                   </div>
+                  <ColumnResizeHandle onResizeStart={handleResizeStart(4)} />
                 </th>
-                <th style={TH}>Validade</th>
-                <th style={TH}>Título</th>
+                <th style={TH}>Validade<ColumnResizeHandle onResizeStart={handleResizeStart(5)} /></th>
+                <th style={TH}>Título<ColumnResizeHandle onResizeStart={handleResizeStart(6)} /></th>
                 <th style={TH}>
                   <div style={{ display:'flex', alignItems:'center' }}>
                     Status
                     <ColumnFilterDropdown column="Status" uniqueValues={STATUSES.map(s => s.value)} selectedValues={colFilterStatus} onChange={setColFilterStatus}/>
                   </div>
+                  <ColumnResizeHandle onResizeStart={handleResizeStart(7)} />
                 </th>
                 <th style={TH}>Ações</th>
               </tr>
@@ -1001,6 +1047,18 @@ export default function PMSPage() {
                       onMouseEnter={e => e.currentTarget.style.background='#F0F9FF'}
                       onMouseLeave={e => e.currentTarget.style.background='#fff'}
                     >
+                      <td style={{ ...TD, textAlign:'center' }}>
+                        {latest.document_link && (
+                          <a
+                            href={externalLink(latest.document_link)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Abrir documento"
+                            onClick={e => e.stopPropagation()}
+                            style={{ color:'#0b5cab', textDecoration:'none', fontSize:'0.9rem' }}
+                          >🔗</a>
+                        )}
+                      </td>
                       <td style={TD}>
                         <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
                           {hasRevisions && (
@@ -1050,7 +1108,7 @@ export default function PMSPage() {
 
                     {expandedDoc === latest.id && (
                       <tr style={{ background:'#F8FBFF', borderBottom:'1px solid #E2E8F0' }}>
-                        <td colSpan={8} style={{ padding:'12px 16px' }}>
+                        <td colSpan={9} style={{ padding:'12px 16px' }}>
                           <DocDetail doc={latest}/>
                         </td>
                       </tr>
@@ -1064,6 +1122,18 @@ export default function PMSPage() {
                           onMouseEnter={e => e.currentTarget.style.background='#F0F9FF'}
                           onMouseLeave={e => e.currentTarget.style.background='#FAFAFA'}
                         >
+                          <td style={{ ...TD, textAlign:'center' }}>
+                            {rev.document_link && (
+                              <a
+                                href={externalLink(rev.document_link)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Abrir documento"
+                                onClick={e => e.stopPropagation()}
+                                style={{ color:'#0b5cab', textDecoration:'none', fontSize:'0.9rem' }}
+                              >🔗</a>
+                            )}
+                          </td>
                           <td style={{ ...TD, paddingLeft:0 }}>
                             <div style={{ display:'flex', alignItems:'center', gap:0 }}>
                               <div style={{ width:28, display:'flex', flexDirection:'column', alignItems:'center', flexShrink:0 }}>
@@ -1102,7 +1172,7 @@ export default function PMSPage() {
                         </tr>
                         {expandedDoc === rev.id && (
                           <tr style={{ background:'#F8FBFF', borderBottom:'1px solid #E2E8F0' }}>
-                            <td colSpan={8} style={{ padding:'12px 16px 12px 32px' }}>
+                            <td colSpan={9} style={{ padding:'12px 16px 12px 32px' }}>
                               <DocDetail doc={rev}/>
                             </td>
                           </tr>
@@ -1114,6 +1184,7 @@ export default function PMSPage() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
@@ -1159,7 +1230,7 @@ function DocDetail({ doc }) {
 }
 
 /* ─── Style helpers ──────────────────────────────────────────────────────────── */
-const TH = { padding:'10px 14px', textAlign:'left', fontSize:'0.68rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#fff' };
+const TH = { position:'relative', padding:'10px 14px', textAlign:'left', fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.07em', color:'#64748B', whiteSpace:'nowrap' };
 const TD = { padding:'10px 14px', verticalAlign:'middle' };
 const Div = () => <div style={{ width:1, height:18, background:'#E2E8F0', flexShrink:0 }}/>;
 const selStyle = (active) => ({ border:'none', outline:'none', fontSize:'0.78rem', fontFamily:'var(--font-body)', color: active?'#001F5B':'#94A3B8', fontWeight: active?700:400, cursor:'pointer', background:'transparent', flexShrink:0 });

@@ -274,7 +274,8 @@ const UHE_SIGLAS = {
 };
 
 /* ─── DonutChart (Natureza) ──────────────────────────────────────────────────── */
-function DonutChart({ data, uheData = [], filteredItems = [] }) {
+function DonutChart({ data, uheData = [], filteredItems = [], activeFilter, onFilter }) {
+  const clickable = !!onFilter;
   const total = data.reduce((s, d) => s + d.value, 0);
   const r = 46, cx = 55, cy = 55, circ = 2 * Math.PI * r;
   let off = 0;
@@ -309,22 +310,36 @@ function DonutChart({ data, uheData = [], filteredItems = [] }) {
         : <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <svg width={90} height={90} viewBox="0 0 110 110" style={{ flexShrink: 0 }}>
               <circle cx={cx} cy={cy} r={r} fill="none" stroke="#F1F5F9" strokeWidth={14} />
-              {slices.map((s, i) => <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={s.color} strokeWidth={14} strokeDasharray={`${s.dash} ${circ - s.dash}`} strokeDashoffset={-s.offset + circ / 4} />)}
+              {slices.map((s, i) => {
+                const isActive = activeFilter === s.label;
+                return (
+                  <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={s.color} strokeWidth={14}
+                    strokeDasharray={`${s.dash} ${circ - s.dash}`} strokeDashoffset={-s.offset + circ / 4}
+                    opacity={activeFilter && !isActive ? 0.3 : 1}
+                    style={{ cursor: clickable ? 'pointer' : 'default', transition: 'opacity 0.15s' }}
+                    onClick={() => clickable && onFilter(isActive ? '' : s.label)}
+                  />
+                );
+              })}
               <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="middle" style={{ fontSize: '0.95rem', fontWeight: 700, fill: '#1E293B' }}>{total}</text>
             </svg>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 0 }}>
-              {slices.map((s, i) => (
-                <div key={i}
-                  style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'default' }}
-                  onMouseEnter={e => { setHoveredLabel(s.label); setTooltipPos({ x: e.clientX, y: e.clientY }); }}
-                  onMouseMove={e => setTooltipPos({ x: e.clientX, y: e.clientY })}
-                  onMouseLeave={() => setHoveredLabel(null)}
-                >
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
-                  <span style={{ fontSize: '0.7rem', color: '#475569', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.label}</span>
-                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#1E293B', flexShrink: 0 }}>{s.value}</span>
-                </div>
-              ))}
+              {slices.map((s, i) => {
+                const isActive = activeFilter === s.label;
+                return (
+                  <div key={i}
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: clickable ? 'pointer' : 'default', opacity: activeFilter && !isActive ? 0.5 : 1, transition: 'opacity 0.15s' }}
+                    onMouseEnter={e => { setHoveredLabel(s.label); setTooltipPos({ x: e.clientX, y: e.clientY }); }}
+                    onMouseMove={e => setTooltipPos({ x: e.clientX, y: e.clientY })}
+                    onMouseLeave={() => setHoveredLabel(null)}
+                    onClick={() => clickable && onFilter(isActive ? '' : s.label)}
+                  >
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
+                    <span style={{ fontSize: '0.7rem', color: isActive ? '#0b5cab' : '#475569', fontWeight: isActive ? 700 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.label}</span>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#1E293B', flexShrink: 0 }}>{s.value}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>}
       {hoveredLabel && sliceBreakdown.length > 0 && createPortal(
@@ -2077,6 +2092,8 @@ export default function ProjectsTrackingPage() {
             ]}
             uheData={uheData}
             filteredItems={filtered}
+            activeFilter={filterNatureza}
+            onFilter={setFilterNatureza}
           />
         </div>
 

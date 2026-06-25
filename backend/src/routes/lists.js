@@ -90,7 +90,7 @@ router.post('/iacs', async (req, res) => {
       comments, requester, team_leader, team_leader_user_id, chinese_work_staff,
       status_current, apresentado_work_team,
       organizer, supervisor, evaluation_team,
-      priority, validity, continuidade,
+      priority, validity, continuidade, link_path,
     } = req.body;
 
     const r = await pool.query(`
@@ -101,9 +101,9 @@ router.post('/iacs', async (req, res) => {
         comments, requester, team_leader, team_leader_user_id, chinese_work_staff,
         status_current, apresentado_work_team,
         organizer, supervisor, evaluation_team,
-        priority, validity, continuidade
+        priority, validity, continuidade, link_path
       ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23
       ) RETURNING *
     `, [
       iac_code || null, type_line || 'New', area || 'Elétrica',
@@ -112,7 +112,7 @@ router.post('/iacs', async (req, res) => {
       comments || null, requester || null, team_leader || null, team_leader_user_id || null, chinese_work_staff || null,
       status_current || '0 - Not started yet', apresentado_work_team || 'Não',
       organizer || null, supervisor || null, evaluation_team || null,
-      priority || 'Non Priority', validity || 'Dez/2027', continuidade || 'Sim',
+      priority || 'Non Priority', validity || 'Dez/2027', continuidade || 'Sim', link_path || null,
     ]);
     res.status(201).json(r.rows[0]);
   } catch (err) { safeError(res, err); }
@@ -130,7 +130,7 @@ router.put('/iacs/:id', async (req, res) => {
       comments, requester, team_leader, team_leader_user_id, chinese_work_staff,
       status_current, apresentado_work_team,
       organizer, supervisor, evaluation_team,
-      priority, validity, continuidade,
+      priority, validity, continuidade, link_path,
     } = req.body;
 
     const r = await pool.query(`
@@ -141,9 +141,9 @@ router.put('/iacs/:id', async (req, res) => {
         comments=$10, requester=$11, team_leader=$12, team_leader_user_id=$13, chinese_work_staff=$14,
         status_current=$15, apresentado_work_team=$16,
         organizer=$17, supervisor=$18, evaluation_team=$19,
-        priority=$20, validity=$21, continuidade=$22,
+        priority=$20, validity=$21, continuidade=$22, link_path=$23,
         updated_at=NOW()
-      WHERE id=$23
+      WHERE id=$24
       RETURNING *
     `, [
       iac_code || null, type_line || 'New', area || 'Elétrica',
@@ -152,7 +152,7 @@ router.put('/iacs/:id', async (req, res) => {
       comments || null, requester || null, team_leader || null, team_leader_user_id || null, chinese_work_staff || null,
       status_current || '0 - Not started yet', apresentado_work_team || 'Não',
       organizer || null, supervisor || null, evaluation_team || null,
-      priority || 'Non Priority', validity || 'Dez/2027', continuidade || 'Sim',
+      priority || 'Non Priority', validity || 'Dez/2027', continuidade || 'Sim', link_path || null,
       id,
     ]);
 

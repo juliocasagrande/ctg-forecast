@@ -11,7 +11,7 @@ import OpenTimeBadge from '../components/ui/OpenTimeBadge.jsx';
 import { isIacOpenedInYear } from '../utils/iacDates.js';
 import useColumnWidths from '../hooks/useColumnWidths.js';
 
-const IACS_COL_WIDTHS = [40, 140, 90, 110, 90, 105, 60, 90, 220, 180, 130, 130, 110, 80, 110, 100, 120, 130, 140, 100];
+const IACS_COL_WIDTHS = [40, 40, 140, 90, 110, 90, 105, 60, 90, 220, 180, 130, 130, 110, 80, 110, 100, 120, 130, 140, 100];
 
 /* ─── Constants ────────────────────────────────────────────────────────────── */
 const AREAS = ['Confiabilidade', 'Elétrica', 'Mecânica'];
@@ -68,8 +68,18 @@ const EMPTY_IAC = {
   requester: '', team_leader: '', chinese_work_staff: '',
   status_current: '0 - Not started yet', apresentado_work_team: 'Não',
   organizer: '', supervisor: '', evaluation_team: '',
-  priority: 'Non Priority', validity: 'Dez/2027', continuidade: 'Sim',
+  priority: 'Non Priority', validity: 'Dez/2027', continuidade: 'Sim', link_path: '',
 };
+
+function externalLink(path) {
+  const value = String(path || '').trim();
+  if (!value) return '';
+  if (/^[A-Za-z]:[\\/]/.test(value)) return `file:///${value.replace(/\\/g, '/')}`;
+  if (value.startsWith('\\')) return `file:${value.replace(/\\/g, '/')}`;
+  if (/^[a-z][a-z\d+.-]*:/i.test(value)) return value;
+  if (/^(?:www\.)?[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(?:[/?#]|$)/i.test(value)) return `https://${value}`;
+  return value;
+}
 
 /* ─── Badges ─────────────────────────────────────────────────────────────────── */
 function StatusBadge({ status }) {
@@ -784,6 +794,12 @@ function IACModal({ item, onClose, onSave, onDelete, isNew, saving, deleting, al
 
           <div style={{ borderTop: '1px solid #E2E8F0', margin: '4px 0' }} />
 
+          {/* Link / Caminho */}
+          <Field label="Link / Caminho do Arquivo">
+            <input value={form.link_path || ''} onChange={e => set('link_path', e.target.value)}
+              placeholder="https://... ou \\servidor\pasta" style={fS} />
+          </Field>
+
           {/* Comentários */}
           <Field label="Comentários">
             <textarea value={form.comments || ''} onChange={e => set('comments', e.target.value)}
@@ -1344,16 +1360,17 @@ export default function IACsPage() {
               </div>
               <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
                 <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', fontFamily: 'var(--font-body)', tableLayout: 'fixed', minWidth: 2110 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', fontFamily: 'var(--font-body)', tableLayout: 'fixed', minWidth: 2150 }}>
                     <colgroup>
                       {colWidths.map((w, i) => <col key={i} style={{ width: w }} />)}
                     </colgroup>
                     <thead>
                       <tr style={{ background: '#F8FAFC', borderBottom: '2px solid #E2E8F0' }}>
                         <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'center', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>●<ColumnResizeHandle onResizeStart={handleResizeStart(0)} /></th>
+                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'center', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>🔗<ColumnResizeHandle onResizeStart={handleResizeStart(1)} /></th>
                         <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>
                           IAC
-                          <ColumnResizeHandle onResizeStart={handleResizeStart(1)} />
+                          <ColumnResizeHandle onResizeStart={handleResizeStart(2)} />
                         </th>
                         <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>
                           Tipo
@@ -1363,7 +1380,7 @@ export default function IACsPage() {
                             selectedValues={colFilterType}
                             onChange={setColFilterType}
                           />
-                          <ColumnResizeHandle onResizeStart={handleResizeStart(2)} />
+                          <ColumnResizeHandle onResizeStart={handleResizeStart(3)} />
                         </th>
                         <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>
                           Área
@@ -1373,17 +1390,17 @@ export default function IACsPage() {
                             selectedValues={colFilterArea}
                             onChange={setColFilterArea}
                           />
-                          <ColumnResizeHandle onResizeStart={handleResizeStart(3)} />
+                          <ColumnResizeHandle onResizeStart={handleResizeStart(4)} />
                         </th>
-                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Abertura<ColumnResizeHandle onResizeStart={handleResizeStart(4)} /></th>
-                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Fechamento<ColumnResizeHandle onResizeStart={handleResizeStart(5)} /></th>
-                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'center', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>META<ColumnResizeHandle onResizeStart={handleResizeStart(6)} /></th>
-                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>When Open<ColumnResizeHandle onResizeStart={handleResizeStart(7)} /></th>
-                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Projeto<ColumnResizeHandle onResizeStart={handleResizeStart(8)} /></th>
-                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Comentários<ColumnResizeHandle onResizeStart={handleResizeStart(9)} /></th>
-                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Solicitante<ColumnResizeHandle onResizeStart={handleResizeStart(10)} /></th>
-                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Team Leader<ColumnResizeHandle onResizeStart={handleResizeStart(11)} /></th>
-                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Chinese Staff<ColumnResizeHandle onResizeStart={handleResizeStart(12)} /></th>
+                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Abertura<ColumnResizeHandle onResizeStart={handleResizeStart(5)} /></th>
+                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Fechamento<ColumnResizeHandle onResizeStart={handleResizeStart(6)} /></th>
+                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'center', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>META<ColumnResizeHandle onResizeStart={handleResizeStart(7)} /></th>
+                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>When Open<ColumnResizeHandle onResizeStart={handleResizeStart(8)} /></th>
+                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Projeto<ColumnResizeHandle onResizeStart={handleResizeStart(9)} /></th>
+                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Comentários<ColumnResizeHandle onResizeStart={handleResizeStart(10)} /></th>
+                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Solicitante<ColumnResizeHandle onResizeStart={handleResizeStart(11)} /></th>
+                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Team Leader<ColumnResizeHandle onResizeStart={handleResizeStart(12)} /></th>
+                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Chinese Staff<ColumnResizeHandle onResizeStart={handleResizeStart(13)} /></th>
                         <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>
                           Ap. WT
                           <ColumnFilterDropdown
@@ -1392,10 +1409,10 @@ export default function IACsPage() {
                             selectedValues={colFilterApresentado}
                             onChange={setColFilterApresentado}
                           />
-                          <ColumnResizeHandle onResizeStart={handleResizeStart(13)} />
+                          <ColumnResizeHandle onResizeStart={handleResizeStart(14)} />
                         </th>
-                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Organizador<ColumnResizeHandle onResizeStart={handleResizeStart(14)} /></th>
-                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Supervisor<ColumnResizeHandle onResizeStart={handleResizeStart(15)} /></th>
+                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Organizador<ColumnResizeHandle onResizeStart={handleResizeStart(15)} /></th>
+                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Supervisor<ColumnResizeHandle onResizeStart={handleResizeStart(16)} /></th>
                         <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>
                           Prioridade
                           <ColumnFilterDropdown
@@ -1404,10 +1421,10 @@ export default function IACsPage() {
                             selectedValues={colFilterPriority}
                             onChange={setColFilterPriority}
                           />
-                          <ColumnResizeHandle onResizeStart={handleResizeStart(16)} />
+                          <ColumnResizeHandle onResizeStart={handleResizeStart(17)} />
                         </th>
-                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'center', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Qtde Priority<ColumnResizeHandle onResizeStart={handleResizeStart(17)} /></th>
-                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'center', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Qtde No Priority<ColumnResizeHandle onResizeStart={handleResizeStart(18)} /></th>
+                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'center', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Qtde Priority<ColumnResizeHandle onResizeStart={handleResizeStart(18)} /></th>
+                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'center', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Qtde No Priority<ColumnResizeHandle onResizeStart={handleResizeStart(19)} /></th>
                         <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>Validade</th>
                       </tr>
                     </thead>
@@ -1421,6 +1438,18 @@ export default function IACsPage() {
                         >
                           <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                             <StatusDot updatedAt={item.updated_at} />
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                            {item.link_path && (
+                              <a
+                                href={externalLink(item.link_path)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Abrir arquivo"
+                                onClick={e => e.stopPropagation()}
+                                style={{ color: '#0b5cab', textDecoration: 'none', fontSize: '0.9rem' }}
+                              >🔗</a>
+                            )}
                           </td>
                           <td style={{ padding: '10px 12px', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap' }}>{item.iac_code || '—'}</td>
                           <td style={{ padding: '10px 12px' }}><TypeBadge value={item.type_line} /></td>

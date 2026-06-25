@@ -3,7 +3,11 @@ import { useAuth } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
 import { useToast } from '../components/ui/Toast.jsx';
 import ColumnFilterDropdown from '../components/ui/ColumnFilterDropdown.jsx';
+import ColumnResizeHandle from '../components/ui/ColumnResizeHandle.jsx';
+import useColumnWidths from '../hooks/useColumnWidths.js';
 import * as mammoth from 'mammoth';
+
+const DOCS_COL_WIDTHS = [40, 150, 130, 150, 100, 320, 130, 110]; // 🔗 Código Usina Responsável Data Título Status Ações
 
 /* ─── Constants ──────────────────────────────────────────────────────────────── */
 const DOC_TYPES = [
@@ -57,10 +61,14 @@ function fmtDateBR(val) {
   const [, y, m, d] = match;
   return `${d}/${m}/${y}`;
 }
-function externalLink(url) {
-  if (!url) return '';
-  const trimmed = url.trim();
-  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+function externalLink(path) {
+  const value = String(path || '').trim();
+  if (!value) return '';
+  if (/^[A-Za-z]:[\\/]/.test(value)) return `file:///${value.replace(/\\/g, '/')}`;
+  if (value.startsWith('\\')) return `file:${value.replace(/\\/g, '/')}`;
+  if (/^[a-z][a-z\d+.-]*:/i.test(value)) return value;
+  if (/^(?:www\.)?[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(?:[/?#]|$)/i.test(value)) return `https://${value}`;
+  return value;
 }
 function buildCode(type, area, seq, year, revision) {
   if (!type || !area || !seq || !year) return '';
@@ -1015,6 +1023,8 @@ export default function DocumentsPage() {
   const [colFilterSubject, setColFilterSubject] = useState([]);
   const [colFilterStatus, setColFilterStatus] = useState([]);
 
+  const { widths: colWidths, handleResizeStart } = useColumnWidths(DOCS_COL_WIDTHS);
+
   // Chart click filters
   const [chartTypeFilter, setChartTypeFilter] = useState('');
   const [chartStatusFilter, setChartStatusFilter] = useState('');
@@ -1116,8 +1126,18 @@ export default function DocumentsPage() {
   const openNew  = () => { fetchNextSeq(); setDocModal({ open:true, doc:null }); };
   const openEdit = (doc) => setDocModal({ open:true, doc });
 
-  // Filtro "Meus docs" — filtra onde o usuário é autor (consta em doc.authors)
-  const filtered = useMemo(() => {
+  // Agrupar por base_code — normalizar: CTA-PRD-002-26-R0 → CTA-PRD-002-26
+  const normalizeBaseCode = (doc) => {
+    if (doc.base_code) return doc.base_code;
+    // Derivar base_code do code: remover sufixo -R{n}
+    return (doc.code || '').replace(/-R\d+$/, '');
+  };
+
+  // Aplica todos os filtros (busca, dropdowns, colunas e gráficos), exceto a dimensão de
+  // gráfico indicada em `skip` — assim o próprio gráfico clicado continua mostrando todas
+  // as categorias (para dar pra trocar a seleção), enquanto os demais elementos da página
+  // (tabela, KPIs, outros gráficos) refletem o cruzamento.
+  const applyFilters = useCallback((skip) => {
     let data = [...docs];
     if (myDocsOnly) {
       // "Meus" = SOMENTE sou o responsável pelo nome
@@ -1126,23 +1146,23 @@ export default function DocumentsPage() {
         return d.responsible.trim().toLowerCase() === user.name.trim().toLowerCase();
       });
     }
-    if (statusFilter && data.some(d => d.status === statusFilter)) {
+    if (skip !== 'status' && statusFilter && data.some(d => d.status === statusFilter)) {
       data = data.filter(d => d.status === statusFilter);
     }
-    if (typeFilter) {
+    if (skip !== 'type' && typeFilter) {
       data = data.filter(d => d.type === typeFilter);
     }
-    if (plantFilter) {
+    if (skip !== 'plant' && plantFilter) {
       data = data.filter(d => d.plant === plantFilter);
     }
     // Chart click filters
-    if (chartTypeFilter) {
+    if (skip !== 'type' && chartTypeFilter) {
       data = data.filter(d => d.type === chartTypeFilter);
     }
-    if (chartStatusFilter) {
+    if (skip !== 'status' && chartStatusFilter) {
       data = data.filter(d => d.status === chartStatusFilter);
     }
-    if (chartPlantFilter) {
+    if (skip !== 'plant' && chartPlantFilter) {
       data = data.filter(d => d.plant === chartPlantFilter);
     }
     // Column filters
@@ -1177,12 +1197,21 @@ export default function DocumentsPage() {
     return data;
   }, [docs, statusFilter, typeFilter, plantFilter, search, myDocsOnly, user, colFilterCode, colFilterPlant, colFilterResponsible, colFilterDate, colFilterSubject, colFilterStatus, chartTypeFilter, chartStatusFilter, chartPlantFilter]);
 
-  // Agrupar por base_code — normalizar: CTA-PRD-002-26-R0 → CTA-PRD-002-26
-  const normalizeBaseCode = (doc) => {
-    if (doc.base_code) return doc.base_code;
-    // Derivar base_code do code: remover sufixo -R{n}
-    return (doc.code || '').replace(/-R\d+$/, '');
+  const dedupeLatest = (arr) => {
+    const map = new Map();
+    arr.forEach(d => {
+      const key = normalizeBaseCode(d);
+      const cur = map.get(key);
+      if (!cur || (d.revision ?? -1) > (cur.revision ?? -1)) map.set(key, d);
+    });
+    return Array.from(map.values());
   };
+
+  const filtered        = useMemo(() => applyFilters(null),        [applyFilters]);
+  const kpiDocs          = useMemo(() => dedupeLatest(filtered),    [filtered]);
+  const typeChartDocs    = useMemo(() => dedupeLatest(applyFilters('type')),   [applyFilters]);
+  const statusChartDocs  = useMemo(() => dedupeLatest(applyFilters('status')), [applyFilters]);
+  const plantChartDocs   = useMemo(() => dedupeLatest(applyFilters('plant')),  [applyFilters]);
 
   const groups = useMemo(() => {
     const map = new Map();
@@ -1202,24 +1231,24 @@ export default function DocumentsPage() {
     return Array.from(map.entries()).map(([key, items]) => ({ key, items, latest: items[0] }));
   }, [filtered]);
 
-  /* KPIs */
-  const totalAll  = docs.length;
-  const published = docs.filter(d => d.status==='Publicado').length;
-  const inProg    = docs.filter(d => d.status==='Em elaboração').length;
+  /* KPIs — refletem o cruzamento total (todos os filtros, incluindo gráficos) */
+  const totalAll  = kpiDocs.length;
+  const published = kpiDocs.filter(d => d.status==='Publicado').length;
+  const inProg    = kpiDocs.filter(d => d.status==='Em elaboração').length;
   const pubNoLink = stats?.published_without_link ?? 0;
   const activeYear = yearFilter ? (yearFilter % 100) : CURRENT_YEAR_SHORT;
   const activeYearFull = yearFilter || CURRENT_YEAR;
-  const yearDocs  = docs.filter(d => d.year === activeYear).length;
-  const myDocsCount = docs.filter(d =>
+  const yearDocs  = kpiDocs.filter(d => d.year === activeYear).length;
+  const myDocsCount = kpiDocs.filter(d =>
     user?.name && d.responsible &&
     d.responsible.trim().toLowerCase() === user.name.trim().toLowerCase()
   ).length;
 
-  /* Charts */
+  /* Charts — cada um reflete os demais filtros, exceto a própria dimensão */
   const TYPE_COLORS = ['#0066B3','#0891B2','#10B981','#8B5CF6','#F59E0B','#EF4444','#6366F1','#EC4899','#14B8A6'];
-  const typeChartData   = DOC_TYPES.map((t,i) => ({ label:t.value, value:docs.filter(d=>d.type===t.value).length, color:TYPE_COLORS[i%TYPE_COLORS.length], filterKey: t.value }));
-  const statusChartData = STATUSES.map(s => ({ label:s.value, value:docs.filter(d=>d.status===s.value).length, color:s.color, filterKey: s.value }));
-  const plantChartData  = ALL_PLANTS.map(p => ({ label: PLANT_SIGLAS[p] || p, fullName: p, value:docs.filter(d=>d.plant===p).length, color:'#0066B3', filterKey: p })).filter(d=>d.value>0);
+  const typeChartData   = DOC_TYPES.map((t,i) => ({ label:t.value, value:typeChartDocs.filter(d=>d.type===t.value).length, color:TYPE_COLORS[i%TYPE_COLORS.length], filterKey: t.value }));
+  const statusChartData = STATUSES.map(s => ({ label:s.value, value:statusChartDocs.filter(d=>d.status===s.value).length, color:s.color, filterKey: s.value }));
+  const plantChartData  = ALL_PLANTS.map(p => ({ label: PLANT_SIGLAS[p] || p, fullName: p, value:plantChartDocs.filter(d=>d.plant===p).length, color:'#0066B3', filterKey: p })).filter(d=>d.value>0);
   const years = [...new Set(docs.map(d=>2000+d.year))].sort((a,b)=>b-a);
   const plantsUsed = ALL_PLANTS.filter(p => docs.some(d => d.plant === p));
 
@@ -1353,9 +1382,14 @@ export default function DocumentsPage() {
             <button onClick={openNew} style={{ marginTop:12, padding:'8px 18px', border:'none', borderRadius:8, background:'#001F5B', color:'#fff', fontSize:'0.82rem', fontWeight:700, cursor:'pointer' }}>+ Registrar Documento</button>
           </div>
         ) : (
-          <table style={{ width:'100%', borderCollapse:'collapse' }}>
+          <div style={{ overflowX:'auto' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed', minWidth: DOCS_COL_WIDTHS.reduce((s,w)=>s+w,0) }}>
+            <colgroup>
+              {colWidths.map((w, i) => <col key={i} style={{ width:w }} />)}
+            </colgroup>
             <thead style={{ position:'sticky', top:0, zIndex:2 }}>
-              <tr style={{ background:'#001F5B' }}>
+              <tr style={{ background:'#F8FAFC', borderBottom:'2px solid #E2E8F0' }}>
+                <th style={{ ...TH, textAlign:'center' }}>🔗<ColumnResizeHandle onResizeStart={handleResizeStart(0)} /></th>
                 <th style={TH}>
                   <div style={{ display:'flex', alignItems:'center' }}>
                     Código
@@ -1366,6 +1400,7 @@ export default function DocumentsPage() {
                       onChange={setColFilterCode}
                     />
                   </div>
+                  <ColumnResizeHandle onResizeStart={handleResizeStart(1)} />
                 </th>
                 <th style={TH}>
                   <div style={{ display:'flex', alignItems:'center' }}>
@@ -1377,6 +1412,7 @@ export default function DocumentsPage() {
                       onChange={setColFilterPlant}
                     />
                   </div>
+                  <ColumnResizeHandle onResizeStart={handleResizeStart(2)} />
                 </th>
                 <th style={TH}>
                   <div style={{ display:'flex', alignItems:'center' }}>
@@ -1388,6 +1424,7 @@ export default function DocumentsPage() {
                       onChange={setColFilterResponsible}
                     />
                   </div>
+                  <ColumnResizeHandle onResizeStart={handleResizeStart(3)} />
                 </th>
                 <th style={TH}>
                   <div style={{ display:'flex', alignItems:'center' }}>
@@ -1399,6 +1436,7 @@ export default function DocumentsPage() {
                       onChange={setColFilterDate}
                     />
                   </div>
+                  <ColumnResizeHandle onResizeStart={handleResizeStart(4)} />
                 </th>
                 <th style={TH}>
                   <div style={{ display:'flex', alignItems:'center' }}>
@@ -1410,6 +1448,7 @@ export default function DocumentsPage() {
                       onChange={setColFilterSubject}
                     />
                   </div>
+                  <ColumnResizeHandle onResizeStart={handleResizeStart(5)} />
                 </th>
                 <th style={TH}>
                   <div style={{ display:'flex', alignItems:'center' }}>
@@ -1421,6 +1460,7 @@ export default function DocumentsPage() {
                       onChange={setColFilterStatus}
                     />
                   </div>
+                  <ColumnResizeHandle onResizeStart={handleResizeStart(6)} />
                 </th>
                 <th style={TH}>Ações</th>
               </tr>
@@ -1440,6 +1480,18 @@ export default function DocumentsPage() {
                       onMouseEnter={e => e.currentTarget.style.background='#F0F9FF'}
                       onMouseLeave={e => e.currentTarget.style.background='#fff'}
                     >
+                      <td style={{ ...TD, textAlign:'center' }}>
+                        {latest.document_link && (
+                          <a
+                            href={externalLink(latest.document_link)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Abrir documento"
+                            onClick={e => e.stopPropagation()}
+                            style={{ color:'#0b5cab', textDecoration:'none', fontSize:'0.9rem' }}
+                          >🔗</a>
+                        )}
+                      </td>
                       <td style={TD}>
                         <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
                           {/* Botão de expandir revisões */}
@@ -1490,7 +1542,7 @@ export default function DocumentsPage() {
                     {/* ── Detalhe expandido do documento principal ── */}
                     {expandedDoc === latest.id && (
                       <tr style={{ background:'#F8FBFF', borderBottom:'1px solid #E2E8F0' }}>
-                        <td colSpan={7} style={{ padding:'12px 16px' }}>
+                        <td colSpan={8} style={{ padding:'12px 16px' }}>
                           <DocDetail doc={latest} isAuthor={isAuthor(latest)}/>
                         </td>
                       </tr>
@@ -1505,6 +1557,18 @@ export default function DocumentsPage() {
                           onMouseEnter={e => e.currentTarget.style.background='#F0F9FF'}
                           onMouseLeave={e => e.currentTarget.style.background='#FAFAFA'}
                         >
+                          <td style={{ ...TD, textAlign:'center' }}>
+                            {rev.document_link && (
+                              <a
+                                href={externalLink(rev.document_link)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Abrir documento"
+                                onClick={e => e.stopPropagation()}
+                                style={{ color:'#0b5cab', textDecoration:'none', fontSize:'0.9rem' }}
+                              >🔗</a>
+                            )}
+                          </td>
                           <td style={{ ...TD, paddingLeft:0 }}>
                             <div style={{ display:'flex', alignItems:'center', gap:0 }}>
                               {/* Conector visual de árvore */}
@@ -1540,7 +1604,7 @@ export default function DocumentsPage() {
                         </tr>
                         {expandedDoc === rev.id && (
                           <tr style={{ background:'#F8FBFF', borderBottom:'1px solid #E2E8F0' }}>
-                            <td colSpan={7} style={{ padding:'12px 16px 12px 32px' }}>
+                            <td colSpan={8} style={{ padding:'12px 16px 12px 32px' }}>
                               <DocDetail doc={rev} isAuthor={isAuthor(rev)}/>
                             </td>
                           </tr>
@@ -1552,6 +1616,7 @@ export default function DocumentsPage() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
@@ -1620,7 +1685,7 @@ function DocDetail({ doc, isAuthor }) {
 }
 
 /* ─── Style helpers ──────────────────────────────────────────────────────────── */
-const TH = { padding:'10px 14px', textAlign:'left', fontSize:'0.68rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#fff' };
+const TH = { position:'relative', padding:'10px 14px', textAlign:'left', fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.07em', color:'#64748B', whiteSpace:'nowrap' };
 const TD = { padding:'10px 14px', verticalAlign:'middle' };
 const Div = () => <div style={{ width:1, height:18, background:'#E2E8F0', flexShrink:0 }}/>;
 const selStyle = (active) => ({ border:'none', outline:'none', fontSize:'0.78rem', fontFamily:'var(--font-body)', color: active?'#001F5B':'#94A3B8', fontWeight: active?700:400, cursor:'pointer', background:'transparent', flexShrink:0 });

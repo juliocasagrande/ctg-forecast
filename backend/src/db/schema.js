@@ -544,6 +544,7 @@ await client.query(`
     await client.query(`
       ALTER TABLE lists_iacs ADD COLUMN IF NOT EXISTS unique_key VARCHAR(100);
       ALTER TABLE lists_iacs ADD COLUMN IF NOT EXISTS acceptance_letter_signed DATE;
+      ALTER TABLE lists_iacs ADD COLUMN IF NOT EXISTS link_path TEXT DEFAULT NULL;
     `);
 
     await client.query(`
