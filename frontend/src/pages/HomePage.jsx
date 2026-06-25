@@ -712,7 +712,7 @@ function TimelineList({ items }) {
   );
 }
 
-function HomeCard({ title, icon, action, children, onClick, style }) {
+function HomeCard({ title, icon, titleExtra, action, children, onClick, style }) {
   const iconColor = icon === 'warning' ? '#F59E0B' : '#0070B8';
   const iconBg = icon === 'warning' ? '#FEF3C7' : '#EFF6FF';
   return (
@@ -733,11 +733,12 @@ function HomeCard({ title, icon, action, children, onClick, style }) {
       }}
     >
       <div style={{ padding: '11px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           {icon && <span style={{ width: 22, height: 22, borderRadius: 6, display: 'grid', placeItems: 'center', background: iconBg, color: iconColor, fontWeight: 900, fontSize: '0.8rem' }}>
             {['target', 'file', 'folder', 'warning'].includes(icon) ? <OperationalIcon name={icon} color={iconColor} /> : icon}
           </span>}
           <span style={{ color: 'var(--ctg-navy)', fontWeight: 900, fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</span>
+          {titleExtra}
         </div>
         {action && <span style={{ color: '#0070B8', fontSize: '0.68rem', fontWeight: 900 }}>{action}</span>}
       </div>
@@ -1211,6 +1212,42 @@ function CompactActionList({ title, items }) {
   );
 }
 
+function ScopeToggle({ value, onChange }) {
+  const options = [
+    { key: 'mine', label: 'Meus dados' },
+    { key: 'area', label: 'Minha área' },
+    { key: 'all', label: 'Todos' },
+  ];
+  return (
+    <div style={{ display: 'inline-flex', gap: 2, background: '#EEF2F7', borderRadius: 8, padding: 3, flexShrink: 0 }}>
+      {options.map(opt => {
+        const active = value === opt.key;
+        return (
+          <button
+            key={opt.key}
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onChange(opt.key); }}
+            style={{
+              border: 0,
+              borderRadius: 6,
+              padding: '4px 10px',
+              lineHeight: 1,
+              fontSize: '0.74rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              background: active ? '#0070B8' : 'transparent',
+              color: active ? '#fff' : '#6b7a90',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function AttentionPanel({ total, items, navigate }) {
   const max = Math.max(1, ...items.map(item => Number(item.value) || 0));
   const iconByLabel = {
@@ -1262,11 +1299,21 @@ export default function HomePage({ year }) {
   });
   const [selectedPlants, setSelectedPlants] = useState([]);
 
+  const canToggleScope = viewRole === 'engenheiro' || viewRole === 'coordenador';
+  const defaultViewMode = viewRole === 'engenheiro' ? 'mine' : viewRole === 'coordenador' ? 'area' : 'all';
+  const [viewMode, setViewMode] = useState(defaultViewMode);
+
+  useEffect(() => {
+    setViewMode(defaultViewMode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewRole]);
+
   const scope = useMemo(() => {
-    if (user?.role === 'engenheiro') return { label: 'Meus dados', area: user?.area || 'eletrica' };
-    if (user?.role === 'coordenador' && !user?._managerAccessOverride) return { label: areaLabel(user?.area || 'eletrica'), area: user?.area || 'eletrica' };
-    return { label: 'Visao geral', area: '' };
-  }, [user]);
+    if (!canToggleScope) return { label: 'Visao geral', area: '', ownOnly: false };
+    if (viewMode === 'mine') return { label: 'Meus dados', area: user?.area || 'eletrica', ownOnly: true };
+    if (viewMode === 'area') return { label: areaLabel(user?.area || 'eletrica'), area: user?.area || 'eletrica', ownOnly: false };
+    return { label: 'Todos os dados', area: '', ownOnly: false };
+  }, [canToggleScope, viewMode, user?.area]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1288,17 +1335,16 @@ export default function HomePage({ year }) {
         api.get('/delegations/notifications').then(r => r.data).catch(() => []),
       ]);
       if (cancelled) return;
-      const viewRole = user?._managerAccessOverride ? user?.role : (user?._originalRole || user?.role);
-      const ownMetas = viewRole === 'engenheiro' ? metas.filter(m => m.is_general || m.user_id === user.id) : metas;
-      const ownVacations = viewRole === 'engenheiro' ? vacations.filter(v => v.user_id === user.id) : vacations;
+      const ownMetas = scope.ownOnly ? metas.filter(m => m.is_general || m.user_id === user.id) : metas;
+      const ownVacations = scope.ownOnly ? vacations.filter(v => v.user_id === user.id) : vacations;
       const areaMatch = row => areaKey(row.area) === areaKey(scope.area);
-      const scopedTracking = viewRole === 'engenheiro'
+      const scopedTracking = scope.ownOnly
         ? tracking.filter(r => Number(r.gestor_user_id) === Number(user.id))
         : scope.area ? tracking.filter(areaMatch) : tracking;
-      const scopedIacs = viewRole === 'engenheiro'
+      const scopedIacs = scope.ownOnly
         ? iacs.filter(r => Number(r.team_leader_user_id) === Number(user.id))
         : scope.area ? iacs.filter(areaMatch) : iacs;
-      const scopedDocuments = viewRole === 'engenheiro'
+      const scopedDocuments = scope.ownOnly
         ? documents.filter(d => (d.responsible || '').trim().toLowerCase() === (user?.name || '').trim().toLowerCase())
         : scope.area ? documents.filter(areaMatch) : documents;
       const scopedStaleTracking = scope.area ? staleTracking.filter(areaMatch) : staleTracking;
@@ -1308,7 +1354,7 @@ export default function HomePage({ year }) {
     }
     load();
     return () => { cancelled = true; };
-  }, [year, scope.area, user?.id, user?.role, user?._originalRole, user?._managerAccessOverride]);
+  }, [year, scope.area, scope.ownOnly, user?.id]);
 
   const metasDone = data.metas.filter(m => Number(m.achieved_value || 0) >= 100).length;
   const metasAvg = weightedAchievement(data.metas);
@@ -1466,7 +1512,11 @@ export default function HomePage({ year }) {
 
         {/* Row 1: left col = Resumo + Filter stacked; right col = Atenção agora spanning both */}
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 290px', gridTemplateRows: 'auto auto', gap: 10, flexShrink: 0 }}>
-          <HomeCard title="Resumo operacional" style={{ gridColumn: '1', gridRow: '1' }}>
+          <HomeCard
+            title="Resumo operacional"
+            titleExtra={canToggleScope ? <ScopeToggle value={viewMode} onChange={setViewMode} /> : null}
+            style={{ gridColumn: '1', gridRow: '1' }}
+          >
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
               <OperationalTile label="IACs" value={iacRows.length} sub={`${iacUpdatedPct}% atualizado`} color="#F59E0B" icon="warning" trend gaugeValue={iacUpdatedPct} onClick={() => navigate('/lists/iacs')} />
               <OperationalTile label="Projetos" value={projectRows.length} sub={`${projectUpdatedPct}% atualizado`} color="#0070B8" icon="folder" trend gaugeValue={projectUpdatedPct} onClick={() => navigate('/lists/projects-tracking')} />
