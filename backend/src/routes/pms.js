@@ -115,7 +115,7 @@ router.get('/alerts', async (req, res) => {
     if (cfg.pms_alert_enabled === 'false') return res.json({ count: 0, docs: [] });
 
     const alertRoles = (cfg.pms_alert_roles || 'coordenador,gerente,admin').split(',').map(r => r.trim()).filter(Boolean);
-    const role = req.user.role;
+    const role = req.user._managerAccessOverride ? req.user.role : (req.user._originalRole || req.user.role);
     const userName = req.user.name || '';
     const isPrivileged = alertRoles.includes(role);
 

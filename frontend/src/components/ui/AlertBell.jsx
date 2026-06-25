@@ -73,7 +73,15 @@ export default function AlertBell() {
   useEffect(() => {
     fetchAlerts();
     const t = setInterval(fetchAlerts, POLL_INTERVAL);
-    return () => clearInterval(t);
+    const onFocus = () => fetchAlerts();
+    const onVisibility = () => { if (document.visibilityState === 'visible') fetchAlerts(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [fetchAlerts]);
 
   useEffect(() => {

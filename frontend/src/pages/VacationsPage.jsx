@@ -36,30 +36,24 @@ const PERIOD_COLORS = [
   { bg: '#D1FAE5', border: '#10B981', text: '#065F46' },
   { bg: '#FEF3C7', border: '#F59E0B', text: '#92400E' },
 ];
-/* ─── Styled tooltip for vacation bars ─────────────────────────────────────── */
+/* ─── Styled tooltip for vacation periods (mesmo padrão dos gráficos da HomePage) ── */
 function VacTooltip({ style, label, children }) {
   const [vis, setVis] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
 
-  const show = (e) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    setPos({ x: r.left + r.width / 2, y: r.top - 8 });
-    setVis(true);
-  };
+  const show = (e) => { setPos({ x: e.clientX, y: e.clientY }); setVis(true); };
+  const move = (e) => setPos({ x: e.clientX, y: e.clientY });
 
   return (
-    <div style={{ position:'absolute', ...style }}
-      onMouseEnter={show} onMouseLeave={() => setVis(false)}>
+    <div style={{ position: style ? 'absolute' : 'relative', display: style ? undefined : 'inline-block', ...style }}
+      onMouseEnter={show} onMouseMove={move} onMouseLeave={() => setVis(false)}>
       {children}
       {vis && (
         <div style={{
-          position: 'fixed', left: pos.x, top: pos.y,
-          transform: 'translate(-50%, -100%)',
-          background: 'var(--bg-card)', border: '1px solid var(--border)',
-          borderRadius: 8, padding: '8px 12px',
-          boxShadow: 'var(--shadow-lg)', zIndex: 9999,
-          fontSize: '0.78rem', color: 'var(--text-primary)',
-          pointerEvents: 'none', whiteSpace: 'nowrap',
+          position: 'fixed', left: pos.x + 14, top: pos.y + 14, zIndex: 9999,
+          background: 'rgba(15,23,42,0.94)', color: '#fff', borderRadius: 8,
+          padding: '9px 10px', boxShadow: '0 14px 32px rgba(15,23,42,0.22)',
+          fontSize: '0.76rem', pointerEvents: 'none', whiteSpace: 'nowrap',
         }}>
           {label}
         </div>
@@ -93,6 +87,22 @@ function daysUntil(dateStr) {
 function calcDays(start, end) {
   if (!start || !end) return 0;
   return Math.round((new Date(String(end).slice(0,10)) - new Date(String(start).slice(0,10))) / 86400000) + 1;
+}
+
+function fmtDateTime(ts) {
+  if (!ts) return '';
+  return new Date(ts).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function periodTooltipLabel(p) {
+  const wasEdited = p.updated_at && p.created_at && new Date(p.updated_at) - new Date(p.created_at) > 60000;
+  return (
+    <div>
+      <div style={{ fontWeight: 700, marginBottom: 3 }}>{p.period_number}º período: {fmt(p.start_date)} – {fmt(p.end_date)} ({p.days}d)</div>
+      <div style={{ color: 'rgba(255,255,255,0.75)' }}>Marcado em {fmtDateTime(p.created_at)}</div>
+      {wasEdited && <div style={{ color: 'rgba(255,255,255,0.75)' }}>Alterado em {fmtDateTime(p.updated_at)}</div>}
+    </div>
+  );
 }
 
 function dateToPercent(dateStr, year) {
@@ -203,9 +213,8 @@ function VacationTimeline({ periodsByUser, allMembers, year }) {
                         const right = dateToPercent(p.end_date,   year);
                         const width = Math.max(right - left, 0.8);
                         const c = PERIOD_COLORS[(p.period_number - 1) % 3];
-                        const tooltipLabel = `${p.period_number}º período: ${fmt(p.start_date)} – ${fmt(p.end_date)} (${p.days}d)`;
                         return (
-                          <VacTooltip key={p.id} label={tooltipLabel} style={{
+                          <VacTooltip key={p.id} label={periodTooltipLabel(p)} style={{
                             left: `${left}%`, width: `${width}%`, height: 20,
                             borderRadius: 4, background: c.bg, border: `1.5px solid ${c.border}`,
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -488,9 +497,11 @@ export default function VacationsPage({ areaFilter: areaFilterProp = '', year: y
     return (
       <td style={{ padding: '7px 12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <span style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}`, borderRadius: 5, padding: '2px 7px', fontSize: '0.72rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
-            {fmt(p.start_date)} – {fmt(p.end_date)}
-          </span>
+          <VacTooltip label={periodTooltipLabel(p)}>
+            <span style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}`, borderRadius: 5, padding: '2px 7px', fontSize: '0.72rem', fontWeight: 600, whiteSpace: 'nowrap', cursor: 'default' }}>
+              {fmt(p.start_date)} – {fmt(p.end_date)}
+            </span>
+          </VacTooltip>
           <span style={{ fontSize: '0.68rem', color: 'var(--text-secondary)' }}>{p.days}d</span>
           {p.adp_registered && <span style={{ fontSize: '0.6rem', background: '#D1FAE5', color: '#065F46', borderRadius: 4, padding: '1px 5px', fontWeight: 700 }}>ADP</span>}
           {canEdit && <>
