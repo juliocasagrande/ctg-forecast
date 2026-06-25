@@ -10,8 +10,8 @@ import { cleanTables } from '../helpers/db.js';
 const app    = getTestApp();
 const PREFIX = 'vac';
 
-let adminCookies, engCookies, eng2Cookies, coordCookies, gerenteCookies;
-let adminUser, engUser, eng2User, coordUser, gerenteUser;
+let adminCookies, engCookies, eng2Cookies, coordCookies, gerenteCookies, coordMecCookies;
+let adminUser, engUser, eng2User, coordUser, gerenteUser, coordMecUser, engMecNoVacUser;
 let createdVacId;
 
 beforeAll(async () => {
@@ -22,12 +22,15 @@ beforeAll(async () => {
   eng2User   = await createTestUser({ email: `${PREFIX}.eng2@ctg-test.internal`,   role: 'engenheiro', area: 'eletrica' });
   coordUser  = await createTestUser({ email: `${PREFIX}.coord@ctg-test.internal`,  role: 'coordenador', area: 'eletrica' });
   gerenteUser = await createTestUser({ email: `${PREFIX}.ger@ctg-test.internal`,   role: 'gerente' });
+  coordMecUser = await createTestUser({ email: `${PREFIX}.coordmec@ctg-test.internal`, role: 'coordenador', area: 'mecanica' });
+  engMecNoVacUser = await createTestUser({ email: `${PREFIX}.engmecnv@ctg-test.internal`, role: 'engenheiro', area: 'mecanica' });
 
   ({ cookies: adminCookies   } = await loginAs(app, adminUser));
   ({ cookies: engCookies     } = await loginAs(app, engUser));
   ({ cookies: eng2Cookies    } = await loginAs(app, eng2User));
   ({ cookies: coordCookies   } = await loginAs(app, coordUser));
   ({ cookies: gerenteCookies } = await loginAs(app, gerenteUser));
+  ({ cookies: coordMecCookies } = await loginAs(app, coordMecUser));
 });
 
 afterAll(async () => {
@@ -367,6 +370,25 @@ describe('GET /api/vacations/members', () => {
 
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it('coordenador mecânico vê engenheiros mecânicos sem férias cadastradas, outros coordenadores e gerentes', async () => {
+    const res = await request(app)
+      .get('/api/vacations/members')
+      .set('Cookie', cookieHeader(coordMecCookies));
+
+    expect(res.status).toBe(200);
+    const ids = res.body.map(m => m.id);
+    // engenheiro mecânico sem nenhum período de férias cadastrado deve aparecer
+    expect(ids).toContain(engMecNoVacUser.id);
+    // o próprio coordenador mecânico aparece
+    expect(ids).toContain(coordMecUser.id);
+    // outros coordenadores (de outra área) também aparecem na seção de gestão
+    expect(ids).toContain(coordUser.id);
+    // gerentes também aparecem na seção de gestão
+    expect(ids).toContain(gerenteUser.id);
+    // engenheiros de outra área não aparecem
+    expect(ids).not.toContain(engUser.id);
   });
 
   it('sem auth retorna 401', async () => {

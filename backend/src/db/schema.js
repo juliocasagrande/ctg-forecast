@@ -537,6 +537,7 @@ await client.query(`
         pp_contrato           VARCHAR(30),
         projeto_atividade     TEXT,
         projeto               VARCHAR(200),
+        caminho_projeto       TEXT,
         status                VARCHAR(50) DEFAULT 'Em andamento',
         gestor                VARCHAR(120),
         resumo                TEXT,
@@ -577,6 +578,7 @@ await client.query(`
     // unique_key = pp_contrato + first 30 chars of projeto_atividade (to handle duplicate PP codes)
     await client.query(`
       ALTER TABLE lists_projects_tracking ADD COLUMN IF NOT EXISTS unique_key VARCHAR(100);
+      ALTER TABLE lists_projects_tracking ADD COLUMN IF NOT EXISTS caminho_projeto TEXT;
     `);
 
     // Per-usina breakdown for projects spanning multiple plants (e.g. UHE "Geral").
@@ -635,6 +637,40 @@ await client.query(`
     await client.query(`
       ALTER TABLE lists_iacs ADD COLUMN IF NOT EXISTS team_leader_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
       ALTER TABLE lists_projects_tracking ADD COLUMN IF NOT EXISTS gestor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+    `);
+
+    /* ───────── CONTROLE DE CARGA (workload demands) ───────── */
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS workload_demands (
+        id            SERIAL PRIMARY KEY,
+        user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        title         VARCHAR(200) NOT NULL,
+        description   TEXT DEFAULT NULL,
+        status        VARCHAR(20) NOT NULL DEFAULT 'planejada',
+        priority      VARCHAR(10) NOT NULL DEFAULT 'media',
+        load_percent  INTEGER NOT NULL DEFAULT 0,
+        due_date      DATE DEFAULT NULL,
+        created_by    INTEGER REFERENCES users(id),
+        created_at    TIMESTAMPTZ DEFAULT NOW(),
+        updated_at    TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      ALTER TABLE workload_demands ADD COLUMN IF NOT EXISTS start_date DATE DEFAULT NULL;
+
+      ALTER TABLE workload_demands DROP CONSTRAINT IF EXISTS workload_demands_status_check;
+      ALTER TABLE workload_demands ADD CONSTRAINT workload_demands_status_check
+        CHECK (status IN ('planejada','em_andamento','bloqueada','concluida'));
+
+      ALTER TABLE workload_demands DROP CONSTRAINT IF EXISTS workload_demands_priority_check;
+      ALTER TABLE workload_demands ADD CONSTRAINT workload_demands_priority_check
+        CHECK (priority IN ('baixa','media','alta'));
+
+      ALTER TABLE workload_demands DROP CONSTRAINT IF EXISTS workload_demands_load_percent_check;
+      ALTER TABLE workload_demands ADD CONSTRAINT workload_demands_load_percent_check
+        CHECK (load_percent >= 0 AND load_percent <= 100);
+
+      CREATE INDEX IF NOT EXISTS idx_workload_demands_user   ON workload_demands(user_id);
+      CREATE INDEX IF NOT EXISTS idx_workload_demands_status ON workload_demands(status);
     `);
 
     /* ───────── EQUIPAMENTOS DE SUBESTAÇÃO ───────── */

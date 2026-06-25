@@ -394,7 +394,12 @@ export default function VacationsPage({ areaFilter: areaFilterProp = '', year: y
   // year and area driven by App.jsx header props
   const year    = yearProp ?? new Date().getFullYear();
   const setYear = onYearChange ?? (() => {});
-  const area    = (areaFilterProp && areaFilterProp !== '') ? areaFilterProp : 'eletrica';
+  // Engenheiros e coordenadores sempre veem a própria área (o backend já
+  // restringe a este escopo); o filtro de área do cabeçalho só se aplica
+  // a quem pode ver todas as áreas (admin/gestor/planejador/gerente).
+  const area    = ['engenheiro', 'coordenador'].includes(viewRole)
+    ? (user?.area || 'eletrica')
+    : ((areaFilterProp && areaFilterProp !== '') ? areaFilterProp : 'eletrica');
   const setArea = () => {}; // area is controlled by App header
   const [periods,    setPeriods]    = useState([]);
   const [members,    setMembers]    = useState([]);

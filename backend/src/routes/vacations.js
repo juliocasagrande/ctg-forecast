@@ -81,15 +81,20 @@ router.get('/members', async (req, res) => {
     `;
     params = area ? [area] : [];
   } else if (role === 'coordenador') {
-    // Coordenador: engenheiros da sua área + todos coordenadores e gerentes
+    // Coordenador: o próprio coordenador, engenheiros ativos da sua área,
+    // todos os coordenadores ativos e todos os gerentes ativos
+    // (a existência de períodos de férias não é condição para aparecer aqui).
     const userArea = req.user.area || 'eletrica';
     query = `
       SELECT u.id, u.name, u.avatar_initials, u.role,
              COALESCE(u.area, 'eletrica') AS area
       FROM users u
       WHERE u.active = true
-        AND COALESCE(u.area, 'eletrica') = $1
-        AND u.role IN ('engenheiro', 'coordenador')
+        AND (
+          (u.role = 'engenheiro' AND COALESCE(u.area, 'eletrica') = $1)
+          OR u.role = 'coordenador'
+          OR u.role = 'gerente'
+        )
       ORDER BY u.name
     `;
     params = [userArea];

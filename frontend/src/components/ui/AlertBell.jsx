@@ -19,6 +19,7 @@ export default function AlertBell() {
   const [alerts, setAlerts] = useState(null);
   const [stalePT, setStalePT] = useState([]);
   const [staleIACs, setStaleIACs] = useState([]);
+  const [workloadLate, setWorkloadLate] = useState([]);
   const [open, setOpen] = useState(false);
   const [dismissing, setDismissing] = useState(new Set());
   const ref = useRef(null);
@@ -30,11 +31,12 @@ export default function AlertBell() {
 
   const fetchAlerts = useCallback(async () => {
     try {
-      const [alertsR, delegR, staleR, staleIACsR] = await Promise.all([
+      const [alertsR, delegR, staleR, staleIACsR, workloadLateR] = await Promise.all([
         api.get('/forecast/alerts'),
         api.get('/delegations/notifications'),
         api.get('/lists/projects-tracking/stale-projects').catch(() => ({ data: [] })),
         api.get('/lists/iacs/stale-iacs').catch(() => ({ data: [] })),
+        api.get('/workload/alerts/late').catch(() => ({ data: { demands: [] } })),
       ]);
       const data = alertsR.data;
       // Inject delegation_received into alerts object
@@ -49,9 +51,11 @@ export default function AlertBell() {
       // Add stale IACs count
       const staleIACs = staleIACsR.data || [];
       setStaleIACs(staleIACs);
+      const lateDemands = workloadLateR.data?.demands || [];
+      setWorkloadLate(lateDemands);
       const vacationCount = data.vacation_adp?.count || 0;
       const forecastTotal = SHOW_FORECAST_ALERTS ? (data.total || 0) : 0;
-      data.total = forecastTotal + delegations.length + (SHOW_FORECAST_ALERTS ? 0 : vacationCount) + (data.doc_unpublished?.count || 0) + staleProjects.length + staleIACs.length;
+      data.total = forecastTotal + delegations.length + (SHOW_FORECAST_ALERTS ? 0 : vacationCount) + (data.doc_unpublished?.count || 0) + staleProjects.length + staleIACs.length + lateDemands.length;
       setAlerts(data);
       if ('setAppBadge' in navigator) {
         const count = data?.total ?? 0;
@@ -297,6 +301,22 @@ export default function AlertBell() {
                   </Section>
                 )}
 
+                {/* Demandas atrasadas */}
+                {workloadLate.length > 0 && (
+                  <Section icon={<WarningIcon />} title="Demandas atrasadas" count={workloadLate.length} color="#DC2626">
+                    {workloadLate.map(d => (
+                      <AlertRow
+                        key={d.id}
+                        onClick={() => { navigate('/workload'); setOpen(false); }}
+                        label={d.title}
+                        sub={`${d.user_name || 'Responsavel'} - ${d.load_percent || 0}% carga${d.due_date ? ` - fim ${new Date(String(d.due_date).slice(0, 10) + 'T12:00:00').toLocaleDateString('pt-BR')}` : ''}`}
+                        accent="#DC2626"
+                        onDismiss={() => dismiss('workload_late', d.id)}
+                        dismissing={isDismissing('workload_late', d.id)}
+                      />
+                    ))}
+                  </Section>
+                )}
                 {/* Documentos não publicados */}
                 {alerts.doc_unpublished?.count > 0 && (
                   <Section icon={<DocIcon />} title="Documentos não publicados" count={alerts.doc_unpublished.count} color="#F59E0B">

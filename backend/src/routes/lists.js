@@ -239,8 +239,8 @@ router.get('/projects-tracking', async (req, res) => {
 router.post('/projects-tracking', async (req, res) => {
   try {
     const {
-      area, uhe, pp_contrato, projeto_atividade, projeto,
-      status, gestor, gestor_user_id, resumo, empresa, vencimento, vencimento_txt,
+      area, uhe, pp_contrato, projeto_atividade, projeto, caminho_projeto,
+        status, gestor, gestor_user_id, resumo, empresa, vencimento, vencimento_txt,
       cronograma, aditivos, reajustes,
       valor_contrato, realizado_contrato, saldo_contrato,
       valor_si, realizado_si, saldo_si,
@@ -251,7 +251,7 @@ router.post('/projects-tracking', async (req, res) => {
 
     const r = await pool.query(`
       INSERT INTO lists_projects_tracking (
-        area, uhe, pp_contrato, projeto_atividade, projeto,
+        area, uhe, pp_contrato, projeto_atividade, projeto, caminho_projeto,
         status, gestor, gestor_user_id, resumo, empresa, vencimento, vencimento_txt,
         cronograma, aditivos, reajustes,
         valor_contrato, realizado_contrato, saldo_contrato,
@@ -260,12 +260,12 @@ router.post('/projects-tracking', async (req, res) => {
         valor_si_breakdown, realizado_si_breakdown,
         fornecedor, natureza, aditivo_em_andamento
       ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
-        $16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
+        $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29
       ) RETURNING *
     `, [
       area || 'Elétrica', uhe || 'Geral', pp_contrato || null,
-      projeto_atividade || null, projeto || null,
+      projeto_atividade || null, projeto || null, caminho_projeto || null,
       status || 'Em andamento', gestor || null, gestor_user_id || null, resumo || null,
       empresa || null,
       vencimento || null, vencimento_txt || null,
@@ -287,8 +287,8 @@ router.put('/projects-tracking/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const {
-      area, uhe, pp_contrato, projeto_atividade, projeto,
-      status, gestor, gestor_user_id, resumo, empresa, vencimento, vencimento_txt,
+      area, uhe, pp_contrato, projeto_atividade, projeto, caminho_projeto,
+        status, gestor, gestor_user_id, resumo, empresa, vencimento, vencimento_txt,
       cronograma, aditivos, reajustes,
       valor_contrato, realizado_contrato, saldo_contrato,
       valor_si, realizado_si, saldo_si,
@@ -299,21 +299,21 @@ router.put('/projects-tracking/:id', async (req, res) => {
 
     const r = await pool.query(`
       UPDATE lists_projects_tracking SET
-        area=$1, uhe=$2, pp_contrato=$3, projeto_atividade=$4, projeto=$5,
-        status=$6, gestor=$7, gestor_user_id=$8, resumo=$9, empresa=$10,
-        vencimento=$11, vencimento_txt=$12,
-        cronograma=$13, aditivos=$14, reajustes=$15,
-        valor_contrato=$16, realizado_contrato=$17, saldo_contrato=$18,
-        valor_si=$19, realizado_si=$20, saldo_si=$21,
-        valor_contrato_breakdown=$22, realizado_contrato_breakdown=$23,
-        valor_si_breakdown=$24, realizado_si_breakdown=$25,
-        fornecedor=$26, natureza=$27, aditivo_em_andamento=$28,
+        area=$1, uhe=$2, pp_contrato=$3, projeto_atividade=$4, projeto=$5, caminho_projeto=$6,
+        status=$7, gestor=$8, gestor_user_id=$9, resumo=$10, empresa=$11,
+        vencimento=$12, vencimento_txt=$13,
+        cronograma=$14, aditivos=$15, reajustes=$16,
+        valor_contrato=$17, realizado_contrato=$18, saldo_contrato=$19,
+        valor_si=$20, realizado_si=$21, saldo_si=$22,
+        valor_contrato_breakdown=$23, realizado_contrato_breakdown=$24,
+        valor_si_breakdown=$25, realizado_si_breakdown=$26,
+        fornecedor=$27, natureza=$28, aditivo_em_andamento=$29,
         updated_at=NOW()
-      WHERE id=$29
+      WHERE id=$30
       RETURNING *
     `, [
       area || 'Elétrica', uhe || 'Geral', pp_contrato || null,
-      projeto_atividade || null, projeto || null,
+      projeto_atividade || null, projeto || null, caminho_projeto || null,
       status || 'Em andamento', gestor || null, gestor_user_id || null, resumo || null,
       empresa || null,
       vencimento || null, vencimento_txt || null,

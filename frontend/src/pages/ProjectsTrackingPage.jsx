@@ -73,6 +73,7 @@ const EMPTY_PROJECT = {
   pp_contrato: '',
   projeto_atividade: '',
   projeto: '',
+  caminho_projeto: '',
   status: 'Em andamento',
   gestor: '',
   resumo: '',
@@ -723,6 +724,15 @@ function toDateInput(val) {
   if (isNaN(d.getTime())) return '';
   return d.toISOString().slice(0, 10);
 }
+function projectFolderHref(path) {
+  const value = String(path || '').trim();
+  if (/^[A-Za-z]:[\\/]/.test(value)) return `file:///${value.replace(/\\/g, '/')}`;
+  if (value.startsWith('\\\\')) return `file:${value.replace(/\\/g, '/')}`;
+  if (/^[a-z][a-z\d+.-]*:/i.test(value)) return value;
+  if (/^(?:www\.)?[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(?:[/?#]|$)/i.test(value)) return `https://${value}`;
+  return value;
+}
+
 function fmtDateBR(val) {
   const iso = toDateInput(val);
   if (!iso) return '';
@@ -944,6 +954,14 @@ function ProjectModal({ item, onClose, onSave, onDelete, isNew, saving, deleting
           </Field>
           <Field label="Projeto">
             <input value={form.projeto || ''} onChange={e => set('projeto', e.target.value)} placeholder="Nome curto" style={fS} />
+          </Field>
+          <Field label="Caminho da pasta do projeto">
+            <input
+              value={form.caminho_projeto || ''}
+              onChange={e => set('caminho_projeto', e.target.value)}
+              placeholder="Link ou caminho da pasta"
+              style={fS}
+            />
           </Field>
           <Field label="Status" required>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -2157,6 +2175,7 @@ export default function ProjectsTrackingPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", tableLayout: 'fixed', minWidth: 2200 }}>
                   <colgroup>
                     <col style={{ width: 40 }} />
+                    <col style={{ width: 46 }} />
                     <col style={{ width: 130 }} />
                     <col style={{ width: 110 }} />
                     <col style={{ width: 280 }} />
@@ -2182,6 +2201,10 @@ export default function ProjectsTrackingPage() {
                         fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
                       }}>●</th>
+                      <th style={{
+                        padding: '10px 12px', textAlign: 'center',
+                        fontSize: '0.75rem', fontWeight: 700, color: '#64748B', whiteSpace: 'nowrap',
+                      }}>🔗</th>
                       <th style={{
                         padding: '10px 12px', textAlign: 'left',
                         fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
@@ -2322,6 +2345,18 @@ export default function ProjectsTrackingPage() {
                       >
                         <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                           <StatusDot updatedAt={item.updated_at} />
+                        </td>
+                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                          {item.caminho_projeto && (
+                            <a
+                              href={projectFolderHref(item.caminho_projeto)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Abrir pasta do projeto"
+                              onClick={e => e.stopPropagation()}
+                              style={{ color: '#0b5cab', textDecoration: 'none', fontSize: '0.9rem' }}
+                            >🔗</a>
+                          )}
                         </td>
                         <td style={{ padding: '10px 12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           <UheBadge uhe={item.uhe} />

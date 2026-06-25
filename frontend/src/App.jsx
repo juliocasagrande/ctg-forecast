@@ -21,6 +21,7 @@ import FeedbackPage from './pages/FeedbackPage.jsx';
 import FeedbackInbox from './pages/FeedbackInbox.jsx';
 import VacationsPage from './pages/VacationsPage.jsx';
 import MetasPage from './pages/MetasPage.jsx';
+import WorkloadPage from './pages/WorkloadPage.jsx';
 import DocumentsPage from './pages/DocumentsPage.jsx';
 import IACsPage from './pages/IACsPage.jsx';
 import ProjectsTrackingPage from './pages/ProjectsTrackingPage.jsx';
@@ -728,6 +729,7 @@ function getPageMeta(pathname) {
   if (pathname === '/feedback/inbox') return { title: 'Inbox de Feedback', sub: 'Mensagens dos usuários do sistema' };
   if (pathname === '/vacations') return { title: 'Controle de Férias', sub: null };
   if (pathname === '/metas') return { title: 'Controle de Metas', sub: null };
+  if (pathname === '/workload') return { title: 'Controle de Carga', sub: null };
   if (pathname === '/documents') return { title: 'Controle de Documentos', sub: null };
   if (pathname === '/lists/iacs') return { title: 'IACs 2026'};
   if (pathname === '/lists/projects-tracking') return { title: 'Acompanhamento de Projetos', sub: 'Relatório mensal — contratos em andamento' };
@@ -1314,6 +1316,7 @@ export default function App() {
             <Route path="/feedback/inbox" element={<RequireAuth><FeedbackInbox /></RequireAuth>} />
              <Route path="/vacations" element={<RequireAuth><VacationsPage areaFilter={areaFilter} year={vacYear} onYearChange={setVacYear} /></RequireAuth>} />
              <Route path="/metas" element={<RequireAuth><MetasPage areaFilter={areaFilter} year={vacYear} onYearChange={setVacYear} /></RequireAuth>} />
+             <Route path="/workload" element={<RequireAuth><WorkloadPage /></RequireAuth>} />
              <Route path="/documents" element={<RequireAuth><DocumentsPage /></RequireAuth>} />
             <Route path="/lists/iacs" element={<RequireAuth><IACsPage /></RequireAuth>} />
             <Route path="/lists/projects-tracking" element={<RequireAuth><ProjectsTrackingPage /></RequireAuth>} />
