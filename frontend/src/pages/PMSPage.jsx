@@ -716,6 +716,7 @@ export default function PMSPage() {
   const [chartTypeFilter, setChartTypeFilter]         = useState('');
   const [chartValidadeFilter, setChartValidadeFilter] = useState('');
   const [chartPlantFilter, setChartPlantFilter]       = useState('');
+  const [chartLangFilter, setChartLangFilter]         = useState('');
 
   const [colFilterCode, setColFilterCode]       = useState([]);
   const [colFilterArea, setColFilterArea]       = useState([]);
@@ -783,6 +784,8 @@ export default function PMSPage() {
     if (chartTypeFilter) data = data.filter(d => d.type === chartTypeFilter);
     if (chartValidadeFilter) data = data.filter(d => d.validade_status === chartValidadeFilter);
     if (chartPlantFilter) data = data.filter(d => d.plant === chartPlantFilter);
+    if (chartLangFilter === 'with_en') data = data.filter(d => d.has_en);
+    else if (chartLangFilter === 'without_en') data = data.filter(d => !d.has_en);
     if (colFilterCode.length)   data = data.filter(d => colFilterCode.includes(d.code));
     if (colFilterArea.length)   data = data.filter(d => colFilterArea.includes(d.area));
     if (colFilterResp.length)   data = data.filter(d => colFilterResp.includes(d.responsible));
@@ -799,7 +802,7 @@ export default function PMSPage() {
     }
     return data;
   }, [docs, typeFilter, statusFilter, plantFilter, validadeFilter, search, myDocsOnly, user,
-      colFilterCode, colFilterArea, colFilterResp, colFilterStatus, chartTypeFilter, chartValidadeFilter, chartPlantFilter]);
+      colFilterCode, colFilterArea, colFilterResp, colFilterStatus, chartTypeFilter, chartValidadeFilter, chartPlantFilter, chartLangFilter]);
 
   const groups = useMemo(() => {
     const map = new Map();
@@ -829,11 +832,17 @@ export default function PMSPage() {
   const expiring   = latestDocs.filter(d => d.validade_status === 'Alerta').length;
   const expired    = latestDocs.filter(d => d.validade_status === 'Vencido').length;
   const myDocsCount = latestDocs.filter(d => isOwner(d)).length;
+  const withEnCount = latestDocs.filter(d => d.has_en).length;
+  const enPct = totalAll ? Math.round((withEnCount / totalAll) * 100) : 0;
 
   /* Charts */
   const typeChartData     = TYPES.map(t => ({ label:t.value, value:latestDocs.filter(d=>d.type===t.value).length, color:TYPE_COLORS[t.value], filterKey:t.value }));
   const validadeChartData = VALIDADE.map(v => ({ label:v.value, value:latestDocs.filter(d=>d.validade_status===v.value).length, color:v.color, filterKey:v.value }));
   const plantChartData    = PLANTS.map(p => ({ label:p, value:latestDocs.filter(d=>d.plant===p).length, color:'#0066B3', filterKey:p })).filter(d=>d.value>0);
+  const langChartData     = [
+    { label:'Com Inglês', value: withEnCount, color:'#10B981', filterKey:'with_en' },
+    { label:'Só Português', value: totalAll - withEnCount, color:'#94A3B8', filterKey:'without_en' },
+  ];
   const plantsUsed = PLANTS.filter(p => docs.some(d => d.plant === p));
   const areasUsed   = [...new Set(docs.map(d => d.area).filter(Boolean))];
 
@@ -847,6 +856,7 @@ export default function PMSPage() {
         <StatCard label="Vencendo (30d)"   value={expiring}   color={expiring>0?'#F59E0B':'#94A3B8'} sub={expiring>0?'Atenção':'Tudo ok'}/>
         <StatCard label="Vencidos"         value={expired}    color={expired>0?'#EF4444':'#94A3B8'} sub={expired>0?'Ação necessária':'Tudo ok'}/>
         <StatCard label="Meus documentos"  value={myDocsCount} color="#8B5CF6"/>
+        <StatCard label="Com versão EN"    value={`${enPct}%`} color={enPct<50?'#F59E0B':'#0891B2'} sub={`${withEnCount} de ${totalAll} documentos`}/>
       </div>
 
       {/* Charts */}
@@ -854,19 +864,25 @@ export default function PMSPage() {
         <div style={{ flex:'1 1 180px', minWidth:160, display:'flex' }}>
           <HBarChart title="Documentos por Tipo" data={typeChartData}
             activeFilter={chartTypeFilter}
-            onFilter={(key) => { setChartTypeFilter(key); if (key) { setChartValidadeFilter(''); setChartPlantFilter(''); } }}
+            onFilter={(key) => { setChartTypeFilter(key); if (key) { setChartValidadeFilter(''); setChartPlantFilter(''); setChartLangFilter(''); } }}
           />
         </div>
         <div style={{ flex:'2 1 320px', minWidth:220, display:'flex' }}>
           <VBarChart title="Documentos por Usina" data={plantChartData}
             activeFilter={chartPlantFilter}
-            onFilter={(key) => { setChartPlantFilter(key); if (key) { setChartTypeFilter(''); setChartValidadeFilter(''); } }}
+            onFilter={(key) => { setChartPlantFilter(key); if (key) { setChartTypeFilter(''); setChartValidadeFilter(''); setChartLangFilter(''); } }}
           />
         </div>
         <div style={{ flex:'1 1 180px', minWidth:160, display:'flex' }}>
           <DonutChart title="Status de Validade" data={validadeChartData}
             activeFilter={chartValidadeFilter}
-            onFilter={(key) => { setChartValidadeFilter(key); if (key) { setChartTypeFilter(''); setChartPlantFilter(''); } }}
+            onFilter={(key) => { setChartValidadeFilter(key); if (key) { setChartTypeFilter(''); setChartPlantFilter(''); setChartLangFilter(''); } }}
+          />
+        </div>
+        <div style={{ flex:'1 1 180px', minWidth:160, display:'flex' }}>
+          <DonutChart title="Relação Português / Inglês" data={langChartData}
+            activeFilter={chartLangFilter}
+            onFilter={(key) => { setChartLangFilter(key); if (key) { setChartTypeFilter(''); setChartPlantFilter(''); setChartValidadeFilter(''); } }}
           />
         </div>
       </div>
