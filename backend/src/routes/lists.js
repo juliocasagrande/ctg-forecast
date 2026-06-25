@@ -449,7 +449,13 @@ router.get('/projects-tracking/stale-projects', async (req, res) => {
     }
 
     const r = await pool.query(query, params);
-    res.json(r.rows);
+    const dismissedRes = await pool.query(
+      `SELECT alert_key FROM alert_dismissals
+       WHERE user_id=$1 AND alert_type='stale_tracking' AND dismissed_at >= date_trunc('month', CURRENT_DATE)`,
+      [user.id]
+    );
+    const dismissed = new Set(dismissedRes.rows.map(row => String(row.alert_key)));
+    res.json(r.rows.filter(row => !dismissed.has(String(row.id))));
   } catch (err) { safeError(res, err); }
 });
 
@@ -510,7 +516,13 @@ router.get('/iacs/stale-iacs', async (req, res) => {
     }
 
     const r = await pool.query(query, params);
-    res.json(r.rows);
+    const dismissedRes = await pool.query(
+      `SELECT alert_key FROM alert_dismissals
+       WHERE user_id=$1 AND alert_type='stale_iacs' AND dismissed_at >= date_trunc('month', CURRENT_DATE)`,
+      [user.id]
+    );
+    const dismissed = new Set(dismissedRes.rows.map(row => String(row.alert_key)));
+    res.json(r.rows.filter(row => !dismissed.has(String(row.id))));
   } catch (err) { safeError(res, err); }
 });
 

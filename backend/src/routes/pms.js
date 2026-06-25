@@ -29,6 +29,21 @@ const SELECT_COMPUTED = `
   ${VALIDADE_EXPR}                                       AS validade_status
 `;
 
+// pms_documents.area é texto livre (ex: "Engenharia Elétrica"), enquanto users.area
+// é um slug fixo — comparamos por radical da palavra em português.
+const AREA_ROOTS = {
+  eletrica:       'el.tric',
+  mecanica:       'mec.nic',
+  confiabilidade: 'confiabilidade',
+  modernizacao:   'moderniza',
+  coordenacao:    'coordena',
+};
+function areaMatchesUser(docArea, userArea) {
+  const root = AREA_ROOTS[String(userArea || '').toLowerCase()];
+  if (!root) return false;
+  return new RegExp(root, 'i').test(String(docArea || ''));
+}
+
 function canEdit(doc, userRole, userName) {
   if (SUPERIOR_ROLES.includes(userRole)) return true;
   if (doc.responsible && userName && doc.responsible.trim().toLowerCase() === userName.trim().toLowerCase()) return true;
@@ -53,6 +68,11 @@ router.get('/', async (req, res) => {
     if (type)  { params.push(type);  q += ` AND d.type = $${params.length}`; }
     if (plant) { params.push(plant); q += ` AND d.plant = $${params.length}`; }
     if (area)  { params.push(area);  q += ` AND d.area = $${params.length}`; }
+    // Engenheiros só veem documentos destinados a eles (responsável)
+    if (req.user.role === 'engenheiro') {
+      params.push(req.user.name || '');
+      q += ` AND LOWER(TRIM(d.responsible)) = LOWER(TRIM($${params.length}))`;
+    }
     q += ' ORDER BY d.type ASC, d.base_code ASC, d.revision ASC NULLS FIRST';
     res.json((await pool.query(q, params)).rows);
   } catch (err) { safeError(res, err); }
@@ -110,9 +130,10 @@ router.get('/alerts', async (req, res) => {
       ORDER BY days_to_expire ASC
     `);
 
-    const visible = r.rows.filter(d =>
-      isPrivileged || d.responsible.trim().toLowerCase() === userName.trim().toLowerCase()
-    );
+    const visible = r.rows.filter(d => {
+      if (isPrivileged && role === 'coordenador') return areaMatchesUser(d.area, req.user.area);
+      return isPrivileged || d.responsible.trim().toLowerCase() === userName.trim().toLowerCase();
+    });
 
     const dismissedRes = await pool.query(
       `SELECT alert_key FROM alert_dismissals

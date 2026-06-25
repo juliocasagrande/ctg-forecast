@@ -113,7 +113,13 @@ router.get('/notifications', async (req, res) => {
         AND d.end_date >= CURRENT_DATE
       ORDER BY d.start_date ASC
     `, [userId]);
-    res.json(r.rows);
+    const dismissedRes = await pool.query(
+      `SELECT alert_key FROM alert_dismissals
+       WHERE user_id=$1 AND alert_type='delegation_received' AND dismissed_at >= date_trunc('month', CURRENT_DATE)`,
+      [userId]
+    );
+    const dismissed = new Set(dismissedRes.rows.map(row => String(row.alert_key)));
+    res.json(r.rows.filter(row => !dismissed.has(String(row.id))));
   } catch (err) { safeError(res, err); }
 });
 
