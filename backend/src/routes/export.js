@@ -2,6 +2,7 @@ import { Router } from 'express';
 import ExcelJS from 'exceljs';
 import { pool } from '../db/schema.js';
 import { requireAuth, requireProjectAccess } from '../middleware/auth.js';
+import { buildLegacyWorkbook } from '../utils/pmsExcelFormat.js';
 
 const router = Router();
 
@@ -1103,6 +1104,40 @@ router.get('/documents', requireAuth, async (req, res) => {
     res.end();
   } catch (err) {
     console.error('Documents export error:', err);
+    safeError(res, err);
+  }
+});
+
+/* ══════════════════════════════════════════════════════
+ * PMS EXPORT (POL/IM/GM/MM) — mesmo modelo de referência usado pela
+ * engenharia (4 abas, um layout por tipo). Ver backend/src/utils/pmsExcelFormat.js
+ * — o mesmo módulo é usado pela importação, garantindo o round-trip.
+ * ══════════════════════════════════════════════════════ */
+router.get('/pms', requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT *,
+        (date + INTERVAL '3 years')::date AS expiry_date,
+        ((date + INTERVAL '3 years')::date - CURRENT_DATE) AS days_to_expire,
+        CASE WHEN (date + INTERVAL '3 years') < CURRENT_DATE THEN 'Vencido'
+             WHEN (date + INTERVAL '3 years') <= CURRENT_DATE + INTERVAL '30 days' THEN 'Alerta'
+             ELSE 'Em dia' END AS validade_status
+      FROM pms_documents
+      ORDER BY type ASC, base_code ASC, revision ASC NULLS FIRST
+    `);
+
+    const docsByType = { POL: [], IM: [], GM: [], MM: [] };
+    r.rows.forEach(row => { if (docsByType[row.type]) docsByType[row.type].push(row); });
+
+    const wb = buildLegacyWorkbook(docsByType);
+
+    const filename = `CTG_PMS_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('PMS export error:', err);
     safeError(res, err);
   }
 });

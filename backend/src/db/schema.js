@@ -387,6 +387,42 @@ await client.query(`
       ALTER TABLE documents ADD COLUMN IF NOT EXISTS base_code VARCHAR(50) DEFAULT NULL;
     `);
 
+    /* ───────── PMS DOCUMENTS (POL/IM/GM/MM — controle de documentos técnicos) ───────── */
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS pms_documents (
+        id               SERIAL PRIMARY KEY,
+        type             VARCHAR(10)  NOT NULL,
+        code             VARCHAR(60)  UNIQUE NOT NULL,
+        base_code        VARCHAR(60)  NOT NULL,
+        revision         INTEGER      DEFAULT NULL,
+        category         VARCHAR(120) DEFAULT NULL,
+        plant            VARCHAR(60)  DEFAULT NULL,
+        equipment_number VARCHAR(30)  DEFAULT NULL,
+        sub_item         VARCHAR(30)  DEFAULT NULL,
+        area             VARCHAR(80)  NOT NULL,
+        title_pt         TEXT         NOT NULL,
+        title_en         TEXT         DEFAULT NULL,
+        has_pt           BOOLEAN      DEFAULT true,
+        has_en           BOOLEAN      DEFAULT false,
+        responsible      VARCHAR(120) NOT NULL,
+        date             DATE         NOT NULL,
+        status           VARCHAR(30)  NOT NULL DEFAULT 'Em elaboração',
+        document_link    TEXT         DEFAULT NULL,
+        notes            TEXT         DEFAULT NULL,
+        created_by       INTEGER REFERENCES users(id),
+        updated_by       INTEGER REFERENCES users(id),
+        created_at       TIMESTAMPTZ DEFAULT NOW(),
+        updated_at       TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await client.query(`
+      INSERT INTO system_settings (key, value) VALUES
+        ('pms_alert_enabled','true'),
+        ('pms_alert_days','30'),
+        ('pms_alert_roles','coordenador,gerente,admin')
+      ON CONFLICT (key) DO NOTHING;
+    `);
+
     /* ───────── VACATION PERIODS ───────── */
     await client.query(`
       CREATE TABLE IF NOT EXISTS vacation_periods (

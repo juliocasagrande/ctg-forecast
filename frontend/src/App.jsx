@@ -23,6 +23,7 @@ import VacationsPage from './pages/VacationsPage.jsx';
 import MetasPage from './pages/MetasPage.jsx';
 import WorkloadPage from './pages/WorkloadPage.jsx';
 import DocumentsPage from './pages/DocumentsPage.jsx';
+import PMSPage from './pages/PMSPage.jsx';
 import IACsPage from './pages/IACsPage.jsx';
 import ProjectsTrackingPage from './pages/ProjectsTrackingPage.jsx';
 import ScheduleProjectPage from './pages/ScheduleProjectPage.jsx';
@@ -731,6 +732,7 @@ function getPageMeta(pathname) {
   if (pathname === '/metas') return { title: 'Controle de Metas', sub: null };
   if (pathname === '/workload') return { title: 'Controle de Carga', sub: null };
   if (pathname === '/documents') return { title: 'Controle de Documentos', sub: null };
+  if (pathname === '/pms') return { title: 'PMS — Documentos Técnicos', sub: 'Políticas, Instruções, Guias e Manuais de Manutenção' };
   if (pathname === '/lists/iacs') return { title: 'IACs 2026'};
   if (pathname === '/lists/projects-tracking') return { title: 'Acompanhamento de Projetos', sub: 'Relatório mensal — contratos em andamento' };
   if (pathname === '/lists/schedule-project') return { title: 'Cronograma Project', sub: 'Gantt, vínculos e impressão em PDF' };
@@ -1040,6 +1042,45 @@ export default function App() {
                 );
               })()}
 
+              {/* ── Botões da página PMS ── */}
+              {location.pathname === '/pms' && (() => {
+                const canManage = ['admin', 'gestor', 'coordenador', 'planejador', 'gerente'].includes(user?.role);
+                return (
+                  <>
+                    {canManage && (
+                      <button onClick={() => {
+                        window.dispatchEvent(new CustomEvent('import-pms-excel'));
+                      }} style={{
+                        display: 'flex', alignItems: 'center', gap: 7,
+                        padding: '8px 14px', borderRadius: 10, border: '1.5px solid #0b5cab',
+                        background: '#fff',
+                        color: '#0b5cab', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                        marginRight: 8, whiteSpace: 'nowrap',
+                      }}>
+                        <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                          <path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"/>
+                        </svg>
+                        Importar
+                      </button>
+                    )}
+                    <button onClick={() => {
+                      window._exportPMSExcel?.();
+                    }} style={{
+                      display: 'flex', alignItems: 'center', gap: 7,
+                      padding: '8px 14px', borderRadius: 10, border: '1.5px solid #10B981',
+                      background: '#fff',
+                      color: '#059669', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                      marginRight: 8, whiteSpace: 'nowrap',
+                    }}>
+                      <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                        <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm7-13a1 1 0 011 1v4.586l1.707-1.707a1 1 0 111.414 1.414l-3.414 3.414a1 1 0 01-1.414 0l-3.414-3.414a1 1 0 111.414-1.414L9 9.586V5a1 1 0 011-1z" clipRule="evenodd"/>
+                      </svg>
+                      Exportar
+                    </button>
+                  </>
+                );
+              })()}
+
               {/* ── KPIs do Mapa de Equipamentos ── */}
               {location.pathname === '/engineering/equipamentos' && equipamentosStats && (
                 <div style={{ display: 'flex', gap: 6, marginRight: 6 }}>
@@ -1318,6 +1359,7 @@ export default function App() {
              <Route path="/metas" element={<RequireAuth><MetasPage areaFilter={areaFilter} year={vacYear} onYearChange={setVacYear} /></RequireAuth>} />
              <Route path="/workload" element={<RequireAuth><WorkloadPage /></RequireAuth>} />
              <Route path="/documents" element={<RequireAuth><DocumentsPage /></RequireAuth>} />
+             <Route path="/pms" element={<RequireAuth><PMSPage /></RequireAuth>} />
             <Route path="/lists/iacs" element={<RequireAuth><IACsPage /></RequireAuth>} />
             <Route path="/lists/projects-tracking" element={<RequireAuth><ProjectsTrackingPage /></RequireAuth>} />
             <Route path="/lists/schedule-project" element={<RequireAuth><ScheduleProjectPage /></RequireAuth>} />

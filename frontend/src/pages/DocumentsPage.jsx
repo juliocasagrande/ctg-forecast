@@ -57,6 +57,11 @@ function fmtDateBR(val) {
   const [, y, m, d] = match;
   return `${d}/${m}/${y}`;
 }
+function externalLink(url) {
+  if (!url) return '';
+  const trimmed = url.trim();
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
 function buildCode(type, area, seq, year, revision) {
   if (!type || !area || !seq || !year) return '';
   const seqStr = String(seq).padStart(3, '0');
@@ -1601,7 +1606,7 @@ function DocDetail({ doc, isAuthor }) {
         {doc.status === 'Publicado' && (
           <div style={{ marginTop:8 }}>
             {doc.document_link
-              ? <a href={doc.document_link} target="_blank" rel="noopener noreferrer"
+              ? <a href={externalLink(doc.document_link)} target="_blank" rel="noopener noreferrer"
                   style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:'0.8rem', color:'#0066B3', fontWeight:600, textDecoration:'none' }}>
                   🔗 Acessar documento
                 </a>

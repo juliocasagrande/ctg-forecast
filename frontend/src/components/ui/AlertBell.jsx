@@ -20,6 +20,7 @@ export default function AlertBell() {
   const [stalePT, setStalePT] = useState([]);
   const [staleIACs, setStaleIACs] = useState([]);
   const [workloadLate, setWorkloadLate] = useState([]);
+  const [pmsAlerts, setPmsAlerts] = useState([]);
   const [open, setOpen] = useState(false);
   const [dismissing, setDismissing] = useState(new Set());
   const ref = useRef(null);
@@ -31,12 +32,13 @@ export default function AlertBell() {
 
   const fetchAlerts = useCallback(async () => {
     try {
-      const [alertsR, delegR, staleR, staleIACsR, workloadLateR] = await Promise.all([
+      const [alertsR, delegR, staleR, staleIACsR, workloadLateR, pmsAlertsR] = await Promise.all([
         api.get('/forecast/alerts'),
         api.get('/delegations/notifications'),
         api.get('/lists/projects-tracking/stale-projects').catch(() => ({ data: [] })),
         api.get('/lists/iacs/stale-iacs').catch(() => ({ data: [] })),
         api.get('/workload/alerts/late').catch(() => ({ data: { demands: [] } })),
+        api.get('/pms/alerts').catch(() => ({ data: { count: 0, docs: [] } })),
       ]);
       const data = alertsR.data;
       // Inject delegation_received into alerts object
@@ -53,9 +55,11 @@ export default function AlertBell() {
       setStaleIACs(staleIACs);
       const lateDemands = workloadLateR.data?.demands || [];
       setWorkloadLate(lateDemands);
+      const pmsDocs = pmsAlertsR.data?.docs || [];
+      setPmsAlerts(pmsDocs);
       const vacationCount = data.vacation_adp?.count || 0;
       const forecastTotal = SHOW_FORECAST_ALERTS ? (data.total || 0) : 0;
-      data.total = forecastTotal + delegations.length + (SHOW_FORECAST_ALERTS ? 0 : vacationCount) + (data.doc_unpublished?.count || 0) + staleProjects.length + staleIACs.length + lateDemands.length;
+      data.total = forecastTotal + delegations.length + (SHOW_FORECAST_ALERTS ? 0 : vacationCount) + (data.doc_unpublished?.count || 0) + staleProjects.length + staleIACs.length + lateDemands.length + pmsDocs.length;
       setAlerts(data);
       if ('setAppBadge' in navigator) {
         const count = data?.total ?? 0;
@@ -329,6 +333,23 @@ export default function AlertBell() {
                         accent="#F59E0B"
                         onDismiss={() => dismiss('doc_unpublished', d.id)}
                         dismissing={isDismissing('doc_unpublished', d.id)}
+                      />
+                    ))}
+                  </Section>
+                )}
+
+                {/* Documentos PMS vencendo/vencidos */}
+                {pmsAlerts.length > 0 && (
+                  <Section icon={<DocIcon />} title="Documentos PMS vencendo/vencidos" count={pmsAlerts.length} color="#DC2626">
+                    {pmsAlerts.map(d => (
+                      <AlertRow
+                        key={d.id}
+                        onClick={() => { navigate('/pms'); setOpen(false); }}
+                        label={d.title_pt}
+                        sub={`${d.code} · ${d.validade_status === 'Vencido' ? `vencido há ${Math.abs(d.days_to_expire)}d` : `vence em ${d.days_to_expire}d`} · ${d.responsible}`}
+                        accent={d.validade_status === 'Vencido' ? '#DC2626' : '#F59E0B'}
+                        onDismiss={() => dismiss('pms_expiring', d.id)}
+                        dismissing={isDismissing('pms_expiring', d.id)}
                       />
                     ))}
                   </Section>

@@ -120,7 +120,7 @@ function addSheet(wb, name, columns, rows) {
 }
 
 async function fetchBackupData() {
-  const [projects, iacs, documents] = await Promise.all([
+  const [projects, iacs, documents, pmsDocuments] = await Promise.all([
     pool.query(`
       SELECT * FROM lists_projects_tracking
       ORDER BY area ASC, status ASC, pp_contrato ASC
@@ -142,12 +142,26 @@ async function fetchBackupData() {
       GROUP BY d.id, creator.name, updater.name
       ORDER BY d.year ASC, d.sequence_number ASC, d.base_code ASC NULLS LAST, d.revision ASC NULLS FIRST
     `),
+    pool.query(`
+      SELECT d.*,
+        creator.name AS created_by_name,
+        updater.name AS updated_by_name,
+        (d.date + INTERVAL '3 years')::date AS expiry_date,
+        CASE WHEN (d.date + INTERVAL '3 years') < CURRENT_DATE THEN 'Vencido'
+             WHEN (d.date + INTERVAL '3 years') <= CURRENT_DATE + INTERVAL '30 days' THEN 'Alerta'
+             ELSE 'Em dia' END AS validade_status
+      FROM pms_documents d
+      LEFT JOIN users creator ON creator.id = d.created_by
+      LEFT JOIN users updater ON updater.id = d.updated_by
+      ORDER BY d.type ASC, d.base_code ASC, d.revision ASC NULLS FIRST
+    `),
   ]);
 
   return {
     projects: projects.rows,
     iacs: iacs.rows,
     documents: documents.rows,
+    pmsDocuments: pmsDocuments.rows,
   };
 }
 
@@ -162,6 +176,7 @@ function addSummarySheet(wb, data, fileDate) {
     { item: 'Projetos em acompanhamento', value: data.projects.length },
     { item: 'IACs', value: data.iacs.length },
     { item: 'Documentos', value: data.documents.length },
+    { item: 'Documentos PMS', value: data.pmsDocuments.length },
   ]);
   styleWorksheet(ws);
 }
@@ -188,6 +203,28 @@ export async function createOperationalBackup({ date = new Date(), overwrite = f
   wb.modified = date;
 
   addSummarySheet(wb, data, date);
+  addSheet(wb, 'PMS', [
+    { header: 'Tipo', key: 'type', width: 10 },
+    { header: 'Codigo', key: 'code', width: 22 },
+    { header: 'Categoria', key: 'category', width: 26 },
+    { header: 'Usina', key: 'plant', width: 14 },
+    { header: 'Nº Equip', key: 'equipment_number', width: 12 },
+    { header: 'Subitem', key: 'sub_item', width: 12 },
+    { header: 'Area', key: 'area', width: 26 },
+    { header: 'Titulo PT', key: 'title_pt', width: 40 },
+    { header: 'Titulo EN', key: 'title_en', width: 40 },
+    { header: 'Responsavel', key: 'responsible', width: 24 },
+    { header: 'Data', key: 'date', type: 'date', width: 14 },
+    { header: 'Validade', key: 'expiry_date', type: 'date', width: 14 },
+    { header: 'Status', key: 'status', width: 20 },
+    { header: 'Status Validade', key: 'validade_status', width: 16 },
+    { header: 'Link do Documento', key: 'document_link', width: 40 },
+    { header: 'Observacoes', key: 'notes', width: 32 },
+    { header: 'Criado Por', key: 'created_by_name', width: 22 },
+    { header: 'Atualizado Por', key: 'updated_by_name', width: 22 },
+    { header: 'Criado em', key: 'created_at', type: 'date', width: 14 },
+    { header: 'Atualizado em', key: 'updated_at', type: 'date', width: 14 },
+  ], data.pmsDocuments);
   addSheet(wb, 'Projetos', [
     { header: 'Area', key: 'area', width: 14 },
     { header: 'UHE', key: 'uhe', width: 18 },
