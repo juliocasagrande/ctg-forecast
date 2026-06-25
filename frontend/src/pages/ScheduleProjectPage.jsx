@@ -23,6 +23,18 @@ const DEFAULT_SETTINGS = {
   holidays: [],
   extraWorkdays: [],
 };
+const MAX_HIERARCHY_LEVELS = 5;
+// Pastel, discreet tones per hierarchy level — applied to both macro and leaf rows alike.
+const LEVEL_COLORS = [
+  { bg: '#DCE8F8', fill: '#8FB8E8', text: '#1D4F8F' },
+  { bg: '#DCF3EA', fill: '#79CDA8', text: '#1F7A55' },
+  { bg: '#E8E2F8', fill: '#B6A0E8', text: '#5B3FA0' },
+  { bg: '#FBEFD9', fill: '#E8BD6E', text: '#8A5A12' },
+  { bg: '#FBE3EA', fill: '#E892AC', text: '#A13E5E' },
+];
+function getLevelColor(depth = 0) {
+  return LEVEL_COLORS[Math.min(depth, LEVEL_COLORS.length - 1)];
+}
 const WEEKDAYS = [
   ['0', 'Dom'],
   ['1', 'Seg'],
@@ -112,53 +124,132 @@ function makeTask(project) {
   };
 }
 
-function isChildWbs(childWbs = '', parentWbs = '') {
-  return parentWbs && String(childWbs).startsWith(`${parentWbs}.`);
+function buildChildrenMap(tasks) {
+  const map = new Map();
+  tasks.forEach(task => {
+    const key = task.parentId || '';
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(task);
+  });
+  return map;
 }
 
-function wbsParts(wbs = '') {
-  return String(wbs).split('.').map(part => Number(part)).filter(Number.isFinite);
+function subtreeIds(tasks, rootId) {
+  const byParent = buildChildrenMap(tasks);
+  const result = new Set();
+  const visit = (id) => {
+    if (result.has(id)) return;
+    result.add(id);
+    (byParent.get(id) || []).forEach(child => visit(child.id));
+  };
+  visit(rootId);
+  return result;
 }
 
-function compareWbs(a = '', b = '') {
-  const left = wbsParts(a);
-  const right = wbsParts(b);
-  const max = Math.max(left.length, right.length);
-  for (let index = 0; index < max; index += 1) {
-    const diff = (left[index] || 0) - (right[index] || 0);
-    if (diff !== 0) return diff;
+// Height (in levels) of the deepest descendant under rootId, 0 if it's a leaf.
+function getSubtreeHeight(tasks, rootId) {
+  const byParent = buildChildrenMap(tasks);
+  let max = 0;
+  const visit = (id, depth, visited) => {
+    if (visited.has(id)) return;
+    visited.add(id);
+    max = Math.max(max, depth);
+    (byParent.get(id) || []).forEach(child => visit(child.id, depth + 1, visited));
+  };
+  visit(rootId, 0, new Set());
+  return max;
+}
+
+// Would attaching movingIds (with their existing subtrees) under newParentId
+// push any branch past MAX_HIERARCHY_LEVELS?
+function exceedsMaxDepth(tasks, movingIds, newParentId) {
+  const taskMapById = new Map(tasks.map(task => [task.id, task]));
+  const baseDepth = newParentId ? getTaskDepth(newParentId, taskMapById) + 1 : 0;
+  return movingIds.some(id => baseDepth + getSubtreeHeight(tasks, id) > MAX_HIERARCHY_LEVELS - 1);
+}
+
+function assignHierarchicalWbs(tasks) {
+  const byParent = buildChildrenMap(tasks);
+  const wbsMap = new Map();
+  const visited = new Set();
+  const visit = (parentKey, prefix) => {
+    (byParent.get(parentKey) || []).forEach((child, index) => {
+      if (visited.has(child.id)) return;
+      visited.add(child.id);
+      const wbs = prefix ? `${prefix}.${index + 1}` : `${index + 1}`;
+      wbsMap.set(child.id, wbs);
+      visit(child.id, wbs);
+    });
+  };
+  visit('', '');
+  return tasks.map(task => ({ ...task, wbs: wbsMap.get(task.id) || task.wbs }));
+}
+
+function flattenByHierarchy(tasks) {
+  const byParent = buildChildrenMap(tasks);
+  const visited = new Set();
+  const result = [];
+  const visit = (parentKey) => {
+    (byParent.get(parentKey) || []).forEach(child => {
+      if (visited.has(child.id)) return;
+      visited.add(child.id);
+      result.push(child);
+      visit(child.id);
+    });
+  };
+  visit('');
+  tasks.forEach(task => {
+    if (!visited.has(task.id)) {
+      visited.add(task.id);
+      result.push({ ...task, parentId: '' });
+    }
+  });
+  return result;
+}
+
+// Subtrees must stay contiguous for stable drag-and-drop ordering and WBS numbering.
+function normalizeTaskOrder(tasks) {
+  return assignHierarchicalWbs(flattenByHierarchy(tasks));
+}
+
+function getTaskDepth(taskId, taskMapById) {
+  let depth = 0;
+  let current = taskMapById.get(taskId);
+  const visited = new Set();
+  while (current?.parentId && !visited.has(current.id)) {
+    visited.add(current.id);
+    const parent = taskMapById.get(current.parentId);
+    if (!parent) break;
+    depth += 1;
+    current = parent;
   }
-  return String(a).localeCompare(String(b));
+  return depth;
 }
 
 function derivePhaseValues(tasks, settings) {
-  let currentPhase = null;
-  let childIndex = 0;
-  const arranged = tasks.map(task => {
-    if (task.type === 'phase') {
-      currentPhase = task;
-      childIndex = 0;
-      return task;
-    }
-    if (!currentPhase) return task;
-    childIndex += 1;
-    return {
-      ...task,
-      wbs: isChildWbs(task.wbs, currentPhase.wbs) ? task.wbs : `${currentPhase.wbs}.${childIndex}`,
-      _parentPhaseId: currentPhase.id,
-    };
-  });
+  const withWbs = assignHierarchicalWbs(tasks);
+  const taskMapById = new Map(withWbs.map(task => [task.id, task]));
+  const byParent = buildChildrenMap(withWbs);
+  const leafDescendants = (id, visited = new Set()) => {
+    if (visited.has(id)) return [];
+    visited.add(id);
+    return (byParent.get(id) || []).flatMap(child => (
+      child.type === 'phase' ? leafDescendants(child.id, visited) : [child]
+    ));
+  };
 
-  return arranged.map(task => {
-    if (task.type !== 'phase') return task;
-    const children = arranged.filter(item => item._parentPhaseId === task.id && parseDate(item.start) && parseDate(item.end));
-    if (!children.length) return task;
+  return withWbs.map(task => {
+    const depth = getTaskDepth(task.id, taskMapById);
+    if (task.type !== 'phase') return { ...task, _depth: depth };
+    const children = leafDescendants(task.id).filter(item => parseDate(item.start) && parseDate(item.end));
+    if (!children.length) return { ...task, _depth: depth };
     const start = new Date(Math.min(...children.map(item => parseDate(item.start))));
     const end = new Date(Math.max(...children.map(item => parseDate(item.end))));
     const totalDuration = children.reduce((sum, item) => sum + taskDuration(item, settings), 0);
     const weightedProgress = children.reduce((sum, item) => sum + (Number(item.progress) || 0) * taskDuration(item, settings), 0);
     return {
       ...task,
+      _depth: depth,
       start: iso(start),
       end: iso(end),
       progress: totalDuration ? Math.round(weightedProgress / totalDuration) : Number(task.progress) || 0,
@@ -166,41 +257,42 @@ function derivePhaseValues(tasks, settings) {
   });
 }
 
-function getPhaseChildrenByPosition(tasks, phaseId) {
-  const phaseIndex = tasks.findIndex(task => task.id === phaseId);
-  if (phaseIndex < 0) return [];
-  const children = [];
-  for (let index = phaseIndex + 1; index < tasks.length; index += 1) {
-    if (tasks[index].type === 'phase') break;
-    children.push(tasks[index]);
-  }
-  return children;
+function getPhaseChildren(tasks, phaseId) {
+  return tasks.filter(task => task.parentId === phaseId);
 }
 
 function findParentPhase(tasks, selectedId) {
   const selected = tasks.find(task => task.id === selectedId);
   if (selected?.type === 'phase') return selected;
-  if (selected) {
-    const candidates = tasks
-      .filter(task => task.type === 'phase' && isChildWbs(selected.wbs, task.wbs))
-      .sort((a, b) => String(b.wbs).length - String(a.wbs).length);
-    if (candidates[0]) return candidates[0];
+  if (selected?.parentId) {
+    const parent = tasks.find(task => task.id === selected.parentId);
+    if (parent) return parent;
   }
   return [...tasks].reverse().find(task => task.type === 'phase') || null;
 }
 
-function nextTopLevelWbs(tasks) {
-  const max = tasks
-    .filter(task => !String(task.wbs).includes('.'))
-    .reduce((highest, task) => Math.max(highest, Number(task.wbs) || 0), 0);
-  return String(max + 1);
+function lastDescendantIndex(tasks, rootId) {
+  const ids = subtreeIds(tasks, rootId);
+  let last = tasks.findIndex(task => task.id === rootId);
+  tasks.forEach((task, index) => {
+    if (ids.has(task.id) && index > last) last = index;
+  });
+  return last;
 }
 
-function nextChildWbs(tasks, parentWbs) {
-  const max = tasks
-    .filter(task => isChildWbs(task.wbs, parentWbs) && String(task.wbs).split('.').length === String(parentWbs).split('.').length + 1)
-    .reduce((highest, task) => Math.max(highest, Number(String(task.wbs).split('.').at(-1)) || 0), 0);
-  return `${parentWbs}.${max + 1}`;
+// Migrates projects saved before the parentId field existed, preserving the old
+// single-level "nearest preceding phase" grouping as the initial hierarchy.
+function migrateLegacyHierarchy(tasks) {
+  if (!tasks.length || tasks.every(task => task.parentId !== undefined)) return tasks;
+  let currentPhaseId = '';
+  return tasks.map(task => {
+    if (task.parentId !== undefined) return task;
+    if (task.type === 'phase') {
+      currentPhaseId = task.id;
+      return { ...task, parentId: '' };
+    }
+    return { ...task, parentId: currentPhaseId };
+  });
 }
 
 function makeRevision(id, label, tasks = []) {
@@ -212,7 +304,10 @@ function normalizeProject(project) {
   const revisions = Array.isArray(project.revisions) && project.revisions.length
     ? project.revisions
     : [makeRevision('rev-0', project.revision || 'Rev. 0', sourceTasks)];
-  const normalized = [...revisions];
+  const normalized = revisions.map(revision => ({
+    ...revision,
+    tasks: normalizeTaskOrder(migrateLegacyHierarchy(revision.tasks || [])),
+  }));
   for (let index = normalized.length; index < 3; index++) {
     normalized.push(makeRevision(`rev-${index}`, `Rev. ${index}`, []));
   }
@@ -305,12 +400,16 @@ function getCriticalPath(tasks, settings) {
   const taskMap = new Map(taskList.map(task => [task.id, task]));
   const memo = new Map();
 
-  const resolve = (task) => {
+  const resolve = (task, visiting = new Set()) => {
     if (memo.has(task.id)) return memo.get(task.id);
+    // predecessorId can form a cycle (e.g. manually picked in the modal) — without
+    // this guard the recursion below blows the call stack.
+    if (visiting.has(task.id)) return { duration: 0, path: [] };
+    visiting.add(task.id);
     const taskIndex = taskList.findIndex(item => item.id === task.id);
     const fallbackPredecessor = taskIndex > 0 ? taskList[taskIndex - 1] : null;
-    const predecessor = taskMap.get(task.predecessorId) || fallbackPredecessor;
-    const base = predecessor ? resolve(predecessor) : { duration: 0, path: [] };
+    const predecessor = task.predecessorId !== task.id ? (taskMap.get(task.predecessorId) || fallbackPredecessor) : null;
+    const base = predecessor ? resolve(predecessor, visiting) : { duration: 0, path: [] };
     const result = {
       duration: base.duration + taskDuration(task, settings),
       path: [...base.path, task.id],
@@ -371,6 +470,18 @@ function TaskModal({ task, tasks, onClose, onSave }) {
           <label className="form-group">
             <span className="form-label">Nome</span>
             <input className="form-input" value={draft?.name || ''} onChange={e => set('name', e.target.value)} />
+          </label>
+          <label className="form-group">
+            <span className="form-label">Atividade macro pai</span>
+            <select className="form-select" value={draft?.parentId || ''} onChange={e => set('parentId', e.target.value)}>
+              <option value="">Nível superior (sem pai)</option>
+              {tasks
+                .filter(item => item.type === 'phase' && item.id !== draft?.id && !subtreeIds(tasks, draft?.id || '').has(item.id))
+                .filter(item => !exceedsMaxDepth(tasks, [draft?.id || ''], item.id))
+                .map(item => (
+                  <option key={item.id} value={item.id}>{item.wbs} - {item.name}</option>
+                ))}
+            </select>
           </label>
           <div className="schedule-form-grid">
             <label className="form-group">
@@ -582,7 +693,7 @@ function ScheduleSettingsModal({ open, settings, onChange, onClose }) {
 
 export default function ScheduleProjectPage() {
   const { user } = useAuth();
-  const { confirm } = useToast();
+  const { confirm, warning } = useToast();
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState('');
   const [selectedId, setSelectedId] = useState('');
@@ -600,6 +711,8 @@ export default function ScheduleProjectPage() {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
   const nameInputRef = useRef(null);
+  const ganttScrollRef = useRef(null);
+  const ganttDragRef = useRef({ active: false, moved: false, captured: false, startX: 0, scrollLeft: 0, pointerId: null });
 
   const project = projects.find(item => item.id === projectId) || projects[0];
   const activeRevision = getActiveRevision(project);
@@ -755,13 +868,20 @@ export default function ScheduleProjectPage() {
 
   const addTask = (type = 'task') => {
     const sourceTasks = activeRevision?.tasks || [];
-    const parentPhase = type === 'task' ? findParentPhase(sourceTasks, selectedId) : null;
-    const siblingTasks = parentPhase ? getPhaseChildrenByPosition(sourceTasks, parentPhase.id) : sourceTasks;
+    let parentPhase = type === 'task' ? findParentPhase(sourceTasks, selectedId) : null;
+    if (parentPhase) {
+      const taskMapById = new Map(sourceTasks.map(item => [item.id, item]));
+      if (getTaskDepth(parentPhase.id, taskMapById) + 1 > MAX_HIERARCHY_LEVELS - 1) {
+        warning(`Limite de ${MAX_HIERARCHY_LEVELS} níveis de hierarquia atingido.`);
+        parentPhase = null;
+      }
+    }
+    const siblingTasks = parentPhase ? getPhaseChildren(sourceTasks, parentPhase.id) : sourceTasks.filter(item => !item.parentId);
     const prev = siblingTasks[siblingTasks.length - 1] || sourceTasks[sourceTasks.length - 1];
     const start = prev?.end ? iso(addDays(parseDate(prev.end), 1)) : iso(TODAY);
     const task = {
       id: `task-${Date.now()}`,
-      wbs: type === 'phase' ? nextTopLevelWbs(sourceTasks) : (parentPhase ? `${parentPhase.wbs}.${siblingTasks.length + 1}` : nextTopLevelWbs(sourceTasks)),
+      wbs: '',
       name: type === 'phase' ? 'Nova atividade macro' : 'Nova atividade',
       type,
       start,
@@ -770,16 +890,14 @@ export default function ScheduleProjectPage() {
       predecessorId: prev?.id || '',
       dependencyType: 'FS',
       notes: '',
+      parentId: parentPhase ? parentPhase.id : '',
     };
     updateRevision(revision => {
-      if (!parentPhase || type === 'phase') return { ...revision, tasks: [...revision.tasks, task] };
-      const lastChildIndex = revision.tasks.reduce(
-        (last, item, index) => (isChildWbs(item.wbs, parentPhase.wbs) ? index : last),
-        revision.tasks.findIndex(item => item.id === parentPhase.id)
-      );
+      if (!parentPhase) return { ...revision, tasks: normalizeTaskOrder([...revision.tasks, task]) };
+      const insertAt = lastDescendantIndex(revision.tasks, parentPhase.id) + 1;
       const nextTasks = [...revision.tasks];
-      nextTasks.splice(lastChildIndex + 1, 0, task);
-      return { ...revision, tasks: nextTasks };
+      nextTasks.splice(insertAt, 0, task);
+      return { ...revision, tasks: normalizeTaskOrder(nextTasks) };
     });
     setSelectedId(task.id);
     setSelectedIds([task.id]);
@@ -813,6 +931,50 @@ export default function ScheduleProjectPage() {
     setLastSelectedId(taskId);
   };
 
+  // Click-and-drag panning of the Gantt timeline, mirroring WorkloadPage's Timeline.
+  const handleGanttPointerDown = (event) => {
+    if (event.button !== 0) return;
+    const node = ganttScrollRef.current;
+    if (!node) return;
+    ganttDragRef.current = { active: true, moved: false, captured: false, startX: event.clientX, scrollLeft: node.scrollLeft, pointerId: event.pointerId };
+  };
+
+  const handleGanttPointerMove = (event) => {
+    const drag = ganttDragRef.current;
+    const node = ganttScrollRef.current;
+    if (!drag.active || !node) return;
+    const dx = event.clientX - drag.startX;
+    if (!drag.moved && Math.abs(dx) > 3) {
+      drag.moved = true;
+      if (!drag.captured) {
+        node.setPointerCapture?.(drag.pointerId);
+        drag.captured = true;
+      }
+    }
+    if (!drag.moved) return;
+    node.scrollLeft = drag.scrollLeft - dx;
+  };
+
+  const stopGanttDrag = () => {
+    const node = ganttScrollRef.current;
+    const drag = ganttDragRef.current;
+    if (node && drag.captured && drag.pointerId != null) node.releasePointerCapture?.(drag.pointerId);
+    const moved = drag.moved;
+    drag.active = false;
+    drag.captured = false;
+    window.setTimeout(() => { ganttDragRef.current.moved = false; }, moved ? 80 : 0);
+  };
+
+  const handleGanttRowClick = (taskId, event) => {
+    if (ganttDragRef.current.moved) return;
+    selectTask(taskId, event);
+  };
+
+  const handleGanttRowDoubleClick = (task) => {
+    if (ganttDragRef.current.moved) return;
+    setEditingTask(task);
+  };
+
   const normalizeTaskOrder = (items) => {
     let topLevel = 0;
     let child = 0;
@@ -834,12 +996,24 @@ export default function ScheduleProjectPage() {
     });
   };
 
+  // Dropping near the top/bottom edge of a row reorders as a sibling at that row's level.
   const moveTasksTo = (targetId, position) => {
     const movingIds = selectedIds.length ? selectedIds : (selectedId ? [selectedId] : []);
     if (!targetId || !movingIds.length || movingIds.includes(targetId)) return;
     updateRevision(revision => {
+      const target = revision.tasks.find(task => task.id === targetId);
+      if (!target) return revision;
+      const wouldCycle = movingIds.some(id => subtreeIds(revision.tasks, id).has(targetId));
+      if (wouldCycle) return revision;
+      const newParentId = target.parentId || '';
+      if (exceedsMaxDepth(revision.tasks, movingIds, newParentId)) {
+        warning(`Limite de ${MAX_HIERARCHY_LEVELS} níveis de hierarquia atingido.`);
+        return revision;
+      }
       const movingSet = new Set(movingIds);
-      const moving = revision.tasks.filter(task => movingSet.has(task.id));
+      const moving = revision.tasks
+        .filter(task => movingSet.has(task.id))
+        .map(task => ({ ...task, parentId: newParentId }));
       const remaining = revision.tasks.filter(task => !movingSet.has(task.id));
       const targetIndex = remaining.findIndex(task => task.id === targetId);
       if (targetIndex < 0) return revision;
@@ -848,24 +1022,28 @@ export default function ScheduleProjectPage() {
     });
   };
 
+  // Dropping in the middle of a row nests the selection inside it, turning the
+  // target into a macro (phase). Nested macros keep their own type/children,
+  // so this supports arbitrary levels of hierarchy.
   const aggregateTasksInto = (targetId) => {
     const movingIds = selectedIds.length ? selectedIds : (selectedId ? [selectedId] : []);
     if (!targetId || !movingIds.length || movingIds.includes(targetId)) return;
     updateRevision(revision => {
+      const target = revision.tasks.find(task => task.id === targetId);
+      if (!target) return revision;
+      const wouldCycle = movingIds.some(id => subtreeIds(revision.tasks, id).has(targetId));
+      if (wouldCycle) return revision;
+      if (exceedsMaxDepth(revision.tasks, movingIds, targetId)) {
+        warning(`Limite de ${MAX_HIERARCHY_LEVELS} níveis de hierarquia atingido.`);
+        return revision;
+      }
       const movingSet = new Set(movingIds);
-      const moving = revision.tasks.filter(task => movingSet.has(task.id)).map(task => ({ ...task, type: 'task' }));
-      const remaining = revision.tasks.filter(task => !movingSet.has(task.id));
-      const targetIndex = remaining.findIndex(task => task.id === targetId);
-      if (targetIndex < 0) return revision;
-      const target = remaining[targetIndex];
-      const nextTarget = { ...target, type: 'phase', predecessorId: '', dependencyType: 'FS' };
-      const arranged = [
-        ...remaining.slice(0, targetIndex),
-        nextTarget,
-        ...moving,
-        ...remaining.slice(targetIndex + 1),
-      ];
-      return { ...revision, tasks: normalizeTaskOrder(arranged) };
+      const nextTasks = revision.tasks.map(task => {
+        if (task.id === targetId) return { ...task, type: 'phase' };
+        if (movingSet.has(task.id)) return { ...task, parentId: targetId };
+        return task;
+      });
+      return { ...revision, tasks: normalizeTaskOrder(nextTasks) };
     });
   };
 
@@ -885,10 +1063,14 @@ export default function ScheduleProjectPage() {
   };
 
   const saveTask = (task) => {
-    updateRevision(revision => ({
-      ...revision,
-      tasks: revision.tasks.map(existing => existing.id === task.id ? task : existing),
-    }));
+    updateRevision(revision => {
+      const wouldCycle = task.parentId && subtreeIds(revision.tasks, task.id).has(task.parentId);
+      const wouldExceedDepth = task.parentId && exceedsMaxDepth(revision.tasks, [task.id], task.parentId);
+      if (wouldExceedDepth) warning(`Limite de ${MAX_HIERARCHY_LEVELS} níveis de hierarquia atingido.`);
+      const safeTask = (wouldCycle || wouldExceedDepth) ? { ...task, parentId: '' } : task;
+      const nextTasks = revision.tasks.map(existing => existing.id === safeTask.id ? safeTask : existing);
+      return { ...revision, tasks: normalizeTaskOrder(nextTasks) };
+    });
     setEditingTask(null);
   };
 
@@ -896,12 +1078,19 @@ export default function ScheduleProjectPage() {
     if (!taskId) return;
     const deleteIds = selectedIds.length && selectedIds.includes(taskId) ? selectedIds : [taskId];
     const deleteSet = new Set(deleteIds);
-    updateRevision(revision => ({
-      ...revision,
-      tasks: revision.tasks
+    updateRevision(revision => {
+      // Children of a deleted phase are promoted to its parent instead of vanishing.
+      const promotedParentOf = new Map(deleteIds.map(id => [id, revision.tasks.find(task => task.id === id)?.parentId || '']));
+      const nextTasks = revision.tasks
         .filter(task => !deleteSet.has(task.id))
-        .map(task => deleteSet.has(task.predecessorId) ? { ...task, predecessorId: '' } : task),
-    }));
+        .map(task => {
+          let next = task;
+          if (deleteSet.has(next.predecessorId)) next = { ...next, predecessorId: '' };
+          if (deleteSet.has(next.parentId)) next = { ...next, parentId: promotedParentOf.get(next.parentId) || '' };
+          return next;
+        });
+      return { ...revision, tasks: normalizeTaskOrder(nextTasks) };
+    });
     setSelectedId('');
     setSelectedIds([]);
   };
@@ -1255,7 +1444,10 @@ export default function ScheduleProjectPage() {
                   onDrop={event => handleTaskDrop(task.id, event)}
                 >
                   <span>{task.wbs}</span>
-                  <span className="schedule-task-name">{task.name}</span>
+                  <span className="schedule-task-name" style={{ paddingLeft: (task._depth || 0) * 14 }}>
+                    <i style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 2, marginRight: 6, background: getLevelColor(task._depth).fill, flexShrink: 0 }} />
+                    {task.name}
+                  </span>
                   <span>{formatDate(task.start)}</span>
                   <span>{formatDate(task.end)}</span>
                   <span><b className={`schedule-progress ${status}`}>{task.progress || 0}%</b></span>
@@ -1267,7 +1459,15 @@ export default function ScheduleProjectPage() {
         </div>
 
         <div className="schedule-gantt-pane">
-          <div className="schedule-gantt-scroll">
+          <div
+            className="schedule-gantt-scroll"
+            ref={ganttScrollRef}
+            onPointerDown={handleGanttPointerDown}
+            onPointerMove={handleGanttPointerMove}
+            onPointerUp={stopGanttDrag}
+            onPointerCancel={stopGanttDrag}
+            style={{ cursor: 'grab', userSelect: ganttDragRef.current.active ? 'none' : 'auto' }}
+          >
             <div className="schedule-gantt-inner" style={{ width: totalWidth }}>
               <div className="schedule-gantt-months">
                 {monthCells.map(cell => (
@@ -1312,13 +1512,16 @@ export default function ScheduleProjectPage() {
                   const left = start ? daysBetween(range.start, start) * colWidth : 0;
                   const width = start && end ? Math.max(colWidth, (daysBetween(start, end) + 1) * colWidth) : colWidth;
                   const status = getStatus(task);
+                  const levelColor = getLevelColor(task._depth);
+                  const isCritical = showCriticalPath && criticalPathIds.has(task.id);
+                  const barShadow = [status === 'late' ? 'inset 3px 0 0 0 #DC2626' : '', isCritical ? '0 0 0 3px rgba(245,158,11,.35)' : '', '0 1px 2px rgba(0,31,91,.15)'].filter(Boolean).join(', ');
                   return (
                     <div
                       key={task.id}
                       className={`schedule-gantt-row ${task.type} ${selectedIds.includes(task.id) ? 'selected' : ''}`}
                       style={{ height: rowHeight(task) }}
-                      onClick={event => selectTask(task.id, event)}
-                      onDoubleClick={() => setEditingTask(task)}
+                      onClick={event => handleGanttRowClick(task.id, event)}
+                      onDoubleClick={() => handleGanttRowDoubleClick(task)}
                       onDragOver={event => event.preventDefault()}
                       onDrop={event => handleTaskDrop(task.id, event)}
                     >
@@ -1326,9 +1529,9 @@ export default function ScheduleProjectPage() {
                         <span key={iso(day)} className={dayClass(day)} style={{ width: colWidth }} />
                       ))}
                       {start && end && (
-                        <div className={`schedule-bar ${task.type} ${status} ${showCriticalPath && criticalPathIds.has(task.id) ? 'critical' : ''}`} style={{ left, width }}>
-                          <i style={{ width: `${task.progress || 0}%` }} />
-                          <em>{task.type === 'phase' ? task.name : `${task.progress || 0}%`}</em>
+                        <div className={`schedule-bar ${task.type} ${isCritical ? 'critical' : ''}`} style={{ left, width, backgroundColor: levelColor.bg, boxShadow: barShadow }}>
+                          <i style={{ width: `${task.progress || 0}%`, backgroundColor: levelColor.fill }} />
+                          <em style={{ color: levelColor.text, textShadow: 'none' }}>{task.type === 'phase' ? task.name : `${task.progress || 0}%`}</em>
                         </div>
                       )}
                     </div>
@@ -1379,7 +1582,10 @@ export default function ScheduleProjectPage() {
                           style={{ height: printRowHeight(task) }}
                         >
                           <span>{task.wbs}</span>
-                          <span className="schedule-task-name">{task.name}</span>
+                          <span className="schedule-task-name" style={{ paddingLeft: (task._depth || 0) * 14 }}>
+                    <i style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 2, marginRight: 6, background: getLevelColor(task._depth).fill, flexShrink: 0 }} />
+                    {task.name}
+                  </span>
                           <span>{formatDate(task.start)}</span>
                           <span>{formatDate(task.end)}</span>
                           <span><b className={`schedule-progress ${status}`}>{task.progress || 0}%</b></span>
@@ -1439,15 +1645,18 @@ export default function ScheduleProjectPage() {
                           const left = start ? daysBetween(range.start, start) * printColWidth : 0;
                           const width = start && end ? Math.max(printColWidth, (daysBetween(start, end) + 1) * printColWidth) : printColWidth;
                           const status = getStatus(task);
+                          const levelColor = getLevelColor(task._depth);
+                          const isCritical = showCriticalPath && criticalPathIds.has(task.id);
+                          const barShadow = [status === 'late' ? 'inset 3px 0 0 0 #DC2626' : '', isCritical ? '0 0 0 3px rgba(245,158,11,.35)' : '', '0 1px 2px rgba(0,31,91,.15)'].filter(Boolean).join(', ');
                           return (
                             <div key={`print-gantt-${task.id}`} className={`schedule-gantt-row ${task.type}`} style={{ height: printRowHeight(task) }}>
                               {dayList.map(day => (
                                 <span key={`print-task-day-${task.id}-${iso(day)}`} className={dayClass(day)} style={{ width: printColWidth }} />
                               ))}
                               {start && end && (
-                                <div className={`schedule-bar ${task.type} ${status} ${showCriticalPath && criticalPathIds.has(task.id) ? 'critical' : ''}`} style={{ left, width }}>
-                                  <i style={{ width: `${task.progress || 0}%` }} />
-                                  <em>{task.type === 'phase' ? task.name : `${task.progress || 0}%`}</em>
+                                <div className={`schedule-bar ${task.type} ${isCritical ? 'critical' : ''}`} style={{ left, width, backgroundColor: levelColor.bg, boxShadow: barShadow }}>
+                                  <i style={{ width: `${task.progress || 0}%`, backgroundColor: levelColor.fill }} />
+                                  <em style={{ color: levelColor.text, textShadow: 'none' }}>{task.type === 'phase' ? task.name : `${task.progress || 0}%`}</em>
                                 </div>
                               )}
                             </div>
