@@ -400,12 +400,6 @@ function RequireRole({ roles, children }) {
   return children;
 }
 
-function StaticLandingRedirect() {
-  useEffect(() => {
-    window.location.replace('/engenharia-eletromecanica.html');
-  }, []);
-  return null;
-}
 function MobileBottomNav({ onLogout, isPlanejador, unreadCount = 0 }) {
   const location = useLocation();
   const isActive = (path) => location.pathname === path ||
@@ -805,7 +799,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/" element={<StaticLandingRedirect />} />
+      <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
