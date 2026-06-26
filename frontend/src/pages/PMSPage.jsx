@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
 import { useToast } from '../components/ui/Toast.jsx';
@@ -113,12 +114,44 @@ function StatCard({ label, value, sub, color = '#0066B3' }) {
 }
 
 /* ─── Charts ─────────────────────────────────────────────────────────────────── */
+function ChartTooltip({ pos, color, label, value, breakdowns }) {
+  return createPortal(
+    <div style={{ position:'fixed', left:pos.x, top:pos.y+14, transform:'translateX(-50%)', pointerEvents:'none', zIndex:99999 }}>
+      <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:8, padding:'8px 12px', boxShadow:'0 4px 16px rgba(0,0,0,0.15)', fontSize:'0.72rem', whiteSpace:'nowrap', minWidth:200 }}>
+        <div style={{ fontWeight:800, marginBottom:5, color: color || '#1E293B', fontSize:'0.78rem' }}>{label}</div>
+        <div style={{ display:'flex', justifyContent:'space-between', gap:18, lineHeight:1.55 }}>
+          <span style={{ color:'#64748B' }}>Total</span>
+          <span style={{ color:'#1E293B', fontWeight:700 }}>{value}</span>
+        </div>
+        {breakdowns.map(group => {
+          const rows = group.items.filter(it => it.value > 0);
+          return (
+            <div key={group.title} style={{ borderTop:'1px solid #F1F5F9', marginTop:5, paddingTop:4 }}>
+              <div style={{ fontSize:'0.62rem', fontWeight:800, color:'#64748B', textTransform:'uppercase', marginBottom:3 }}>Por {group.title}</div>
+              {rows.length === 0
+                ? <div style={{ color:'#94A3B8' }}>Sem dados</div>
+                : rows.map(it => (
+                    <div key={it.label} style={{ display:'flex', justifyContent:'space-between', gap:18, lineHeight:1.55 }}>
+                      <span style={{ color:'#64748B' }}>{it.label}</span>
+                      <span style={{ color: it.color || '#1E293B', fontWeight:700 }}>{it.value}</span>
+                    </div>
+                  ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>,
+    document.body
+  );
+}
 function HBarChart({ data, title, activeFilter, onFilter }) {
   const max = Math.max(...data.map(d => d.value), 1);
   const visible = data.filter(d => d.value > 0);
   const clickable = !!onFilter;
+  const [hovered, setHovered] = useState(null);
+  const [tooltipPos, setTooltipPos] = useState({ x:0, y:0 });
   return (
-    <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:10, padding:'14px 16px', flex:1, minWidth:0 }}>
+    <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:10, borderTop:'3px solid #0066B3', padding:'14px 16px', flex:1, minWidth:0 }}>
       <div style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#94A3B8', marginBottom:10 }}>{title}</div>
       {visible.length === 0 ? <div style={{ fontSize:'0.78rem', color:'#CBD5E1', textAlign:'center', padding:'16px 0' }}>Sem dados</div>
         : <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
@@ -127,6 +160,9 @@ function HBarChart({ data, title, activeFilter, onFilter }) {
               return (
                 <div key={i}
                   onClick={() => clickable && onFilter(isActive ? '' : d.filterKey)}
+                  onMouseEnter={e => { setHovered(d); setTooltipPos({ x:e.clientX, y:e.clientY }); }}
+                  onMouseMove={e => setTooltipPos({ x:e.clientX, y:e.clientY })}
+                  onMouseLeave={() => setHovered(null)}
                   style={{ display:'flex', alignItems:'center', gap:8, cursor: clickable ? 'pointer' : 'default',
                     opacity: activeFilter && !isActive ? 0.45 : 1, transition:'opacity 0.15s',
                     borderRadius:4, padding:'2px 0',
@@ -141,6 +177,9 @@ function HBarChart({ data, title, activeFilter, onFilter }) {
               );
             })}
           </div>}
+      {hovered && hovered.tooltipBreakdowns && (
+        <ChartTooltip pos={tooltipPos} color={hovered.color} label={hovered.label} value={hovered.value} breakdowns={hovered.tooltipBreakdowns} />
+      )}
     </div>
   );
 }
@@ -155,6 +194,8 @@ function MiniDonut({ data, highlightKey, highlightLabel, activeFilter, onFilter 
   const dash = (pct/100) * circ;
   const isActive = activeFilter === highlightKey;
   const clickable = !!onFilter;
+  const [hovered, setHovered] = useState(null);
+  const [tooltipPos, setTooltipPos] = useState({ x:0, y:0 });
   return (
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:10, flex:1, minWidth:0 }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
@@ -164,6 +205,9 @@ function MiniDonut({ data, highlightKey, highlightLabel, activeFilter, onFilter 
             opacity={activeFilter && !isActive ? 0.35 : 1}
             style={{ cursor: clickable ? 'pointer' : 'default', transition:'opacity 0.15s' }}
             onClick={() => clickable && onFilter(isActive ? '' : highlightKey)}
+            onMouseEnter={e => { setHovered(highlight); setTooltipPos({ x:e.clientX, y:e.clientY }); }}
+            onMouseMove={e => setTooltipPos({ x:e.clientX, y:e.clientY })}
+            onMouseLeave={() => setHovered(null)}
           />
         )}
         <text x={cx} y={cy-6} textAnchor="middle" style={{ fontSize:'1.3rem', fontWeight:800, fill:'#0F172A' }}>{pctLabel}%</text>
@@ -175,6 +219,9 @@ function MiniDonut({ data, highlightKey, highlightLabel, activeFilter, onFilter 
           return (
             <div key={i}
               onClick={() => clickable && onFilter(isItemActive ? '' : d.filterKey)}
+              onMouseEnter={e => { setHovered(d); setTooltipPos({ x:e.clientX, y:e.clientY }); }}
+              onMouseMove={e => setTooltipPos({ x:e.clientX, y:e.clientY })}
+              onMouseLeave={() => setHovered(null)}
               style={{ display:'flex', alignItems:'center', gap:6, cursor: clickable ? 'pointer' : 'default', opacity: activeFilter && !isItemActive ? 0.5 : 1, transition:'opacity 0.15s' }}
             >
               <span style={{ width:8, height:8, borderRadius:'50%', background:d.color, flexShrink:0 }}/>
@@ -184,12 +231,15 @@ function MiniDonut({ data, highlightKey, highlightLabel, activeFilter, onFilter 
           );
         })}
       </div>
+      {hovered && hovered.tooltipBreakdowns && (
+        <ChartTooltip pos={tooltipPos} color={hovered.color} label={hovered.label} value={hovered.value} breakdowns={hovered.tooltipBreakdowns} />
+      )}
     </div>
   );
 }
 function StatsOverviewCard({ blocks }) {
   return (
-    <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:10, padding:'16px 20px', width:'100%', height:'100%', boxSizing:'border-box', display:'flex', flexDirection:'column', justifyContent:'center' }}>
+    <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:10, borderTop:'3px solid #0066B3', padding:'16px 20px', width:'100%', height:'100%', boxSizing:'border-box', display:'flex', flexDirection:'column', justifyContent:'center' }}>
       <div style={{ display:'flex', gap:18, alignItems:'center' }}>
         {blocks.map((b,i) => (
           <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:8, minWidth:0 }}>
@@ -207,8 +257,10 @@ function VBarChart({ data, title, activeFilter, onFilter }) {
   const max = Math.max(...data.map(d => d.value), 1);
   const visible = data.filter(d => d.value > 0);
   const clickable = !!onFilter;
+  const [hovered, setHovered] = useState(null);
+  const [tooltipPos, setTooltipPos] = useState({ x:0, y:0 });
   return (
-    <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:10, padding:'14px 16px', flex:1, minWidth:0, width:'100%' }}>
+    <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:10, borderTop:'3px solid #0066B3', padding:'14px 16px', flex:1, minWidth:0, width:'100%' }}>
       <div style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#94A3B8', marginBottom:10 }}>{title}</div>
       {visible.length === 0
         ? <div style={{ fontSize:'0.78rem', color:'#CBD5E1', textAlign:'center', padding:'16px 0' }}>Sem dados</div>
@@ -218,6 +270,9 @@ function VBarChart({ data, title, activeFilter, onFilter }) {
               return (
                 <div key={i}
                   onClick={() => clickable && onFilter(isActive ? '' : d.filterKey)}
+                  onMouseEnter={e => { setHovered(d); setTooltipPos({ x:e.clientX, y:e.clientY }); }}
+                  onMouseMove={e => setTooltipPos({ x:e.clientX, y:e.clientY })}
+                  onMouseLeave={() => setHovered(null)}
                   style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:0, minWidth:0,
                     cursor: clickable ? 'pointer' : 'default',
                     opacity: activeFilter && !isActive ? 0.4 : 1,
@@ -243,6 +298,9 @@ function VBarChart({ data, title, activeFilter, onFilter }) {
             })}
           </div>
       }
+      {hovered && hovered.tooltipBreakdowns && (
+        <ChartTooltip pos={tooltipPos} color={hovered.color} label={hovered.label} value={hovered.value} breakdowns={hovered.tooltipBreakdowns} />
+      )}
     </div>
   );
 }
@@ -877,13 +935,56 @@ export default function PMSPage() {
   const myDocsCount = kpiDocs.filter(d => isOwner(d)).length;
 
   /* Charts — cada um reflete os demais filtros, exceto a própria dimensão */
-  const typeChartData     = TYPES.map(t => ({ label:t.value, value:typeChartDocs.filter(d=>d.type===t.value).length, color:TYPE_COLORS[t.value], filterKey:t.value }));
-  const validadeChartData = VALIDADE.map(v => ({ label:v.value, value:validadeChartDocs.filter(d=>d.validade_status===v.value).length, color:v.color, filterKey:v.value }));
-  const plantChartData    = PLANTS.map(p => ({ label:p, value:plantChartDocs.filter(d=>d.plant===p).length, color:'#0066B3', filterKey:p })).filter(d=>d.value>0);
+  const langBreakdown = (arr) => {
+    const withEn = arr.filter(d => d.has_en).length;
+    return [
+      { label:'Com Inglês', value: withEn, color:'#10B981' },
+      { label:'Só Português', value: arr.length - withEn, color:'#94A3B8' },
+    ];
+  };
+
+  const typeChartData = TYPES.map(t => {
+    const itemsForType = typeChartDocs.filter(d=>d.type===t.value);
+    return { label:t.value, value:itemsForType.length, color:TYPE_COLORS[t.value], filterKey:t.value,
+      tooltipBreakdowns: [
+        { title:'Usina',  items: PLANTS.map(p => ({ label:p, value: itemsForType.filter(d=>d.plant===p).length })) },
+        { title:'Status de validade', items: VALIDADE.map(v => ({ label:v.value, value: itemsForType.filter(d=>d.validade_status===v.value).length, color:v.color })) },
+        { title:'Idioma', items: langBreakdown(itemsForType) },
+      ] };
+  });
+  const validadeChartData = VALIDADE.map(v => {
+    const itemsForValidade = validadeChartDocs.filter(d=>d.validade_status===v.value);
+    return { label:v.value, value:itemsForValidade.length, color:v.color, filterKey:v.value,
+      tooltipBreakdowns: [
+        { title:'Tipo',  items: TYPES.map(t => ({ label:t.value, value: itemsForValidade.filter(d=>d.type===t.value).length, color:TYPE_COLORS[t.value] })) },
+        { title:'Usina', items: PLANTS.map(p => ({ label:p, value: itemsForValidade.filter(d=>d.plant===p).length })) },
+        { title:'Idioma', items: langBreakdown(itemsForValidade) },
+      ] };
+  });
+  const plantChartData = PLANTS.map(p => {
+    const itemsForPlant = plantChartDocs.filter(d=>d.plant===p);
+    return { label:p, value:itemsForPlant.length, color:'#0066B3', filterKey:p,
+      tooltipBreakdowns: [
+        { title:'Tipo',  items: TYPES.map(t => ({ label:t.value, value: itemsForPlant.filter(d=>d.type===t.value).length, color:TYPE_COLORS[t.value] })) },
+        { title:'Status de validade', items: VALIDADE.map(v => ({ label:v.value, value: itemsForPlant.filter(d=>d.validade_status===v.value).length, color:v.color })) },
+        { title:'Idioma', items: langBreakdown(itemsForPlant) },
+      ] };
+  }).filter(d=>d.value>0);
   const langWithEn = langChartDocs.filter(d => d.has_en).length;
-  const langChartData     = [
-    { label:'Com Inglês', value: langWithEn, color:'#10B981', filterKey:'with_en' },
-    { label:'Só Português', value: langChartDocs.length - langWithEn, color:'#94A3B8', filterKey:'without_en' },
+  const langItemsFor = (predicate) => langChartDocs.filter(predicate);
+  const langChartData = [
+    { label:'Com Inglês', value: langWithEn, color:'#10B981', filterKey:'with_en',
+      tooltipBreakdowns: [
+        { title:'Tipo',  items: TYPES.map(t => ({ label:t.value, value: langItemsFor(d=>d.has_en && d.type===t.value).length, color:TYPE_COLORS[t.value] })) },
+        { title:'Usina', items: PLANTS.map(p => ({ label:p, value: langItemsFor(d=>d.has_en && d.plant===p).length })) },
+        { title:'Status de validade', items: VALIDADE.map(v => ({ label:v.value, value: langItemsFor(d=>d.has_en && d.validade_status===v.value).length, color:v.color })) },
+      ] },
+    { label:'Só Português', value: langChartDocs.length - langWithEn, color:'#94A3B8', filterKey:'without_en',
+      tooltipBreakdowns: [
+        { title:'Tipo',  items: TYPES.map(t => ({ label:t.value, value: langItemsFor(d=>!d.has_en && d.type===t.value).length, color:TYPE_COLORS[t.value] })) },
+        { title:'Usina', items: PLANTS.map(p => ({ label:p, value: langItemsFor(d=>!d.has_en && d.plant===p).length })) },
+        { title:'Status de validade', items: VALIDADE.map(v => ({ label:v.value, value: langItemsFor(d=>!d.has_en && d.validade_status===v.value).length, color:v.color })) },
+      ] },
   ];
   const plantsUsed = PLANTS.filter(p => docs.some(d => d.plant === p));
   const areasUsed   = [...new Set(docs.map(d => d.area).filter(Boolean))];

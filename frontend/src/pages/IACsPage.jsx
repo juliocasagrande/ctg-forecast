@@ -15,6 +15,7 @@ const IACS_COL_WIDTHS = [40, 40, 140, 90, 110, 90, 105, 60, 90, 220, 180, 130, 1
 
 /* ─── Constants ────────────────────────────────────────────────────────────── */
 const AREAS = ['Confiabilidade', 'Elétrica', 'Mecânica'];
+const AREA_COLORS = { 'Elétrica': '#0EA5E9', 'Mecânica': '#F59E0B', 'Confiabilidade': '#94A3B8' };
 const TAB_DOT_COLORS = {
   'Todos': '#0b5cab',
   'Meus IACs': '#7C3AED',
@@ -914,6 +915,8 @@ export default function IACsPage() {
   const [search, setSearch]             = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterPriority, setFilterPriority] = useState('');
+  const [hoveredStatusCard, setHoveredStatusCard] = useState(null);
+  const [statusTooltipPos, setStatusTooltipPos] = useState({ x: 0, y: 0 });
   const [activeTab, setActiveTab]       = useState('Todos');
   const [showMyIACs, setShowMyIACs]     = useState(false);
   const [selected, setSelected]         = useState(null);
@@ -1183,7 +1186,14 @@ export default function IACsPage() {
   [items]);
 
   const statusBarData = useMemo(() =>
-    STATUS_OPTIONS.map(s => ({ status: s.value, count: statusChartItems.filter(i => i.status_current === s.value).length })),
+    STATUS_OPTIONS.map(s => {
+      const itemsForStatus = statusChartItems.filter(i => i.status_current === s.value);
+      const areaCounts = AREAS.reduce((acc, area) => {
+        acc[area] = itemsForStatus.filter(i => i.area === area).length;
+        return acc;
+      }, {});
+      return { status: s.value, count: itemsForStatus.length, areaCounts };
+    }),
   [statusChartItems]);
 
   const priorityData = useMemo(() =>
@@ -1310,6 +1320,9 @@ export default function IACsPage() {
                       <div
                         key={d.status}
                         onClick={() => setFilterStatus(isActive ? '' : d.status)}
+                        onMouseEnter={e => { setHoveredStatusCard(d); setStatusTooltipPos({ x: e.clientX, y: e.clientY }); }}
+                        onMouseMove={e => setStatusTooltipPos({ x: e.clientX, y: e.clientY })}
+                        onMouseLeave={() => setHoveredStatusCard(null)}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 8,
                           padding: '8px 12px', borderRadius: 8, cursor: 'pointer',
@@ -1345,6 +1358,36 @@ export default function IACsPage() {
                 </div>
               );
             })()}
+            {hoveredStatusCard && createPortal(
+              <div style={{ position: 'fixed', left: statusTooltipPos.x, top: statusTooltipPos.y + 14, transform: 'translateX(-50%)', pointerEvents: 'none', zIndex: 99999 }}>
+                <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 12px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', fontSize: '0.72rem', whiteSpace: 'nowrap', minWidth: 200 }}>
+                  <div style={{ fontWeight: 800, marginBottom: 5, color: (STATUS_META[hoveredStatusCard.status] || {}).text || '#1E293B', fontSize: '0.78rem' }}>
+                    {getStatusLabel(hoveredStatusCard.status)}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 18, lineHeight: 1.55 }}>
+                    <span style={{ color: '#64748B' }}>Total</span>
+                    <span style={{ color: '#1E293B', fontWeight: 700 }}>{hoveredStatusCard.count}</span>
+                  </div>
+                  <div style={{ borderTop: '1px solid #F1F5F9', marginTop: 5, paddingTop: 4 }}>
+                    <div style={{ fontSize: '0.62rem', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', marginBottom: 3 }}>Por área</div>
+                    {AREAS.map(area => {
+                      const count = hoveredStatusCard.areaCounts?.[area] || 0;
+                      if (!count) return null;
+                      return (
+                        <div key={area} style={{ display: 'flex', justifyContent: 'space-between', gap: 18, lineHeight: 1.55 }}>
+                          <span style={{ color: '#64748B' }}>{area}</span>
+                          <span style={{ color: AREA_COLORS[area] || '#1E293B', fontWeight: 700 }}>{count}</span>
+                        </div>
+                      );
+                    })}
+                    {!AREAS.some(area => hoveredStatusCard.areaCounts?.[area]) && (
+                      <div style={{ color: '#94A3B8' }}>Sem IACs</div>
+                    )}
+                  </div>
+                </div>
+              </div>,
+              document.body
+            )}
           </div>
         </div>
 
