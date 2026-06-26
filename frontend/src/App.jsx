@@ -1,4 +1,4 @@
-import Icon from './components/ui/Icon.jsx';
+﻿import Icon from './components/ui/Icon.jsx';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate, NavLink } from 'react-router-dom';
 import { useAuth, useRole } from './context/AuthContext.jsx';
@@ -33,7 +33,7 @@ import AdminPanel from './components/admin/AdminPanel.jsx';
 import AlertBell from './components/ui/AlertBell.jsx';
 import api from './utils/api.js';
 
-// ── Error Boundary ──────────────────────────────────────────────────────────
+// â”€â”€ Error Boundary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class ErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { hasError: false, error: null }; }
   static getDerivedStateFromError(error) { return { hasError: true, error }; }
@@ -50,19 +50,19 @@ class ErrorBoundary extends React.Component {
             borderRadius: 16, padding: '40px 32px', boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
             border: '1px solid #E2E8F0',
           }}>
-            <div style={{ fontSize: '2.5rem', marginBottom: 16 }}>⚠️</div>
+            <div style={{ fontSize: '2.5rem', marginBottom: 16 }}>âš ï¸</div>
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem', color: '#001F5B', marginBottom: 8 }}>
               Algo deu errado
             </h1>
             <p style={{ fontSize: '0.88rem', color: '#64748B', lineHeight: 1.6, marginBottom: 24 }}>
-              Ocorreu um erro inesperado na aplicação. Tente recarregar a página.
+              Ocorreu um erro inesperado na aplicaÃ§Ã£o. Tente recarregar a pÃ¡gina.
             </p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
               <button onClick={() => window.location.reload()} style={{
                 padding: '10px 24px', borderRadius: 8, border: 'none', cursor: 'pointer',
                 background: '#001F5B', color: '#fff', fontWeight: 600, fontSize: '0.9rem',
               }}>
-                Recarregar página
+                Recarregar pÃ¡gina
               </button>
               <button onClick={() => { window.location.href = '/'; }} style={{
                 padding: '10px 24px', borderRadius: 8, border: '1.5px solid #CBD5E1', cursor: 'pointer',
@@ -73,7 +73,7 @@ class ErrorBoundary extends React.Component {
             </div>
             {this.state.error && (
               <details style={{ marginTop: 20, textAlign: 'left' }}>
-                <summary style={{ fontSize: '0.75rem', color: '#94A3B8', cursor: 'pointer' }}>Detalhes técnicos</summary>
+                <summary style={{ fontSize: '0.75rem', color: '#94A3B8', cursor: 'pointer' }}>Detalhes tÃ©cnicos</summary>
                 <pre style={{ fontSize: '0.7rem', color: '#DC2626', background: '#FEF2F2', padding: 12, borderRadius: 8, marginTop: 8, overflow: 'auto', maxHeight: 120 }}>
                   {this.state.error.toString()}
                 </pre>
@@ -90,11 +90,11 @@ class ErrorBoundary extends React.Component {
 const ALL_PLANTS = [
   'PCH Palmeiras','PCH Retiro','UHE Canoas 1','UHE Canoas 2',
   'UHE Capivara','UHE Chavantes','UHE Garibaldi','UHE Ilha Solteira',
-  'UHE Jupiá','UHE Jurumirim','UHE Rosana','UHE Salto',
-  'UHE Salto Grande','UHE Taquaruçu',
+  'UHE JupiÃ¡','UHE Jurumirim','UHE Rosana','UHE Salto',
+  'UHE Salto Grande','UHE TaquaruÃ§u',
 ];
 
-// ── Period Slider ────────────────────────────────────────────────────────────
+// â”€â”€ Period Slider â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function PeriodSelector({ period, onChange }) {
   const settings = useSettings();
   const activeStart = parseInt(settings.active_year_start) || 2026;
@@ -104,7 +104,7 @@ function PeriodSelector({ period, onChange }) {
   const years = [];
   for (let y = MIN_YEAR; y <= MAX_YEAR; y++) years.push(y);
   const isSingle = period.start === period.end;
-  const label = isSingle ? `${period.start}` : `${period.start} – ${period.end}`;
+  const label = isSingle ? `${period.start}` : `${period.start} â€“ ${period.end}`;
 
   return (
     <div className="period-selector">
@@ -117,7 +117,7 @@ function PeriodSelector({ period, onChange }) {
             onChange({ start: val, end: Math.max(val, period.end) });
           }}
         />
-        <div className="period-track-label" style={{ fontSize: '0.58rem' }}>Até</div>
+        <div className="period-track-label" style={{ fontSize: '0.58rem' }}>AtÃ©</div>
         <input type="range" className="period-slider"
           min={MIN_YEAR} max={MAX_YEAR} value={period.end}
           onChange={e => {
@@ -139,7 +139,7 @@ function PeriodSelector({ period, onChange }) {
   );
 }
 
-// ── Plant Filter Dropdown ────────────────────────────────────────────────────
+// â”€â”€ Plant Filter Dropdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function PlantFilter({ activePlants, selected, onChange }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -167,7 +167,7 @@ function PlantFilter({ activePlants, selected, onChange }) {
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
-      {/* Trigger — mirrors period-selector layout */}
+      {/* Trigger â€” mirrors period-selector layout */}
       <button
         onClick={() => setOpen(o => !o)}
         style={{
@@ -213,11 +213,11 @@ function PlantFilter({ activePlants, selected, onChange }) {
                 fontSize: '0.6rem', fontWeight: 700, lineHeight: 1, flexShrink: 0,
               }}
             >
-              ×
+              Ã—
             </span>
           )}
           <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', lineHeight: 1 }}>
-            {open ? '▲' : '▼'}
+            {open ? 'â–²' : 'â–¼'}
           </span>
         </span>
       </button>
@@ -285,7 +285,7 @@ function PlantFilter({ activePlants, selected, onChange }) {
   );
 }
 
-// ── Project Filter Dropdown ──────────────────────────────────────────────────
+// â”€â”€ Project Filter Dropdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ProjectFilter({ projects, plantFilter, selected, onChange }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -337,10 +337,10 @@ function ProjectFilter({ projects, plantFilter, selected, onChange }) {
           {selected.length > 0 && (
             <span onClick={e => { e.stopPropagation(); onChange([]); }} title="Limpar"
               style={{ display:'inline-flex',alignItems:'center',justifyContent:'center',width:14,height:14,borderRadius:'50%',background:'var(--ctg-blue)',color:'#fff',fontSize:'0.6rem',fontWeight:700,lineHeight:1,flexShrink:0,cursor:'pointer' }}>
-              ×
+              Ã—
             </span>
           )}
-          <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', lineHeight: 1 }}>{open ? '▲' : '▼'}</span>
+          <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', lineHeight: 1 }}>{open ? 'â–²' : 'â–¼'}</span>
         </span>
       </button>
 
@@ -385,7 +385,7 @@ function ProjectFilter({ projects, plantFilter, selected, onChange }) {
   );
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function RequireAuth({ children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
@@ -400,6 +400,12 @@ function RequireRole({ roles, children }) {
   return children;
 }
 
+function StaticLandingRedirect() {
+  useEffect(() => {
+    window.location.replace('/engenharia-eletromecanica.html');
+  }, []);
+  return null;
+}
 function MobileBottomNav({ onLogout, isPlanejador, unreadCount = 0 }) {
   const location = useLocation();
   const isActive = (path) => location.pathname === path ||
@@ -445,7 +451,7 @@ function MobileBottomNav({ onLogout, isPlanejador, unreadCount = 0 }) {
 }
 
 
-// ── Planejador / Relatório Geral export modal ─────────────────────────────────
+// â”€â”€ Planejador / RelatÃ³rio Geral export modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const PLANNER_TYPES  = ['Budget','Forecast','Actual','Meta','Pool'];
 const TYPE_LABEL_MAP = { Budget:'Budget', Forecast:'Forecast', Actual:'Realizado', Meta:'Meta', Pool:'Pool' };
 const TYPE_COLOR_MAP = {
@@ -488,20 +494,20 @@ function PlanejadorExportModal({ open, onClose }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">📊 Relatório Geral</span>
+          <span className="modal-title">ðŸ“Š RelatÃ³rio Geral</span>
           <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer',
-            color:'rgba(255,255,255,0.7)', fontSize:'1.1rem', padding:'0 4px' }}>✕</button>
+            color:'rgba(255,255,255,0.7)', fontSize:'1.1rem', padding:'0 4px' }}>âœ•</button>
         </div>
         <div className="modal-body">
           <p style={{ fontSize:'0.82rem', color:'var(--text-secondary)', marginBottom:8 }}>
-            O relatório incluirá <strong>todos os projetos</strong> com dados de Forecast mês a mês
+            O relatÃ³rio incluirÃ¡ <strong>todos os projetos</strong> com dados de Forecast mÃªs a mÃªs
             de Jan/2026 a Dez/2031.
           </p>
           <p style={{ fontSize:'0.78rem', color:'var(--text-muted)', marginBottom:16,
             padding:'8px 12px', background:'var(--bg-app)', borderRadius:'var(--radius-sm)',
             borderLeft:'3px solid var(--ctg-blue)' }}>
-            ℹ Engenheiros verão apenas seus próprios projetos.
-            Planejadores verão todos os projetos.
+            â„¹ Engenheiros verÃ£o apenas seus prÃ³prios projetos.
+            Planejadores verÃ£o todos os projetos.
           </p>
 
           <div style={{ fontSize:'0.7rem', fontWeight:700, textTransform:'uppercase',
@@ -534,7 +540,7 @@ function PlanejadorExportModal({ open, onClose }) {
           <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
           <button className="btn btn-export" onClick={handleExport}
             disabled={selTypes.length === 0 || exporting}>
-            {exporting ? 'Gerando...' : '📊 Exportar'}
+            {exporting ? 'Gerando...' : 'ðŸ“Š Exportar'}
           </button>
         </div>
       </div>
@@ -543,14 +549,14 @@ function PlanejadorExportModal({ open, onClose }) {
 }
 
 
-// ── Mobile filter modal (bottom-sheet) ──────────────────────────────────────
-// ── Area dropdown filter (vacations + polos) ──────────────────────────────────
+// â”€â”€ Mobile filter modal (bottom-sheet) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ Area dropdown filter (vacations + polos) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const AREA_OPTIONS_LIST = [
   { value: '', label: 'Todas' },
-  { value: 'eletrica', label: 'Elétrica' },
-  { value: 'mecanica', label: 'Mecânica' },
+  { value: 'eletrica', label: 'ElÃ©trica' },
+  { value: 'mecanica', label: 'MecÃ¢nica' },
   { value: 'confiabilidade', label: 'Confiabilidade' },
-  { value: 'modernizacao', label: 'Modernização' },
+  { value: 'modernizacao', label: 'ModernizaÃ§Ã£o' },
 ];
 
 function AreaFilter({ value, onChange }) {
@@ -576,7 +582,7 @@ function AreaFilter({ value, onChange }) {
           letterSpacing: '0.08em', fontFamily: 'var(--font-body)',
           color: value ? 'var(--ctg-blue)' : 'var(--ctg-navy)',
           display: 'block', lineHeight: 1,
-        }}>Área</span>
+        }}>Ãrea</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.72rem',
           fontWeight: value ? 600 : 400, color: value ? 'var(--ctg-blue)' : 'var(--text-muted)',
           fontFamily: 'var(--font-body)', whiteSpace: 'nowrap' }}>
@@ -585,9 +591,9 @@ function AreaFilter({ value, onChange }) {
             <span onClick={e => { e.stopPropagation(); onChange(''); }}
               style={{ display:'inline-flex',alignItems:'center',justifyContent:'center',
                 width:14,height:14,borderRadius:'50%',background:'var(--ctg-blue)',color:'#fff',
-                fontSize:'0.6rem',fontWeight:700,lineHeight:1,flexShrink:0 }}>×</span>
+                fontSize:'0.6rem',fontWeight:700,lineHeight:1,flexShrink:0 }}>Ã—</span>
           )}
-          <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', lineHeight: 1 }}>{open ? '▲' : '▼'}</span>
+          <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', lineHeight: 1 }}>{open ? 'â–²' : 'â–¼'}</span>
         </span>
       </button>
       {open && (
@@ -597,7 +603,7 @@ function AreaFilter({ value, onChange }) {
           minWidth:160, zIndex:200, overflow:'hidden' }}>
           <div style={{ padding:'9px 14px', borderBottom:'1px solid var(--border)',
             background:'var(--ctg-navy)', color:'#fff',
-            fontSize:'0.72rem', fontWeight:700, letterSpacing:'0.05em' }}>ÁREA</div>
+            fontSize:'0.72rem', fontWeight:700, letterSpacing:'0.05em' }}>ÃREA</div>
           {AREA_OPTIONS_LIST.map(opt => (
             <button key={opt.value} onClick={() => { onChange(opt.value); setOpen(false); }}
               style={{ width:'100%', textAlign:'left', padding:'8px 14px',
@@ -607,7 +613,7 @@ function AreaFilter({ value, onChange }) {
                 color: value === opt.value ? 'var(--ctg-blue)' : 'var(--text-primary)',
                 display:'flex', alignItems:'center', justifyContent:'space-between' }}>
               {opt.label}
-              {value === opt.value && <span style={{ color:'var(--ctg-blue)', fontSize:'0.75rem' }}>✓</span>}
+              {value === opt.value && <span style={{ color:'var(--ctg-blue)', fontSize:'0.75rem' }}>âœ“</span>}
             </button>
           ))}
         </div>
@@ -669,9 +675,9 @@ function MobileFilterModal({
             <div style={{ marginBottom:16 }}>
               <div style={{ fontSize:'0.68rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--text-muted)', marginBottom:8 }}>Ano</div>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:16 }}>
-                <button onClick={() => onVacYear(y => y - 1)} style={{ width:34, height:34, borderRadius:8, border:'1px solid var(--border)', background:'var(--bg-app)', cursor:'pointer', color:'var(--text-secondary)', fontSize:'1.2rem' }}>‹</button>
+                <button onClick={() => onVacYear(y => y - 1)} style={{ width:34, height:34, borderRadius:8, border:'1px solid var(--border)', background:'var(--bg-app)', cursor:'pointer', color:'var(--text-secondary)', fontSize:'1.2rem' }}>â€¹</button>
                 <span style={{ minWidth:70, textAlign:'center', fontWeight:800, color:'var(--ctg-navy)', fontSize:'1.1rem' }}>{vacYear}</span>
-                <button onClick={() => onVacYear(y => y + 1)} style={{ width:34, height:34, borderRadius:8, border:'1px solid var(--border)', background:'var(--bg-app)', cursor:'pointer', color:'var(--text-secondary)', fontSize:'1.2rem' }}>›</button>
+                <button onClick={() => onVacYear(y => y + 1)} style={{ width:34, height:34, borderRadius:8, border:'1px solid var(--border)', background:'var(--bg-app)', cursor:'pointer', color:'var(--text-secondary)', fontSize:'1.2rem' }}>â€º</button>
               </div>
             </div>
           </>
@@ -720,29 +726,29 @@ function getPageMeta(pathname) {
   if (pathname === '/') return { title: 'Inicio', sub: 'Resumo operacional' };
   if (pathname === '/forecast-dashboard') return { title: 'Dashboard', sub: null };
   if (pathname === '/projects') return { title: 'Projetos', sub: null };
-  if (pathname === '/admin') return { title: 'Administração', sub: 'Gestão de Usuários' };
+  if (pathname === '/admin') return { title: 'AdministraÃ§Ã£o', sub: 'GestÃ£o de UsuÃ¡rios' };
   if (pathname === '/profile') return { title: 'Meu Perfil', sub: null };
-  if (pathname === '/settings') return { title: 'Configurações', sub: null };
-  if (pathname === '/polos') return { title: 'Visão Geral Consolidada — CTG Brasil', sub: null };
-  if (pathname === '/report') return { title: 'Relatório HTML', sub: 'Configurar e exportar' };
+  if (pathname === '/settings') return { title: 'ConfiguraÃ§Ãµes', sub: null };
+  if (pathname === '/polos') return { title: 'VisÃ£o Geral Consolidada â€” CTG Brasil', sub: null };
+  if (pathname === '/report') return { title: 'RelatÃ³rio HTML', sub: 'Configurar e exportar' };
   if (pathname === '/tutorial') return { title: 'Tutorial', sub: 'Como utilizar o sistema' };
-  if (pathname === '/feedback') return { title: 'Sugestões e Feedback', sub: 'Envie sua contribuição' };
-  if (pathname === '/feedback/inbox') return { title: 'Inbox de Feedback', sub: 'Mensagens dos usuários do sistema' };
-  if (pathname === '/vacations') return { title: 'Controle de Férias', sub: null };
+  if (pathname === '/feedback') return { title: 'SugestÃµes e Feedback', sub: 'Envie sua contribuiÃ§Ã£o' };
+  if (pathname === '/feedback/inbox') return { title: 'Inbox de Feedback', sub: 'Mensagens dos usuÃ¡rios do sistema' };
+  if (pathname === '/vacations') return { title: 'Controle de FÃ©rias', sub: null };
   if (pathname === '/metas') return { title: 'Controle de Metas', sub: null };
   if (pathname === '/workload') return { title: 'Controle de Carga', sub: null };
   if (pathname === '/documents') return { title: 'Controle de Documentos', sub: null };
-  if (pathname === '/pms') return { title: 'PMS — Documentos Técnicos', sub: 'Políticas, Instruções, Guias e Manuais de Manutenção' };
+  if (pathname === '/pms') return { title: 'PMS â€” Documentos TÃ©cnicos', sub: 'PolÃ­ticas, InstruÃ§Ãµes, Guias e Manuais de ManutenÃ§Ã£o' };
   if (pathname === '/lists/iacs') return { title: 'IACs 2026'};
-  if (pathname === '/lists/projects-tracking') return { title: 'Acompanhamento de Projetos', sub: 'Relatório mensal — contratos em andamento' };
-  if (pathname === '/lists/schedule-project') return { title: 'Cronograma Project', sub: 'Gantt, vínculos e impressão em PDF' };
+  if (pathname === '/lists/projects-tracking') return { title: 'Acompanhamento de Projetos', sub: 'RelatÃ³rio mensal â€” contratos em andamento' };
+  if (pathname === '/lists/schedule-project') return { title: 'Cronograma Project', sub: 'Gantt, vÃ­nculos e impressÃ£o em PDF' };
   if (pathname === '/engineering/equipamentos') return { title: 'Mapa de Equipamentos', sub: 'CTG Brasil' };
-  if (pathname === '/engineering/equipamentos-admin') return { title: 'Gestão de Equipamentos', sub: 'Cadastro e manutenção dos dados' };
+  if (pathname === '/engineering/equipamentos-admin') return { title: 'GestÃ£o de Equipamentos', sub: 'Cadastro e manutenÃ§Ã£o dos dados' };
   if (pathname.startsWith('/projects/')) return { title: 'Projetos', sub: null };
   return { title: 'CTG.Engenharia', sub: null };
 }
 
-// ── App ──────────────────────────────────────────────────────────────────────
+// â”€â”€ App â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function App() {
   const { user, loading, logout } = useAuth();
   const { isAdmin, isPlanejador, isCoordenador, isGerente } = useRole();
@@ -799,6 +805,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/" element={<StaticLandingRedirect />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
@@ -825,11 +832,11 @@ export default function App() {
       />
 
       <div className="main-content">
-        {/* ── MOBILE: single sticky header row ── */}
+        {/* â”€â”€ MOBILE: single sticky header row â”€â”€ */}
         {!isHomePage && (
         <header className="page-header mobile-header">
           {/* Mobile: menu toggle inline with title */}
-          <button className="sidebar-toggle-inline" onClick={() => setSidebarOpen(o => !o)}>☰</button>
+          <button className="sidebar-toggle-inline" onClick={() => setSidebarOpen(o => !o)}>â˜°</button>
 
           {/* Title */}
           <div className="mobile-header-title">
@@ -837,11 +844,11 @@ export default function App() {
             {sub && <div className="page-subtitle">{sub}</div>}
           </div>
 
-          {/* Desktop: full controls — always same height, pill always visible */}
+          {/* Desktop: full controls â€” always same height, pill always visible */}
           <div className="header-controls-desktop">
             <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
 
-              {/* ── Botões da página de acompanhamento ── */}
+              {/* â”€â”€ BotÃµes da pÃ¡gina de acompanhamento â”€â”€ */}
               {location.pathname === '/lists/projects-tracking' && (() => {
                 const canImport = ['coordenador', 'planejador', 'admin'].includes(user?.role) ||
                   user?.email === 'julio.casagrande@ctgbr.com.br';
@@ -905,14 +912,14 @@ export default function App() {
                         <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
                           <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd"/>
                         </svg>
-                        Relatório HTML
+                        RelatÃ³rio HTML
                       </button>
                     )}
                   </>
                 );
               })()}
 
-              {/* ── Botões da página de IACs ── */}
+              {/* â”€â”€ BotÃµes da pÃ¡gina de IACs â”€â”€ */}
               {location.pathname === '/metas' && (
                 <button onClick={() => {
                   window.dispatchEvent(new CustomEvent('new-meta'));
@@ -988,7 +995,7 @@ export default function App() {
                 );
               })()}
 
-              {/* ── Botões da página de Documentos ── */}
+              {/* â”€â”€ BotÃµes da pÃ¡gina de Documentos â”€â”€ */}
               {location.pathname === '/documents' && (() => {
                 const canManage = ['admin', 'gestor', 'coordenador', 'planejador'].includes(user?.role) ||
                   user?.email === 'julio.casagrande@ctgbr.com.br';
@@ -1042,7 +1049,7 @@ export default function App() {
                 );
               })()}
 
-              {/* ── Botões da página PMS ── */}
+              {/* â”€â”€ BotÃµes da pÃ¡gina PMS â”€â”€ */}
               {location.pathname === '/pms' && (() => {
                 const canManage = ['admin', 'gestor', 'coordenador', 'planejador', 'gerente'].includes(user?.role);
                 return (
@@ -1081,12 +1088,12 @@ export default function App() {
                 );
               })()}
 
-              {/* ── KPIs do Mapa de Equipamentos ── */}
+              {/* â”€â”€ KPIs do Mapa de Equipamentos â”€â”€ */}
               {location.pathname === '/engineering/equipamentos' && equipamentosStats && (
                 <div style={{ display: 'flex', gap: 6, marginRight: 6 }}>
                   {[
                     { label: 'Usinas',    value: equipamentosStats.usinas },
-                    { label: 'Funções',   value: equipamentosStats.funcoes },
+                    { label: 'FunÃ§Ãµes',   value: equipamentosStats.funcoes },
                     { label: 'Tipos',     value: equipamentosStats.tipos },
                     { label: 'Registros', value: equipamentosStats.registros },
                   ].map(({ label, value }) => (
@@ -1103,7 +1110,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* ── Botões do Cronograma Project ── */}
+              {/* â”€â”€ BotÃµes do Cronograma Project â”€â”€ */}
               {location.pathname === '/lists/schedule-project' && (
                 <>
                   <button onClick={() => window._scheduleCreateProject?.()} style={{
@@ -1146,7 +1153,7 @@ export default function App() {
 
               <AlertBell />
 
-              {/* ── Pill de filtros — sempre renderizado para altura consistente ── */}
+              {/* â”€â”€ Pill de filtros â€” sempre renderizado para altura consistente â”€â”€ */}
               {showFilterPill && (
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 2,
@@ -1159,13 +1166,13 @@ export default function App() {
                 position: 'relative',
                 minHeight: 36,
               }}>
-                {/* Ícone de filtro decorativo — sempre visível */}
+                {/* Ãcone de filtro decorativo â€” sempre visÃ­vel */}
                 <svg viewBox="0 0 16 16" fill="none" stroke="var(--ctg-blue)" strokeWidth="1.5"
                   width="13" height="13" style={{ opacity: 0.45, flexShrink: 0, marginRight: 4 }}>
                   <path d="M2 4h12M4.5 8h7M7 12h2" strokeLinecap="round"/>
                 </svg>
 
-                {/* Filtro de usina — páginas com showControls exceto pessoas */}
+                {/* Filtro de usina â€” pÃ¡ginas com showControls exceto pessoas */}
                 {showControls && !isPeopleControlPage && (
                   <PlantFilter
                     activePlants={activePlants}
@@ -1174,7 +1181,7 @@ export default function App() {
                   />
                 )}
 
-                {/* Filtro de projeto — só no dashboard de forecast */}
+                {/* Filtro de projeto â€” sÃ³ no dashboard de forecast */}
                 {showControls && location.pathname === '/forecast-dashboard' && (
                   <>
                     <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.12)', margin: '0 4px', flexShrink: 0 }} />
@@ -1187,7 +1194,7 @@ export default function App() {
                   </>
                 )}
 
-                {/* Filtro de área — férias e metas */}
+                {/* Filtro de Ã¡rea â€” fÃ©rias e metas */}
                 {showControls && isPeopleControlPage && (
                   <>
                     <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.12)', margin: '0 4px', flexShrink: 0 }} />
@@ -1195,22 +1202,22 @@ export default function App() {
                   </>
                 )}
 
-                {/* Seletor de ano — férias e metas */}
+                {/* Seletor de ano â€” fÃ©rias e metas */}
                 {showControls && isPeopleControlPage && (
                   <>
                     <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.15)', margin: '0 8px', flexShrink: 0 }} />
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
                       <span style={{ fontSize: '0.58rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'var(--font-body)', color: 'var(--ctg-navy)', lineHeight: 1 }}>Ano</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                        <button onClick={() => setVacYear(y => y - 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.9rem', padding: '0 1px', lineHeight: 1, fontFamily: 'var(--font-body)' }}>‹</button>
+                        <button onClick={() => setVacYear(y => y - 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.9rem', padding: '0 1px', lineHeight: 1, fontFamily: 'var(--font-body)' }}>â€¹</button>
                         <span style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--ctg-navy)', minWidth: 32, textAlign: 'center', fontFamily: 'var(--font-body)' }}>{vacYear}</span>
-                        <button onClick={() => setVacYear(y => y + 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.9rem', padding: '0 1px', lineHeight: 1, fontFamily: 'var(--font-body)' }}>›</button>
+                        <button onClick={() => setVacYear(y => y + 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.9rem', padding: '0 1px', lineHeight: 1, fontFamily: 'var(--font-body)' }}>â€º</button>
                       </div>
                     </div>
                   </>
                 )}
 
-                {/* Seletor de período — todas as páginas exceto pessoas */}
+                {/* Seletor de perÃ­odo â€” todas as pÃ¡ginas exceto pessoas */}
                 {!showControls || !isPeopleControlPage ? (
                   <>
                     <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.15)', margin: '0 8px', flexShrink: 0 }} />
@@ -1224,7 +1231,7 @@ export default function App() {
 
           {/* Mobile: bell + filter button only */}
           <div className="header-controls-mobile">
-            {/* Botão Novo Projeto (apenas na página de acompanhamento) */}
+            {/* BotÃ£o Novo Projeto (apenas na pÃ¡gina de acompanhamento) */}
             {location.pathname === '/lists/projects-tracking' && (
               <button onClick={() => {
                 window.dispatchEvent(new CustomEvent('new-project'));
@@ -1257,7 +1264,7 @@ export default function App() {
                 Nova Meta
               </button>
             )}
-            {/* Botão Novo IAC (apenas na página de IACs, não para engenheiros, exceto julio.casagrande) */}
+            {/* BotÃ£o Novo IAC (apenas na pÃ¡gina de IACs, nÃ£o para engenheiros, exceto julio.casagrande) */}
             {location.pathname === '/lists/iacs' && (user?.role !== 'engenheiro' || user?.email === 'julio.casagrande@ctgbr.com.br') && (
               <button onClick={() => {
                 window.dispatchEvent(new CustomEvent('new-iac'));
@@ -1384,14 +1391,18 @@ export default function App() {
         onClose={() => setPlanjExportModal(false)}
       />
 
-      {/* Mobile bottom navigation — hidden on desktop via CSS */}
+      {/* Mobile bottom navigation â€” hidden on desktop via CSS */}
       {!isNativeAdmin && (
         <MobileBottomNav
           isPlanejador={isPlanejador}
-          onLogout={() => { logout(); navigate('/login'); }}
+          onLogout={async () => { await logout(); navigate('/'); }}
         />
       )}
     </div>
     </ErrorBoundary>
   );
 }
+
+
+
+

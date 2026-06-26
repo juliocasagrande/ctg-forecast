@@ -1,4 +1,4 @@
-import axios from 'axios';
+﻿import axios from 'axios';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
@@ -6,7 +6,7 @@ const api = axios.create({
   withCredentials: true, // auth via httpOnly cookie
 });
 
-// Limpa token legado em localStorage (migração — versões antigas espelhavam o JWT lá).
+// Limpa token legado em localStorage (migraÃ§Ã£o â€” versÃµes antigas espelhavam o JWT lÃ¡).
 try { localStorage.removeItem('ctg_token'); } catch { /* ignore */ }
 
 api.interceptors.request.use(config => {
@@ -22,16 +22,17 @@ api.interceptors.request.use(config => {
   return config;
 });
 
-// Redirect para /login em 401 (exceto durante checagem inicial de sessão)
+// Redirect para /login em 401 (exceto durante checagem inicial de sessÃ£o)
 api.interceptors.response.use(
   r => r,
   err => {
     if (err.response?.status === 401) {
       const url = err.config?.url || '';
       const isAuthCheck = url.includes('/auth/me');
-      const isOnLogin = window.location.pathname === '/login';
-      if (!isAuthCheck && !isOnLogin) {
-        window.location.href = '/login';
+      const publicPaths = ['/login', '/reset-password', '/engenharia-eletromecanica.html', '/'];
+      const isPublicPath = publicPaths.includes(window.location.pathname);
+      if (!isAuthCheck && !isPublicPath) {
+        window.location.href = '/';
       }
     }
     return Promise.reject(err);
@@ -39,3 +40,4 @@ api.interceptors.response.use(
 );
 
 export default api;
+

@@ -209,6 +209,24 @@ export default function Login() {
 
   return (
     <div className="login-page">
+      <button
+        type="button"
+        onClick={() => navigate('/')}
+        style={{
+          position: 'fixed', top: 20, left: 20, zIndex: 10,
+          display: 'flex', alignItems: 'center', gap: 6,
+          background: 'rgba(255,255,255,0.9)', border: '1.5px solid var(--border)',
+          borderRadius: 8, cursor: 'pointer', padding: '8px 14px',
+          color: 'var(--ctg-navy)', fontSize: '0.85rem', fontWeight: 600,
+        }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 9.5L12 3l9 6.5" />
+          <path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10" />
+        </svg>
+        Home
+      </button>
+
       <div className="login-left">
         <div className="login-brand">
           <div className="login-logo">CTG<span>.</span>Engenharia</div>

@@ -1,5 +1,5 @@
-/**
- * app.js — Fábrica do Express, sem listen() e sem initDB().
+﻿/**
+ * app.js â€” FÃ¡brica do Express, sem listen() e sem initDB().
  * Importado tanto pelo servidor real (index.js) quanto pelos testes.
  */
 import express from 'express';
@@ -43,7 +43,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * @param {Object}  opts
- * @param {boolean} opts.disableRateLimit  — desativa apiLimiter/heavyOpLimiter (útil em testes)
+ * @param {boolean} opts.disableRateLimit  â€” desativa apiLimiter/heavyOpLimiter (Ãºtil em testes)
  */
 export function createApp({ disableRateLimit = false } = {}) {
   const app = express();
@@ -51,7 +51,7 @@ export function createApp({ disableRateLimit = false } = {}) {
 
   app.set('trust proxy', 1);
 
-  /* ── CORS ─────────────────────────────────────────────────── */
+  /* â”€â”€ CORS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   const allowedOrigins = process.env.FRONTEND_URL
     ? process.env.FRONTEND_URL.split(',').map(o => o.trim())
     : [];
@@ -61,7 +61,7 @@ export function createApp({ disableRateLimit = false } = {}) {
       ? (origin, cb) => {
           if (!origin) return cb(null, true);
           if (allowedOrigins.includes(origin)) return cb(null, true);
-          return cb(new Error('Origem não permitida pelo CORS'));
+          return cb(new Error('Origem nÃ£o permitida pelo CORS'));
         }
       : true,
     credentials: true,
@@ -70,26 +70,26 @@ export function createApp({ disableRateLimit = false } = {}) {
   app.options('*', cors(corsOptions));
   app.use(cors(corsOptions));
 
-  /* ── SEGURANÇA ─────────────────────────────────────────────── */
+  /* â”€â”€ SEGURANÃ‡A â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   app.use(requireHTTPS);
   app.use(securityHeaders);
 
-  /* ── MIDDLEWARES BÁSICOS ───────────────────────────────────── */
+  /* â”€â”€ MIDDLEWARES BÃSICOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   app.use(cookieParser());
   app.use(compression());
   app.use(express.json({ limit: '10mb' }));
 
-  /* ── HEALTH CHECK (sem rate-limit) ────────────────────────── */
+  /* â”€â”€ HEALTH CHECK (sem rate-limit) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   app.get('/api/health', (_, res) => {
     res.json({ status: 'ok', version: '2.1.1-azure-ready' });
   });
 
-  /* ── RATE LIMIT ────────────────────────────────────────────── */
+  /* â”€â”€ RATE LIMIT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   if (!disableRateLimit) {
     app.use('/api', apiLimiter);
   }
 
-  /* ── ROTAS ─────────────────────────────────────────────────── */
+  /* â”€â”€ ROTAS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   app.use('/api/auth',     authRouter);
   app.use('/api/users',    usersRouter);
   app.use('/api/projects', projectsRouter);
@@ -118,8 +118,11 @@ export function createApp({ disableRateLimit = false } = {}) {
     app.use('/api/monthly-report', heavyOpLimiter, monthlyReportRouter);
   }
 
-  /* ── FRONTEND SPA ──────────────────────────────────────────── */
+  /* â”€â”€ FRONTEND SPA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   const publicPath = path.join(__dirname, '../public');
+  app.get('/', (_, res) => {
+    res.sendFile(path.join(publicPath, 'engenharia-eletromecanica.html'));
+  });
   app.use(express.static(publicPath));
   app.get('*', (req, res) => {
     if (!req.path.startsWith('/api')) {
@@ -127,8 +130,9 @@ export function createApp({ disableRateLimit = false } = {}) {
     }
   });
 
-  /* ── ERROR HANDLER (último) ────────────────────────────────── */
+  /* â”€â”€ ERROR HANDLER (Ãºltimo) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   app.use(globalErrorHandler);
 
   return app;
 }
+
