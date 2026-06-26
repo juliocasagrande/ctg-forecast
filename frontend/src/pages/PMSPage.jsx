@@ -737,8 +737,10 @@ export default function PMSPage() {
   const [chartLangFilter, setChartLangFilter]         = useState('');
 
   const [colFilterCode, setColFilterCode]       = useState([]);
+  const [colFilterPlant, setColFilterPlant]     = useState([]);
   const [colFilterArea, setColFilterArea]       = useState([]);
   const [colFilterResp, setColFilterResp]       = useState([]);
+  const [colFilterValidade, setColFilterValidade] = useState([]);
   const [colFilterStatus, setColFilterStatus]   = useState([]);
 
   const { widths: colWidths, handleResizeStart } = useColumnWidths(PMS_COL_WIDTHS);
@@ -795,11 +797,11 @@ export default function PMSPage() {
   const openEdit = (doc) => setDocModal({ open:true, doc });
 
   const hasActiveFilters = !!(search || typeFilter || statusFilter || plantFilter || validadeFilter || myDocsOnly
-    || colFilterCode.length || colFilterArea.length || colFilterResp.length || colFilterStatus.length
+    || colFilterCode.length || colFilterPlant.length || colFilterArea.length || colFilterResp.length || colFilterValidade.length || colFilterStatus.length
     || chartTypeFilter || chartValidadeFilter || chartPlantFilter || chartLangFilter);
   const clearFilters = () => {
     setSearch(''); setTypeFilter(''); setStatusFilter(''); setPlantFilter(''); setValidadeFilter(''); setMyDocsOnly(false);
-    setColFilterCode([]); setColFilterArea([]); setColFilterResp([]); setColFilterStatus([]);
+    setColFilterCode([]); setColFilterPlant([]); setColFilterArea([]); setColFilterResp([]); setColFilterValidade([]); setColFilterStatus([]);
     setChartTypeFilter(''); setChartValidadeFilter(''); setChartPlantFilter(''); setChartLangFilter('');
   };
 
@@ -820,8 +822,10 @@ export default function PMSPage() {
     if (skip !== 'lang' && chartLangFilter === 'with_en') data = data.filter(d => d.has_en);
     else if (skip !== 'lang' && chartLangFilter === 'without_en') data = data.filter(d => !d.has_en);
     if (colFilterCode.length)   data = data.filter(d => colFilterCode.includes(d.code));
+    if (colFilterPlant.length)  data = data.filter(d => colFilterPlant.includes(d.plant));
     if (colFilterArea.length)   data = data.filter(d => colFilterArea.includes(d.area));
     if (colFilterResp.length)   data = data.filter(d => colFilterResp.includes(d.responsible));
+    if (colFilterValidade.length) data = data.filter(d => colFilterValidade.includes(d.validade_status));
     if (colFilterStatus.length) data = data.filter(d => colFilterStatus.includes(d.status));
     const q = search.toLowerCase();
     if (q) {
@@ -835,7 +839,7 @@ export default function PMSPage() {
     }
     return data;
   }, [docs, typeFilter, statusFilter, plantFilter, validadeFilter, search, myDocsOnly, user,
-      colFilterCode, colFilterArea, colFilterResp, colFilterStatus, chartTypeFilter, chartValidadeFilter, chartPlantFilter, chartLangFilter]);
+      colFilterCode, colFilterPlant, colFilterArea, colFilterResp, colFilterValidade, colFilterStatus, chartTypeFilter, chartValidadeFilter, chartPlantFilter, chartLangFilter]);
 
   const dedupeLatest = (arr) => {
     const map = new Map();
@@ -1022,7 +1026,13 @@ export default function PMSPage() {
                   </div>
                   <ColumnResizeHandle onResizeStart={handleResizeStart(1)} />
                 </th>
-                <th style={TH}>Usina<ColumnResizeHandle onResizeStart={handleResizeStart(2)} /></th>
+                <th style={TH}>
+                  <div style={{ display:'flex', alignItems:'center' }}>
+                    Usina
+                    <ColumnFilterDropdown column="Usina" uniqueValues={plantsUsed} selectedValues={colFilterPlant} onChange={setColFilterPlant}/>
+                  </div>
+                  <ColumnResizeHandle onResizeStart={handleResizeStart(2)} />
+                </th>
                 <th style={TH}>
                   <div style={{ display:'flex', alignItems:'center' }}>
                     Área
@@ -1037,7 +1047,13 @@ export default function PMSPage() {
                   </div>
                   <ColumnResizeHandle onResizeStart={handleResizeStart(4)} />
                 </th>
-                <th style={TH}>Validade<ColumnResizeHandle onResizeStart={handleResizeStart(5)} /></th>
+                <th style={TH}>
+                  <div style={{ display:'flex', alignItems:'center' }}>
+                    Validade
+                    <ColumnFilterDropdown column="Validade" uniqueValues={VALIDADE.map(v => v.value)} selectedValues={colFilterValidade} onChange={setColFilterValidade}/>
+                  </div>
+                  <ColumnResizeHandle onResizeStart={handleResizeStart(5)} />
+                </th>
                 <th style={TH}>Título<ColumnResizeHandle onResizeStart={handleResizeStart(6)} /></th>
                 <th style={TH}>
                   <div style={{ display:'flex', alignItems:'center' }}>
