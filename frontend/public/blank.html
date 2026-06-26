@@ -22,6 +22,12 @@
   } catch(e) {
     console.error("MSAL blank redirect error:", e);
   }
+  // Fecha a janela popup de SSO após repassar a resposta para a janela principal
+  try {
+    window.close();
+  } catch(e) {
+    console.error("MSAL blank redirect close error:", e);
+  }
 </script>
 </body>
 </html>
