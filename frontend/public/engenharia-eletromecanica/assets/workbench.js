@@ -8,7 +8,10 @@ const pages = {
           <span class="kicker">Diretoria de Engenharia e Gestão de Ativos</span>
           <h1>Engenharia Eletromecânica</h1>
           <p class="lead">Pasta visual de acesso aos temas, documentos e sistemas da área. Clique nas folhas de anotação ao lado da prancheta para abrir cada assunto.</p>
-          <a class="cover-stamp" href="/login" aria-label="Acessar CTG.Engenharia">CTG.Engenharia</a>
+          <a class="cover-stamp" href="/login" aria-label="Acessar CTG.Engenharia">
+            <span class="cover-stamp-title">CTG.Engenharia</span>
+            <span class="cover-stamp-hint">Acesso ao sistema</span>
+          </a>
         </div>
       </section>
     `

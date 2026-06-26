@@ -144,7 +144,9 @@ h1 { margin: 10px 0 0; color: var(--ctg-navy); font: 750 clamp(2rem, 3vw, 3.3rem
 .cover img { width: clamp(92px, 10vw, 132px); height: clamp(92px, 10vw, 132px); margin: 0 auto 18px; filter: drop-shadow(0 12px 22px rgba(0,31,91,.15)); }
 .cover h1 { font-family: var(--body); font-weight: 850; letter-spacing: 0; }
 .cover .lead { margin-left: auto; margin-right: auto; }
-.cover-stamp { display: inline-flex; margin-top: 18px; padding: 9px 14px; border: 1px solid rgba(0,112,184,.24); border-radius: 999px; color: var(--ctg-blue); background: rgba(255,255,255,.68); font-size: .75rem; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
+.cover-stamp { margin-top: 18px; display: inline-flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 18px; border: 1px solid rgba(0,112,184,.24); border-radius: 16px; color: var(--ctg-blue); background: rgba(255,255,255,.68); }
+.cover-stamp-title { font-size: .8rem; font-weight: 850; letter-spacing: .04em; }
+.cover-stamp-hint { font-size: .7rem; font-weight: 700; letter-spacing: .03em; color: var(--ctg-blue); opacity: .72; }
 
 .summary-grid, .folder-grid, .system-grid { display: grid; gap: 12px; }
 .summary-grid, .folder-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
