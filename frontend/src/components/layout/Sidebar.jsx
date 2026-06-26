@@ -21,8 +21,8 @@ const IC = {
 const ORDERED_PLANTS = [
   'PCH Palmeiras','PCH Retiro','UHE Canoas 1','UHE Canoas 2',
   'UHE Capivara','UHE Chavantes','UHE Garibaldi','UHE Ilha Solteira',
-  'UHE JupiÃ¡','UHE Jurumirim','UHE Rosana','UHE Salto',
-  'UHE Salto Grande','UHE TaquaruÃ§u',
+  'UHE Jupiá','UHE Jurumirim','UHE Rosana','UHE Salto',
+  'UHE Salto Grande','UHE Taquaruçu',
 ];
 
 // Group projects by their plants, keeping plant order
@@ -100,10 +100,10 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
     gestor:      'Gestor',
   }[user?._originalRole || user?.role] || '';
   const areaLabel = {
-    eletrica:       'Eng. ElÃ©trica',
-    mecanica:       'Eng. MecÃ¢nica',
+    eletrica:       'Eng. Elétrica',
+    mecanica:       'Eng. Mecânica',
     confiabilidade: 'Eng. Confiabilidade',
-    modernizacao:   'ModernizaÃ§Ã£o',
+    modernizacao:   'Modernização',
   }[user?.area] || null;
 
   const initials = user?.name?.split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() || '').join('') || '?';
@@ -128,7 +128,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
         {/* Logo */}
         <div className="sidebar-logo">
           <div className="brand">CTG<span>.</span>Engenharia</div>
-          <div className="subtitle">{roleLabel}{areaLabel ? ` Â· ${areaLabel}` : ''}</div>
+          <div className="subtitle">{roleLabel}{areaLabel ? ` · ${areaLabel}` : ''}</div>
         </div>
 
         <div className="sidebar-nav">
@@ -137,10 +137,10 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
           {/* Gestor / Engenheiro / Planejador (also shown for override-admins who have a non-admin original role) */}
           {!isNativeAdmin && <>
 
-            {/* â”€â”€ SEÃ‡ÃƒO: GestÃ£o de Processos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+            {/* ── SEÇÃO: Gestão de Processos ── */}
             <div style={{ margin: '6px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
             <div className="nav-section-label" style={{color:"rgba(255,255,255,0.75)"}}>
-              GestÃ£o de Processos
+              Gestão de Processos
             </div>
             {navItem('/lists/projects-tracking', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>, 'Acompanhamento Projetos')}
             {navItem('/lists/iacs', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd"/></svg>, 'IACs 2026')}
@@ -148,19 +148,19 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
             {navItem('/pms', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z"/></svg>, 'PMS')}
             {navItem('/lists/schedule-project', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v3H3V4zm0 5h14v7a1 1 0 01-1 1H4a1 1 0 01-1-1V9zm3 2a1 1 0 000 2h2a1 1 0 100-2H6zm5 0a1 1 0 100 2h3a1 1 0 100-2h-3z"/></svg>, 'Project CTG')}
 
-            {/* â”€â”€ SEÃ‡ÃƒO: GestÃ£o de Pessoas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+            {/* ── SEÇÃO: Gestão de Pessoas ── */}
             <div style={{ margin: '6px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
             <div className="nav-section-label" style={{color:"rgba(255,255,255,0.75)"}}>
-              GestÃ£o de Pessoas
+              Gestão de Pessoas
             </div>
             {navItem('/workload', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M3 17a1 1 0 011-1h1v-5a1 1 0 112 0v5h2V9a1 1 0 112 0v8h2v-3a1 1 0 112 0v3h1a1 1 0 110 2H4a1 1 0 01-1-1z"/></svg>, 'Controle de Carga')}
-            {navItem('/vacations', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd"/></svg>, 'FÃ©rias')}
+            {navItem('/vacations', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd"/></svg>, 'Férias')}
             {navItem('/metas', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9zM4 5a2 2 0 00-2 2v6a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2H4zm0 2h12v6H4V7z"/></svg>, 'Metas')}
 
-            {/* â”€â”€ SEÃ‡ÃƒO: GestÃ£o de Ativos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+            {/* ── SEÇÃO: Gestão de Ativos ── */}
             <div style={{ margin: '6px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
             <div className="nav-section-label" style={{color:"rgba(255,255,255,0.75)"}}>
-              GestÃ£o de Ativos
+              Gestão de Ativos
             </div>
             {navItem('/engineering/equipamentos',
               <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
@@ -180,8 +180,8 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
           {/* Admin */}
           {isAdmin && <>
             <div style={{ margin: '6px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
-            <div className="nav-section-label">AdministraÃ§Ã£o</div>
-            {navItem('/admin', IC.users, 'Gerenciar UsuÃ¡rios')}
+            <div className="nav-section-label">Administração</div>
+            {navItem('/admin', IC.users, 'Gerenciar Usuários')}
           </>}
 
           {/* Projects listed only on Projects page */}
@@ -189,7 +189,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
 
         {/* User footer */}
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', padding: '10px 8px' }}>
-          {/* Help & Feedback â€” above user info */}
+          {/* Help & Feedback — above user info */}
           <div style={{ display: 'flex', gap: 4, padding: '0 8px 6px', borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: 6 }}>
             <NavLink to="/tutorial" onClick={onClose}
               className={({ isActive }) => `nav-item sidebar-footer-item ${isActive ? 'active' : ''}`}
@@ -201,11 +201,11 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
               className={({ isActive }) => `nav-item sidebar-footer-item ${isActive ? 'active' : ''}`}
               style={{ flex: 1, justifyContent: 'center', padding: '6px 0', fontSize: '0.72rem' }}>
               <Icon name="lightbulb" style={{ width: 14, textAlign: 'center' }} />
-              <span>SugestÃµes</span>
+              <span>Sugestões</span>
             </NavLink>
           </div>
 
-          {/* Feedback Inbox â€” only for developer */}
+          {/* Feedback Inbox — only for developer */}
           {user?.email === 'julio.casagrande@ctgbr.com.br' && (
             <NavLink to="/feedback/inbox" onClick={onClose}
               className={({ isActive }) => `nav-item sidebar-footer-item ${isActive ? 'active' : ''}`}
@@ -242,12 +242,12 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
             </div>
           </div>
 
-          {/* Nav items â€” one per line */}
+          {/* Nav items — one per line */}
           {(isPlanejador || isGestor || user?.email === 'julio.casagrande@ctgbr.com.br') && (
             <NavLink to="/settings" onClick={onClose}
               className={({ isActive }) => `nav-item sidebar-footer-item ${isActive ? 'active' : ''}`}>
               <Icon name="gear" style={{ width: 16, textAlign: 'center' }} />
-              <span>ConfiguraÃ§Ãµes</span>
+              <span>Configurações</span>
             </NavLink>
           )}
           <NavLink to="/profile" onClick={onClose}

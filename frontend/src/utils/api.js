@@ -6,7 +6,7 @@ const api = axios.create({
   withCredentials: true, // auth via httpOnly cookie
 });
 
-// Limpa token legado em localStorage (migraÃ§Ã£o â€” versÃµes antigas espelhavam o JWT lÃ¡).
+// Limpa token legado em localStorage (migração — versões antigas espelhavam o JWT lá).
 try { localStorage.removeItem('ctg_token'); } catch { /* ignore */ }
 
 api.interceptors.request.use(config => {
@@ -22,7 +22,7 @@ api.interceptors.request.use(config => {
   return config;
 });
 
-// Redirect para /login em 401 (exceto durante checagem inicial de sessÃ£o)
+// Redirect para /login em 401 (exceto durante checagem inicial de sessão)
 api.interceptors.response.use(
   r => r,
   err => {
