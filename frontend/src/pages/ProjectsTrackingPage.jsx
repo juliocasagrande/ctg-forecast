@@ -136,6 +136,15 @@ function maskBRL(raw) {
 function fmtBRLNum(n) {
   return n ? n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
 }
+function fmtBRLCompact(n) {
+  const value = Number(n) || 0;
+  const abs = Math.abs(value);
+  const sign = value < 0 ? '-' : '';
+  const format = (v, suffix) => `${sign}R$ ${v.toFixed(1).replace('.', ',')}${suffix}`;
+  if (abs >= 1_000_000) return format(abs / 1_000_000, 'M');
+  if (abs >= 1_000) return `${sign}R$ ${(abs / 1_000).toFixed(0).replace('.', ',')}k`;
+  return `${sign}${abs.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`;
+}
 
 // Translucent green/red background for saldo displays: green when >= 0, red when negative.
 function saldoBgStyle(value) {
@@ -210,6 +219,174 @@ function getAreaColor(area) {
   return { bg: '#64748B', text: '#fff' };
 }
 
+function ValuesSummaryCard({ totalContrato, totalSaldo, totalSI, totalSISaldo }) {
+  const [hovered, setHovered] = useState(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+
+  const sections = [
+    { key: 'contrato', label: 'Contrato', color: '#0b5cab', total: totalContrato, saldo: totalSaldo },
+    { key: 'si', label: 'SI', color: '#0F766E', total: totalSI, saldo: totalSISaldo },
+  ];
+  const active = hovered ? sections.find(s => s.key === hovered) : null;
+
+  const tooltipRow = (label, value, color = '#1E293B') => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 18, lineHeight: 1.55 }}>
+      <span style={{ color: '#64748B' }}>{label}</span>
+      <span style={{ color, fontWeight: 700 }}>{typeof value === 'string' ? value : fmtBRL(value)}</span>
+    </div>
+  );
+
+  const saldoPercent = (section) => {
+    if (!section.total) return 0;
+    return Math.max(0, Math.min(100, (section.saldo / section.total) * 100));
+  };
+
+  return (
+    <div style={{
+      background: '#fff',
+      border: '1px solid #E2E8F0',
+      borderRadius: 10,
+      borderTop: '3px solid #0b5cab',
+      padding: '8px 12px',
+      flex: 1,
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      gap: 14,
+    }}>
+      {sections.map(section => {
+        const percent = saldoPercent(section);
+        const saldoColor = section.saldo < 0 ? '#DC2626' : '#0F766E';
+        return (
+          <div
+            key={section.key}
+            onMouseEnter={e => { setHovered(section.key); setTooltipPos({ x: e.clientX, y: e.clientY }); }}
+            onMouseMove={e => setTooltipPos({ x: e.clientX, y: e.clientY })}
+            onMouseLeave={() => setHovered(null)}
+            style={{ cursor: 'help' }}
+          >
+            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', alignItems: 'baseline', gap: 4 }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 800, color: section.color, textTransform: 'uppercase' }}>
+                {section.label}
+              </span>
+              <span style={{ justifySelf: 'end', fontSize: '0.68rem', color: '#64748B' }}>Total</span>
+              <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#1E3A5F', whiteSpace: 'nowrap' }}>
+                {fmtBRLCompact(section.total)}
+              </span>
+            </div>
+            <div style={{ height: 3, background: '#E2E8F0', borderRadius: 999, overflow: 'hidden', marginTop: 3 }}>
+              <div style={{ width: `${percent}%`, height: '100%', background: section.color, borderRadius: 999 }} />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', gap: 4, paddingTop: 4 }}>
+              <span style={{ fontSize: '0.68rem', color: '#64748B' }}>Saldo</span>
+              <span style={{ fontSize: '0.72rem', fontWeight: 800, color: saldoColor, whiteSpace: 'nowrap' }}>
+                {fmtBRLCompact(section.saldo)}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+      {active && createPortal(
+        <div style={{
+          position: 'fixed',
+          left: tooltipPos.x,
+          top: tooltipPos.y + 14,
+          transform: 'translateX(-50%)',
+          pointerEvents: 'none',
+          zIndex: 99999,
+        }}>
+          <div style={{
+            background: '#fff',
+            border: '1px solid #E2E8F0',
+            borderRadius: 8,
+            padding: '8px 12px',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+            fontSize: '0.72rem',
+            whiteSpace: 'nowrap',
+            minWidth: 220,
+          }}>
+            <div style={{
+              fontWeight: 800,
+              marginBottom: 5,
+              color: active.color,
+              fontSize: '0.78rem',
+              textTransform: 'uppercase',
+            }}>
+              {active.label}
+            </div>
+            {tooltipRow('Total', active.total)}
+            {tooltipRow('Realizado', active.total - active.saldo)}
+            {tooltipRow('Saldo', active.saldo, active.saldo < 0 ? '#DC2626' : '#0F766E')}
+            <div style={{ borderTop: '1px solid #F1F5F9', marginTop: 5, paddingTop: 4 }}>
+              {tooltipRow('Saldo / Total', `${saldoPercent(active).toFixed(1).replace('.', ',')}%`, active.color)}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+function StatusSummaryCards({ cards, activeFilter, onFilter }) {
+  const [hovered, setHovered] = useState(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+
+  const tooltipRow = (label, value, color = '#1E293B') => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 18, lineHeight: 1.55 }}>
+      <span style={{ color: '#64748B' }}>{label}</span>
+      <span style={{ color, fontWeight: 700 }}>{value}</span>
+    </div>
+  );
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, flex: 1 }}>
+      {cards.map(card => {
+        const isActive = activeFilter === card.filterValue || (!activeFilter && card.filterValue === '');
+        const isDimmed = activeFilter && activeFilter !== card.filterValue && card.filterValue !== '';
+        return (
+          <button
+            key={card.label}
+            type="button"
+            onClick={() => onFilter?.(activeFilter === card.filterValue ? '' : card.filterValue)}
+            onMouseEnter={e => { setHovered(card); setTooltipPos({ x: e.clientX, y: e.clientY }); }}
+            onMouseMove={e => setTooltipPos({ x: e.clientX, y: e.clientY })}
+            onMouseLeave={() => setHovered(null)}
+            style={{
+              background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10,
+              borderTop: '3px solid ' + card.color, padding: '8px 10px',
+              textAlign: 'left', cursor: 'pointer',
+              opacity: isDimmed ? 0.5 : 1,
+              boxShadow: isActive && card.filterValue ? `0 0 0 2px ${card.color}22` : 'none',
+              transition: 'opacity 0.15s, box-shadow 0.15s',
+            }}
+          >
+            <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94A3B8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {card.label}
+            </div>
+            <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '2rem', fontWeight: 700, color: card.color, lineHeight: 1.1 }}>
+              {card.value}
+            </div>
+          </button>
+        );
+      })}
+      {hovered && createPortal(
+        <div style={{ position: 'fixed', left: tooltipPos.x, top: tooltipPos.y + 14, transform: 'translateX(-50%)', pointerEvents: 'none', zIndex: 99999 }}>
+          <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 12px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', fontSize: '0.72rem', whiteSpace: 'nowrap', minWidth: 190 }}>
+            <div style={{ fontWeight: 800, marginBottom: 5, color: hovered.color, fontSize: '0.78rem' }}>{hovered.tooltipTitle}</div>
+            {tooltipRow('Projetos', hovered.value, hovered.color)}
+            {tooltipRow('Participa\u00e7\u00e3o', hovered.baseTotal ? `${((hovered.value / hovered.baseTotal) * 100).toFixed(1).replace('.', ',')}%` : '0,0%')}
+            <div style={{ borderTop: '1px solid #F1F5F9', marginTop: 5, paddingTop: 4 }}>
+              <div style={{ fontSize: '0.62rem', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', marginBottom: 3 }}>{'Por \u00e1rea'}</div>
+              {AREAS.map(area => tooltipRow(area, hovered.areaCounts?.[area] || 0, hovered.color))}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
 /* ─── Badges ────────────────────────────────────────────────────────────────── */
 function StatusBadge({ status }) {
   const m = STATUS_META[status] || { color: '#94A3B8', bg: '#F1F5F9', text: '#475569' };
@@ -366,7 +543,7 @@ function DonutChart({ data, uheData = [], filteredItems = [], activeFilter, onFi
 }
 
 /* ─── UHE Bar Chart with tooltip and click filter ────────────────────────────────────────────── */
-function UheBarChart({ data, height = 120, filterUHE, onFilterUHE }) {
+function UheBarChart({ data, height = null, filterUHE, onFilterUHE }) {
   const getSigla = (uhe) => UHE_SIGLAS[uhe] || uhe.replace('UHE ', '').replace('PCH ', '');
   const filteredData = data.sort((a, b) => getSigla(a.uhe).localeCompare(getSigla(b.uhe), 'pt-BR'));
   const nonGeralData = data.filter(d => d.uhe !== 'Geral');
@@ -379,7 +556,28 @@ function UheBarChart({ data, height = 120, filterUHE, onFilterUHE }) {
   const [hoveredIdx, setHoveredIdx] = useState(null);
   const [hoveredTotal, setHoveredTotal] = useState(false);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+  const [measuredHeight, setMeasuredHeight] = useState(height || 120);
   const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (height) {
+      setMeasuredHeight(height);
+      return undefined;
+    }
+    const node = containerRef.current;
+    if (!node) return undefined;
+    const updateHeight = () => setMeasuredHeight(Math.max(90, Math.round(node.clientHeight - 28)));
+    updateHeight();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateHeight);
+      return () => window.removeEventListener('resize', updateHeight);
+    }
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [height]);
+
+  const chartHeight = measuredHeight;
 
   const handleBarHover = useCallback((e, idx) => {
     setHoveredIdx(idx);
@@ -412,7 +610,7 @@ function UheBarChart({ data, height = 120, filterUHE, onFilterUHE }) {
 
   const barsData = filteredData.map((d, i) => {
     const x = i * (barWidth + gap) + 20;
-    const maxBarH = height - 20;
+    const maxBarH = chartHeight - 20;
     const powerScale = maxVal > 0 && d.valor_contrato > 0 ? Math.pow(d.valor_contrato / maxVal, 0.35) : 0;
     const barH = Math.max(10, Math.min(maxBarH, Math.round(maxBarH * powerScale)));
     const remaining = d.valor_contrato > 0 ? d.saldo_contrato / d.valor_contrato : 0;
@@ -424,19 +622,19 @@ function UheBarChart({ data, height = 120, filterUHE, onFilterUHE }) {
   });
 
   return (
-    <div ref={containerRef} style={{ overflowX: 'auto', position: 'relative' }}>
-      <svg viewBox={`0 0 ${totalWidth} ${height + 28}`} style={{ width: '100%', height: height + 28 }}>
+    <div ref={containerRef} style={{ overflow: 'hidden', position: 'relative', height: '100%', width: '100%', display: 'flex', alignItems: 'center' }}>
+      <svg viewBox={`0 0 ${totalWidth} ${chartHeight + 28}`} style={{ width: '100%', height: chartHeight + 28 }}>
         <defs>
           {barsData.map(({ i, x, barH }) => (
             <clipPath key={i} id={`clip-bar-${i}`}>
-              <rect x={x} y={height - barH} width={barWidth} height={barH} rx={3} />
+              <rect x={x} y={chartHeight - barH} width={barWidth} height={barH} rx={3} />
             </clipPath>
           ))}
           {(() => {
-            const maxBarH = height - 20;
+            const maxBarH = chartHeight - 20;
             return (
               <clipPath id="clip-bar-total">
-                <rect x={totalBarX} y={height - maxBarH} width={barWidth} height={maxBarH} rx={3} />
+                <rect x={totalBarX} y={chartHeight - maxBarH} width={barWidth} height={maxBarH} rx={3} />
               </clipPath>
             );
           })()}
@@ -451,28 +649,28 @@ function UheBarChart({ data, height = 120, filterUHE, onFilterUHE }) {
               style={{ cursor: 'pointer' }}
             >
               {/* Value label above bar */}
-              <text x={x + barWidth / 2} y={height - barH - 6} textAnchor="middle" fontSize="10" fill="#475569" fontWeight="700">
+              <text x={x + barWidth / 2} y={chartHeight - barH - 6} textAnchor="middle" fontSize="10" fill="#475569" fontWeight="700">
                 {fmtM(d.valor_contrato)}
               </text>
               {/* Full bar background */}
-              <rect x={x} y={height - barH} width={barWidth} height={barH} fill="#E8ECF0" rx={3} opacity={!filterUHE || isActive ? 1 : 0.3} />
+              <rect x={x} y={chartHeight - barH} width={barWidth} height={barH} fill="#E8ECF0" rx={3} opacity={!filterUHE || isActive ? 1 : 0.3} />
               {/* Wave fill */}
               {usedH > 1 && (
                 <g clipPath={`url(#clip-bar-${i})`} opacity={!filterUHE || isActive ? 1 : 0.3}>
                   <g>
                     <animateTransform attributeName="transform" type="translate" from="0 0" to={`${barWidth} 0`} dur="2s" repeatCount="indefinite" />
-                    <path d={makeWavePath(x, height - usedH, height, barWidth, 4)} fill={color} />
+                    <path d={makeWavePath(x, chartHeight - usedH, chartHeight, barWidth, 4)} fill={color} />
                   </g>
                   <g>
                     <animateTransform attributeName="transform" type="translate" from={`${-barWidth * 0.5} 0`} to={`${barWidth * 0.5} 0`} dur="3s" repeatCount="indefinite" />
-                    <path d={makeWavePath(x, height - usedH, height, barWidth, 3)} fill={color} opacity="0.35" />
+                    <path d={makeWavePath(x, chartHeight - usedH, chartHeight, barWidth, 3)} fill={color} opacity="0.35" />
                   </g>
                 </g>
               )}
               {/* Active indicator */}
-              {isActive && <rect x={x - 2} y={height - barH - 2} width={barWidth + 4} height={barH + 4} fill="none" stroke={CTG_BAR_COLORS[i % CTG_BAR_COLORS.length]} strokeWidth={2.5} rx={4} />}
+              {isActive && <rect x={x - 2} y={chartHeight - barH - 2} width={barWidth + 4} height={barH + 4} fill="none" stroke={CTG_BAR_COLORS[i % CTG_BAR_COLORS.length]} strokeWidth={2.5} rx={4} />}
               {/* Label */}
-              <text x={x + barWidth / 2} y={height + 16} textAnchor="middle" fontSize="11" fill={isActive ? '#0b5cab' : '#475569'} fontWeight={isActive ? '700' : '600'}>
+              <text x={x + barWidth / 2} y={chartHeight + 16} textAnchor="middle" fontSize="11" fill={isActive ? '#0b5cab' : '#475569'} fontWeight={isActive ? '700' : '600'}>
                 {sigla}
               </text>
             </g>
@@ -480,12 +678,12 @@ function UheBarChart({ data, height = 120, filterUHE, onFilterUHE }) {
         })}
         {/* Separator line before total bar */}
         <line
-          x1={totalBarX - gap - 2} y1={10} x2={totalBarX - gap - 2} y2={height}
+          x1={totalBarX - gap - 2} y1={10} x2={totalBarX - gap - 2} y2={chartHeight}
           stroke="#CBD5E1" strokeWidth={1} strokeDasharray="4 3"
         />
         {/* Total bar */}
         {(() => {
-          const maxBarH = height - 20;
+          const maxBarH = chartHeight - 20;
           const totalRemaining = totalBar.valor_contrato > 0
             ? totalBar.saldo_contrato / totalBar.valor_contrato
             : 0;
@@ -496,25 +694,25 @@ function UheBarChart({ data, height = 120, filterUHE, onFilterUHE }) {
               onMouseLeave={() => setHoveredTotal(false)}
               style={{ cursor: 'default' }}
             >
-              <text x={totalBarX + barWidth / 2} y={height - maxBarH - 6} textAnchor="middle" fontSize="10" fill="#059669" fontWeight="700">
+              <text x={totalBarX + barWidth / 2} y={chartHeight - maxBarH - 6} textAnchor="middle" fontSize="10" fill="#059669" fontWeight="700">
                 {fmtM(totalBar.valor_contrato)}
               </text>
               {/* Background */}
-              <rect x={totalBarX} y={height - maxBarH} width={barWidth} height={maxBarH} fill="rgba(16,185,129,0.15)" rx={3} />
+              <rect x={totalBarX} y={chartHeight - maxBarH} width={barWidth} height={maxBarH} fill="rgba(16,185,129,0.15)" rx={3} />
               {/* Wave fill */}
               {totalUsedH > 1 && (
                 <g clipPath="url(#clip-bar-total)">
                   <g>
                     <animateTransform attributeName="transform" type="translate" from="0 0" to={`${barWidth} 0`} dur="2.2s" repeatCount="indefinite" />
-                    <path d={makeWavePath(totalBarX, height - totalUsedH, height, barWidth, 4)} fill="rgba(16,185,129,0.7)" />
+                    <path d={makeWavePath(totalBarX, chartHeight - totalUsedH, chartHeight, barWidth, 4)} fill="rgba(16,185,129,0.7)" />
                   </g>
                   <g>
                     <animateTransform attributeName="transform" type="translate" from={`${-barWidth * 0.5} 0`} to={`${barWidth * 0.5} 0`} dur="3.3s" repeatCount="indefinite" />
-                    <path d={makeWavePath(totalBarX, height - totalUsedH, height, barWidth, 3)} fill="rgba(16,185,129,0.35)" />
+                    <path d={makeWavePath(totalBarX, chartHeight - totalUsedH, chartHeight, barWidth, 3)} fill="rgba(16,185,129,0.35)" />
                   </g>
                 </g>
               )}
-              <text x={totalBarX + barWidth / 2} y={height + 16} textAnchor="middle" fontSize="11" fill="#059669" fontWeight="700">
+              <text x={totalBarX + barWidth / 2} y={chartHeight + 16} textAnchor="middle" fontSize="11" fill="#059669" fontWeight="700">
                 Total
               </text>
             </g>
@@ -1743,7 +1941,8 @@ export default function ProjectsTrackingPage() {
       data = data.filter(i => i.area === activeTab);
     }
     if (filterUHE) data = data.filter(i => i.uhe === filterUHE);
-    if (filterStatus) data = data.filter(i => i.status === filterStatus);
+    if (filterStatus === '__OUTROS__') data = data.filter(i => !['Em andamento', 'Em fase de encerramento', 'Encerrado'].includes(i.status));
+    else if (filterStatus) data = data.filter(i => i.status === filterStatus);
     if (filterNatureza) data = data.filter(i => i.natureza === filterNatureza);
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -1803,7 +2002,8 @@ export default function ProjectsTrackingPage() {
       data = data.filter(i => i.area === activeTab);
     }
     if (skip !== 'uhe' && filterUHE) data = data.filter(i => i.uhe === filterUHE);
-    if (filterStatus) data = data.filter(i => i.status === filterStatus);
+    if (skip !== 'status' && filterStatus === '__OUTROS__') data = data.filter(i => !['Em andamento', 'Em fase de encerramento', 'Encerrado'].includes(i.status));
+    else if (skip !== 'status' && filterStatus) data = data.filter(i => i.status === filterStatus);
     if (skip !== 'natureza' && filterNatureza) data = data.filter(i => i.natureza === filterNatureza);
     // Column filters
     if (colFilterUHE.length > 0 && colFilterUHE.length < UHE_LIST.length) {
@@ -1835,6 +2035,7 @@ export default function ProjectsTrackingPage() {
   }, [items, search, filterStatus, filterNatureza, filterUHE, activeTab, showMyContracts, user, colFilterUHE, colFilterStatus, colFilterGestor, colFilterNatureza, colFilterAditivo]);
 
   const filtered = useMemo(() => applyFilters(null), [applyFilters]);
+  const statusChartItems   = useMemo(() => applyFilters('status'),   [applyFilters]);
   const uheChartItems      = useMemo(() => applyFilters('uhe'),      [applyFilters]);
   const naturezaChartItems = useMemo(() => applyFilters('natureza'), [applyFilters]);
 
@@ -2044,49 +2245,40 @@ export default function ProjectsTrackingPage() {
     <div style={{ padding: '12px 16px 16px 0' }}>
 
       {/* Summary cards - redesigned layout */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'nowrap', alignItems: 'stretch', minHeight: 170 }}>
-        {/* Left: Status (2x2) */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'nowrap', alignItems: 'stretch', height: 170 }}>
+        {/* Left: Status cards */}
         <div style={{ flex: '0 0 240px', display: 'flex', flexDirection: 'column' }}>
           <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748B', marginBottom: 4 }}>Status</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, flex: 1 }}>
-            {[
-              { label: 'Total', value: filtered.length, color: '#0b5cab' },
-              { label: 'Em Andamento', value: filtered.filter(i => i.status === 'Em andamento').length, color: '#0EA5E9' },
-              { label: 'Encerramento', value: filtered.filter(i => i.status === 'Em fase de encerramento').length, color: '#F59E0B' },
-              { label: 'Encerrados', value: filtered.filter(i => i.status === 'Encerrado').length, color: '#94A3B8' },
-            ].map(c => (
-              <div key={c.label} style={{
-                background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10,
-                borderTop: `3px solid ${c.color}`, padding: '8px 10px',
-              }}>
-                <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94A3B8' }}>{c.label}</div>
-                <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '2rem', fontWeight: 700, color: c.color, lineHeight: 1.1 }}>{c.value}</div>
-              </div>
-            ))}
-          </div>
+          <StatusSummaryCards
+            activeFilter={filterStatus}
+            onFilter={setFilterStatus}
+            cards={(() => {
+              const areaCountsFor = predicate => AREAS.reduce((acc, area) => {
+                acc[area] = statusChartItems.filter(i => predicate(i) && i.area === area).length;
+                return acc;
+              }, {});
+              const makeCard = ({ label, tooltipTitle, filterValue, color, predicate }) => {
+                const value = statusChartItems.filter(predicate).length;
+                return { label, tooltipTitle, filterValue, color, value, baseTotal: statusChartItems.length, areaCounts: areaCountsFor(predicate) };
+              };
+              return [
+                { label: 'Total', tooltipTitle: 'Total', filterValue: '', color: '#0b5cab', value: statusChartItems.length, baseTotal: statusChartItems.length, areaCounts: areaCountsFor(() => true) },
+                makeCard({ label: 'Em andamento', tooltipTitle: 'Em andamento', filterValue: 'Em andamento', color: '#0EA5E9', predicate: i => i.status === 'Em andamento' }),
+                makeCard({ label: 'Encerramento', tooltipTitle: 'Em fase de encerramento', filterValue: 'Em fase de encerramento', color: '#F59E0B', predicate: i => i.status === 'Em fase de encerramento' }),
+                makeCard({ label: 'Encerrados', tooltipTitle: 'Encerrados', filterValue: 'Encerrado', color: '#94A3B8', predicate: i => i.status === 'Encerrado' }),
+              ];
+            })()}
+          />
         </div>
-
         {/* Center-left: Totals */}
-        <div style={{ flex: '0 0 200px', borderLeft: '2px solid #E2E8F0', paddingLeft: 10, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: '0 0 220px', borderLeft: '2px solid #E2E8F0', paddingLeft: 10, display: 'flex', flexDirection: 'column' }}>
           <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748B', marginBottom: 4 }}>Valores</div>
-          <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, borderTop: '3px solid #0b5cab', padding: '10px 12px', flex: 1, display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center' }}>
-            {[
-              { section: 'Contrato', color: '#0b5cab', valorTotal: totalContrato, valorSaldo: totalSaldo },
-              { section: 'SI', color: '#7C3AED', valorTotal: totalSI, valorSaldo: totalSISaldo },
-            ].map(({ section, color, valorTotal, valorSaldo }, idx) => (
-              <div key={section} style={{ ...(idx > 0 ? { borderTop: '1px solid #F1F5F9', paddingTop: 6 } : {}) }}>
-                <div style={{ fontSize: '0.65rem', fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>{section}</div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 4, marginBottom: 2 }}>
-                  <span style={{ fontSize: '0.62rem', color: '#94A3B8' }}>Total</span>
-                  <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '0.88rem', fontWeight: 700, color: '#0F172A' }}>{fmtBRL(valorTotal)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 4 }}>
-                  <span style={{ fontSize: '0.62rem', color: '#94A3B8' }}>Saldo</span>
-                  <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '0.88rem', fontWeight: 700, color: '#065F46' }}>{fmtBRL(valorSaldo)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
+          <ValuesSummaryCard
+            totalContrato={totalContrato}
+            totalSaldo={totalSaldo}
+            totalSI={totalSI}
+            totalSISaldo={totalSISaldo}
+          />
         </div>
 
         {/* Center-right: Natureza (Donut Chart) */}
@@ -2115,8 +2307,8 @@ export default function ProjectsTrackingPage() {
               </span>
             )}
           </div>
-          <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, borderTop: '3px solid #0b5cab', padding: '5px 0px', flex: 1, minHeight: 158 }}>
-            <UheBarChart data={uheData} height={130} filterUHE={filterUHE} onFilterUHE={setFilterUHE} />
+          <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, borderTop: '3px solid #0b5cab', padding: '5px 0px', flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden', boxSizing: 'border-box' }}>
+            <UheBarChart data={uheData} filterUHE={filterUHE} onFilterUHE={setFilterUHE} />
           </div>
         </div>
       </div>

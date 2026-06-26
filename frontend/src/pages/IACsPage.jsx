@@ -142,6 +142,66 @@ function TypeBadge({ value }) {
 }
 
 /* ─── Status Bar Chart (clickable, vertical) ──────────────────────────────────── */
+function IacSummaryCards({ cards, activeArea, onFilterArea }) {
+  const [hovered, setHovered] = useState(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+
+  const tooltipRow = (label, value, color = '#1E293B') => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 18, lineHeight: 1.55 }}>
+      <span style={{ color: '#64748B' }}>{label}</span>
+      <span style={{ color, fontWeight: 700 }}>{value}</span>
+    </div>
+  );
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, flex: 1 }}>
+      {cards.map(card => {
+        const isDimmed = activeArea && card.area && activeArea !== card.area;
+        const isActive = activeArea && card.area === activeArea;
+        return (
+          <button
+            key={card.label}
+            type="button"
+            onClick={() => onFilterArea?.(card.area && activeArea !== card.area ? card.area : '')}
+            onMouseEnter={e => { setHovered(card); setTooltipPos({ x: e.clientX, y: e.clientY }); }}
+            onMouseMove={e => setTooltipPos({ x: e.clientX, y: e.clientY })}
+            onMouseLeave={() => setHovered(null)}
+            style={{
+              background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10,
+              borderTop: '3px solid ' + card.color, padding: '8px 10px',
+              textAlign: 'left', cursor: 'pointer',
+              opacity: isDimmed ? 0.5 : 1,
+              boxShadow: isActive ? '0 0 0 2px ' + card.color + '22' : 'none',
+              transition: 'opacity 0.15s, box-shadow 0.15s',
+            }}
+          >
+            <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94A3B8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.label}</div>
+            <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '2rem', fontWeight: 700, color: card.color, lineHeight: 1.1 }}>{card.value}</div>
+          </button>
+        );
+      })}
+      {hovered && createPortal(
+        <div style={{ position: 'fixed', left: tooltipPos.x, top: tooltipPos.y + 14, transform: 'translateX(-50%)', pointerEvents: 'none', zIndex: 99999 }}>
+          <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 12px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', fontSize: '0.72rem', whiteSpace: 'nowrap', minWidth: 230 }}>
+            <div style={{ fontWeight: 800, marginBottom: 5, color: hovered.color, fontSize: '0.78rem' }}>{hovered.tooltipTitle}</div>
+            {tooltipRow('IACs', hovered.value, hovered.color)}
+            {tooltipRow('Participa\u00e7\u00e3o', hovered.baseTotal ? `${((hovered.value / hovered.baseTotal) * 100).toFixed(1).replace('.', ',')}%` : '0,0%')}
+            <div style={{ borderTop: '1px solid #F1F5F9', marginTop: 5, paddingTop: 4 }}>
+              <div style={{ fontSize: '0.62rem', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', marginBottom: 3 }}>Por status</div>
+              {STATUS_OPTIONS.map(status => {
+                const count = hovered.statusCounts?.[status.value] || 0;
+                if (!count) return null;
+                const meta = STATUS_META[status.value] || { color: hovered.color };
+                return tooltipRow(getStatusLabel(status.value), count, meta.color);
+              })}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
 function StatusBarChart({ data, onFilter, activeFilter, height = 100 }) {
   const visible = data.filter(d => d.count > 0);
   const maxCount = Math.max(...visible.map(d => d.count), 1);
@@ -1024,11 +1084,11 @@ export default function IACsPage() {
         (i.supervisor && i.supervisor.toLowerCase().includes(myName))
       );
     }
-    if (activeTab !== 'Todos' && activeTab !== 'Meus IACs') data = data.filter(i => i.area === activeTab);
+    if (skip !== 'area' && activeTab !== 'Todos' && activeTab !== 'Meus IACs') data = data.filter(i => i.area === activeTab);
     if (skip !== 'status' && filterStatus) data = data.filter(i => i.status_current === filterStatus);
     if (skip !== 'priority' && filterPriority) data = data.filter(i => i.priority === filterPriority);
     // Column filters
-    if (colFilterArea.length > 0 && colFilterArea.length < AREAS.length) {
+    if (skip !== 'area' && colFilterArea.length > 0 && colFilterArea.length < AREAS.length) {
       data = data.filter(i => colFilterArea.includes(i.area));
     }
     if (colFilterType.length > 0) {
@@ -1067,6 +1127,7 @@ export default function IACsPage() {
     return data;
   }, [applyFilters]);
 
+  const summaryItems       = useMemo(() => applyFilters('area'),     [applyFilters]);
   const statusChartItems   = useMemo(() => applyFilters('status'),   [applyFilters]);
   const priorityChartItems = useMemo(() => applyFilters('priority'), [applyFilters]);
 
@@ -1187,29 +1248,27 @@ export default function IACsPage() {
               </span>
             )}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, flex: 1 }}>
-            {[
-              { label: 'Total',          value: filtered.length,                                         color: '#0b5cab' },
-              { label: 'Elétrica',       value: filtered.filter(i => i.area === 'Elétrica').length,      color: '#0EA5E9' },
-              { label: 'Mecânica',       value: filtered.filter(i => i.area === 'Mecânica').length,      color: '#F59E0B' },
-              { label: 'Confiabilidade', value: filtered.filter(i => i.area === 'Confiabilidade').length, color: '#94A3B8' },
-            ].map(c => (
-              <div
-                key={c.label}
-                onClick={() => c.label !== 'Total' && setActiveTab(c.label === activeTab ? 'Todos' : c.label)}
-                style={{
-                  background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10,
-                  borderTop: `3px solid ${c.color}`, padding: '8px 10px',
-                  cursor: c.label !== 'Total' ? 'pointer' : 'default',
-                  opacity: (activeTab !== 'Todos' && activeTab !== 'Meus IACs' && activeTab !== c.label) ? 0.5 : 1,
-                  transition: 'all 0.15s',
-                }}
-              >
-                <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94A3B8' }}>{c.label}</div>
-                <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '2rem', fontWeight: 700, color: c.color, lineHeight: 1.1 }}>{c.value}</div>
-              </div>
-            ))}
-          </div>
+          <IacSummaryCards
+            activeArea={AREAS.includes(activeTab) ? activeTab : ''}
+            onFilterArea={area => { setShowMyIACs(false); setActiveTab(area || 'Todos'); }}
+            cards={(() => {
+              const statusCountsFor = predicate => STATUS_OPTIONS.reduce((acc, status) => {
+                acc[status.value] = summaryItems.filter(i => predicate(i) && i.status_current === status.value).length;
+                return acc;
+              }, {});
+              const makeCard = ({ label, tooltipTitle, area, color }) => {
+                const predicate = item => item.area === area;
+                const value = summaryItems.filter(predicate).length;
+                return { label, tooltipTitle, area, color, value, baseTotal: summaryItems.length, statusCounts: statusCountsFor(predicate) };
+              };
+              return [
+                { label: 'Total', tooltipTitle: 'Total', area: '', color: '#0b5cab', value: summaryItems.length, baseTotal: summaryItems.length, statusCounts: statusCountsFor(() => true) },
+                makeCard({ label: 'El\u00e9trica', tooltipTitle: 'El\u00e9trica', area: 'El\u00e9trica', color: '#0EA5E9' }),
+                makeCard({ label: 'Mec\u00e2nica', tooltipTitle: 'Mec\u00e2nica', area: 'Mec\u00e2nica', color: '#F59E0B' }),
+                makeCard({ label: 'Confiabilidade', tooltipTitle: 'Confiabilidade', area: 'Confiabilidade', color: '#94A3B8' }),
+              ];
+            })()}
+          />
         </div>
 
         {/* Priority donut chart */}
