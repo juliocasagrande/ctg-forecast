@@ -794,6 +794,15 @@ export default function PMSPage() {
   const openNew  = () => setDocModal({ open:true, doc:null });
   const openEdit = (doc) => setDocModal({ open:true, doc });
 
+  const hasActiveFilters = !!(search || typeFilter || statusFilter || plantFilter || validadeFilter || myDocsOnly
+    || colFilterCode.length || colFilterArea.length || colFilterResp.length || colFilterStatus.length
+    || chartTypeFilter || chartValidadeFilter || chartPlantFilter || chartLangFilter);
+  const clearFilters = () => {
+    setSearch(''); setTypeFilter(''); setStatusFilter(''); setPlantFilter(''); setValidadeFilter(''); setMyDocsOnly(false);
+    setColFilterCode([]); setColFilterArea([]); setColFilterResp([]); setColFilterStatus([]);
+    setChartTypeFilter(''); setChartValidadeFilter(''); setChartPlantFilter(''); setChartLangFilter('');
+  };
+
   // Aplica todos os filtros (busca, dropdowns, colunas e gráficos), exceto a dimensão de
   // gráfico indicada em `skip` — assim o próprio gráfico clicado continua mostrando todas
   // as categorias (para dar pra trocar a seleção), enquanto os demais elementos da página
@@ -893,13 +902,13 @@ export default function PMSPage() {
             <div style={{ flex:'1 1 220px', minWidth:200, display:'flex' }}>
               <HBarChart title="Documentos por Tipo" data={typeChartData}
                 activeFilter={chartTypeFilter}
-                onFilter={(key) => { setChartTypeFilter(key); if (key) { setChartValidadeFilter(''); setChartPlantFilter(''); setChartLangFilter(''); } }}
+                onFilter={setChartTypeFilter}
               />
             </div>
             <div style={{ flex:'2 1 400px', minWidth:280, display:'flex' }}>
               <VBarChart title="Documentos por Usina" data={plantChartData}
                 activeFilter={chartPlantFilter}
-                onFilter={(key) => { setChartPlantFilter(key); if (key) { setChartTypeFilter(''); setChartValidadeFilter(''); setChartLangFilter(''); } }}
+                onFilter={setChartPlantFilter}
               />
             </div>
           </div>
@@ -912,13 +921,13 @@ export default function PMSPage() {
               title: 'Status de Validade', data: validadeChartData,
               highlightKey: 'Em dia', highlightLabel: 'Em dia',
               activeFilter: chartValidadeFilter,
-              onFilter: (key) => { setChartValidadeFilter(key); if (key) { setChartTypeFilter(''); setChartPlantFilter(''); setChartLangFilter(''); } },
+              onFilter: setChartValidadeFilter,
             },
             {
               title: 'Relação de Idioma', data: langChartData,
               highlightKey: 'with_en', highlightLabel: 'Com Inglês',
               activeFilter: chartLangFilter,
-              onFilter: (key) => { setChartLangFilter(key); if (key) { setChartTypeFilter(''); setChartPlantFilter(''); setChartValidadeFilter(''); } },
+              onFilter: setChartLangFilter,
             },
           ]}
         />
@@ -928,7 +937,7 @@ export default function PMSPage() {
       <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
         <button onClick={openNew} style={{
           display:'flex', alignItems:'center', gap:6, padding:'8px 16px',
-          border:'none', borderRadius:8, background:'#001F5B',
+          border:'none', borderRadius:8, background:'#10B981',
           fontSize:'0.8rem', fontWeight:700, cursor:'pointer', color:'#fff', flexShrink:0,
         }}>+ Novo Documento</button>
 
@@ -944,6 +953,13 @@ export default function PMSPage() {
           {myDocsOnly ? 'Todos os docs' : 'Meus docs'}
           {myDocsOnly && <span style={{ background:'rgba(255,255,255,0.25)', borderRadius:10, padding:'1px 6px', fontSize:'0.7rem' }}>{myDocsCount}</span>}
         </button>
+
+        <button onClick={clearFilters} disabled={!hasActiveFilters} style={{
+          display:'flex', alignItems:'center', gap:6, padding:'8px 16px',
+          border:'1.5px solid #FCA5A5', borderRadius:8, background:'#FEE2E2', color:'#DC2626',
+          fontSize:'0.8rem', fontWeight:700, cursor: hasActiveFilters ? 'pointer' : 'not-allowed',
+          opacity: hasActiveFilters ? 1 : 0.5, flexShrink:0,
+        }}>Limpar filtros</button>
 
         <div style={{ display:'flex', gap:6, alignItems:'center', flex:1, background:'#fff', border:'1px solid #E2E8F0', borderRadius:8, padding:'7px 12px', minWidth:0 }}>
           <span style={{ color:'#94A3B8', fontSize:'0.85rem', flexShrink:0 }}>🔍</span>

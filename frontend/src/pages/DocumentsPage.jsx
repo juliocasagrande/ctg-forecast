@@ -1126,6 +1126,15 @@ export default function DocumentsPage() {
   const openNew  = () => { fetchNextSeq(); setDocModal({ open:true, doc:null }); };
   const openEdit = (doc) => setDocModal({ open:true, doc });
 
+  const hasActiveFilters = !!(search || typeFilter || statusFilter || plantFilter || yearFilter || myDocsOnly
+    || colFilterCode.length || colFilterPlant.length || colFilterResponsible.length || colFilterDate.length || colFilterSubject.length || colFilterStatus.length
+    || chartTypeFilter || chartStatusFilter || chartPlantFilter);
+  const clearFilters = () => {
+    setSearch(''); setTypeFilter(''); setStatusFilter(''); setPlantFilter(''); setYearFilter(0); setMyDocsOnly(false);
+    setColFilterCode([]); setColFilterPlant([]); setColFilterResponsible([]); setColFilterDate([]); setColFilterSubject([]); setColFilterStatus([]);
+    setChartTypeFilter(''); setChartStatusFilter(''); setChartPlantFilter('');
+  };
+
   // Agrupar por base_code — normalizar: CTA-PRD-002-26-R0 → CTA-PRD-002-26
   const normalizeBaseCode = (doc) => {
     if (doc.base_code) return doc.base_code;
@@ -1272,14 +1281,7 @@ export default function DocumentsPage() {
             title="Documentos por Tipo"    
             data={typeChartData}
             activeFilter={chartTypeFilter}
-            onFilter={(key) => {
-              setChartTypeFilter(key);
-              // Clear other chart filters
-              if (key) {
-                setChartStatusFilter('');
-                setChartPlantFilter('');
-              }
-            }}
+            onFilter={setChartTypeFilter}
           />
         </div>
         <div style={{ flex:'2 1 320px', minWidth:220, display:'flex' }}>
@@ -1287,14 +1289,7 @@ export default function DocumentsPage() {
             title="Documentos por Usina"   
             data={plantChartData}
             activeFilter={chartPlantFilter}
-            onFilter={(key) => {
-              setChartPlantFilter(key);
-              // Clear other chart filters
-              if (key) {
-                setChartTypeFilter('');
-                setChartStatusFilter('');
-              }
-            }}
+            onFilter={setChartPlantFilter}
           />
         </div>
         <div style={{ flex:'1 1 180px', minWidth:160, display:'flex' }}>
@@ -1302,14 +1297,7 @@ export default function DocumentsPage() {
             title="Status dos Documentos"  
             data={statusChartData}
             activeFilter={chartStatusFilter}
-            onFilter={(key) => {
-              setChartStatusFilter(key);
-              // Clear other chart filters
-              if (key) {
-                setChartTypeFilter('');
-                setChartPlantFilter('');
-              }
-            }}
+            onFilter={setChartStatusFilter}
           />
         </div>
       </div>
@@ -1318,7 +1306,7 @@ export default function DocumentsPage() {
       <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
         <button onClick={openNew} style={{
           display:'flex', alignItems:'center', gap:6, padding:'8px 16px',
-          border:'none', borderRadius:8, background:'#001F5B',
+          border:'none', borderRadius:8, background:'#10B981',
           fontSize:'0.8rem', fontWeight:700, cursor:'pointer', color:'#fff', flexShrink:0,
         }}>+ Novo Documento</button>
 
@@ -1335,6 +1323,13 @@ export default function DocumentsPage() {
           {myDocsOnly ? 'Todos os docs' : 'Meus docs'}
           {myDocsOnly && <span style={{ background:'rgba(255,255,255,0.25)', borderRadius:10, padding:'1px 6px', fontSize:'0.7rem' }}>{myDocsCount}</span>}
         </button>
+
+        <button onClick={clearFilters} disabled={!hasActiveFilters} style={{
+          display:'flex', alignItems:'center', gap:6, padding:'8px 16px',
+          border:'1.5px solid #FCA5A5', borderRadius:8, background:'#FEE2E2', color:'#DC2626',
+          fontSize:'0.8rem', fontWeight:700, cursor: hasActiveFilters ? 'pointer' : 'not-allowed',
+          opacity: hasActiveFilters ? 1 : 0.5, flexShrink:0,
+        }}>Limpar filtros</button>
 
         <div style={{ display:'flex', gap:6, alignItems:'center', flex:1, background:'#fff', border:'1px solid #E2E8F0', borderRadius:8, padding:'7px 12px', minWidth:0 }}>
           <span style={{ color:'#94A3B8', fontSize:'0.85rem', flexShrink:0 }}>🔍</span>

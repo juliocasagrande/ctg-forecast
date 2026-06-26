@@ -1327,6 +1327,17 @@ export default function IACsPage() {
 
       {/* ── Filters ── */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+        <button onClick={() => { setFilterStatus(''); setFilterPriority(''); setSearch(''); setActiveTab('Todos'); }}
+          disabled={!(filterStatus || filterPriority || search || activeTab !== 'Todos')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px',
+            border: '1.5px solid #FCA5A5', borderRadius: 8, background: '#FEE2E2', color: '#DC2626',
+            fontSize: '0.82rem', fontWeight: 700,
+            cursor: (filterStatus || filterPriority || search || activeTab !== 'Todos') ? 'pointer' : 'not-allowed',
+            opacity: (filterStatus || filterPriority || search || activeTab !== 'Todos') ? 1 : 0.5, flexShrink: 0,
+          }}>
+          Limpar filtros
+        </button>
         <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 180 }}>
           <svg viewBox="0 0 20 20" fill="#94A3B8" width="14" height="14" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }}>
             <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd"/>
@@ -1340,12 +1351,6 @@ export default function IACsPage() {
           <option value="">Todos os status</option>
           {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{getStatusLabel(o.value)}</option>)}
         </select>
-        {(filterStatus || filterPriority || search || activeTab !== 'Todos') && (
-          <button onClick={() => { setFilterStatus(''); setFilterPriority(''); setSearch(''); setActiveTab('Todos'); }}
-            style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#F8FAFC', color: '#64748B', fontSize: '0.82rem', cursor: 'pointer' }}>
-            Limpar filtros
-          </button>
-        )}
       </div>
 
       {/* ── Table ── */}
