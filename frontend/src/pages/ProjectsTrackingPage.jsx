@@ -10,6 +10,19 @@ import useColumnWidths from '../hooks/useColumnWidths.js';
 
 const PROJECTS_COL_WIDTHS = [40, 46, 130, 110, 280, 180, 160, 170, 220, 100, 120, 110, 110, 100, 100, 100, 150, 100, 90];
 
+// Compara o campo "gestor" com o nome do usuário logado. Usa includes() nos dois sentidos
+// e, como o campo às vezes guarda o nome completo (com nome do meio) enquanto o cadastro do
+// usuário usa uma forma curta (ex.: "Victor Henrique Pedraci" vs "Victor Pedraci"), também
+// compara por primeiro+último nome.
+function personMatchesUser(fieldVal, userName) {
+  const norm = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  const a = norm(fieldVal), b = norm(userName);
+  if (!a || !b) return false;
+  if (a.includes(b) || b.includes(a)) return true;
+  const edges = (s) => { const w = s.split(/\s+/).filter(Boolean); return w.length > 1 ? `${w[0]} ${w[w.length - 1]}` : s; };
+  return edges(a) === edges(b);
+}
+
 /* ─── Constants ─────────────────────────────────────────────────────────────── */
 const AREAS = ['Confiabilidade', 'Elétrica', 'Mecânica'];
 const TAB_DOT_COLORS = {
@@ -1931,10 +1944,10 @@ export default function ProjectsTrackingPage() {
     let data = [...items];
     if (showMyContracts) {
       const myId = user?.id;
-      const myName = user?.name?.toLowerCase();
+      const myName = user?.name;
       data = data.filter(i =>
         (myId && i.gestor_user_id === myId) ||
-        (i.gestor_user_id == null && i.gestor && i.gestor.toLowerCase().includes(myName))
+        (i.gestor_user_id == null && i.gestor && personMatchesUser(i.gestor, myName))
       );
     }
     if (activeTab !== 'Todos' && activeTab !== 'Meus Contratos' && AREAS.includes(activeTab)) {
@@ -1991,10 +2004,10 @@ export default function ProjectsTrackingPage() {
     let data = [...items];
     if (showMyContracts) {
       const myId = user?.id;
-      const myName = user?.name?.toLowerCase();
+      const myName = user?.name;
       data = data.filter(i =>
         (myId && i.gestor_user_id === myId) ||
-        (i.gestor_user_id == null && i.gestor && i.gestor.toLowerCase().includes(myName))
+        (i.gestor_user_id == null && i.gestor && personMatchesUser(i.gestor, myName))
       );
     }
     // Only filter by area if it's a real area tab (not "Meus Contratos")
@@ -2154,10 +2167,10 @@ export default function ProjectsTrackingPage() {
     const m = { Todos: items.length };
     if (user?.id || user?.name) {
       const myId = user.id;
-      const myName = user.name?.toLowerCase();
+      const myName = user.name;
       m['Meus Contratos'] = items.filter(i =>
         (myId && i.gestor_user_id === myId) ||
-        (i.gestor_user_id == null && myName && i.gestor && i.gestor.toLowerCase().includes(myName))
+        (i.gestor_user_id == null && myName && i.gestor && personMatchesUser(i.gestor, myName))
       ).length;
     } else {
       m['Meus Contratos'] = 0;

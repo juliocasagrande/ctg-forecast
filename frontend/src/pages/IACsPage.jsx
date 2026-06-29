@@ -24,6 +24,19 @@ const TAB_DOT_COLORS = {
   'Mecânica': '#059669',
 };
 
+// Compara nome de um campo (requester/team_leader/organizer/supervisor) com o nome do
+// usuário logado. Usa includes() nos dois sentidos e, como esses campos às vezes guardam
+// o nome completo (com nome do meio) enquanto o cadastro do usuário usa uma forma curta
+// (ex.: "Victor Henrique Pedraci" vs "Victor Pedraci"), também compara por primeiro+último nome.
+function personMatchesUser(fieldVal, userName) {
+  const norm = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  const a = norm(fieldVal), b = norm(userName);
+  if (!a || !b) return false;
+  if (a.includes(b) || b.includes(a)) return true;
+  const edges = (s) => { const w = s.split(/\s+/).filter(Boolean); return w.length > 1 ? `${w[0]} ${w[w.length - 1]}` : s; };
+  return edges(a) === edges(b);
+}
+
 const STATUS_OPTIONS = [
   { value: '0 - Not started yet',       color: '#94A3B8', bg: '#F1F5F9', text: '#475569' },
   { value: '1 - IA and PDs',            color: '#3B82F6', bg: '#EFF6FF', text: '#1D4ED8' },
@@ -942,13 +955,13 @@ export default function IACsPage() {
     let data = [...items];
     if (showMyIACs) {
       const myId = user?.id;
-      const myName = user?.name?.toLowerCase();
+      const myName = user?.name;
       data = data.filter(i =>
         (myId && i.team_leader_user_id === myId) ||
-        (i.requester && i.requester.toLowerCase().includes(myName)) ||
-        (i.team_leader_user_id == null && i.team_leader && i.team_leader.toLowerCase().includes(myName)) ||
-        (i.organizer && i.organizer.toLowerCase().includes(myName)) ||
-        (i.supervisor && i.supervisor.toLowerCase().includes(myName))
+        (i.requester && personMatchesUser(i.requester, myName)) ||
+        (i.team_leader_user_id == null && i.team_leader && personMatchesUser(i.team_leader, myName)) ||
+        (i.organizer && personMatchesUser(i.organizer, myName)) ||
+        (i.supervisor && personMatchesUser(i.supervisor, myName))
       );
     }
     if (activeTab !== 'Todos' && activeTab !== 'Meus IACs') data = data.filter(i => i.area === activeTab);
@@ -1078,13 +1091,13 @@ export default function IACsPage() {
     let data = [...items];
     if (showMyIACs) {
       const myId = user?.id;
-      const myName = user?.name?.toLowerCase();
+      const myName = user?.name;
       data = data.filter(i =>
         (myId && i.team_leader_user_id === myId) ||
-        (i.requester && i.requester.toLowerCase().includes(myName)) ||
-        (i.team_leader_user_id == null && i.team_leader && i.team_leader.toLowerCase().includes(myName)) ||
-        (i.organizer && i.organizer.toLowerCase().includes(myName)) ||
-        (i.supervisor && i.supervisor.toLowerCase().includes(myName))
+        (i.requester && personMatchesUser(i.requester, myName)) ||
+        (i.team_leader_user_id == null && i.team_leader && personMatchesUser(i.team_leader, myName)) ||
+        (i.organizer && personMatchesUser(i.organizer, myName)) ||
+        (i.supervisor && personMatchesUser(i.supervisor, myName))
       );
     }
     if (skip !== 'area' && activeTab !== 'Todos' && activeTab !== 'Meus IACs') data = data.filter(i => i.area === activeTab);
@@ -1155,14 +1168,14 @@ export default function IACsPage() {
     for (const a of AREAS) m[a] = items.filter(i => i.area === a).length;
     // Count "Meus IACs"
     const myId = user?.id;
-    const myName = user?.name?.toLowerCase();
+    const myName = user?.name;
     m['Meus IACs'] = items.filter(i =>
       (myId && i.team_leader_user_id === myId) ||
       (myName && (
-        (i.requester && i.requester.toLowerCase().includes(myName)) ||
-        (i.team_leader_user_id == null && i.team_leader && i.team_leader.toLowerCase().includes(myName)) ||
-        (i.organizer && i.organizer.toLowerCase().includes(myName)) ||
-        (i.supervisor && i.supervisor.toLowerCase().includes(myName))
+        (i.requester && personMatchesUser(i.requester, myName)) ||
+        (i.team_leader_user_id == null && i.team_leader && personMatchesUser(i.team_leader, myName)) ||
+        (i.organizer && personMatchesUser(i.organizer, myName)) ||
+        (i.supervisor && personMatchesUser(i.supervisor, myName))
       ))
     ).length;
     return m;

@@ -68,11 +68,6 @@ router.get('/', async (req, res) => {
     if (type)  { params.push(type);  q += ` AND d.type = $${params.length}`; }
     if (plant) { params.push(plant); q += ` AND d.plant = $${params.length}`; }
     if (area)  { params.push(area);  q += ` AND d.area = $${params.length}`; }
-    // Engenheiros só veem documentos destinados a eles (responsável)
-    if (req.user.role === 'engenheiro') {
-      params.push(req.user.name || '');
-      q += ` AND LOWER(TRIM(d.responsible)) = LOWER(TRIM($${params.length}))`;
-    }
     q += ' ORDER BY d.type ASC, d.base_code ASC, d.revision ASC NULLS FIRST';
     res.json((await pool.query(q, params)).rows);
   } catch (err) { safeError(res, err); }
