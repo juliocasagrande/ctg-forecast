@@ -522,6 +522,14 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
     return Object.values(map).sort((a, b) => b.Forecast - a.Forecast);
   }, [filtered]);
 
+  // ── Dados por projeto (visão padrão / engenheiro) — usado no card e no modal ──
+  const projectChartData = useMemo(() => filtered.map(p => ({
+    name:      p.code,
+    Budget:    parseFloat(p.budget) || 0,
+    Forecast:  parseFloat(p.act_forecast ?? p.forecast) || 0,
+    Realizado: parseFloat(p.actual) || 0,
+  })), [filtered]);
+
   // Current month boundary for Realizado cutoff
   const now = new Date();
   const currentYear  = now.getFullYear();
@@ -775,12 +783,7 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
                 ) : (
                   /* Engenheiro: por projeto (comportamento original) */
                   <BarChart
-                    data={filtered.map(p => ({
-                      name:      p.code,
-                      Budget:    parseFloat(p.budget) || 0,
-                      Forecast:  parseFloat(p.act_forecast ?? p.forecast) || 0,
-                      Realizado: parseFloat(p.actual) || 0,
-                    }))}
+                    data={projectChartData}
                     margin={{ top: 2, right: 4, left: 0, bottom: 0 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -929,12 +932,7 @@ export default function Dashboard({ period, plantFilter = [], projectFilter = []
         data={
           isGerente     ? plantChartData :
           isCoordenador ? engChartData   :
-          filtered.map(p => ({
-            name:      p.code,
-            Budget:    parseFloat(p.budget) || 0,
-            Forecast:  parseFloat(p.act_forecast ?? p.forecast) || 0,
-            Realizado: parseFloat(p.actual) || 0,
-          }))
+          projectChartData
         }
         projectMap={projectMap}
         periodLabel={periodLabel}

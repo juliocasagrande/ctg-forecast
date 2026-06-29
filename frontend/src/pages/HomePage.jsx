@@ -1387,126 +1387,92 @@ export default function HomePage({ year }) {
     return () => { cancelled = true; };
   }, [year, scope.area, scope.ownOnly, user?.id]);
 
-  const metasDone = data.metas.filter(m => Number(m.achieved_value || 0) >= 100).length;
-  const metasAvg = weightedAchievement(data.metas);
-  const metasMissingEvidence = data.metas.filter(m => evidenceCount(m) === 0).length;
-  const vacationPeople = new Set(data.vacations.map(v => v.user_id)).size;
-  const vacationDays = data.vacations.reduce((s, v) => s + (Number(v.days) || 0), 0);
-  const rowMatchesSelectedPlant = (row, exactFields = ['uhe', 'plant', 'usina']) => {
-    if (!selectedPlants.length) return true;
-    return selectedPlants.some(plant => {
-      const plantKey = normalizePlant(plant);
-      const plantSigla = normalizePlant(PROJECT_PLANT_SIGLAS[plant] || '');
-      const explicitValues = exactFields.map(field => normalizePlant(row?.[field] || '')).filter(Boolean);
-      if (!explicitValues.length) return true;
-      return explicitValues.some(key => key === plantKey || key === plantSigla);
-    });
-  };
-  const projectRows = data.tracking.filter(row => rowMatchesSelectedPlant(row, ['uhe', 'plant', 'usina']));
-  const staleTrackingRows = data.staleTracking.filter(row => rowMatchesSelectedPlant(row, ['uhe', 'plant', 'usina']));
-  const documentRows = data.documents.filter(row => rowMatchesSelectedPlant(row, ['plant', 'uhe', 'usina']));
-  const iacRows = data.iacs.filter(row => rowMatchesSelectedPlant(row, ['uhe', 'plant', 'usina']));
-  const staleIacRows = data.staleIacs.filter(row => rowMatchesSelectedPlant(row, ['uhe', 'plant', 'usina']));
-  const useDocsStatsFallback = !selectedPlants.length && !documentRows.length;
-  const docsTotal = documentRows.length || (useDocsStatsFallback ? (data.docsStats?.by_status || []).reduce((s, r) => s + Number(r.count || 0), 0) : 0);
-  const docsPublishedNoLink = documentRows.length
-    ? documentRows.filter(d => d.status === 'Publicado' && !d.document_link).length
-    : (useDocsStatsFallback ? Number(data.docsStats?.published_without_link || 0) : 0);
-  const activeTracking = projectRows.filter(p => !/encerrado/i.test(p.status || '')).length;
-  const activeIacs = iacRows.filter(i => !/cancel|hired|signed/i.test(i.status_current || '')).length;
-  const alertVacationCount = Number(data.alerts?.vacation_adp?.count || 0);
-  const alertDelegationCount = data.delegations.length;
-  const docsPublished = documentRows.length
-    ? documentRows.filter(d => d.status === 'Publicado').length
-    : (useDocsStatsFallback ? Number((data.docsStats?.by_status || []).find(r => r.status === 'Publicado')?.count || 0) : 0);
-  const docsPublishedPct = docsTotal ? Math.round((docsPublished / docsTotal) * 100) : 0;
-  const docsGauge = docsTotal ? (docsPublished / docsTotal) * 100 : 0;
-  const vacationsGauge = vacationPeople ? Math.min(100, (data.vacations.length / Math.max(vacationPeople, 1)) * 100) : 0;
-  const projectStaleCount = staleTrackingRows.length;
-  const iacStaleCount = staleIacRows.length;
-  const projectUpdatedCount = Math.max(0, projectRows.length - projectStaleCount);
-  const iacUpdatedCount = Math.max(0, iacRows.length - iacStaleCount);
-  const projectUpdatedPct = projectRows.length ? Math.round((projectUpdatedCount / projectRows.length) * 100) : 0;
-  const iacUpdatedPct = iacRows.length ? Math.round((iacUpdatedCount / iacRows.length) * 100) : 0;
-  const iacPriorityData = countBy(iacRows, 'priority').map(item => ({
-    ...item,
-    color: item.label === 'Priority' ? '#0070B8' : item.label === 'Hired' ? '#00AEEF' : '#64748B',
-  }));
-  const iacProcessData = IAC_STATUS_OPTIONS.map(option => ({
-    status: option.value,
-    count: iacRows.filter(i => i.status_current === option.value).length,
-  }));
-  const iacStatusData = countBy(iacRows, 'status_current').map(item => ({
-    ...item,
-    label: item.label.split(' - ').slice(1).join(' - ') || item.label,
-    color: item.label.startsWith('0') ? '#94A3B8' : item.label.startsWith('1') ? '#3B82F6' : item.label.startsWith('2') ? '#8B5CF6' : item.label.startsWith('3') ? '#F59E0B' : item.label.startsWith('4') ? '#F97316' : item.label.startsWith('5') ? '#0EA5E9' : item.label.startsWith('6') ? '#10B981' : item.label.startsWith('8') || item.label.startsWith('9') ? '#16A34A' : '#64748B',
-    bg: item.label.startsWith('0') ? '#F1F5F9' : item.label.startsWith('3') || item.label.startsWith('4') ? '#FFF7ED' : item.label.startsWith('6') || item.label.startsWith('8') || item.label.startsWith('9') ? '#ECFDF5' : '#EFF6FF',
-  }));
-  const iac2026 = iacRows.filter(i => isIacOpenedInYear(i, 2026));
-  const iacMonths = iac2026.map(i => iacElapsedMonths(i)).filter(v => v !== null);
-  const iacAvgMonths = iacMonths.length ? Math.round(iacMonths.reduce((sum, v) => sum + v, 0) / iacMonths.length) : null;
-  const iacMetaColor = iacAvgMonths === null ? '#10B981' : iacAvgMonths < 5 ? '#10B981' : iacAvgMonths < 6 ? '#0070B8' : iacAvgMonths < 7 ? '#F59E0B' : '#EF4444';
-  const projectNatureData = countBy(projectRows, 'natureza').map(item => ({
-    ...item,
-    color: item.label === 'CAPEX' ? '#0070B8' : item.label === 'OPEX' ? '#10B981' : '#F59E0B',
-  }));
-  const projectPlantData = sumBy(projectRows, 'uhe', 'valor_contrato').filter(item => item.label !== 'Geral');
-  const projectAllPlantData = plantValueData(projectRows);
-  const projectTotalContrato = projectRows.reduce((sum, p) => sum + parseMoney(p.valor_contrato), 0);
-  const projectTotalSi = projectRows.reduce((sum, p) => sum + parseMoney(p.valor_si), 0);
-  const projectRealizadoContrato = projectRows.reduce((sum, p) => sum + parseMoney(p.realizado_contrato), 0);
-  const projectRealizadoSi = projectRows.reduce((sum, p) => sum + parseMoney(p.realizado_si), 0);
-  const unpublishedDocs = documentRows.filter(d => d.status !== 'Publicado' || !d.document_link);
-  const alertDocCount = unpublishedDocs.length || (!selectedPlants.length ? Number(data.alerts?.doc_unpublished?.count || 0) : 0);
-  const metasAttention = data.metas
-    .filter(m => evidenceCount(m) === 0 || Number(m.achieved_value || 0) < 100)
-    .sort((a, b) => Number(a.achieved_value || 0) - Number(b.achieved_value || 0));
-  const upcomingVacations = [...data.vacations]
-    .filter(v => v.start_date || v.start)
-    .sort((a, b) => String(a.start_date || a.start).localeCompare(String(b.start_date || b.start)));
-  const projectRealizedPct = projectTotalContrato ? (projectRealizadoContrato / projectTotalContrato) * 100 : 0;
-  const projectStatusItems = [
-    { label: 'Total', value: projectRows.length, color: '#0b5cab' },
-    { label: 'Em Andamento', value: projectRows.filter(i => i.status === 'Em andamento').length, color: '#0EA5E9' },
-    { label: 'Encerramento', value: projectRows.filter(i => i.status === 'Em fase de encerramento').length, color: '#F59E0B' },
-    { label: 'Encerrados', value: projectRows.filter(i => i.status === 'Encerrado').length, color: '#94A3B8' },
-  ];
-  const mainNature = projectNatureData.sort((a, b) => b.value - a.value)[0]?.label || 'Sem natureza';
-  const mainPlant = [...projectPlantData].sort((a, b) => b.value - a.value)[0]?.label || compactLabel(projectRows[0]?.uhe, 'Sem usina');
-  const mainPriority = [...iacPriorityData].sort((a, b) => b.value - a.value)[0]?.label || 'Sem prioridade';
-  const mainIacStatus = [...iacStatusData].sort((a, b) => b.value - a.value)[0]?.label || 'Sem status';
-  const milestoneItems = [
-    ...unpublishedDocs.slice(0, 3).map(d => ({
-      title: d.subject || d.code || 'Documento pendente',
-      sub: `${d.code || 'Documento'} - ${d.status || 'em revisao'}`,
-      color: '#6366F1',
-    })),
-    ...metasAttention.slice(0, 3).map(m => ({
-      title: m.goal_name || m.name || `Meta ${m.meta_number || ''}`,
-      sub: `${pct(m.achieved_value || 0)} realizado${evidenceCount(m) === 0 ? ' - sem evidencia' : ''}`,
-      color: '#10B981',
-    })),
-    ...upcomingVacations.slice(0, 3).map(v => ({
-      title: v.user_name || v.name || 'Ferias planejadas',
-      sub: `${v.start_date || v.start || '-'} - ${v.days || 0} dias`,
-      color: '#F59E0B',
-    })),
-  ];
-  const attentionItems = [
-    { label: 'Documentos', sub: 'revisao e publicacao', value: alertDocCount, color: '#6366F1' },
-    { label: 'Projetos', sub: 'atualizacoes pendentes', value: projectStaleCount, color: '#0070B8' },
-    { label: 'IACs', sub: 'acoes e revisoes', value: iacStaleCount, color: '#F59E0B' },
-  ];
-  const pendingTotal = attentionItems.reduce((sum, item) => sum + item.value, 0);
-  const projectActionItems = [
-    ...unpublishedDocs.slice(0, 2).map(d => ({ title: d.subject || d.code || 'Documento pendente', sub: d.status || 'Em elaboracao', date: d.code || '' })),
-    ...staleTrackingRows.slice(0, 2).map(p => ({ title: p.projeto || p.pp_contrato || 'Projeto sem revisao', sub: p.status || 'Atualizacao pendente', date: p.vencimento_txt || '' })),
-  ];
-  const iacActionItems = iacRows.slice(0, 3).map(i => ({
-    title: i.project || i.iac_code || 'IAC em andamento',
-    sub: i.status_current?.split(' - ').slice(1).join(' - ') || i.status_current || 'Sem status',
-    date: i.validity || '',
-  }));
+  // Pipeline derivado — memoizado para não recalcular em renders que não mudam
+  // `data`/`selectedPlants` (ex.: AlertBell, eventos de equipamentos no App pai).
+  const {
+    metasDone, metasAvg, projectRows, staleTrackingRows, iacRows,
+    docsTotal, docsPublished, docsPublishedPct,
+    projectStaleCount, iacStaleCount, projectUpdatedPct, iacUpdatedPct,
+    iacPriorityData, iacProcessData, iac2026, iacAvgMonths, iacMetaColor,
+    projectNatureData, projectAllPlantData,
+    projectTotalContrato, projectTotalSi, projectRealizadoContrato, projectRealizadoSi,
+    projectStatusItems, attentionItems, pendingTotal,
+  } = useMemo(() => {
+    const rowMatchesSelectedPlant = (row, exactFields = ['uhe', 'plant', 'usina']) => {
+      if (!selectedPlants.length) return true;
+      return selectedPlants.some(plant => {
+        const plantKey = normalizePlant(plant);
+        const plantSigla = normalizePlant(PROJECT_PLANT_SIGLAS[plant] || '');
+        const explicitValues = exactFields.map(field => normalizePlant(row?.[field] || '')).filter(Boolean);
+        if (!explicitValues.length) return true;
+        return explicitValues.some(key => key === plantKey || key === plantSigla);
+      });
+    };
+    const projectRows = data.tracking.filter(row => rowMatchesSelectedPlant(row, ['uhe', 'plant', 'usina']));
+    const staleTrackingRows = data.staleTracking.filter(row => rowMatchesSelectedPlant(row, ['uhe', 'plant', 'usina']));
+    const documentRows = data.documents.filter(row => rowMatchesSelectedPlant(row, ['plant', 'uhe', 'usina']));
+    const iacRows = data.iacs.filter(row => rowMatchesSelectedPlant(row, ['uhe', 'plant', 'usina']));
+    const staleIacRows = data.staleIacs.filter(row => rowMatchesSelectedPlant(row, ['uhe', 'plant', 'usina']));
+    const useDocsStatsFallback = !selectedPlants.length && !documentRows.length;
+    const docsTotal = documentRows.length || (useDocsStatsFallback ? (data.docsStats?.by_status || []).reduce((s, r) => s + Number(r.count || 0), 0) : 0);
+    const docsPublished = documentRows.length
+      ? documentRows.filter(d => d.status === 'Publicado').length
+      : (useDocsStatsFallback ? Number((data.docsStats?.by_status || []).find(r => r.status === 'Publicado')?.count || 0) : 0);
+    const docsPublishedPct = docsTotal ? Math.round((docsPublished / docsTotal) * 100) : 0;
+    const projectStaleCount = staleTrackingRows.length;
+    const iacStaleCount = staleIacRows.length;
+    const projectUpdatedCount = Math.max(0, projectRows.length - projectStaleCount);
+    const iacUpdatedCount = Math.max(0, iacRows.length - iacStaleCount);
+    const projectUpdatedPct = projectRows.length ? Math.round((projectUpdatedCount / projectRows.length) * 100) : 0;
+    const iacUpdatedPct = iacRows.length ? Math.round((iacUpdatedCount / iacRows.length) * 100) : 0;
+    const iacPriorityData = countBy(iacRows, 'priority').map(item => ({
+      ...item,
+      color: item.label === 'Priority' ? '#0070B8' : item.label === 'Hired' ? '#00AEEF' : '#64748B',
+    }));
+    const iacProcessData = IAC_STATUS_OPTIONS.map(option => ({
+      status: option.value,
+      count: iacRows.filter(i => i.status_current === option.value).length,
+    }));
+    const iac2026 = iacRows.filter(i => isIacOpenedInYear(i, 2026));
+    const iacMonths = iac2026.map(i => iacElapsedMonths(i)).filter(v => v !== null);
+    const iacAvgMonths = iacMonths.length ? Math.round(iacMonths.reduce((sum, v) => sum + v, 0) / iacMonths.length) : null;
+    const iacMetaColor = iacAvgMonths === null ? '#10B981' : iacAvgMonths < 5 ? '#10B981' : iacAvgMonths < 6 ? '#0070B8' : iacAvgMonths < 7 ? '#F59E0B' : '#EF4444';
+    const projectNatureData = countBy(projectRows, 'natureza').map(item => ({
+      ...item,
+      color: item.label === 'CAPEX' ? '#0070B8' : item.label === 'OPEX' ? '#10B981' : '#F59E0B',
+    }));
+    const projectAllPlantData = plantValueData(projectRows);
+    const projectTotalContrato = projectRows.reduce((sum, p) => sum + parseMoney(p.valor_contrato), 0);
+    const projectTotalSi = projectRows.reduce((sum, p) => sum + parseMoney(p.valor_si), 0);
+    const projectRealizadoContrato = projectRows.reduce((sum, p) => sum + parseMoney(p.realizado_contrato), 0);
+    const projectRealizadoSi = projectRows.reduce((sum, p) => sum + parseMoney(p.realizado_si), 0);
+    const unpublishedDocs = documentRows.filter(d => d.status !== 'Publicado' || !d.document_link);
+    const alertDocCount = unpublishedDocs.length || (!selectedPlants.length ? Number(data.alerts?.doc_unpublished?.count || 0) : 0);
+    const projectStatusItems = [
+      { label: 'Total', value: projectRows.length, color: '#0b5cab' },
+      { label: 'Em Andamento', value: projectRows.filter(i => i.status === 'Em andamento').length, color: '#0EA5E9' },
+      { label: 'Encerramento', value: projectRows.filter(i => i.status === 'Em fase de encerramento').length, color: '#F59E0B' },
+      { label: 'Encerrados', value: projectRows.filter(i => i.status === 'Encerrado').length, color: '#94A3B8' },
+    ];
+    const attentionItems = [
+      { label: 'Documentos', sub: 'revisao e publicacao', value: alertDocCount, color: '#6366F1' },
+      { label: 'Projetos', sub: 'atualizacoes pendentes', value: projectStaleCount, color: '#0070B8' },
+      { label: 'IACs', sub: 'acoes e revisoes', value: iacStaleCount, color: '#F59E0B' },
+    ];
+    const pendingTotal = attentionItems.reduce((sum, item) => sum + item.value, 0);
+
+    return {
+      metasDone: data.metas.filter(m => Number(m.achieved_value || 0) >= 100).length,
+      metasAvg: weightedAchievement(data.metas),
+      projectRows, staleTrackingRows, iacRows,
+      docsTotal, docsPublished, docsPublishedPct,
+      projectStaleCount, iacStaleCount, projectUpdatedPct, iacUpdatedPct,
+      iacPriorityData, iacProcessData, iac2026, iacAvgMonths, iacMetaColor,
+      projectNatureData, projectAllPlantData,
+      projectTotalContrato, projectTotalSi, projectRealizadoContrato, projectRealizadoSi,
+      projectStatusItems, attentionItems, pendingTotal,
+    };
+  }, [data, selectedPlants]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: 'calc(100vh - 32px)', maxHeight: 'calc(100vh - 32px)', overflow: 'hidden', paddingBottom: 0 }}>

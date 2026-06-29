@@ -532,6 +532,32 @@ export default function ProjectDetail({ onEdit }) {
     return acc;
   }, []), [chartData]);
 
+  // Charts tab data — memoized so it's not recomputed on every render (entries can be large)
+  const donutData = useMemo(() => CATEGORIES.map(cat => ({
+    name: cat,
+    value: chartData.reduce((s, d) => s + (d['Previsão'] && entries.filter(e=>e.category===cat&&e.type==='Forecast'&&parseInt(e.year)===selectedYear&&parseInt(e.month)===(MONTHS_PT.indexOf(d.month)+1)).reduce((ss,e)=>ss+parseFloat(e.value||0),0) || 0), 0),
+  })).filter(d => d.value > 0), [chartData, entries, selectedYear]);
+
+  const execData = useMemo(() => CATEGORIES.map(cat => {
+    const fc = entries.filter(e=>e.category===cat&&e.type==='Forecast'&&parseInt(e.year)===selectedYear).reduce((s,e)=>s+parseFloat(e.value||0),0);
+    const ac = entries.filter(e=>e.category===cat&&e.type==='Actual'&&parseInt(e.year)===selectedYear).reduce((s,e)=>s+parseFloat(e.value||0),0);
+    return { name: cat, Forecast: fc, Realizado: ac, pct: fc > 0 ? ((ac/fc)*100).toFixed(1) : '0.0' };
+  }), [entries, selectedYear]);
+
+  const budgetVsForecast = useMemo(() => CATEGORIES.map(cat => {
+    const bg = entries.filter(e=>e.category===cat&&e.type==='Budget'&&parseInt(e.year)===selectedYear).reduce((s,e)=>s+parseFloat(e.value||0),0);
+    const fc = entries.filter(e=>e.category===cat&&e.type==='Forecast'&&parseInt(e.year)===selectedYear).reduce((s,e)=>s+parseFloat(e.value||0),0);
+    return { name: cat, Budget: bg, Forecast: fc };
+  }), [entries, selectedYear]);
+
+  const combinedChartData = useMemo(() => chartData.map((d, i) => ({
+    ...d,
+    BudgetAcum:   sCurveData[i]?.Budget    || 0,
+    PrevisãoAcum: sCurveData[i]?.['Previsão'] || 0,
+    MetaAcum:     sCurveData[i]?.Meta       || 0,
+    PoolAcum:     sCurveData[i]?.Pool       || 0,
+  })), [chartData, sCurveData]);
+
   // Handlers
   const handleAssign = async (userId) => {
     try { await api.post(`/projects/${id}/engineers`, { user_id: userId }); await fetchProject(); toast('Engenheiro designado', 'success'); }
@@ -795,35 +821,7 @@ export default function ProjectDetail({ onEdit }) {
         </>
       )}
       {mainTab==='charts' && !isConsolidatedYear && (() => {
-        // Donut data: total by category for Forecast
-        const donutData = CATEGORIES.map(cat => ({
-          name: cat,
-          value: chartData.reduce((s, d) => s + (d['Previsão'] && entries.filter(e=>e.category===cat&&e.type==='Forecast'&&parseInt(e.year)===selectedYear&&parseInt(e.month)===(MONTHS_PT.indexOf(d.month)+1)).reduce((ss,e)=>ss+parseFloat(e.value||0),0) || 0), 0),
-        })).filter(d => d.value > 0);
         const CAT_COLORS = ['#0EA5E9', '#8B5CF6', '#F59E0B'];
-
-        // Execution: Realizado / Forecast per category
-        const execData = CATEGORIES.map(cat => {
-          const fc = entries.filter(e=>e.category===cat&&e.type==='Forecast'&&parseInt(e.year)===selectedYear).reduce((s,e)=>s+parseFloat(e.value||0),0);
-          const ac = entries.filter(e=>e.category===cat&&e.type==='Actual'&&parseInt(e.year)===selectedYear).reduce((s,e)=>s+parseFloat(e.value||0),0);
-          return { name: cat, Forecast: fc, Realizado: ac, pct: fc > 0 ? ((ac/fc)*100).toFixed(1) : '0.0' };
-        });
-
-        // Budget vs Forecast comparison per category
-        const budgetVsForecast = CATEGORIES.map(cat => {
-          const bg = entries.filter(e=>e.category===cat&&e.type==='Budget'&&parseInt(e.year)===selectedYear).reduce((s,e)=>s+parseFloat(e.value||0),0);
-          const fc = entries.filter(e=>e.category===cat&&e.type==='Forecast'&&parseInt(e.year)===selectedYear).reduce((s,e)=>s+parseFloat(e.value||0),0);
-          return { name: cat, Budget: bg, Forecast: fc };
-        });
-
-        // Combined data for main chart — Previsão absorve Actual+Forecast
-        const combinedChartData = chartData.map((d, i) => ({
-          ...d,
-          BudgetAcum:   sCurveData[i]?.Budget    || 0,
-          PrevisãoAcum: sCurveData[i]?.['Previsão'] || 0,
-          MetaAcum:     sCurveData[i]?.Meta       || 0,
-          PoolAcum:     sCurveData[i]?.Pool       || 0,
-        }));
 
         return (
         <div style={{display:'flex',flexDirection:'column',gap:20}}>

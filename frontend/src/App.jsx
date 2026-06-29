@@ -1,5 +1,5 @@
 ﻿import Icon from './components/ui/Icon.jsx';
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate, NavLink } from 'react-router-dom';
 import { useAuth, useRole } from './context/AuthContext.jsx';
 import { useSettings } from './context/SettingsContext.jsx';
@@ -7,31 +7,33 @@ import Sidebar from './components/layout/Sidebar.jsx';
 import { ToastProvider, useToast } from './components/ui/Toast.jsx';
 import Login from './pages/Login.jsx';
 import ResetPassword from './pages/ResetPassword.jsx';
-import HomePage from './pages/HomePage.jsx';
-import Dashboard from './pages/Dashboard.jsx';
-import ProjectsPage from './pages/ProjectsPage.jsx';
-import ProjectDetail from './components/ProjectDetail.jsx';
 import ProjectForm from './components/ProjectForm.jsx';
-import Profile from './components/Profile.jsx';
-import SettingsPage from './pages/SettingsPage.jsx';
-import PolosPage from './pages/PolosPage.jsx';
-import ReportPage from './pages/ReportPage.jsx';
-import TutorialPage from './pages/TutorialPage.jsx';
-import FeedbackPage from './pages/FeedbackPage.jsx';
-import FeedbackInbox from './pages/FeedbackInbox.jsx';
-import VacationsPage from './pages/VacationsPage.jsx';
-import MetasPage from './pages/MetasPage.jsx';
-import WorkloadPage from './pages/WorkloadPage.jsx';
-import DocumentsPage from './pages/DocumentsPage.jsx';
-import PMSPage from './pages/PMSPage.jsx';
-import IACsPage from './pages/IACsPage.jsx';
-import ProjectsTrackingPage from './pages/ProjectsTrackingPage.jsx';
-import ScheduleProjectPage from './pages/ScheduleProjectPage.jsx';
-import EquipamentosPage from './pages/EquipamentosPage.jsx';
-import EquipamentosAdminPage from './pages/EquipamentosAdminPage.jsx';
-import AdminPanel from './components/admin/AdminPanel.jsx';
 import AlertBell from './components/ui/AlertBell.jsx';
 import api from './utils/api.js';
+
+// Route-level code splitting — these pages aren't needed for the initial load
+const HomePage               = lazy(() => import('./pages/HomePage.jsx'));
+const Dashboard               = lazy(() => import('./pages/Dashboard.jsx'));
+const ProjectsPage            = lazy(() => import('./pages/ProjectsPage.jsx'));
+const ProjectDetail           = lazy(() => import('./components/ProjectDetail.jsx'));
+const Profile                 = lazy(() => import('./components/Profile.jsx'));
+const SettingsPage            = lazy(() => import('./pages/SettingsPage.jsx'));
+const PolosPage                = lazy(() => import('./pages/PolosPage.jsx'));
+const ReportPage              = lazy(() => import('./pages/ReportPage.jsx'));
+const TutorialPage            = lazy(() => import('./pages/TutorialPage.jsx'));
+const FeedbackPage            = lazy(() => import('./pages/FeedbackPage.jsx'));
+const FeedbackInbox           = lazy(() => import('./pages/FeedbackInbox.jsx'));
+const VacationsPage           = lazy(() => import('./pages/VacationsPage.jsx'));
+const MetasPage                = lazy(() => import('./pages/MetasPage.jsx'));
+const WorkloadPage            = lazy(() => import('./pages/WorkloadPage.jsx'));
+const DocumentsPage           = lazy(() => import('./pages/DocumentsPage.jsx'));
+const PMSPage                  = lazy(() => import('./pages/PMSPage.jsx'));
+const IACsPage                 = lazy(() => import('./pages/IACsPage.jsx'));
+const ProjectsTrackingPage    = lazy(() => import('./pages/ProjectsTrackingPage.jsx'));
+const ScheduleProjectPage     = lazy(() => import('./pages/ScheduleProjectPage.jsx'));
+const EquipamentosPage        = lazy(() => import('./pages/EquipamentosPage.jsx'));
+const EquipamentosAdminPage   = lazy(() => import('./pages/EquipamentosAdminPage.jsx'));
+const AdminPanel              = lazy(() => import('./components/admin/AdminPanel.jsx'));
 
 // ── Error Boundary ──────────────────────────────────────────────────
 class ErrorBoundary extends React.Component {
@@ -1309,6 +1311,7 @@ export default function App() {
         />
 
         <main className={`page-body ${isHomePage ? 'home-page-body' : ''}`}>
+          <Suspense fallback={<div className="loading-spinner" style={{ minHeight: '60vh' }}><div className="spinner" /></div>}>
           <Routes>
             <Route path="/login" element={<Navigate to="/" replace />} />
 
@@ -1368,6 +1371,7 @@ export default function App() {
             <Route path="/engineering/equipamentos-admin" element={<RequireAuth><EquipamentosAdminPage /></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </Suspense>
         </main>
       </div>
 

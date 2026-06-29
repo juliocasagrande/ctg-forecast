@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRole } from '../context/AuthContext.jsx';
 import { formatBRLShort } from '../utils/format.js';
@@ -32,6 +33,22 @@ export default function ProjectsList({ projects, onEditProject, onProjectsChange
     } catch { toast('Erro ao excluir', 'error'); }
   };
 
+  // Group projects by plant in canonical order
+  const grouped = useMemo(() => {
+    const result = [];
+    const seen   = new Set();
+
+    for (const plant of ORDERED_PLANTS) {
+      const pjs = projects.filter(p => (p.plants || []).includes(plant));
+      if (pjs.length > 0) result.push({ plant, projects: pjs });
+      pjs.forEach(p => seen.add(p.id));
+    }
+    // Catch any unassigned projects
+    const unassigned = projects.filter(p => !seen.has(p.id));
+    if (unassigned.length > 0) result.push({ plant: null, projects: unassigned });
+    return result;
+  }, [projects]);
+
   if (!projects || projects.length === 0) {
     return (
       <div className="empty-state">
@@ -40,19 +57,6 @@ export default function ProjectsList({ projects, onEditProject, onProjectsChange
       </div>
     );
   }
-
-  // Group projects by plant in canonical order
-  const grouped = [];
-  const seen    = new Set();
-
-  for (const plant of ORDERED_PLANTS) {
-    const pjs = projects.filter(p => (p.plants || []).includes(plant));
-    if (pjs.length > 0) grouped.push({ plant, projects: pjs });
-    pjs.forEach(p => seen.add(p.id));
-  }
-  // Catch any unassigned projects
-  const unassigned = projects.filter(p => !seen.has(p.id));
-  if (unassigned.length > 0) grouped.push({ plant: null, projects: unassigned });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
