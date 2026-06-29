@@ -116,22 +116,10 @@ router.get('/data', async (req, res) => {
       LIMIT 200
     `);
 
-    // Index monthly/notes rows by project_id once, instead of filtering per project (was O(n²))
-    const monthlyByProject = new Map();
-    for (const r of monthlyRes.rows) {
-      const arr = monthlyByProject.get(r.project_id);
-      if (arr) arr.push(r); else monthlyByProject.set(r.project_id, [r]);
-    }
-    const notesByProject = new Map();
-    for (const r of notesRes.rows) {
-      const arr = notesByProject.get(r.project_id);
-      if (arr) arr.push(r); else notesByProject.set(r.project_id, [r]);
-    }
-
     // Assemble per project
     const projects = projRes.rows.map(p => {
-      const monthly = monthlyByProject.get(p.id) || [];
-      const notes   = (notesByProject.get(p.id) || []).slice(0,5);
+      const monthly = monthlyRes.rows.filter(r => r.project_id===p.id);
+      const notes   = notesRes.rows.filter(r => r.project_id===p.id).slice(0,5);
       const charts  = {};
       // Calculate ACT+FORECAST correctly: for each month, use Actual if > 0, else Forecast
       let actForecastTotal = 0;

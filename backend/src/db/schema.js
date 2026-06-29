@@ -853,7 +853,6 @@ await client.query(`
       CREATE INDEX IF NOT EXISTS idx_documents_year_responsible      ON documents(year, responsible);
       CREATE INDEX IF NOT EXISTS idx_metas_user_year                 ON metas(user_id, year);
       CREATE INDEX IF NOT EXISTS idx_forecast_entries_project        ON forecast_entries(project_id);
-      CREATE INDEX IF NOT EXISTS idx_forecast_entries_project_year   ON forecast_entries(project_id, year);
     `);
 
     console.log('✅ Migrations OK');
