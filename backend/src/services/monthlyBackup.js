@@ -337,9 +337,11 @@ async function sendBackupEmail({ filePath, date = new Date(), skipped = false })
 async function runScheduledBackup(date = new Date()) {
   try {
     const result = await createOperationalBackup({ date, overwrite: false });
-    console.log(result.skipped
-      ? `[backup] Backup mensal ja existe: ${result.filePath}`
-      : `[backup] Backup mensal gerado: ${result.filePath}`);
+    if (result.skipped) {
+      console.log(`[backup] Backup mensal ja existe, e-mail nao reenviado: ${result.filePath}`);
+      return;
+    }
+    console.log(`[backup] Backup mensal gerado: ${result.filePath}`);
 
     const emailResult = await sendBackupEmail({ ...result, date });
     if (emailResult.sent) {
