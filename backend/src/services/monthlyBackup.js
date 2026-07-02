@@ -8,6 +8,7 @@ import { enviarEmail } from '../utils/mailer.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_BACKUP_DIR = path.resolve(__dirname, '../../../backups');
 const DAY_MS = 24 * 60 * 60 * 1000;
+const BACKUP_EMAIL_SENT_SETTING_KEY = 'operational_backup_email_sent_period';
 
 function resolveBackupDir() {
   return process.env.BACKUP_DIR || DEFAULT_BACKUP_DIR;
@@ -32,6 +33,28 @@ function monthStamp(date = new Date()) {
 
 function backupFilePath(date = new Date()) {
   return path.join(resolveBackupDir(), `CTG_Backup_Operacional_${monthStamp(date)}.xlsx`);
+}
+
+async function getLastSentBackupPeriod() {
+  const result = await pool.query(
+    'SELECT value FROM system_settings WHERE key = $1',
+    [BACKUP_EMAIL_SENT_SETTING_KEY]
+  );
+  return result.rows[0]?.value || null;
+}
+
+async function markBackupEmailSent(period) {
+  await pool.query(`
+    INSERT INTO system_settings (key, value, updated_at)
+    VALUES ($1, $2, NOW())
+    ON CONFLICT (key) DO UPDATE
+      SET value = EXCLUDED.value,
+          updated_at = NOW()
+  `, [BACKUP_EMAIL_SENT_SETTING_KEY, period]);
+}
+
+async function wasBackupEmailSent(period) {
+  return (await getLastSentBackupPeriod()) === period;
 }
 
 function nextMonthlyRunDate(from = new Date()) {
@@ -335,16 +358,24 @@ async function sendBackupEmail({ filePath, date = new Date(), skipped = false })
 }
 
 async function runScheduledBackup(date = new Date()) {
+  const period = monthStamp(date);
+
   try {
-    const result = await createOperationalBackup({ date, overwrite: false });
-    if (result.skipped) {
-      console.log(`[backup] Backup mensal ja existe, e-mail nao reenviado: ${result.filePath}`);
+    if (await wasBackupEmailSent(period)) {
+      console.log(`[backup] E-mail mensal ja enviado para o periodo ${period}; ignorando startup/schedule.`);
       return;
     }
-    console.log(`[backup] Backup mensal gerado: ${result.filePath}`);
+
+    const result = await createOperationalBackup({ date, overwrite: false });
+    if (result.skipped) {
+      console.log(`[backup] Backup mensal ja existe: ${result.filePath}`);
+    } else {
+      console.log(`[backup] Backup mensal gerado: ${result.filePath}`);
+    }
 
     const emailResult = await sendBackupEmail({ ...result, date });
     if (emailResult.sent) {
+      await markBackupEmailSent(period);
       console.log(`[backup] E-mail mensal enviado para: ${emailResult.recipients.join(', ')}`);
     }
   } catch (err) {

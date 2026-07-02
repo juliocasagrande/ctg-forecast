@@ -69,7 +69,7 @@ class ErrorBoundary extends React.Component {
                 padding: '10px 24px', borderRadius: 8, border: '1.5px solid #CBD5E1', cursor: 'pointer',
                 background: '#fff', color: '#475569', fontWeight: 600, fontSize: '0.9rem',
               }}>
-                Ir ao Inicio
+                Ir ao Início
               </button>
             </div>
             {this.state.error && (
@@ -218,7 +218,7 @@ function PlantFilter({ activePlants, selected, onChange }) {
             </span>
           )}
           <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', lineHeight: 1 }}>
-            {open ? '▲' : '▼'}
+            {open ? '\u25b2' : '\u25bc'}
           </span>
         </span>
       </button>
@@ -341,7 +341,7 @@ function ProjectFilter({ projects, plantFilter, selected, onChange }) {
               ×
             </span>
           )}
-          <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', lineHeight: 1 }}>{open ? '▲' : '▼'}</span>
+          <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', lineHeight: 1 }}>{open ? '\u25b2' : '\u25bc'}</span>
         </span>
       </button>
 
@@ -410,7 +410,7 @@ function MobileBottomNav({ onLogout, isPlanejador, unreadCount = 0 }) {
     <nav className="mobile-bottom-nav">
       <NavLink to="/" className={`mobile-bottom-nav-item ${isActive('/') ? 'active' : ''}`}>
         <Icon name="house-chimney" />
-        <span>Inicio</span>
+        <span>Início</span>
       </NavLink>
 
       <NavLink to="/metas" className={`mobile-bottom-nav-item ${isActive('/metas') ? 'active' : ''}`}>
@@ -418,7 +418,7 @@ function MobileBottomNav({ onLogout, isPlanejador, unreadCount = 0 }) {
       </NavLink>
       <NavLink to="/vacations" className={`mobile-bottom-nav-item ${isActive('/vacations') ? 'active' : ''}`}>
         <Icon name="calendar-days" />
-        <span>Ferias</span>
+        <span>Férias</span>
       </NavLink>
       <NavLink to="/documents" className={`mobile-bottom-nav-item ${isActive('/documents') ? 'active' : ''}`}>
         <Icon name="file-lines" />
@@ -577,7 +577,7 @@ function AreaFilter({ value, onChange }) {
           letterSpacing: '0.08em', fontFamily: 'var(--font-body)',
           color: value ? 'var(--ctg-blue)' : 'var(--ctg-navy)',
           display: 'block', lineHeight: 1,
-        }}>Ãrea</span>
+        }}>Área</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.72rem',
           fontWeight: value ? 600 : 400, color: value ? 'var(--ctg-blue)' : 'var(--text-muted)',
           fontFamily: 'var(--font-body)', whiteSpace: 'nowrap' }}>
@@ -588,7 +588,7 @@ function AreaFilter({ value, onChange }) {
                 width:14,height:14,borderRadius:'50%',background:'var(--ctg-blue)',color:'#fff',
                 fontSize:'0.6rem',fontWeight:700,lineHeight:1,flexShrink:0 }}>×</span>
           )}
-          <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', lineHeight: 1 }}>{open ? 'â–²' : 'â–¼'}</span>
+          <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', lineHeight: 1 }}>{open ? '\u25b2' : '\u25bc'}</span>
         </span>
       </button>
       {open && (
@@ -598,7 +598,7 @@ function AreaFilter({ value, onChange }) {
           minWidth:160, zIndex:200, overflow:'hidden' }}>
           <div style={{ padding:'9px 14px', borderBottom:'1px solid var(--border)',
             background:'var(--ctg-navy)', color:'#fff',
-            fontSize:'0.72rem', fontWeight:700, letterSpacing:'0.05em' }}>ÃREA</div>
+            fontSize:'0.72rem', fontWeight:700, letterSpacing:'0.05em' }}>ÁREA</div>
           {AREA_OPTIONS_LIST.map(opt => (
             <button key={opt.value} onClick={() => { onChange(opt.value); setOpen(false); }}
               style={{ width:'100%', textAlign:'left', padding:'8px 14px',
@@ -718,7 +718,7 @@ function MobileFilterModal({
 }
 
 function getPageMeta(pathname) {
-  if (pathname === '/') return { title: 'Inicio', sub: 'Resumo operacional' };
+  if (pathname === '/') return { title: 'Início', sub: 'Resumo operacional' };
   if (pathname === '/projects') return { title: 'Projetos', sub: null };
   if (pathname === '/admin') return { title: 'Administração', sub: 'Gestão de Usuários' };
   if (pathname === '/profile') return { title: 'Meu Perfil', sub: null };
