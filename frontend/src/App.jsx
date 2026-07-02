@@ -27,6 +27,7 @@ const MetasPage                = lazy(() => import('./pages/MetasPage.jsx'));
 const WorkloadPage            = lazy(() => import('./pages/WorkloadPage.jsx'));
 const DocumentsPage           = lazy(() => import('./pages/DocumentsPage.jsx'));
 const PMSPage                  = lazy(() => import('./pages/PMSPage.jsx'));
+const SharePointHubPage        = lazy(() => import('./pages/SharePointHubPage.jsx'));
 const IACsPage                 = lazy(() => import('./pages/IACsPage.jsx'));
 const ProjectsTrackingPage    = lazy(() => import('./pages/ProjectsTrackingPage.jsx'));
 const ScheduleProjectPage     = lazy(() => import('./pages/ScheduleProjectPage.jsx'));
@@ -733,6 +734,7 @@ function getPageMeta(pathname) {
   if (pathname === '/workload') return { title: 'Controle de Carga', sub: null };
   if (pathname === '/documents') return { title: 'Controle de Documentos', sub: null };
   if (pathname === '/pms') return { title: 'PMS — Documentos Técnicos', sub: 'Políticas, Instruções, Guias e Manuais de Manutenção' };
+  if (pathname === '/sharepoint-engenharia') return { title: 'SharePoint Engenharia', sub: 'Mapa de pastas e caminhos' };
   if (pathname === '/lists/iacs') return { title: 'IACs 2026'};
   if (pathname === '/lists/projects-tracking') return { title: 'Acompanhamento de Projetos', sub: 'Relatório mensal — contratos em andamento' };
   if (pathname === '/lists/schedule-project') return { title: 'Cronograma Project', sub: 'Gantt, vínculos e impressão em PDF' };
@@ -1340,6 +1342,7 @@ export default function App() {
              <Route path="/workload" element={<RequireAuth><WorkloadPage /></RequireAuth>} />
              <Route path="/documents" element={<RequireAuth><DocumentsPage /></RequireAuth>} />
              <Route path="/pms" element={<RequireAuth><PMSPage /></RequireAuth>} />
+            <Route path="/sharepoint-engenharia" element={<RequireAuth><SharePointHubPage /></RequireAuth>} />
             <Route path="/lists/iacs" element={<RequireAuth><IACsPage /></RequireAuth>} />
             <Route path="/lists/projects-tracking" element={<RequireAuth><ProjectsTrackingPage /></RequireAuth>} />
             <Route path="/lists/schedule-project" element={<RequireAuth><ScheduleProjectPage /></RequireAuth>} />
@@ -1376,6 +1379,7 @@ export default function App() {
     </ErrorBoundary>
   );
 }
+
 
 
 

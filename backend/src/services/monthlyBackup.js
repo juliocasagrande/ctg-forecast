@@ -8,6 +8,7 @@ import { enviarEmail } from '../utils/mailer.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_BACKUP_DIR = path.resolve(__dirname, '../../../backups');
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_TIMEOUT_MS = 2_147_483_647;
 const BACKUP_EMAIL_SENT_SETTING_KEY = 'operational_backup_email_sent_period';
 
 function resolveBackupDir() {
@@ -400,24 +401,42 @@ export function startMonthlyBackupSchedule({ runIfDueOnStartup = true } = {}) {
   }
 
   let timer = null;
+  let stopped = false;
+
+  const setSafeTimeout = (callback, delay) => {
+    timer = setTimeout(callback, Math.min(delay, MAX_TIMEOUT_MS));
+    if (typeof timer.unref === 'function') timer.unref();
+  };
+
   const scheduleNext = () => {
     const now = new Date();
     const next = nextMonthlyRunDate(now);
-    const delay = Math.max(1000, next.getTime() - now.getTime());
 
-    timer = setTimeout(async () => {
-      await runScheduledBackup(new Date());
-      scheduleNext();
-    }, delay);
+    const waitUntilNext = () => {
+      if (stopped) return;
 
-    if (typeof timer.unref === 'function') timer.unref();
+      const remaining = next.getTime() - Date.now();
+      if (remaining > MAX_TIMEOUT_MS) {
+        setSafeTimeout(waitUntilNext, MAX_TIMEOUT_MS);
+        return;
+      }
+
+      setSafeTimeout(async () => {
+        await runScheduledBackup(new Date());
+        scheduleNext();
+      }, Math.max(1000, remaining));
+    };
+
     console.log(`[backup] Proximo backup mensal: ${next.toLocaleString('pt-BR')}`);
+    waitUntilNext();
   };
 
   scheduleNext();
   return {
     stop() {
+      stopped = true;
       if (timer) clearTimeout(timer);
     },
   };
 }
+

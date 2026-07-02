@@ -33,7 +33,6 @@ import vacationsRouter   from './routes/vacations.js';
 import metasRouter       from './routes/metas.js';
 import monthlyReportRouter from './routes/monthly-report.js';
 import listsRouter          from './routes/lists.js';
-import chatRouter           from './routes/chat.js';
 import equipamentosRouter   from './routes/equipamentos.js';
 import scheduleProjectsRouter from './routes/schedule-projects.js';
 import workloadRouter       from './routes/workload.js';
@@ -106,7 +105,6 @@ export function createApp({ disableRateLimit = false } = {}) {
    app.use('/api/workload',   workloadRouter);
   app.use('/api/pms',        pmsRouter);
    app.use('/api/lists',       listsRouter);
-  app.use('/api/chat',        chatRouter);
   app.use('/api/equipamentos', equipamentosRouter);
   app.use('/api/schedule-projects', scheduleProjectsRouter);
 
@@ -120,9 +118,6 @@ export function createApp({ disableRateLimit = false } = {}) {
 
   /* â”€â”€ FRONTEND SPA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   const publicPath = path.join(__dirname, '../public');
-  app.get('/', (_, res) => {
-    res.sendFile(path.join(publicPath, 'engenharia-eletromecanica.html'));
-  });
   app.use(express.static(publicPath));
   app.get('*', (req, res) => {
     if (!req.path.startsWith('/api')) {
@@ -135,4 +130,5 @@ export function createApp({ disableRateLimit = false } = {}) {
 
   return app;
 }
+
 

@@ -29,7 +29,7 @@ api.interceptors.response.use(
     if (err.response?.status === 401) {
       const url = err.config?.url || '';
       const isAuthCheck = url.includes('/auth/me');
-      const publicPaths = ['/login', '/reset-password', '/engenharia-eletromecanica.html', '/'];
+      const publicPaths = ['/login', '/reset-password', '/'];
       const isPublicPath = publicPaths.includes(window.location.pathname);
       if (!isAuthCheck && !isPublicPath) {
         window.location.href = '/';
@@ -40,4 +40,5 @@ api.interceptors.response.use(
 );
 
 export default api;
+
 
