@@ -12,7 +12,7 @@ import AlertBell from './components/ui/AlertBell.jsx';
 import api from './utils/api.js';
 
 // Route-level code splitting — these pages aren't needed for the initial load
-const Dashboard               = lazy(() => import('./pages/Dashboard.jsx'));
+const HomePage                = lazy(() => import('./pages/HomePage.jsx'));
 const ProjectsPage            = lazy(() => import('./pages/ProjectsPage.jsx'));
 const ProjectDetail           = lazy(() => import('./components/ProjectDetail.jsx'));
 const Profile                 = lazy(() => import('./components/Profile.jsx'));
@@ -69,7 +69,7 @@ class ErrorBoundary extends React.Component {
                 padding: '10px 24px', borderRadius: 8, border: '1.5px solid #CBD5E1', cursor: 'pointer',
                 background: '#fff', color: '#475569', fontWeight: 600, fontSize: '0.9rem',
               }}>
-                Ir ao Dashboard
+                Ir ao Inicio
               </button>
             </div>
             {this.state.error && (
@@ -408,9 +408,9 @@ function MobileBottomNav({ onLogout, isPlanejador, unreadCount = 0 }) {
 
   return (
     <nav className="mobile-bottom-nav">
-      <NavLink to="/forecast-dashboard" className={`mobile-bottom-nav-item ${isActive('/forecast-dashboard') ? 'active' : ''}`}>
+      <NavLink to="/" className={`mobile-bottom-nav-item ${isActive('/') ? 'active' : ''}`}>
         <Icon name="house-chimney" />
-        <span>Dashboard</span>
+        <span>Inicio</span>
       </NavLink>
 
       <NavLink to="/metas" className={`mobile-bottom-nav-item ${isActive('/metas') ? 'active' : ''}`}>
@@ -719,7 +719,6 @@ function MobileFilterModal({
 
 function getPageMeta(pathname) {
   if (pathname === '/') return { title: 'Inicio', sub: 'Resumo operacional' };
-  if (pathname === '/forecast-dashboard') return { title: 'Dashboard', sub: null };
   if (pathname === '/projects') return { title: 'Projetos', sub: null };
   if (pathname === '/admin') return { title: 'Administração', sub: 'Gestão de Usuários' };
   if (pathname === '/profile') return { title: 'Meu Perfil', sub: null };
@@ -806,7 +805,7 @@ export default function App() {
   );
 
   const { title, sub } = getPageMeta(location.pathname);
-  const showControls   = ['/forecast-dashboard', '/projects', '/polos', '/vacations', '/metas'].includes(location.pathname) && !isNativeAdmin;
+  const showControls   = ['/projects', '/polos', '/vacations', '/metas'].includes(location.pathname) && !isNativeAdmin;
   const isPeopleControlPage = location.pathname === '/vacations' || location.pathname === '/metas';
   const showFilterPill = location.pathname !== '/';
   const isHomePage = location.pathname === '/';
@@ -1176,19 +1175,6 @@ export default function App() {
                   />
                 )}
 
-                {/* Filtro de projeto — só no dashboard de forecast */}
-                {showControls && location.pathname === '/forecast-dashboard' && (
-                  <>
-                    <div style={{ width: 1, height: 20, background: 'rgba(0,31,91,0.12)', margin: '0 4px', flexShrink: 0 }} />
-                    <ProjectFilter
-                      projects={projects}
-                      plantFilter={plantFilter}
-                      selected={projectFilter}
-                      onChange={setProjectFilter}
-                    />
-                  </>
-                )}
-
                 {/* Filtro de área — férias e metas */}
                 {showControls && isPeopleControlPage && (
                   <>
@@ -1316,13 +1302,7 @@ export default function App() {
 
             <Route path="/" element={
               <RequireAuth>
-                <Navigate to={isNativeAdmin ? "/admin" : "/forecast-dashboard"} replace />
-              </RequireAuth>
-            } />
-
-            <Route path="/forecast-dashboard" element={
-              <RequireAuth>
-                <Dashboard period={period} plantFilter={plantFilter} projectFilter={projectFilter} onProjectFilterChange={setProjectFilter} />
+                {isNativeAdmin ? <Navigate to="/admin" replace /> : <HomePage year={vacYear} />}
               </RequireAuth>
             } />
 

@@ -132,7 +132,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
         </div>
 
         <div className="sidebar-nav">
-          {navItem('/forecast-dashboard', IC.dashboard, 'Dashboard')}
+          {navItem('/', IC.dashboard, 'In?cio')}
 
           {/* Gestor / Engenheiro / Planejador (also shown for override-admins who have a non-admin original role) */}
           {!isNativeAdmin && <>
