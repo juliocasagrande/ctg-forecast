@@ -14,6 +14,7 @@ const MGMT_ROLES = ['admin', 'gestor', 'planejador', 'gerente'];
 const DAY = 86400000;
 const LEFT_WIDTH = 238;
 const MONTH_WIDTH = 760;
+const YEAR_WIDTH = 260;
 const WEEK_WIDTH = 210;
 
 const dateValue = value => value ? String(value).slice(0, 10) : '';
@@ -62,18 +63,30 @@ function overlapsRange(demand, start, end) {
   return demandStart(demand) <= end && demandEnd(demand) >= start;
 }
 
-function weeksInMonth(base = new Date()) {
-  const monthStart = new Date(base.getFullYear(), base.getMonth(), 1, 12);
-  const monthEnd = new Date(base.getFullYear(), base.getMonth() + 1, 0, 12);
+function weeksInRange(start, end) {
   const weeks = [];
-  let cursor = startOfWeek(monthStart);
-  while (cursor <= monthEnd) {
-    const start = new Date(cursor);
-    const end = endOfWeek(cursor);
-    weeks.push({ start, end });
+  let cursor = startOfWeek(start);
+  while (cursor <= end) {
+    const weekStart = new Date(cursor);
+    const weekEnd = endOfWeek(cursor);
+    weeks.push({ start: weekStart, end: weekEnd });
     cursor = new Date(+cursor + 7 * DAY);
   }
   return weeks;
+}
+
+function weeksInMonth(base = new Date()) {
+  return weeksInRange(
+    new Date(base.getFullYear(), base.getMonth(), 1, 12),
+    new Date(base.getFullYear(), base.getMonth() + 1, 0, 12)
+  );
+}
+
+function weeksInYear(base = new Date()) {
+  return weeksInRange(
+    new Date(base.getFullYear(), 0, 1, 12),
+    new Date(base.getFullYear(), 11, 31, 12)
+  );
 }
 
 function activePeriod(mode, base = new Date()) {
@@ -92,7 +105,7 @@ function loadForMode(demands, mode, base = new Date()) {
     const period = activePeriod('week', base);
     return loadForWeek(demands, period.start, period.end);
   }
-  const weeks = weeksInMonth(base);
+  const weeks = mode === 'year' ? weeksInYear(base) : weeksInMonth(base);
   if (!weeks.length) return 0;
   const total = weeks.reduce((sum, week) => sum + loadForWeek(demands, week.start, week.end), 0);
   return Math.round(total / weeks.length);
@@ -104,7 +117,7 @@ function timelineRange(demands) {
   // Piso minimo de navegacao: sempre permite arrastar alguns meses para tras/frente
   // do mes atual, mesmo sem demandas cadastradas nesse intervalo.
   const floorMin = +new Date(now.getFullYear(), now.getMonth() - 2, 1, 12);
-  const floorMax = +new Date(now.getFullYear(), now.getMonth() + 3, 0, 12);
+  const floorMax = +new Date(now.getFullYear() + 1, 11, 31, 12);
   const min = Math.min(floorMin, ...dates.map(Number));
   const max = Math.max(floorMax, ...dates.map(Number));
   return {
@@ -231,7 +244,7 @@ function Timeline({ groups, range, today, expanded, onExpand, onEdit, canManage,
     return list;
   }, [loadMode, range]);
 
-  const baseWidth = loadMode === 'week' ? WEEK_WIDTH : MONTH_WIDTH;
+  const baseWidth = loadMode === 'week' ? WEEK_WIDTH : loadMode === 'year' ? YEAR_WIDTH : MONTH_WIDTH;
   const colWidth = columns.length && viewportWidth ? Math.max(baseWidth, (viewportWidth - LEFT_WIDTH) / columns.length) : baseWidth;
   const totalWidth = colWidth * columns.length;
   const rangeStart = columns[0]?.start || range.start;
@@ -347,7 +360,7 @@ export default function WorkloadPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState({});
-  const [loadMode, setLoadMode] = useState('month');
+  const [loadMode, setLoadMode] = useState('week');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -388,16 +401,18 @@ export default function WorkloadPage() {
   const allLoads = members.map(personLoad);
   const range = useMemo(() => timelineRange(visibleDemands), [visibleDemands]);
   const statusButtons = [{ key: '', label: 'Todos' }, ...STATUS_OPTIONS.map(key => ({ key, label: STATUS_META[key].label }))];
+  const loadModeButtons = [{ key: 'week', label: 'Semanal' }, { key: 'month', label: 'Mensal' }, { key: 'year', label: 'Anual' }];
+  const loadModeText = { week: 'soma da semana atual', month: 'media semanal do mes atual', year: 'media semanal do ano atual' };
   const openNew = member => setModal({ demand: null, member: member || (canManageOthers ? null : members.find(m => m.id === user?.id)) });
 
   return <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f4f6fa', margin: '-24px', minHeight: 'calc(100% + 48px)' }}>
     <div style={{ height: 58, padding: '0 22px', background: 'linear-gradient(105deg,#15716c,#35ad78)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
-      <div style={{ padding: 3, borderRadius: 8, background: 'rgba(255,255,255,.16)', display: 'flex', gap: 2 }}><button onClick={() => setLoadMode('week')} style={{ border: 0, borderRadius: 6, background: loadMode === 'week' ? '#fff' : 'transparent', color: loadMode === 'week' ? '#15716c' : '#fff', padding: '5px 10px', font: 'inherit', fontSize: '.72rem', fontWeight: 800, cursor: 'pointer' }}>Semanal</button><button onClick={() => setLoadMode('month')} style={{ border: 0, borderRadius: 6, background: loadMode === 'month' ? '#fff' : 'transparent', color: loadMode === 'month' ? '#15716c' : '#fff', padding: '5px 10px', font: 'inherit', fontSize: '.72rem', fontWeight: 800, cursor: 'pointer' }}>Mensal</button></div>
+      <div style={{ padding: 3, borderRadius: 8, background: 'rgba(255,255,255,.16)', display: 'flex', gap: 2 }}>{loadModeButtons.map(option => <button key={option.key} onClick={() => setLoadMode(option.key)} style={{ border: 0, borderRadius: 6, background: loadMode === option.key ? '#fff' : 'transparent', color: loadMode === option.key ? '#15716c' : '#fff', padding: '5px 10px', font: 'inherit', fontSize: '.72rem', fontWeight: 800, cursor: 'pointer' }}>{option.label}</button>)}</div>
       <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar colaborador..." className="workload-search" style={{ height: 32, width: 190, padding: '0 10px', border: '1px solid rgba(255,255,255,.32)', borderRadius: 8, background: 'rgba(255,255,255,.14)', color: '#fff', font: 'inherit', fontSize: '.75rem', outline: 'none' }} />
       {statusButtons.map(option => { const meta = option.key ? STATUS_META[option.key] : null; const active = statusFilter === option.key; return <button key={option.key} onClick={() => setStatusFilter(option.key)} style={{ border: active && meta ? `1px solid ${meta.color}` : 0, borderRadius: 6, padding: '5px 10px', background: active ? (meta ? meta.color : 'rgba(255,255,255,.92)') : (meta ? meta.soft : 'rgba(255,255,255,.14)'), color: active ? (meta ? '#fff' : '#16335c') : (meta ? meta.text : '#fff'), font: 'inherit', fontSize: '.7rem', fontWeight: 800, cursor: 'pointer' }}>{option.label}</button>; })}
       <button onClick={() => openNew()} style={{ marginLeft: 'auto', height: 32, padding: '0 14px', border: '1px solid rgba(255,255,255,.36)', borderRadius: 8, background: 'rgba(255,255,255,.16)', color: '#fff', font: 'inherit', fontSize: '.78rem', fontWeight: 800, cursor: 'pointer' }}>+ Nova Demanda</button>
     </div>
-    <div style={{ padding: '5px 22px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', background: '#f8fafc', borderBottom: '1px solid #e0e7ef', fontSize: '.68rem', color: '#718098', flexShrink: 0 }}><b style={{ fontSize: '.58rem', letterSpacing: '.08em' }}>STATUS:</b>{STATUS_OPTIONS.map(key => <span key={key}><i style={{ display: 'inline-block', width: 8, height: 8, marginRight: 5, borderRadius: 2, background: STATUS_META[key].color }} />{STATUS_META[key].label}</span>)}<span style={{ borderLeft: '1px solid #dbe3eb', paddingLeft: 12 }}>Carga exibida: <b>{loadMode === 'week' ? 'soma da semana atual' : 'media semanal do mes atual'}</b></span><span style={{ marginLeft: 'auto', color: '#97a4b5' }}>Use a barra horizontal, trackpad ou Shift + roda para navegar no tempo</span></div>
+    <div style={{ padding: '5px 22px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', background: '#f8fafc', borderBottom: '1px solid #e0e7ef', fontSize: '.68rem', color: '#718098', flexShrink: 0 }}><b style={{ fontSize: '.58rem', letterSpacing: '.08em' }}>STATUS:</b>{STATUS_OPTIONS.map(key => <span key={key}><i style={{ display: 'inline-block', width: 8, height: 8, marginRight: 5, borderRadius: 2, background: STATUS_META[key].color }} />{STATUS_META[key].label}</span>)}<span style={{ borderLeft: '1px solid #dbe3eb', paddingLeft: 12 }}>Carga exibida: <b>{loadModeText[loadMode]}</b></span><span style={{ marginLeft: 'auto', color: '#97a4b5' }}>Use a barra horizontal, trackpad ou Shift + roda para navegar no tempo</span></div>
     {loading ? <div style={{ flex: 1, display: 'grid', placeItems: 'center' }}><div className="spinner" /></div> : roleGroups.length ? <Timeline groups={roleGroups} range={range} today={new Date()} expanded={expanded} onExpand={id => setExpanded(current => ({ ...current, [id]: !current[id] }))} onEdit={demand => setModal({ demand, member: members.find(member => member.id === demand.user_id) })} canManage={canManage} onNew={openNew} loadMode={loadMode} /> : <div className="card" style={{ margin: 20, padding: 30, textAlign: 'center', color: 'var(--text-secondary)' }}>Nenhum colaborador ou demanda encontrado.</div>}
     {modal && <DemandDrawer demand={modal.demand} member={modal.member} members={canManageOthers ? members : members.filter(member => member.id === user?.id)} canPickMember={canManageOthers} onSave={save} onDelete={remove} onClose={() => setModal(null)} />}
   </div>;

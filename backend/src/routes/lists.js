@@ -359,7 +359,7 @@ router.put('/projects-tracking/:id', async (req, res) => {
       valor_si_breakdown ? JSON.stringify(valor_si_breakdown) : null,
       realizado_si_breakdown ? JSON.stringify(realizado_si_breakdown) : null,
       fornecedor || null, natureza || 'OPEX', aditivo_em_andamento || 'NÃO',
-      id,
+      id, req.user?.id || null, req.user?.name || null,
     ]);
 
     if (!r.rows.length) return res.status(404).json({ error: 'Projeto não encontrado' });

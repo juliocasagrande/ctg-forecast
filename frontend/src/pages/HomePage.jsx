@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useSettings } from '../context/SettingsContext.jsx';
 import AlertBell from '../components/ui/AlertBell.jsx';
 import api from '../utils/api.js';
 import { formatBRL } from '../utils/format.js';
@@ -36,6 +37,13 @@ function evidenceCount(meta) {
     } catch {}
   }
   return meta?.evidence_image ? 1 : 0;
+}
+
+function isStaleByUpdatedAt(row, thresholdDays) {
+  if (!row?.updated_at) return false;
+  const updatedAt = new Date(row.updated_at).getTime();
+  if (!Number.isFinite(updatedAt)) return false;
+  return (Date.now() - updatedAt) / 86400000 > thresholdDays;
 }
 
 function areaLabel(area) {
@@ -1308,6 +1316,7 @@ function AttentionPanel({ total, items, navigate }) {
 
 export default function HomePage({ year }) {
   const { user } = useAuth();
+  const settings = useSettings();
   const viewRole = user?._managerAccessOverride ? user?.role : (user?._originalRole || user?.role);
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -1320,8 +1329,6 @@ export default function HomePage({ year }) {
     docsStats: null,
     tracking: [],
     iacs: [],
-    staleTracking: [],
-    staleIacs: [],
   });
   const [selectedPlants, setSelectedPlants] = useState([]);
 
@@ -1353,15 +1360,13 @@ export default function HomePage({ year }) {
       const docsYear = year ? year % 100 : '';
       const metasQuery = `?year=${year}${scope.area ? `&area=${scope.area}` : ''}`;
       const vacationsQuery = `?year=${year}${scope.area ? `&area=${scope.area}` : ''}`;
-      const [metas, vacations, documents, docsStats, tracking, iacs, staleTracking, staleIacs, alerts, delegations] = await Promise.all([
+      const [metas, vacations, documents, docsStats, tracking, iacs, alerts, delegations] = await Promise.all([
         api.get(`/metas${metasQuery}`).then(r => r.data).catch(() => []),
         api.get(`/vacations${vacationsQuery}`).then(r => r.data).catch(() => []),
         api.get(`/documents?year=${docsYear}`).then(r => r.data).catch(() => []),
         api.get(`/documents/stats?year=${docsYear}`).then(r => r.data).catch(() => null),
         api.get('/lists/projects-tracking').then(r => r.data).catch(() => []),
         api.get('/lists/iacs').then(r => r.data).catch(() => []),
-        api.get('/lists/projects-tracking/stale-projects').then(r => r.data).catch(() => []),
-        api.get('/lists/iacs/stale-iacs').then(r => r.data).catch(() => []),
         api.get('/forecast/alerts').then(r => r.data).catch(() => null),
         api.get('/delegations/notifications').then(r => r.data).catch(() => []),
       ]);
@@ -1378,9 +1383,7 @@ export default function HomePage({ year }) {
       const scopedDocuments = scope.ownOnly
         ? documents.filter(d => (d.responsible || '').trim().toLowerCase() === (user?.name || '').trim().toLowerCase())
         : scope.area ? documents.filter(areaMatch) : documents;
-      const scopedStaleTracking = scope.area ? staleTracking.filter(areaMatch) : staleTracking;
-      const scopedStaleIacs = scope.area ? staleIacs.filter(areaMatch) : staleIacs;
-      setData({ metas: ownMetas, vacations: ownVacations, documents: scopedDocuments, alerts, delegations, docsStats, tracking: scopedTracking, iacs: scopedIacs, staleTracking: scopedStaleTracking, staleIacs: scopedStaleIacs });
+      setData({ metas: ownMetas, vacations: ownVacations, documents: scopedDocuments, alerts, delegations, docsStats, tracking: scopedTracking, iacs: scopedIacs });
       setLoading(false);
     }
     load();
@@ -1409,10 +1412,12 @@ export default function HomePage({ year }) {
       });
     };
     const projectRows = data.tracking.filter(row => rowMatchesSelectedPlant(row, ['uhe', 'plant', 'usina']));
-    const staleTrackingRows = data.staleTracking.filter(row => rowMatchesSelectedPlant(row, ['uhe', 'plant', 'usina']));
     const documentRows = data.documents.filter(row => rowMatchesSelectedPlant(row, ['plant', 'uhe', 'usina']));
     const iacRows = data.iacs.filter(row => rowMatchesSelectedPlant(row, ['uhe', 'plant', 'usina']));
-    const staleIacRows = data.staleIacs.filter(row => rowMatchesSelectedPlant(row, ['uhe', 'plant', 'usina']));
+    const trackingStaleDays = parseInt(settings.tracking_alert_interval_days, 10) || 6;
+    const iacStaleDays = parseInt(settings.iac_alert_interval_days, 10) || 6;
+    const staleTrackingRows = projectRows.filter(row => isStaleByUpdatedAt(row, trackingStaleDays));
+    const staleIacRows = iacRows.filter(row => isStaleByUpdatedAt(row, iacStaleDays));
     const useDocsStatsFallback = !selectedPlants.length && !documentRows.length;
     const docsTotal = documentRows.length || (useDocsStatsFallback ? (data.docsStats?.by_status || []).reduce((s, r) => s + Number(r.count || 0), 0) : 0);
     const docsPublished = documentRows.length
@@ -1472,7 +1477,7 @@ export default function HomePage({ year }) {
       projectTotalContrato, projectTotalSi, projectRealizadoContrato, projectRealizadoSi,
       projectStatusItems, attentionItems, pendingTotal,
     };
-  }, [data, selectedPlants]);
+  }, [data, selectedPlants, settings.tracking_alert_interval_days, settings.iac_alert_interval_days]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: 'calc(100vh - 32px)', maxHeight: 'calc(100vh - 32px)', overflow: 'hidden', paddingBottom: 0 }}>

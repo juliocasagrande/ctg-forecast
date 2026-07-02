@@ -4,6 +4,8 @@ import { useAuth } from './AuthContext.jsx';
 
 const DEFAULTS = {
   alert_stale_days:      '30',
+  tracking_alert_interval_days: '6',
+  iac_alert_interval_days: '6',
   alert_empty_forecast:  'true',
   alert_unread_messages: 'true',
   color_budget:          '#15803D',
