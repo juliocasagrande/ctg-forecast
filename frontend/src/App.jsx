@@ -12,7 +12,6 @@ import AlertBell from './components/ui/AlertBell.jsx';
 import api from './utils/api.js';
 
 // Route-level code splitting — these pages aren't needed for the initial load
-const HomePage               = lazy(() => import('./pages/HomePage.jsx'));
 const Dashboard               = lazy(() => import('./pages/Dashboard.jsx'));
 const ProjectsPage            = lazy(() => import('./pages/ProjectsPage.jsx'));
 const ProjectDetail           = lazy(() => import('./components/ProjectDetail.jsx'));
@@ -409,9 +408,9 @@ function MobileBottomNav({ onLogout, isPlanejador, unreadCount = 0 }) {
 
   return (
     <nav className="mobile-bottom-nav">
-      <NavLink to="/" end className={`mobile-bottom-nav-item ${location.pathname === '/' ? 'active' : ''}`}>
+      <NavLink to="/forecast-dashboard" className={`mobile-bottom-nav-item ${isActive('/forecast-dashboard') ? 'active' : ''}`}>
         <Icon name="house-chimney" />
-        <span>Inicio</span>
+        <span>Dashboard</span>
       </NavLink>
 
       <NavLink to="/metas" className={`mobile-bottom-nav-item ${isActive('/metas') ? 'active' : ''}`}>
@@ -1317,10 +1316,7 @@ export default function App() {
 
             <Route path="/" element={
               <RequireAuth>
-                {isNativeAdmin
-                  ? <Navigate to="/admin" replace />
-                  : <HomePage year={vacYear} />
-                }
+                <Navigate to={isNativeAdmin ? "/admin" : "/forecast-dashboard"} replace />
               </RequireAuth>
             } />
 
@@ -1393,7 +1389,7 @@ export default function App() {
       {!isNativeAdmin && (
         <MobileBottomNav
           isPlanejador={isPlanejador}
-          onLogout={async () => { await logout(); navigate('/'); }}
+          onLogout={async () => { await logout(); navigate('/login'); }}
         />
       )}
     </div>

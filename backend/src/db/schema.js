@@ -545,6 +545,10 @@ await client.query(`
       ALTER TABLE lists_iacs ADD COLUMN IF NOT EXISTS unique_key VARCHAR(100);
       ALTER TABLE lists_iacs ADD COLUMN IF NOT EXISTS acceptance_letter_signed DATE;
       ALTER TABLE lists_iacs ADD COLUMN IF NOT EXISTS link_path TEXT DEFAULT NULL;
+      ALTER TABLE lists_iacs ADD COLUMN IF NOT EXISTS last_activity_type VARCHAR(20);
+      ALTER TABLE lists_iacs ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ;
+      ALTER TABLE lists_iacs ADD COLUMN IF NOT EXISTS last_activity_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE lists_iacs ADD COLUMN IF NOT EXISTS last_activity_user_name VARCHAR(120);
     `);
 
     await client.query(`
@@ -628,6 +632,10 @@ await client.query(`
       ALTER TABLE lists_projects_tracking ADD COLUMN IF NOT EXISTS realizado_contrato_breakdown JSONB;
       ALTER TABLE lists_projects_tracking ADD COLUMN IF NOT EXISTS valor_si_breakdown JSONB;
       ALTER TABLE lists_projects_tracking ADD COLUMN IF NOT EXISTS realizado_si_breakdown JSONB;
+      ALTER TABLE lists_projects_tracking ADD COLUMN IF NOT EXISTS last_activity_type VARCHAR(20);
+      ALTER TABLE lists_projects_tracking ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ;
+      ALTER TABLE lists_projects_tracking ADD COLUMN IF NOT EXISTS last_activity_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE lists_projects_tracking ADD COLUMN IF NOT EXISTS last_activity_user_name VARCHAR(120);
     `);
     
     await client.query(`

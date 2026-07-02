@@ -14,12 +14,34 @@ async function ensureIacSchema() {
     iacSchemaReady = pool.query(`
       ALTER TABLE lists_iacs ADD COLUMN IF NOT EXISTS acceptance_letter_signed DATE;
       ALTER TABLE lists_iacs ADD COLUMN IF NOT EXISTS team_leader_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE lists_iacs ADD COLUMN IF NOT EXISTS last_activity_type VARCHAR(20);
+      ALTER TABLE lists_iacs ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ;
+      ALTER TABLE lists_iacs ADD COLUMN IF NOT EXISTS last_activity_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE lists_iacs ADD COLUMN IF NOT EXISTS last_activity_user_name VARCHAR(120);
     `).catch(err => {
       iacSchemaReady = null;
       throw err;
     });
   }
   await iacSchemaReady;
+}
+
+let trackingSchemaReady;
+
+async function ensureTrackingSchema() {
+  if (!trackingSchemaReady) {
+    trackingSchemaReady = pool.query(`
+      ALTER TABLE lists_projects_tracking ADD COLUMN IF NOT EXISTS gestor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE lists_projects_tracking ADD COLUMN IF NOT EXISTS last_activity_type VARCHAR(20);
+      ALTER TABLE lists_projects_tracking ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ;
+      ALTER TABLE lists_projects_tracking ADD COLUMN IF NOT EXISTS last_activity_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE lists_projects_tracking ADD COLUMN IF NOT EXISTS last_activity_user_name VARCHAR(120);
+    `).catch(err => {
+      trackingSchemaReady = null;
+      throw err;
+    });
+  }
+  await trackingSchemaReady;
 }
 
 const upload = multer({
@@ -142,7 +164,8 @@ router.put('/iacs/:id', async (req, res) => {
         status_current=$15, apresentado_work_team=$16,
         organizer=$17, supervisor=$18, evaluation_team=$19,
         priority=$20, validity=$21, continuidade=$22, link_path=$23,
-        updated_at=NOW()
+        updated_at=NOW(), last_activity_type='edit', last_activity_at=NOW(),
+        last_activity_user_id=$25, last_activity_user_name=$26
       WHERE id=$24
       RETURNING *
     `, [
@@ -153,7 +176,7 @@ router.put('/iacs/:id', async (req, res) => {
       status_current || '0 - Not started yet', apresentado_work_team || 'Não',
       organizer || null, supervisor || null, evaluation_team || null,
       priority || 'Non Priority', validity || 'Dez/2027', continuidade || 'Sim', link_path || null,
-      id,
+      id, req.user?.id || null, req.user?.name || null,
     ]);
 
     if (!r.rows.length) return res.status(404).json({ error: 'IAC não encontrado' });
@@ -172,6 +195,7 @@ router.delete('/iacs/:id', async (req, res) => {
 // POST /api/lists/iacs/:id/viewed — record that user viewed this IAC
 router.post('/iacs/:id/viewed', async (req, res) => {
   try {
+    await ensureIacSchema();
     const { id } = req.params;
     const { user } = req;
     await pool.query(`
@@ -180,7 +204,16 @@ router.post('/iacs/:id/viewed', async (req, res) => {
       ON CONFLICT (iac_id, user_id)
       DO UPDATE SET viewed_at = NOW()
     `, [id, user.id]);
-    res.json({ ok: true });
+    const updated = await pool.query(
+      `UPDATE lists_iacs
+       SET updated_at=NOW(), last_activity_type='checkin', last_activity_at=NOW(),
+           last_activity_user_id=$2, last_activity_user_name=$3
+       WHERE id=$1
+       RETURNING *`,
+      [id, user.id, user.name]
+    );
+    if (!updated.rows.length) return res.status(404).json({ error: 'IAC nao encontrado' });
+    res.json({ ok: true, item: updated.rows[0] });
   } catch (err) { safeError(res, err); }
 });
 
@@ -206,8 +239,7 @@ router.get('/iacs/:id/alert-info', async (req, res) => {
       'SELECT updated_at, requester FROM lists_iacs WHERE id=$1',
       [id]
     );
-    const viewedAt = r.rows[0]?.viewed_at || null;
-    res.json({ viewed: Boolean(viewedAt), viewed_at: viewedAt });
+    res.json(r.rows[0] || null);
   } catch (err) { safeError(res, err); }
 });
 
@@ -285,6 +317,7 @@ router.post('/projects-tracking', async (req, res) => {
 // PUT /api/lists/projects-tracking/:id
 router.put('/projects-tracking/:id', async (req, res) => {
   try {
+    await ensureTrackingSchema();
     const { id } = req.params;
     const {
       area, uhe, pp_contrato, projeto_atividade, projeto, caminho_projeto,
@@ -308,7 +341,8 @@ router.put('/projects-tracking/:id', async (req, res) => {
         valor_contrato_breakdown=$23, realizado_contrato_breakdown=$24,
         valor_si_breakdown=$25, realizado_si_breakdown=$26,
         fornecedor=$27, natureza=$28, aditivo_em_andamento=$29,
-        updated_at=NOW()
+        updated_at=NOW(), last_activity_type='edit', last_activity_at=NOW(),
+        last_activity_user_id=$31, last_activity_user_name=$32
       WHERE id=$30
       RETURNING *
     `, [
@@ -356,6 +390,7 @@ router.delete('/projects-tracking/:id', async (req, res) => {
 // POST /api/lists/projects-tracking/:id/viewed — record that user viewed this project
 router.post('/projects-tracking/:id/viewed', async (req, res) => {
   try {
+    await ensureTrackingSchema();
     const { id } = req.params;
     const { user } = req;
     await pool.query(`
@@ -364,7 +399,16 @@ router.post('/projects-tracking/:id/viewed', async (req, res) => {
       ON CONFLICT (tracking_id, user_id)
       DO UPDATE SET viewed_at = NOW()
     `, [id, user.id]);
-    res.json({ ok: true });
+    const updated = await pool.query(
+      `UPDATE lists_projects_tracking
+       SET updated_at=NOW(), last_activity_type='checkin', last_activity_at=NOW(),
+           last_activity_user_id=$2, last_activity_user_name=$3
+       WHERE id=$1
+       RETURNING *`,
+      [id, user.id, user.name]
+    );
+    if (!updated.rows.length) return res.status(404).json({ error: 'Projeto nao encontrado' });
+    res.json({ ok: true, item: updated.rows[0] });
   } catch (err) { safeError(res, err); }
 });
 

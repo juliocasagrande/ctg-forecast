@@ -9,6 +9,7 @@ import ColumnResizeHandle from '../components/ui/ColumnResizeHandle.jsx';
 import StatusDot from '../components/ui/StatusDot.jsx';
 import OpenTimeBadge from '../components/ui/OpenTimeBadge.jsx';
 import { isIacOpenedInYear } from '../utils/iacDates.js';
+import { formatActivityLine, formatRemainingTime, getCheckinRemainingMs } from '../utils/listActivity.js';
 import useColumnWidths from '../hooks/useColumnWidths.js';
 
 const IACS_COL_WIDTHS = [40, 40, 140, 90, 110, 90, 105, 60, 90, 220, 180, 130, 130, 110, 80, 110, 100, 120, 130, 140, 100];
@@ -627,7 +628,7 @@ function fmtDateBR(val) {
 }
 
 /* ─── IAC Modal ──────────────────────────────────────────────────────────────── */
-function IACModal({ item, onClose, onSave, onDelete, isNew, saving, deleting, allUsers, allRequesters, allChineseStaff, allOrganizers, allSupervisors }) {
+function IACModal({ item, onClose, onSave, onDelete, onCheckinSaved, isNew, saving, deleting, allUsers, allRequesters, allChineseStaff, allOrganizers, allSupervisors }) {
   const initForm = (src) => src
     ? { ...src, opening_date: toDateInput(src.opening_date), when_open: toDateInput(src.when_open), acceptance_letter_signed: toDateInput(src.acceptance_letter_signed) }
     : { ...EMPTY_IAC };
@@ -636,6 +637,7 @@ function IACModal({ item, onClose, onSave, onDelete, isNew, saving, deleting, al
   useEffect(() => { setForm(initForm(item)); }, [item]);
   const [checkedIn, setCheckedIn] = useState(false);
   const [lastEdited, setLastEdited] = useState(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const toast = useToast().toast;
   const { user } = useAuth();
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
@@ -653,11 +655,38 @@ function IACModal({ item, onClose, onSave, onDelete, isNew, saving, deleting, al
       .catch(() => {});
   }, [item?.id, isNew]);
 
+  useEffect(() => {
+    if (isNew || !item?.id) return undefined;
+    setNowMs(Date.now());
+    const interval = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [item?.id, isNew]);
+
+  const activityItem = form?.id ? form : item;
+  const checkinRemainingMs = getCheckinRemainingMs(activityItem, nowMs);
+  const checkinLocked = checkinRemainingMs > 0;
+  const activityLine = formatActivityLine(activityItem);
+  const checkinTitle = checkinLocked
+    ? `Check-in liberado em ${formatRemainingTime(checkinRemainingMs)}`
+    : (checkedIn ? 'Registrar novo check-in' : 'Marcar como visitado');
+
   const handleCheckin = async () => {
-    if (!item?.id || checkedIn) return;
+    if (!item?.id) return;
+    if (checkinLocked) {
+      toast(`Check-in liberado em ${formatRemainingTime(checkinRemainingMs)}`, 'info');
+      return;
+    }
     try {
-      await api.post(`/lists/iacs/${item.id}/viewed`);
+      const r = await api.post(`/lists/iacs/${item.id}/viewed`);
+      const updatedItem = r.data?.item;
+      const fallbackItem = { ...item, updated_at: new Date().toISOString(), last_activity_type: 'checkin', last_activity_at: new Date().toISOString(), last_activity_user_name: user?.name || 'usuario nao identificado' };
+      const nextItem = updatedItem || fallbackItem;
       setCheckedIn(true);
+      setNowMs(Date.now());
+      setForm(prev => initForm({ ...prev, ...nextItem }));
+      if (nextItem?.updated_at) setLastEdited(new Date(nextItem.updated_at));
+      onCheckinSaved?.(nextItem);
+      window.dispatchEvent(new Event('alerts-refresh'));
       toast('Check-in registrado!', 'success');
     } catch {
       toast('Erro ao registrar check-in', 'error');
@@ -698,18 +727,23 @@ function IACModal({ item, onClose, onSave, onDelete, isNew, saving, deleting, al
                 {/* Check-in button */}
                 <button
                   onClick={handleCheckin}
-                  disabled={checkedIn}
+                  disabled={checkinLocked}
                   style={{
                     padding: '3px 10px', borderRadius: 20, border: 'none',
-                    background: checkedIn ? '#15803D' : 'rgba(255,255,255,0.15)',
-                    color: checkedIn ? '#fff' : 'rgba(255,255,255,0.7)',
-                    fontSize: '0.7rem', fontWeight: 600, cursor: checkedIn ? 'default' : 'pointer',
+                    background: checkinLocked ? 'rgba(255,255,255,0.10)' : (checkedIn ? '#15803D' : 'rgba(255,255,255,0.15)'),
+                    color: checkinLocked ? 'rgba(255,255,255,0.45)' : (checkedIn ? '#fff' : 'rgba(255,255,255,0.7)'),
+                    fontSize: '0.7rem', fontWeight: 600, cursor: checkinLocked ? 'not-allowed' : 'pointer',
                     display: 'flex', alignItems: 'center', gap: 4,
                   }}
-                  title={checkedIn ? 'Você já visitou este IAC' : 'Marcar como visitado'}
+                  title={checkinTitle}
                 >
-                  {checkedIn ? '✓ Visitado' : '✓ Check-in'}
+                  {checkinLocked ? formatRemainingTime(checkinRemainingMs) : (checkedIn ? 'Visitado' : 'Check-in')}
                 </button>
+                {activityLine && (
+                  <span title={activityLine} style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.48)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 260 }}>
+                    {activityLine}
+                  </span>
+                )}
               </>
             )}
           </div>
@@ -1217,6 +1251,12 @@ export default function IACsPage() {
   [priorityChartItems]);
 
   /* ── CRUD ── */
+  const handleCheckinSaved = (updatedItem) => {
+    if (!updatedItem?.id) return;
+    setItems(prev => prev.map(i => i.id === updatedItem.id ? { ...i, ...updatedItem } : i));
+    setSelected(prev => prev?.id === updatedItem.id ? { ...prev, ...updatedItem } : prev);
+  };
+
   const handleSave = async (form) => {
     setSaving(true);
     try {
@@ -1640,6 +1680,7 @@ export default function IACsPage() {
           onClose={() => { setSelected(null); setIsNew(false); }}
           onSave={handleSave}
           onDelete={handleDelete}
+          onCheckinSaved={handleCheckinSaved}
           saving={saving}
           deleting={deleting}
           allUsers={allUsers}

@@ -76,10 +76,12 @@ export default function AlertBell() {
     const onFocus = () => fetchAlerts();
     const onVisibility = () => { if (document.visibilityState === 'visible') fetchAlerts(); };
     window.addEventListener('focus', onFocus);
+    window.addEventListener('alerts-refresh', fetchAlerts);
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       clearInterval(t);
       window.removeEventListener('focus', onFocus);
+      window.removeEventListener('alerts-refresh', fetchAlerts);
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [fetchAlerts]);

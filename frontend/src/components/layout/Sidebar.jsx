@@ -132,7 +132,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
         </div>
 
         <div className="sidebar-nav">
-          {navItem('/', IC.dashboard, 'Inicio')}
+          {navItem('/forecast-dashboard', IC.dashboard, 'Dashboard')}
 
           {/* Gestor / Engenheiro / Planejador (also shown for override-admins who have a non-admin original role) */}
           {!isNativeAdmin && <>
@@ -256,7 +256,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
             <span>Meu Perfil</span>
           </NavLink>
           <button className="nav-item sidebar-footer-item sidebar-logout"
-            onClick={async () => { await logout(); navigate('/'); }}>
+            onClick={async () => { await logout(); navigate('/login'); }}>
             <Icon name="right-from-bracket" style={{ width: 16, textAlign: 'center' }} />
             <span>Sair</span>
           </button>

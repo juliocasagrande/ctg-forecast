@@ -139,7 +139,7 @@ export default function Login() {
   const homePathFor = (user) =>
     user?.role === 'admin' && (!user?._originalRole || user._originalRole === 'admin')
       ? '/admin'
-      : '/';
+      : '/forecast-dashboard';
 
   const handleAzureLogin = async () => {
     setLoginError('');
