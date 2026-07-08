@@ -186,6 +186,7 @@ const IAC_STATUS_OPTIONS = [
   { value: '4 - Clarification', color: '#F97316', bg: '#FFF7ED', text: '#9A3412' },
   { value: '5 - Negotiation', color: '#0EA5E9', bg: '#E0F2FE', text: '#0369A1' },
   { value: '6 - ER/DM Review/Approval', color: '#10B981', bg: '#D1FAE5', text: '#065F46' },
+  { value: '7 - Decision Making', color: '#14B8A6', bg: '#CCFBF1', text: '#0F766E' },
   { value: '8 - Draft Contract', color: '#22C55E', bg: '#DCFCE7', text: '#14532D' },
   { value: '9 - Contract signed', color: '#16A34A', bg: '#BBF7D0', text: '#14532D' },
   { value: '91 - Hired 2025', color: '#64748B', bg: '#F1F5F9', text: '#334155' },

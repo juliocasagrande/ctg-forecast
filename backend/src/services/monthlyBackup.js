@@ -151,7 +151,23 @@ async function fetchBackupData() {
     `),
     pool.query(`
       SELECT * FROM lists_iacs
-      ORDER BY area ASC, status_current ASC, iac_code ASC
+      ORDER BY area ASC,
+        CASE status_current
+          WHEN '0 - Not started yet'       THEN 0
+          WHEN '1 - IA and PDs'            THEN 1
+          WHEN '2 - Invitation letter'     THEN 2
+          WHEN '3 - Proposal received'     THEN 3
+          WHEN '4 - Clarification'         THEN 4
+          WHEN '5 - Negotiation'           THEN 5
+          WHEN '6 - ER/DM Review/Approval' THEN 6
+          WHEN '7 - Decision Making'       THEN 7
+          WHEN '8 - Draft Contract'        THEN 8
+          WHEN '9 - Contract signed'       THEN 9
+          WHEN '91 - Hired 2025'           THEN 91
+          WHEN '10 - Cancelado'            THEN 100
+          ELSE 99
+        END,
+        iac_code ASC
     `),
     pool.query(`
       SELECT d.*,

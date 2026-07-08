@@ -88,10 +88,11 @@ router.get('/iacs', async (req, res) => {
           WHEN '4 - Clarification'         THEN 4
           WHEN '5 - Negotiation'           THEN 5
           WHEN '6 - ER/DM Review/Approval' THEN 6
+          WHEN '7 - Decision Making'       THEN 7
           WHEN '8 - Draft Contract'        THEN 8
           WHEN '9 - Contract signed'       THEN 9
           WHEN '91 - Hired 2025'           THEN 91
-          WHEN '10 - Cancelad'             THEN 100
+          WHEN '10 - Cancelado'            THEN 100
           ELSE 99
         END,
         area ASC,

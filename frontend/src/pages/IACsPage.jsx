@@ -46,12 +46,21 @@ const STATUS_OPTIONS = [
   { value: '4 - Clarification',         color: '#F97316', bg: '#FFF7ED', text: '#9A3412' },
   { value: '5 - Negotiation',           color: '#0EA5E9', bg: '#E0F2FE', text: '#0369A1' },
   { value: '6 - ER/DM Review/Approval', color: '#10B981', bg: '#D1FAE5', text: '#065F46' },
+  { value: '7 - Decision Making',        color: '#14B8A6', bg: '#CCFBF1', text: '#0F766E' },
   { value: '8 - Draft Contract',        color: '#22C55E', bg: '#DCFCE7', text: '#14532D' },
   { value: '9 - Contract signed',       color: '#16A34A', bg: '#BBF7D0', text: '#14532D' },
   { value: '91 - Hired 2025',           color: '#64748B', bg: '#F1F5F9', text: '#334155' },
   { value: '10 - Cancelado',            color: '#EF4444', bg: '#FEE2E2', text: '#991B1B' },
 ];
 const STATUS_META = Object.fromEntries(STATUS_OPTIONS.map(s => [s.value, s]));
+const STATUS_ORDER = Object.fromEntries(STATUS_OPTIONS.map((s, idx) => [s.value, idx]));
+
+function compareIacStatus(a, b) {
+  const orderA = STATUS_ORDER[a] ?? 999;
+  const orderB = STATUS_ORDER[b] ?? 999;
+  if (orderA !== orderB) return orderA - orderB;
+  return (a || '').localeCompare(b || '');
+}
 
 const PRIORITY_OPTIONS = ['Priority', 'Non Priority', 'Hired'];
 const PRIORITY_COLORS = {
@@ -537,7 +546,7 @@ function ImportPreviewModal({ preview, onClose, onConfirm, loading }) {
             <div>
               <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94A3B8', marginBottom: 6 }}>Por Status</div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {Object.entries(statuses).map(([status, count]) => {
+                {[...Object.entries(statuses)].sort(([a], [b]) => compareIacStatus(a, b)).map(([status, count]) => {
                   const m = STATUS_META[status] || STATUS_OPTIONS[0];
                   return (
                     <span key={status} style={{
@@ -1031,7 +1040,7 @@ export default function IACsPage() {
 
   const colFilterStatus2Values = useMemo(() => {
     const values = [...new Set(preFiltered.map(i => i.status_current).filter(Boolean))];
-    return values.sort();
+    return values.sort(compareIacStatus);
   }, [preFiltered]);
 
   const colFilterApresentadoValues = useMemo(() => {
@@ -1167,11 +1176,10 @@ export default function IACsPage() {
 
   const filtered = useMemo(() => {
     const data = applyFilters(null);
-    // Sort alphabetically by status, then by iac_code
+    // Sort by process status order, then by iac_code
     data.sort((a, b) => {
-      const statusA = (a.status_current || '').toLowerCase();
-      const statusB = (b.status_current || '').toLowerCase();
-      if (statusA !== statusB) return statusA.localeCompare(statusB);
+      const statusDiff = compareIacStatus(a.status_current, b.status_current);
+      if (statusDiff !== 0) return statusDiff;
       return (a.iac_code || '').localeCompare(b.iac_code || '');
     });
     return data;
