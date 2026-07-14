@@ -63,6 +63,7 @@ function compareIacStatus(a, b) {
 }
 
 const PRIORITY_OPTIONS = ['Priority', 'Non Priority', 'Hired'];
+const PRIORITY_CHART_OPTIONS = ['Priority', 'Non Priority'];
 const PRIORITY_COLORS = {
   'Priority':     { color: '#F59E0B', bg: '#FEF3C7', text: '#92400E' },
   'Non Priority': { color: '#64748B', bg: '#F1F5F9', text: '#475569' },
@@ -369,7 +370,7 @@ function PriorityDonutChart({ data, filterPriority, onFilterPriority }) {
               {hoveredLabel.label}
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginBottom: 2 }}>
-              <span style={{ color: '#64748B' }}>IACs:</span>
+              <span style={{ color: '#64748B' }}>Elementos:</span>
               <span style={{ fontWeight: 700 }}>{hoveredLabel.value}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
@@ -1252,9 +1253,18 @@ export default function IACsPage() {
   [statusChartItems]);
 
   const priorityData = useMemo(() =>
-    PRIORITY_OPTIONS.map(p => {
+    PRIORITY_CHART_OPTIONS.map(p => {
       const c = PRIORITY_COLORS[p] || PRIORITY_COLORS['Non Priority'];
-      return { label: p, value: priorityChartItems.filter(i => i.priority === p).length, ...c };
+      const itemsForPriority = priorityChartItems.filter(i => i.priority === p);
+      const quantityField = p === 'Priority'
+        ? 'qty_pp_line_26_priority'
+        : p === 'Non Priority'
+          ? 'qty_pp_line_26_no_priority'
+          : null;
+      const value = quantityField
+        ? itemsForPriority.reduce((sum, item) => sum + (Number(item[quantityField]) || 0), 0)
+        : itemsForPriority.length;
+      return { label: p, value, ...c };
     }),
   [priorityChartItems]);
 
