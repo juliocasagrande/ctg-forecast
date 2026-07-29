@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
@@ -394,38 +394,6 @@ function ChartBox({ title, children }) {
     <div style={{ border: '1px solid var(--border)', background: '#FBFDFF', borderRadius: 8, padding: 10, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden' }}>
       <div style={{ color: 'var(--text-muted)', fontSize: '0.66rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{title}</div>
       {children}
-    </div>
-  );
-}
-
-function DistributionDonut({ items, total, centerLabel }) {
-  const rows = items
-    .filter(item => Number(item.value) > 0)
-    .sort((a, b) => Number(b.value) - Number(a.value))
-    .slice(0, 4);
-  const sum = total || rows.reduce((acc, item) => acc + Number(item.value || 0), 0);
-  if (!sum || !rows.length) return <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Sem dados para este escopo.</span>;
-  let cursor = 0;
-  const gradient = rows.map((item, idx) => {
-    const start = cursor;
-    cursor += (Number(item.value) / sum) * 100;
-    const color = item.color || ['#0070B8', '#10B981', '#F59E0B', '#6366F1'][idx % 4];
-    return `${color} ${start}% ${cursor}%`;
-  }).join(', ');
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: '78px 1fr', alignItems: 'center', gap: 10, minHeight: 0 }}>
-      <div style={{ width: 74, height: 74, borderRadius: '50%', background: `conic-gradient(${gradient}, #E2E8F0 0)`, display: 'grid', placeItems: 'center', boxShadow: 'inset 0 0 0 1px rgba(15,23,42,0.06)' }}>
-        <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#fff', display: 'grid', placeItems: 'center', color: 'var(--ctg-navy)', fontWeight: 900, fontSize: '0.78rem' }}>{centerLabel || sum}</div>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
-        {rows.map((item, idx) => (
-          <div key={item.label} style={{ display: 'grid', gridTemplateColumns: '10px 1fr auto', alignItems: 'center', gap: 6, minWidth: 0 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: item.color || ['#0070B8', '#10B981', '#F59E0B', '#6366F1'][idx % 4] }} />
-            <span style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
-            <span style={{ color: 'var(--ctg-navy)', fontSize: '0.7rem', fontWeight: 900 }}>{item.value}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -1160,28 +1128,305 @@ function NaturezaHorizontalChart({ items }) {
   );
 }
 
-function IacStatusProcessChart({ items }) {
+const IAC_PRIORITY_GOALS = {
+  Priority: { pct80: 28, pct100: 35, pct120: 39 },
+  'Non Priority': { pct80: 8, pct100: 9, pct120: 14 },
+};
+
+const IAC_PRIORITY_ACCENTS = {
+  Priority: '#F59E0B',
+  'Non Priority': '#64748B',
+};
+
+const IAC_AVG_TIME_ACCENT = '#0070B8';
+const IAC_STAGE_CHART_ACCENT = '#6366F1';
+const IAC_CARD_TITLE_FONT = 'clamp(0.6rem, 0.9vw, 0.72rem)';
+
+const PRIORITY_GOAL_STAT_COLUMNS = [
+  { key: 'total', label: 'Total' },
+  { key: 'hiring2025', label: 'Hiring 2025' },
+  { key: 'pending', label: 'Pending' },
+  { key: 'cancel', label: 'Cancel' },
+  { key: 'hiring', label: 'Hiring' },
+  { key: 'draft', label: 'Draft' },
+  { key: 'signed', label: 'Signed' },
+];
+
+function GoalBar({ value, pct80, pct100, pct120 }) {
+  const [hovered, setHovered] = useState(false);
+  const [tipPos, setTipPos] = useState({ x: 0, y: 0 });
+  const [tooltipStyle, setTooltipStyle] = useState({ left: 0, top: 0 });
+  const tooltipRef = useRef(null);
+  const scaleMax = pct120 > 0 ? pct120 * (8 / 7) : 1;
+  const widthPct = Math.min(100, Math.max(0, (value / scaleMax) * 100));
+  const barColor = value >= pct120 ? '#10B981' : value >= pct100 ? '#0070B8' : value >= pct80 ? '#F59E0B' : '#EF4444';
+  const marks = [
+    { key: 'pct80', pctLabel: '80%', value: pct80, color: '#F59E0B' },
+    { key: 'pct100', pctLabel: '100%', value: pct100, color: '#0070B8' },
+    { key: 'pct120', pctLabel: '120%', value: pct120, color: '#10B981' },
+  ];
+
+  useLayoutEffect(() => {
+    if (!hovered || !tooltipRef.current) return;
+    const rect = tooltipRef.current.getBoundingClientRect();
+    const margin = 8;
+    let left = tipPos.x + 16;
+    let top = tipPos.y - 10;
+    if (left + rect.width + margin > window.innerWidth) left = tipPos.x - rect.width - 16;
+    if (left < margin) left = margin;
+    if (top + rect.height + margin > window.innerHeight) top = tipPos.y - rect.height - 10;
+    if (top < margin) top = margin;
+    setTooltipStyle({ left, top });
+  }, [hovered, tipPos]);
+
+  return (
+    <div
+      style={{ position: 'relative', paddingBottom: 16, flex: 1, minWidth: 0, cursor: 'default' }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseMove={e => setTipPos({ x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div style={{ height: 8, background: '#E2E8F0', borderRadius: 999, overflow: 'hidden' }}>
+        <div style={{ width: `${widthPct}%`, height: '100%', background: barColor, borderRadius: 999 }} />
+      </div>
+      {marks.map(mark => (
+        <div key={mark.key} style={{ position: 'absolute', left: `${Math.min(100, (mark.value / scaleMax) * 100)}%`, top: 0, transform: 'translateX(-50%)', pointerEvents: 'none' }}>
+          <div style={{ width: 2, height: 8, background: mark.color, borderRadius: 1 }} />
+          <div style={{ marginTop: 2, fontSize: '0.78rem', color: mark.color, fontWeight: 900, textAlign: 'center', whiteSpace: 'nowrap' }}>{mark.value}</div>
+        </div>
+      ))}
+      {hovered && (
+        <div ref={tooltipRef} style={{
+          position: 'fixed',
+          left: tooltipStyle.left,
+          top: tooltipStyle.top,
+          zIndex: 9999,
+          background: 'var(--bg-card)', border: '1px solid var(--border)',
+          borderRadius: 8, padding: '9px 12px', boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
+          fontSize: '0.82rem', minWidth: 210, pointerEvents: 'none',
+        }}>
+          <div style={{ fontWeight: 800, color: 'var(--ctg-navy)', marginBottom: 5 }}>Valor atual: {value}</div>
+          {marks.map(mark => {
+            const gap = Math.max(0, mark.value - value);
+            return (
+              <div key={mark.key} style={{ display: 'flex', justifyContent: 'space-between', gap: 14 }}>
+                <span style={{ color: 'var(--text-muted)' }}>Meta {mark.pctLabel} ({mark.value})</span>
+                <strong style={{ color: gap ? mark.color : '#10B981' }}>{gap ? `Faltam ${gap}` : 'Atingida'}</strong>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatValueCell({ value, rows }) {
+  const [hovered, setHovered] = useState(false);
+  const [tipPos, setTipPos] = useState({ x: 0, y: 0 });
+  const [tooltipStyle, setTooltipStyle] = useState({ left: 0, top: 0 });
+  const tooltipRef = useRef(null);
+
+  useLayoutEffect(() => {
+    if (!hovered || !tooltipRef.current) return;
+    const rect = tooltipRef.current.getBoundingClientRect();
+    const margin = 8;
+    let left = tipPos.x + 16;
+    let top = tipPos.y - 10;
+    if (left + rect.width + margin > window.innerWidth) left = tipPos.x - rect.width - 16;
+    if (left < margin) left = margin;
+    if (top + rect.height + margin > window.innerHeight) top = tipPos.y - rect.height - 10;
+    if (top < margin) top = margin;
+    setTooltipStyle({ left, top });
+  }, [hovered, tipPos]);
+
+  const areaCounts = useMemo(() => {
+    const map = new Map();
+    (rows || []).forEach(r => {
+      const label = r.area || 'Não informado';
+      map.set(label, (map.get(label) || 0) + 1);
+    });
+    return [...map.entries()].sort((a, b) => b[1] - a[1]);
+  }, [rows]);
+
+  const codes = (rows || []).map(r => r.iac_code).filter(Boolean);
+  const visibleCodes = codes.slice(0, 14);
+  const hiddenCount = codes.length - visibleCodes.length;
+
+  return (
+    <div
+      style={{ padding: '5px 2px', textAlign: 'center', borderRight: '1px solid var(--border)', cursor: 'default' }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseMove={e => setTipPos({ x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <strong style={{ fontSize: '0.98rem', color: 'var(--ctg-navy)' }}>{value}</strong>
+      {hovered && (
+        <div ref={tooltipRef} style={{
+          position: 'fixed', left: tooltipStyle.left, top: tooltipStyle.top, zIndex: 9999,
+          background: 'var(--bg-card)', border: '1px solid var(--border)',
+          borderRadius: 8, padding: '9px 12px', boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
+          fontSize: '0.76rem', minWidth: 190, maxWidth: 260, pointerEvents: 'none', textAlign: 'left',
+        }}>
+          <div style={{ fontWeight: 800, color: 'var(--ctg-navy)', marginBottom: 4 }}>Por área</div>
+          {areaCounts.length ? areaCounts.map(([area, count]) => (
+            <div key={area} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+              <span style={{ color: 'var(--text-muted)' }}>{area}</span>
+              <strong style={{ color: 'var(--ctg-navy)' }}>{count}</strong>
+            </div>
+          )) : <div style={{ color: 'var(--text-muted)' }}>Sem processos</div>}
+          <div style={{ fontWeight: 800, color: 'var(--ctg-navy)', marginTop: 7, marginBottom: 4, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
+            Processos ({codes.length})
+          </div>
+          {visibleCodes.length ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {visibleCodes.map(code => <span key={code} style={{ color: 'var(--text-secondary)' }}>{code}</span>)}
+              {hiddenCount > 0 && <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>+{hiddenCount} outro(s)</span>}
+            </div>
+          ) : <span style={{ color: 'var(--text-muted)' }}>-</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PriorityGoalTable({ title, stats, goals, accent }) {
+  return (
+    <div style={{ borderRadius: 8, overflow: 'hidden', background: '#FBFDFF', minHeight: 0 }}>
+      <div style={{ background: `linear-gradient(135deg, ${accent}26, ${accent}0d)`, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ color: accent, fontSize: IAC_CARD_TITLE_FONT, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>{title}</span>
+        <span style={{ fontSize: '0.66rem', fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase', flexShrink: 0 }}>Goal</span>
+        <GoalBar value={stats.goalValue} pct80={goals.pct80} pct100={goals.pct100} pct120={goals.pct120} />
+      </div>
+      <div style={{ padding: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${PRIORITY_GOAL_STAT_COLUMNS.length}, 1fr)`, border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+          {PRIORITY_GOAL_STAT_COLUMNS.map(col => (
+            <div key={col.key} style={{ padding: '4px 2px', textAlign: 'center', background: '#F1F5F9', borderBottom: '1px solid var(--border)', borderRight: '1px solid var(--border)' }}>
+              <span style={{ fontSize: '0.64rem', fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{col.label}</span>
+            </div>
+          ))}
+          {PRIORITY_GOAL_STAT_COLUMNS.map(col => (
+            <StatValueCell key={`${col.key}-value`} value={stats[col.key]} rows={stats.rowsByColumn[col.key]} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function IacPriorityGoalPanel({ data }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
+      <PriorityGoalTable title="Priority" stats={data.Priority} goals={IAC_PRIORITY_GOALS.Priority} accent={IAC_PRIORITY_ACCENTS.Priority} />
+      <PriorityGoalTable title="Non Priority" stats={data['Non Priority']} goals={IAC_PRIORITY_GOALS['Non Priority']} accent={IAC_PRIORITY_ACCENTS['Non Priority']} />
+    </div>
+  );
+}
+
+function IacAvgTimeMetaCard({ avgMonths, metaColor, iac2026Count }) {
+  const widthPct = avgMonths === null ? 0 : Math.min(100, (avgMonths / 8) * 100);
+  return (
+    <div style={{ borderRadius: 8, overflow: 'hidden', background: '#FBFDFF', minHeight: 0 }}>
+      <div style={{ background: `linear-gradient(135deg, ${IAC_AVG_TIME_ACCENT}26, ${IAC_AVG_TIME_ACCENT}0d)`, padding: '6px 10px' }}>
+        <span style={{ color: IAC_AVG_TIME_ACCENT, fontSize: IAC_CARD_TITLE_FONT, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Média tempo META</span>
+      </div>
+      <div style={{ padding: 8, display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'baseline', gap: 6 }}>
+          <span style={{ color: metaColor, fontFamily: 'var(--font-display)', fontSize: 'clamp(1.15rem, 1.8vw, 1.6rem)', fontWeight: 900, lineHeight: 1 }}>
+            {avgMonths === null ? '-' : `${avgMonths}m`}
+          </span>
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.66rem', whiteSpace: 'nowrap' }}>{iac2026Count} IAC(s) de 2026</span>
+        </div>
+        <div style={{ position: 'relative', paddingBottom: 14, flex: 1, minWidth: 0 }}>
+          <div style={{ height: 7, background: '#E2E8F0', borderRadius: 999, overflow: 'hidden' }}>
+            <div style={{ width: `${widthPct}%`, height: '100%', background: metaColor, borderRadius: 999 }} />
+          </div>
+          {[{ m: 5, color: '#10B981' }, { m: 6, color: '#0070B8' }, { m: 7, color: '#F59E0B' }].map(({ m, color }) => (
+            <div key={m} style={{ position: 'absolute', left: `${(m / 8) * 100}%`, top: 0, transform: 'translateX(-50%)', pointerEvents: 'none' }}>
+              <div style={{ width: 2, height: 7, background: color, borderRadius: 1 }} />
+              <div style={{ marginTop: 2, fontSize: '0.8rem', color, fontWeight: 900, textAlign: 'center', whiteSpace: 'nowrap' }}>{m}m</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function IacStatusHorizontalChart({ items }) {
+  const [hovered, setHovered] = useState(null);
+  const [tipPos, setTipPos] = useState({ x: 0, y: 0 });
+  const [tooltipStyle, setTooltipStyle] = useState({ left: 0, top: 0 });
+  const tooltipRef = useRef(null);
   const countMap = new Map(items.map(item => [item.status, item.count]));
   const rows = IAC_STATUS_OPTIONS.map(option => ({
     ...option,
     label: statusLabel(option.value),
     count: countMap.get(option.value) || 0,
   }));
+  const total = rows.reduce((sum, item) => sum + item.count, 0);
   const max = Math.max(1, ...rows.map(item => item.count));
+
+  useLayoutEffect(() => {
+    if (!hovered || !tooltipRef.current) return;
+    const rect = tooltipRef.current.getBoundingClientRect();
+    const margin = 8;
+    let left = tipPos.x + 16;
+    let top = tipPos.y - 10;
+    if (left + rect.width + margin > window.innerWidth) left = tipPos.x - rect.width - 16;
+    if (left < margin) left = margin;
+    if (top + rect.height + margin > window.innerHeight) top = tipPos.y - rect.height - 10;
+    if (top < margin) top = margin;
+    setTooltipStyle({ left, top });
+  }, [hovered, tipPos]);
+
   return (
-    <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10, background: '#FBFDFF', minHeight: 0, height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ color: 'var(--text-muted)', fontSize: '0.76rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8, flexShrink: 0 }}>Etapas do processo</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gridAutoRows: '1fr', gap: 4, flex: 1, minHeight: 0 }}>
+    <div
+      style={{ borderRadius: 8, background: '#FBFDFF', minHeight: 0, height: '100%', position: 'relative', overflow: 'visible', display: 'flex', flexDirection: 'column' }}
+      onMouseMove={e => setTipPos({ x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => setHovered(null)}
+    >
+      <div style={{ background: `linear-gradient(135deg, ${IAC_STAGE_CHART_ACCENT}26, ${IAC_STAGE_CHART_ACCENT}0d)`, padding: '6px 10px', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>
+        <span style={{ color: IAC_STAGE_CHART_ACCENT, fontSize: IAC_CARD_TITLE_FONT, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Contratos por etapa</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gridAutoRows: '1fr', gap: 4, flex: 1, minHeight: 0, padding: 8 }}>
         {rows.map(item => (
-          <div key={item.value} style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, .76fr) minmax(120px, 1fr) 28px', alignItems: 'center', gap: 8, minWidth: 0 }}>
-            <span style={{ color: 'var(--text-secondary)', fontSize: '0.76rem', fontWeight: 850, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
+          <div
+            key={item.value}
+            onMouseEnter={() => setHovered(item)}
+            onFocus={() => setHovered(item)}
+            tabIndex={0}
+            style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, .76fr) minmax(80px, 1fr) 26px', alignItems: 'center', gap: 8, minWidth: 0, cursor: 'default' }}
+          >
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', fontWeight: 850, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
             <div style={{ height: 7, borderRadius: 999, background: '#E2E8F0', overflow: 'hidden' }}>
               <div style={{ width: `${(item.count / max) * 100}%`, height: '100%', borderRadius: 999, background: item.color, opacity: item.count ? 1 : 0.22 }} />
             </div>
-            <strong style={{ color: item.text, fontSize: '0.78rem', textAlign: 'right' }}>{item.count}</strong>
+            <strong style={{ color: item.text, fontSize: '0.74rem', textAlign: 'right' }}>{item.count}</strong>
           </div>
         ))}
       </div>
+      {hovered && (
+        <div ref={tooltipRef} style={{
+          position: 'fixed',
+          left: tooltipStyle.left,
+          top: tooltipStyle.top,
+          zIndex: 9999,
+          background: 'var(--bg-card)', border: '1px solid var(--border)',
+          borderRadius: 8, padding: '9px 12px', boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
+          fontSize: '0.78rem', minWidth: 170, pointerEvents: 'none',
+        }}>
+          <div style={{ fontWeight: 800, color: 'var(--ctg-navy)', marginBottom: 4 }}>{hovered.label}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+            <span style={{ color: 'var(--text-muted)' }}>Processos</span>
+            <strong style={{ color: 'var(--ctg-navy)' }}>{hovered.count}</strong>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+            <span style={{ color: 'var(--text-muted)' }}>% do total</span>
+            <strong style={{ color: 'var(--ctg-navy)' }}>{total ? pct((hovered.count / total) * 100) : '-'}</strong>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1330,6 +1575,7 @@ export default function HomePage({ year }) {
     docsStats: null,
     tracking: [],
     iacs: [],
+    allIacs: [],
   });
   const [selectedPlants, setSelectedPlants] = useState([]);
 
@@ -1384,7 +1630,7 @@ export default function HomePage({ year }) {
       const scopedDocuments = scope.ownOnly
         ? documents.filter(d => (d.responsible || '').trim().toLowerCase() === (user?.name || '').trim().toLowerCase())
         : scope.area ? documents.filter(areaMatch) : documents;
-      setData({ metas: ownMetas, vacations: ownVacations, documents: scopedDocuments, alerts, delegations, docsStats, tracking: scopedTracking, iacs: scopedIacs });
+      setData({ metas: ownMetas, vacations: ownVacations, documents: scopedDocuments, alerts, delegations, docsStats, tracking: scopedTracking, iacs: scopedIacs, allIacs: iacs });
       setLoading(false);
     }
     load();
@@ -1397,7 +1643,7 @@ export default function HomePage({ year }) {
     metasDone, metasAvg, projectRows, staleTrackingRows, iacRows,
     docsTotal, docsPublished, docsPublishedPct,
     projectStaleCount, iacStaleCount, projectUpdatedPct, iacUpdatedPct,
-    iacPriorityData, iacProcessData, iac2026, iacAvgMonths, iacMetaColor,
+    iacProcessData, iacPriorityGoalData, iac2026, iacAvgMonths, iacMetaColor,
     projectNatureData, projectAllPlantData,
     projectTotalContrato, projectTotalSi, projectRealizadoContrato, projectRealizadoSi,
     projectStatusItems, attentionItems, pendingTotal,
@@ -1431,14 +1677,33 @@ export default function HomePage({ year }) {
     const iacUpdatedCount = Math.max(0, iacRows.length - iacStaleCount);
     const projectUpdatedPct = projectRows.length ? Math.round((projectUpdatedCount / projectRows.length) * 100) : 0;
     const iacUpdatedPct = iacRows.length ? Math.round((iacUpdatedCount / iacRows.length) * 100) : 0;
-    const iacPriorityData = countBy(iacRows, 'priority').map(item => ({
-      ...item,
-      color: item.label === 'Priority' ? '#0070B8' : item.label === 'Hired' ? '#00AEEF' : '#64748B',
-    }));
     const iacProcessData = IAC_STATUS_OPTIONS.map(option => ({
       status: option.value,
       count: iacRows.filter(i => i.status_current === option.value).length,
     }));
+    const IAC_NAMED_STATUSES = new Set(['91 - Hired 2025', '0 - Not started yet', '10 - Cancelado', '8 - Draft Contract', '9 - Contract signed']);
+    const buildPriorityGoalBucket = (rows, quantityField) => {
+      const hiring2025Rows = rows.filter(r => r.status_current === '91 - Hired 2025');
+      const pendingRows = rows.filter(r => r.status_current === '0 - Not started yet');
+      const cancelRows = rows.filter(r => r.status_current === '10 - Cancelado');
+      const draftRows = rows.filter(r => r.status_current === '8 - Draft Contract');
+      const signedRows = rows.filter(r => r.status_current === '9 - Contract signed');
+      const hiringRows = rows.filter(r => !IAC_NAMED_STATUSES.has(r.status_current));
+      const total = rows.reduce((sum, r) => sum + (Number(r[quantityField]) || 0), 0);
+      return {
+        total, hiring2025: hiring2025Rows.length, pending: pendingRows.length, cancel: cancelRows.length,
+        hiring: hiringRows.length, draft: draftRows.length, signed: signedRows.length,
+        goalValue: draftRows.length + signedRows.length,
+        rowsByColumn: {
+          total: rows, hiring2025: hiring2025Rows, pending: pendingRows, cancel: cancelRows,
+          hiring: hiringRows, draft: draftRows, signed: signedRows,
+        },
+      };
+    };
+    const iacPriorityGoalData = {
+      Priority: buildPriorityGoalBucket(data.allIacs.filter(r => r.priority === 'Priority'), 'qty_pp_line_26_priority'),
+      'Non Priority': buildPriorityGoalBucket(data.allIacs.filter(r => r.priority === 'Non Priority'), 'qty_pp_line_26_no_priority'),
+    };
     const iac2026 = iacRows.filter(i => isIacOpenedInYear(i, 2026));
     const iacMonths = iac2026.map(i => iacElapsedMonths(i)).filter(v => v !== null);
     const iacAvgMonths = iacMonths.length ? Math.round(iacMonths.reduce((sum, v) => sum + v, 0) / iacMonths.length) : null;
@@ -1473,7 +1738,7 @@ export default function HomePage({ year }) {
       projectRows, staleTrackingRows, iacRows,
       docsTotal, docsPublished, docsPublishedPct,
       projectStaleCount, iacStaleCount, projectUpdatedPct, iacUpdatedPct,
-      iacPriorityData, iacProcessData, iac2026, iacAvgMonths, iacMetaColor,
+      iacProcessData, iacPriorityGoalData, iac2026, iacAvgMonths, iacMetaColor,
       projectNatureData, projectAllPlantData,
       projectTotalContrato, projectTotalSi, projectRealizadoContrato, projectRealizadoSi,
       projectStatusItems, attentionItems, pendingTotal,
@@ -1632,25 +1897,11 @@ export default function HomePage({ year }) {
 
           <HomeCard title="IACs em andamento" icon="warning" action="›" onClick={() => navigate('/lists/iacs')}>
             <div style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', gap: 10, height: '100%', minHeight: 0 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, .85fr) minmax(0, 1fr)', gap: 10, minHeight: 0 }}>
-                <StatBox label="Média META" value={iacAvgMonths === null ? '-' : `${iacAvgMonths}m`} color={iacMetaColor} sub={`${iac2026.length} IAC(s) de 2026`}>
-                  <div style={{ position: 'relative', paddingBottom: 14 }}>
-                    <div style={{ height: 7, background: '#E2E8F0', borderRadius: 999, overflow: 'hidden' }}>
-                      <div style={{ width: `${iacAvgMonths === null ? 0 : Math.min(100, (iacAvgMonths / 8) * 100)}%`, height: '100%', background: iacMetaColor, borderRadius: 999 }} />
-                    </div>
-                    {[{ m: 5, color: '#10B981' }, { m: 6, color: '#0070B8' }, { m: 7, color: '#F59E0B' }].map(({ m, color }) => (
-                      <div key={m} style={{ position: 'absolute', left: `${(m / 8) * 100}%`, top: 0, transform: 'translateX(-50%)', pointerEvents: 'none' }}>
-                        <div style={{ width: 2, height: 7, background: color, borderRadius: 1 }} />
-                        <div style={{ marginTop: 2, fontSize: '0.8rem', color, fontWeight: 900, textAlign: 'center', whiteSpace: 'nowrap' }}>{m}m</div>
-                      </div>
-                    ))}
-                  </div>
-                </StatBox>
-                <ChartBox title="Por prioridade">
-                  <DistributionDonut items={iacPriorityData} total={iacRows.length} centerLabel={iacRows.length} />
-                </ChartBox>
+              <IacPriorityGoalPanel data={iacPriorityGoalData} />
+              <div style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', gap: 10, minHeight: 0 }}>
+                <IacAvgTimeMetaCard avgMonths={iacAvgMonths} metaColor={iacMetaColor} iac2026Count={iac2026.length} />
+                <IacStatusHorizontalChart items={iacProcessData} />
               </div>
-              <IacStatusProcessChart items={iacProcessData} />
             </div>
           </HomeCard>
         </div>

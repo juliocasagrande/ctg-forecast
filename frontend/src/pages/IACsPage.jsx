@@ -62,7 +62,7 @@ function compareIacStatus(a, b) {
   return (a || '').localeCompare(b || '');
 }
 
-const PRIORITY_OPTIONS = ['Priority', 'Non Priority', 'Hired'];
+const PRIORITY_OPTIONS = ['Priority', 'Non Priority'];
 const PRIORITY_CHART_OPTIONS = ['Priority', 'Non Priority'];
 const PRIORITY_COLORS = {
   'Priority':     { color: '#F59E0B', bg: '#FEF3C7', text: '#92400E' },
