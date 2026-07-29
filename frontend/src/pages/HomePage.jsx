@@ -695,7 +695,7 @@ function HomeCard({ title, icon, titleExtra, action, children, onClick, style })
         ...style,
       }}
     >
-      <div style={{ padding: '11px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexShrink: 0 }}>
+      <div style={{ padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           {icon && <span style={{ width: 22, height: 22, borderRadius: 6, display: 'grid', placeItems: 'center', background: iconBg, color: iconColor, fontWeight: 900, fontSize: '0.8rem' }}>
             {['target', 'file', 'folder', 'warning'].includes(icon) ? <OperationalIcon name={icon} color={iconColor} /> : icon}
@@ -705,7 +705,7 @@ function HomeCard({ title, icon, titleExtra, action, children, onClick, style })
         </div>
         {action && <span style={{ color: '#0070B8', fontSize: '0.68rem', fontWeight: 900 }}>{action}</span>}
       </div>
-      <div style={{ padding: '0 14px 14px', flex: 1, minHeight: 0 }}>
+      <div style={{ padding: '0 14px 11px', flex: 1, minHeight: 0 }}>
         {children}
       </div>
     </div>
@@ -1181,7 +1181,7 @@ function GoalBar({ value, pct80, pct100, pct120 }) {
 
   return (
     <div
-      style={{ position: 'relative', paddingBottom: 16, flex: 1, minWidth: 0, cursor: 'default' }}
+      style={{ position: 'relative', paddingBottom: 13, flex: 1, minWidth: 0, cursor: 'default' }}
       onMouseEnter={() => setHovered(true)}
       onMouseMove={e => setTipPos({ x: e.clientX, y: e.clientY })}
       onMouseLeave={() => setHovered(false)}
@@ -1255,7 +1255,7 @@ function StatValueCell({ value, rows }) {
 
   return (
     <div
-      style={{ padding: '5px 2px', textAlign: 'center', borderRight: '1px solid var(--border)', cursor: 'default' }}
+      style={{ padding: '3px 2px', textAlign: 'center', borderRight: '1px solid var(--border)', cursor: 'default' }}
       onMouseEnter={() => setHovered(true)}
       onMouseMove={e => setTipPos({ x: e.clientX, y: e.clientY })}
       onMouseLeave={() => setHovered(false)}
@@ -1293,15 +1293,15 @@ function StatValueCell({ value, rows }) {
 function PriorityGoalTable({ title, stats, goals, accent }) {
   return (
     <div style={{ borderRadius: 8, overflow: 'hidden', background: '#FBFDFF', minHeight: 0 }}>
-      <div style={{ background: `linear-gradient(135deg, ${accent}26, ${accent}0d)`, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ background: `linear-gradient(135deg, ${accent}26, ${accent}0d)`, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 12 }}>
         <span style={{ color: accent, fontSize: IAC_CARD_TITLE_FONT, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>{title}</span>
         <span style={{ fontSize: '0.66rem', fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase', flexShrink: 0 }}>Goal</span>
         <GoalBar value={stats.goalValue} pct80={goals.pct80} pct100={goals.pct100} pct120={goals.pct120} />
       </div>
-      <div style={{ padding: 8 }}>
+      <div style={{ padding: '6px 8px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${PRIORITY_GOAL_STAT_COLUMNS.length}, 1fr)`, border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
           {PRIORITY_GOAL_STAT_COLUMNS.map(col => (
-            <div key={col.key} style={{ padding: '4px 2px', textAlign: 'center', background: '#F1F5F9', borderBottom: '1px solid var(--border)', borderRight: '1px solid var(--border)' }}>
+            <div key={col.key} style={{ padding: '3px 2px', textAlign: 'center', background: '#F1F5F9', borderBottom: '1px solid var(--border)', borderRight: '1px solid var(--border)' }}>
               <span style={{ fontSize: '0.64rem', fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{col.label}</span>
             </div>
           ))}
@@ -1316,7 +1316,7 @@ function PriorityGoalTable({ title, stats, goals, accent }) {
 
 function IacPriorityGoalPanel({ data }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minHeight: 0 }}>
       <PriorityGoalTable title="Priority" stats={data.Priority} goals={IAC_PRIORITY_GOALS.Priority} accent={IAC_PRIORITY_ACCENTS.Priority} />
       <PriorityGoalTable title="Non Priority" stats={data['Non Priority']} goals={IAC_PRIORITY_GOALS['Non Priority']} accent={IAC_PRIORITY_ACCENTS['Non Priority']} />
     </div>
@@ -1327,17 +1327,17 @@ function IacAvgTimeMetaCard({ avgMonths, metaColor, iac2026Count }) {
   const widthPct = avgMonths === null ? 0 : Math.min(100, (avgMonths / 8) * 100);
   return (
     <div style={{ borderRadius: 8, overflow: 'hidden', background: '#FBFDFF', minHeight: 0 }}>
-      <div style={{ background: `linear-gradient(135deg, ${IAC_AVG_TIME_ACCENT}26, ${IAC_AVG_TIME_ACCENT}0d)`, padding: '6px 10px' }}>
+      <div style={{ background: `linear-gradient(135deg, ${IAC_AVG_TIME_ACCENT}26, ${IAC_AVG_TIME_ACCENT}0d)`, padding: '4px 10px' }}>
         <span style={{ color: IAC_AVG_TIME_ACCENT, fontSize: IAC_CARD_TITLE_FONT, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Média tempo META</span>
       </div>
-      <div style={{ padding: 8, display: 'flex', alignItems: 'center', gap: 16 }}>
+      <div style={{ padding: '6px 8px', display: 'flex', alignItems: 'center', gap: 16 }}>
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'baseline', gap: 6 }}>
           <span style={{ color: metaColor, fontFamily: 'var(--font-display)', fontSize: 'clamp(1.15rem, 1.8vw, 1.6rem)', fontWeight: 900, lineHeight: 1 }}>
             {avgMonths === null ? '-' : `${avgMonths}m`}
           </span>
           <span style={{ color: 'var(--text-muted)', fontSize: '0.66rem', whiteSpace: 'nowrap' }}>{iac2026Count} IAC(s) de 2026</span>
         </div>
-        <div style={{ position: 'relative', paddingBottom: 14, flex: 1, minWidth: 0 }}>
+        <div style={{ position: 'relative', paddingBottom: 12, flex: 1, minWidth: 0 }}>
           <div style={{ height: 7, background: '#E2E8F0', borderRadius: 999, overflow: 'hidden' }}>
             <div style={{ width: `${widthPct}%`, height: '100%', background: metaColor, borderRadius: 999 }} />
           </div>
@@ -1386,10 +1386,10 @@ function IacStatusHorizontalChart({ items }) {
       onMouseMove={e => setTipPos({ x: e.clientX, y: e.clientY })}
       onMouseLeave={() => setHovered(null)}
     >
-      <div style={{ background: `linear-gradient(135deg, ${IAC_STAGE_CHART_ACCENT}26, ${IAC_STAGE_CHART_ACCENT}0d)`, padding: '6px 10px', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>
+      <div style={{ background: `linear-gradient(135deg, ${IAC_STAGE_CHART_ACCENT}26, ${IAC_STAGE_CHART_ACCENT}0d)`, padding: '5px 8px', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>
         <span style={{ color: IAC_STAGE_CHART_ACCENT, fontSize: IAC_CARD_TITLE_FONT, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Contratos por etapa</span>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gridAutoRows: '1fr', gap: 4, flex: 1, minHeight: 0, padding: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gridAutoRows: 'minmax(0, 1fr)', gap: 3, flex: 1, minHeight: 0, padding: '6px 8px', overflow: 'hidden' }}>
         {rows.map(item => (
           <div
             key={item.value}
@@ -1754,7 +1754,7 @@ export default function HomePage({ year }) {
   }, [data, selectedPlants, settings.tracking_alert_interval_days, settings.iac_alert_interval_days]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: 'calc(100vh - 32px)', maxHeight: 'calc(100vh - 32px)', overflow: 'hidden', paddingBottom: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, height: 'calc(100vh - 32px)', maxHeight: 'calc(100vh - 32px)', overflow: 'hidden', paddingBottom: 0 }}>
       <style>{`
         @keyframes homeHeroGlow {
           0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: .58; }
@@ -1769,7 +1769,7 @@ export default function HomePage({ year }) {
           50% { transform: translate3d(-10px, 7px, 0) scale(1.08); opacity: .62; }
         }
       `}</style>
-      <section style={{ position: 'relative', overflow: 'hidden', background: 'linear-gradient(112deg, var(--ctg-navy) 0%, #063575 44%, #0B6FAE 73%, #8ED8F8 100%)', backgroundSize: '210% 210%', animation: 'homeHeroGradientFloat 12s ease-in-out infinite', color: '#fff', borderRadius: 10, padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', flexShrink: 0 }}>
+      <section style={{ position: 'relative', overflow: 'hidden', background: 'linear-gradient(112deg, var(--ctg-navy) 0%, #063575 44%, #0B6FAE 73%, #8ED8F8 100%)', backgroundSize: '210% 210%', animation: 'homeHeroGradientFloat 12s ease-in-out infinite', color: '#fff', borderRadius: 10, padding: '9px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', flexShrink: 0 }}>
         <div style={{ position: 'absolute', right: 78, top: -42, width: 300, height: 150, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.36) 0%, rgba(125,211,252,0.22) 46%, rgba(255,255,255,0) 72%)', filter: 'blur(3px)', animation: 'homeHeroGlow 7s ease-in-out infinite', pointerEvents: 'none' }} />
         <div style={{ position: 'absolute', right: -80, bottom: -70, width: 360, height: 150, borderRadius: '50%', background: 'radial-gradient(circle, rgba(14,165,233,0.24) 0%, rgba(255,255,255,0.16) 48%, rgba(255,255,255,0) 74%)', animation: 'homeHeroGlow 9s ease-in-out infinite reverse', pointerEvents: 'none' }} />
         <div style={{ position: 'relative', zIndex: 1 }}>
@@ -1784,10 +1784,10 @@ export default function HomePage({ year }) {
         </div>
       </section>
 
-      <section style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1, minHeight: 0 }}>
+      <section style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minHeight: 0 }}>
 
         {/* Row 1: left col = Resumo + Filter stacked; right col = Atenção agora spanning both */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 290px', gridTemplateRows: 'auto auto', gap: 10, flexShrink: 0 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 290px', gridTemplateRows: 'auto auto', gap: 8, flexShrink: 0 }}>
           <HomeCard
             title="Resumo operacional"
             titleExtra={canToggleScope ? <ScopeToggle options={scopeOptions} value={viewMode} onChange={setViewMode} /> : null}
@@ -1890,7 +1890,7 @@ export default function HomePage({ year }) {
         </div>
 
         {/* Row 2: main cards side by side */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, flex: 1, minHeight: 0 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, flex: 1, minHeight: 0 }}>
           <HomeCard title="Projetos em acompanhamento" icon="folder" action="›" onClick={() => navigate('/lists/projects-tracking')}>
             <div style={{ display: 'grid', gridTemplateRows: 'auto auto minmax(0, 1fr) auto', gap: 8, height: '100%', minHeight: 0 }}>
               <ProjectStatusStrip items={projectStatusItems} />
@@ -1904,9 +1904,9 @@ export default function HomePage({ year }) {
           </HomeCard>
 
           <HomeCard title="IACs em andamento" icon="warning" action="›" onClick={() => navigate('/lists/iacs')}>
-            <div style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', gap: 10, height: '100%', minHeight: 0 }}>
+            <div style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', gap: 6, height: '100%', minHeight: 0 }}>
               <IacPriorityGoalPanel data={iacPriorityGoalData} />
-              <div style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', gap: 10, minHeight: 0 }}>
+              <div style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', gap: 6, minHeight: 0 }}>
                 <IacAvgTimeMetaCard avgMonths={iacAvgMonths} metaColor={iacMetaColor} iac2026Count={iac2026.length} />
                 <IacStatusHorizontalChart items={iacProcessData} />
               </div>
