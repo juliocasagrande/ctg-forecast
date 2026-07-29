@@ -202,6 +202,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
             {navItem('/lists/projects-tracking', IC.projects, 'Acompanhamento Projetos')}
             {navItem('/lists/iacs', IC.report, 'IACs 2026')}
             {navItem('/documents', IC.report, 'Documentos')}
+            {navItem('/lists/schedule-project', IC.monthly, 'Project CTG')}
 
             <div style={{ margin: '6px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
             <div className={'nav-section-label'} style={{ color: 'rgba(255,255,255,0.75)' }}>
@@ -217,7 +218,6 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
         {/* User footer */}
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', padding: '10px 8px' }}>
           {/* Help & Feedback — above user info */}
-          {hasFullSidebarAccess && (
           <div style={{ display: 'flex', gap: 4, padding: '0 8px 6px', borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: 6 }}>
             <NavLink to="/tutorial" onClick={onClose}
               className={({ isActive }) => `nav-item sidebar-footer-item ${isActive ? 'active' : ''}`}
@@ -232,7 +232,6 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
               <span>Sugestões</span>
             </NavLink>
           </div>
-          )}
 
           {/* Feedback Inbox — only for developer */}
           {userEmail === 'julio.casagrande@ctgbr.com.br' && (
