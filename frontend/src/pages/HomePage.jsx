@@ -1126,14 +1126,14 @@ const IAC_PRIORITY_ACCENTS = {
 
 function priorityAchievementPct(bucket, goals) {
   if (!bucket || !goals?.pct100) return null;
-  return (bucket.goalValue / goals.pct100) * 100;
+  return Math.min(120, (bucket.goalValue / goals.pct100) * 100);
 }
 
 // Tempo menor é melhor: replica os degraus visuais do card (7m=80%, 6m=100%, 5m=120%),
-// interpolando/extrapolando linearmente fora desses pontos.
+// interpolando abaixo da meta e limitando o atingimento máximo a 120%.
 function iacTimeAchievementPct(avgMonths) {
   if (avgMonths === null || avgMonths === undefined) return null;
-  if (avgMonths <= 6) return 100 + (6 - avgMonths) * 20;
+  if (avgMonths <= 6) return Math.min(120, 100 + (6 - avgMonths) * 20);
   if (avgMonths <= 7) return 100 - (avgMonths - 6) * 20;
   return Math.max(0, 80 - (avgMonths - 7) * 20);
 }
