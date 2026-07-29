@@ -25,6 +25,11 @@ const ORDERED_PLANTS = [
   'UHE Salto Grande','UHE Taquaruçu',
 ];
 
+const FULL_SIDEBAR_EMAILS = new Set([
+  'julio.casagrande@ctgbr.com.br',
+  'lucas.vitti@ctgbr.com.br',
+]);
+
 // Group projects by their plants, keeping plant order
 // Projects with no plant go to a "Sem usina" group
 function groupByPlant(projects) {
@@ -55,6 +60,8 @@ function groupByPlant(projects) {
 export default function Sidebar({ open, onClose, onNewProject, projects }) {
   const { user, logout } = useAuth();
   const { isAdmin, isGestor, isCoordenador, isPlanejador, isGerente } = useRole();
+  const userEmail = user?.email?.trim().toLowerCase() || '';
+  const hasFullSidebarAccess = FULL_SIDEBAR_EMAILS.has(userEmail);
   const isNativeAdmin = isAdmin && (!user?._originalRole || user._originalRole === 'admin');
   const canManageSidebar = isGestor || isCoordenador || isPlanejador;
   const navigate = useNavigate();
@@ -79,7 +86,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
 
   // Poll feedback unread count (only for developer)
   useEffect(() => {
-    if (user?.email !== 'julio.casagrande@ctgbr.com.br') return;
+    if (userEmail !== 'julio.casagrande@ctgbr.com.br') return;
     const fetchFeedback = async () => {
       try {
         const r = await api.get('/feedback/stats');
@@ -89,7 +96,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
     fetchFeedback();
     const t = setInterval(fetchFeedback, 60000);
     return () => clearInterval(t);
-  }, [user?.email]);
+  }, [userEmail]);
 
   const roleLabel = {
     admin:       'Administrador',
@@ -132,7 +139,8 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
         </div>
 
         <div className="sidebar-nav">
-          {navItem('/', IC.dashboard, 'Início')}
+          {hasFullSidebarAccess ? <>
+            {navItem('/', IC.dashboard, 'Início')}
 
           {/* Gestor / Engenheiro / Planejador (also shown for override-admins who have a non-admin original role) */}
           {!isNativeAdmin && <>
@@ -184,12 +192,32 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
             {navItem('/admin', IC.users, 'Gerenciar Usuários')}
           </>}
 
+          </> : <>
+            {navItem('/', IC.dashboard, 'Início')}
+
+            <div style={{ margin: '6px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
+            <div className={'nav-section-label'} style={{ color: 'rgba(255,255,255,0.75)' }}>
+              Gestão de Processos
+            </div>
+            {navItem('/lists/projects-tracking', IC.projects, 'Acompanhamento Projetos')}
+            {navItem('/lists/iacs', IC.report, 'IACs 2026')}
+            {navItem('/documents', IC.report, 'Documentos')}
+
+            <div style={{ margin: '6px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
+            <div className={'nav-section-label'} style={{ color: 'rgba(255,255,255,0.75)' }}>
+              Gestão de Pessoas
+            </div>
+            {navItem('/workload', IC.report, 'Controle de Carga')}
+            {navItem('/vacations', IC.monthly, 'Férias')}
+          </>}
+
           {/* Projects listed only on Projects page */}
         </div>
 
         {/* User footer */}
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', padding: '10px 8px' }}>
           {/* Help & Feedback — above user info */}
+          {hasFullSidebarAccess && (
           <div style={{ display: 'flex', gap: 4, padding: '0 8px 6px', borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: 6 }}>
             <NavLink to="/tutorial" onClick={onClose}
               className={({ isActive }) => `nav-item sidebar-footer-item ${isActive ? 'active' : ''}`}
@@ -204,9 +232,10 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
               <span>Sugestões</span>
             </NavLink>
           </div>
+          )}
 
           {/* Feedback Inbox — only for developer */}
-          {user?.email === 'julio.casagrande@ctgbr.com.br' && (
+          {userEmail === 'julio.casagrande@ctgbr.com.br' && (
             <NavLink to="/feedback/inbox" onClick={onClose}
               className={({ isActive }) => `nav-item sidebar-footer-item ${isActive ? 'active' : ''}`}
               style={{ padding: '6px 8px', fontSize: '0.72rem', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -243,7 +272,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
           </div>
 
           {/* Nav items — one per line */}
-          {(isPlanejador || isGestor || user?.email === 'julio.casagrande@ctgbr.com.br') && (
+          {hasFullSidebarAccess && (isPlanejador || isGestor || userEmail === 'julio.casagrande@ctgbr.com.br') && (
             <NavLink to="/settings" onClick={onClose}
               className={({ isActive }) => `nav-item sidebar-footer-item ${isActive ? 'active' : ''}`}>
               <Icon name="gear" style={{ width: 16, textAlign: 'center' }} />

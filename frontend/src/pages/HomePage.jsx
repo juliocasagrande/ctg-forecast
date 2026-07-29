@@ -13,20 +13,6 @@ function pct(v) {
   return `${n.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
 }
 
-function weight(meta) {
-  const n = Number(meta?.weight);
-  return Number.isFinite(n) && n > 0 ? n : 0;
-}
-
-function weightedAchievement(metas) {
-  const rows = metas
-    .map(m => ({ w: weight(m), a: Number(m.achieved_value || 0) }))
-    .filter(r => r.w > 0 && Number.isFinite(r.a));
-  const total = rows.reduce((s, r) => s + r.w, 0);
-  if (total <= 0) return null;
-  return rows.reduce((s, r) => s + r.w * r.a, 0) / total;
-}
-
 function evidenceCount(meta) {
   const raw = meta?.evidence_images;
   if (Array.isArray(raw)) return raw.filter(Boolean).length;
@@ -1138,6 +1124,20 @@ const IAC_PRIORITY_ACCENTS = {
   'Non Priority': '#64748B',
 };
 
+function priorityAchievementPct(bucket, goals) {
+  if (!bucket || !goals?.pct100) return null;
+  return (bucket.goalValue / goals.pct100) * 100;
+}
+
+// Tempo menor é melhor: replica os degraus visuais do card (7m=80%, 6m=100%, 5m=120%),
+// interpolando/extrapolando linearmente fora desses pontos.
+function iacTimeAchievementPct(avgMonths) {
+  if (avgMonths === null || avgMonths === undefined) return null;
+  if (avgMonths <= 6) return 100 + (6 - avgMonths) * 20;
+  if (avgMonths <= 7) return 100 - (avgMonths - 6) * 20;
+  return Math.max(0, 80 - (avgMonths - 7) * 20);
+}
+
 const IAC_AVG_TIME_ACCENT = '#0070B8';
 const IAC_STAGE_CHART_ACCENT = '#6366F1';
 const IAC_CARD_TITLE_FONT = 'clamp(0.6rem, 0.9vw, 0.72rem)';
@@ -1640,7 +1640,7 @@ export default function HomePage({ year }) {
   // Pipeline derivado — memoizado para não recalcular em renders que não mudam
   // `data`/`selectedPlants` (ex.: AlertBell, eventos de equipamentos no App pai).
   const {
-    metasDone, metasAvg, projectRows, staleTrackingRows, iacRows,
+    metasAvg, projectRows, staleTrackingRows, iacRows,
     docsTotal, docsPublished, docsPublishedPct,
     projectStaleCount, iacStaleCount, projectUpdatedPct, iacUpdatedPct,
     iacProcessData, iacPriorityGoalData, iac2026, iacAvgMonths, iacMetaColor,
@@ -1732,9 +1732,17 @@ export default function HomePage({ year }) {
     ];
     const pendingTotal = attentionItems.reduce((sum, item) => sum + item.value, 0);
 
+    const iacGoalAchievements = [
+      priorityAchievementPct(iacPriorityGoalData.Priority, IAC_PRIORITY_GOALS.Priority),
+      priorityAchievementPct(iacPriorityGoalData['Non Priority'], IAC_PRIORITY_GOALS['Non Priority']),
+      iacTimeAchievementPct(iacAvgMonths),
+    ].filter(v => v !== null);
+    const iacMetasAvg = iacGoalAchievements.length
+      ? iacGoalAchievements.reduce((sum, v) => sum + v, 0) / iacGoalAchievements.length
+      : null;
+
     return {
-      metasDone: data.metas.filter(m => Number(m.achieved_value || 0) >= 100).length,
-      metasAvg: weightedAchievement(data.metas),
+      metasAvg: iacMetasAvg,
       projectRows, staleTrackingRows, iacRows,
       docsTotal, docsPublished, docsPublishedPct,
       projectStaleCount, iacStaleCount, projectUpdatedPct, iacUpdatedPct,
@@ -1789,7 +1797,7 @@ export default function HomePage({ year }) {
               <OperationalTile label="IACs" value={iacRows.length} sub={`${iacUpdatedPct}% atualizado`} color="#F59E0B" icon="warning" trend gaugeValue={iacUpdatedPct} onClick={() => navigate('/lists/iacs')} />
               <OperationalTile label="Projetos" value={projectRows.length} sub={`${projectUpdatedPct}% atualizado`} color="#0070B8" icon="folder" trend gaugeValue={projectUpdatedPct} onClick={() => navigate('/lists/projects-tracking')} />
               <OperationalTile label="Documentos" value={docsTotal} sub={`${docsPublished} publicados`} color="#6366F1" icon="file" trend gaugeValue={docsPublishedPct} onClick={() => navigate('/documents')} />
-              <OperationalTile label="Metas" value={pct(metasAvg)} sub={`${metasDone} de ${data.metas.length} atingidas`} color="#10B981" icon="target" trend gaugeValue={metasAvg || 0} onClick={() => navigate('/metas')} />
+              <OperationalTile label="Metas IACs" value={pct(metasAvg)} sub="Média Ponderada / Metas IACs" color="#10B981" icon="target" trend gaugeValue={metasAvg || 0} onClick={() => navigate('/lists/iacs')} />
             </div>
           </HomeCard>
 
