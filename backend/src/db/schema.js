@@ -395,8 +395,10 @@ await client.query(`
           SELECT 1 FROM information_schema.columns
           WHERE table_name = 'documents' AND column_name = 'plant' AND data_type <> 'ARRAY'
         ) THEN
+          ALTER TABLE documents ALTER COLUMN plant DROP DEFAULT;
           ALTER TABLE documents ALTER COLUMN plant TYPE TEXT[]
             USING (CASE WHEN plant IS NULL OR plant = '' THEN NULL ELSE ARRAY[plant] END);
+          ALTER TABLE documents ALTER COLUMN plant SET DEFAULT NULL;
         END IF;
       END $$;
     `);
