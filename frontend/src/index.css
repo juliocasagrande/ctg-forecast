@@ -134,7 +134,7 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
 .schedule-legend .done{background:#16A34A}.schedule-legend .progress{background:#0070B8}.schedule-legend .pending{background:#93C5FD}.schedule-legend .late{background:#DC2626}
 .schedule-workspace{display:grid;grid-template-columns:minmax(560px,42%) 1fr;min-height:520px;flex:1;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-sm);}
 .schedule-task-pane{display:flex;flex-direction:column;min-width:0;border-right:2px solid var(--border);}
-.schedule-grid{display:grid;grid-template-columns:58px minmax(190px,1fr) 72px 72px 54px 86px;align-items:center;}
+.schedule-grid{display:grid;grid-template-columns:58px minmax(190px,1fr) 72px 72px 66px 54px;align-items:center;}
 .schedule-header-row{height:38px;background:var(--ctg-navy);color:#fff;font-size:.63rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;}
 .schedule-header-row span,.schedule-task-row span{padding:0 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .schedule-task-rows{overflow:auto;min-height:0;flex:1;}
@@ -256,7 +256,7 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
 }
 
 @media(max-width:768px){
-  .schedule-grid{grid-template-columns:44px minmax(160px,1fr) 64px 64px 44px 70px;}
+  .schedule-grid{grid-template-columns:44px minmax(160px,1fr) 64px 64px 56px 44px;}
   .schedule-commandbar .form-select,.schedule-project-picker{width:100%;}
   .schedule-actions{width:100%;overflow-x:auto;flex-wrap:nowrap;padding-bottom:2px;}
   .schedule-title-input{width:100%;font-size:1.2rem;}
@@ -273,7 +273,7 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
   .schedule-page{display:block;}
   .schedule-page > .schedule-print-header,.schedule-page > .schedule-workspace{display:none!important;}
   .schedule-print-pages{display:block;}
-  .schedule-print-page{break-after:page;page-break-after:always;min-height:204mm;display:flex;flex-direction:column;font-size:9px;}
+  .schedule-print-page{break-after:page;page-break-after:always;height:204mm;max-height:204mm;overflow:hidden;display:flex;flex-direction:column;font-size:9px;}
   .schedule-print-page:last-child{break-after:auto;page-break-after:auto;}
   .schedule-print-page .schedule-print-header{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #0070B8;padding-bottom:4mm;margin-bottom:4mm;}
   .schedule-print-header h1{font-family:Arial,sans-serif;font-size:14pt;color:#001F5B;margin:0;}
@@ -287,7 +287,7 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
   .schedule-print-workspace{display:grid!important;width:100%;border:1px solid #CBD5E1;border-radius:0;box-shadow:none;min-height:0;overflow:hidden;background:#fff;break-inside:avoid;page-break-inside:avoid;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   .schedule-print-workspace .schedule-task-pane{border-right:2px solid var(--border);}
   .schedule-print-workspace .schedule-task-rows,.schedule-print-workspace .schedule-gantt-scroll{overflow:hidden;}
-  .schedule-print-workspace .schedule-print-grid{grid-template-columns:34px minmax(0,1fr) 56px 56px 50px;}
+  .schedule-print-workspace .schedule-print-grid{grid-template-columns:34px minmax(0,1fr) 56px 56px 40px 46px;}
   .schedule-print-workspace .schedule-header-row{height:28px;font-size:.48rem;}
   .schedule-print-workspace .schedule-task-row{font-size:.5rem;break-inside:avoid;page-break-inside:avoid;}
   .schedule-print-workspace .schedule-header-row span,.schedule-print-workspace .schedule-task-row span{padding:0 5px;}

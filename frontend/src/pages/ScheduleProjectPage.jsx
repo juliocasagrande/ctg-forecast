@@ -13,9 +13,20 @@ const SUMMARY_ROW_H = 42;
 const PRINT_TASK_ROW_H = 20;
 const PRINT_PHASE_ROW_H = 24;
 const PRINT_SUMMARY_ROW_H = 26;
-const PRINT_BODY_MAX_H = 1320;
 const PRINT_PAGE_WIDTH = 1080;
 const PRINT_TASK_WIDTH = 384;
+// Printable body height (px, 96dpi) reserved for task/gantt rows on one A4-landscape page.
+// @page usable height is 204mm (see index.css); the header block, footer bar and the
+// table/timeline header row all eat into that before any task row can be drawn — leaving
+// this out of the budget is what let content grow past the page and cut the footer off.
+const PRINT_MM_TO_PX = 96 / 25.4;
+const PRINT_HEADER_H = 68;       // .schedule-print-header block (~18mm)
+const PRINT_FOOTER_H = 30;       // .schedule-print-footer, fixed 8mm tall
+const PRINT_TABLE_HEADER_H = 28; // .schedule-header-row / gantt months+days header row
+const PRINT_BODY_MAX_H = Math.floor(204 * PRINT_MM_TO_PX) - PRINT_HEADER_H - PRINT_FOOTER_H - PRINT_TABLE_HEADER_H;
+const PRINT_GANTT_WIDTH = PRINT_PAGE_WIDTH - PRINT_TASK_WIDTH;
+const PRINT_MIN_COL_WIDTH = 4;
+const PRINT_MAX_COL_WIDTH = 40;
 const DEFAULT_SETTINGS = {
   showToday: true,
   shadeWeekends: true,
@@ -337,6 +348,7 @@ function rowTop(tasks, index) {
   return tasks.slice(0, index).reduce((sum, task) => sum + rowHeight(task), 0);
 }
 
+
 function getWorkdays(settings = DEFAULT_SETTINGS) {
   if (Array.isArray(settings.workdays) && settings.workdays.length) {
     return settings.workdays.map(Number).filter(day => day >= 0 && day <= 6);
@@ -386,6 +398,44 @@ function taskDuration(task, settings = DEFAULT_SETTINGS) {
   return Math.max(1, total);
 }
 
+function nextWorkdayOnOrAfter(date, settings = DEFAULT_SETTINGS) {
+  let cursor = new Date(date);
+  while (!isWorkday(cursor, settings)) cursor = addDays(cursor, 1);
+  return cursor;
+}
+
+function nextWorkdayAfter(date, settings = DEFAULT_SETTINGS) {
+  return nextWorkdayOnOrAfter(addDays(date, 1), settings);
+}
+
+function prevWorkdayOnOrBefore(date, settings = DEFAULT_SETTINGS) {
+  let cursor = new Date(date);
+  while (!isWorkday(cursor, settings)) cursor = addDays(cursor, -1);
+  return cursor;
+}
+
+// Walks forward from a workday, counting only workdays, until `workdayCount` have been covered.
+function addWorkdaySpan(startDate, workdayCount, settings = DEFAULT_SETTINGS) {
+  let cursor = new Date(startDate);
+  let count = 1;
+  while (count < workdayCount) {
+    cursor = addDays(cursor, 1);
+    if (isWorkday(cursor, settings)) count += 1;
+  }
+  return cursor;
+}
+
+// Same as addWorkdaySpan but walking backward from an end date.
+function subtractWorkdaySpan(endDate, workdayCount, settings = DEFAULT_SETTINGS) {
+  let cursor = new Date(endDate);
+  let count = 1;
+  while (count < workdayCount) {
+    cursor = addDays(cursor, -1);
+    if (isWorkday(cursor, settings)) count += 1;
+  }
+  return cursor;
+}
+
 function getInitialSettings() {
   try {
     return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY)) };
@@ -433,7 +483,59 @@ function getCriticalPath(tasks, settings) {
   return new Set(best.path);
 }
 
-function TaskModal({ task, tasks, onClose, onSave }) {
+// When a task's start/end move, everything linked to it downstream should slide with it —
+// but landing on the correct next workday, not just calendar-shifting past weekends/holidays.
+// FS: successor starts the workday after the predecessor ends. SS: successor starts alongside
+// the predecessor's start. FF: successor ends alongside the predecessor's end. Each successor
+// keeps its own workday-duration and cascades into its own successors recursively.
+function cascadeLinkedTasks(tasks, oldTask, newTask, settings = DEFAULT_SETTINGS) {
+  const oldStart = parseDate(oldTask?.start);
+  const oldEnd = parseDate(oldTask?.end);
+  const newStart = parseDate(newTask?.start);
+  const newEnd = parseDate(newTask?.end);
+  if (!oldStart || !oldEnd || !newStart || !newEnd) return tasks;
+  if (oldStart.getTime() === newStart.getTime() && oldEnd.getTime() === newEnd.getTime()) return tasks;
+
+  const byId = new Map(tasks.map(task => [task.id, task]));
+  const successorsOf = new Map();
+  tasks.forEach(task => {
+    if (!task.predecessorId) return;
+    if (!successorsOf.has(task.predecessorId)) successorsOf.set(task.predecessorId, []);
+    successorsOf.get(task.predecessorId).push(task);
+  });
+
+  const visited = new Set();
+  const rescheduleSuccessors = (predecessorId) => {
+    (successorsOf.get(predecessorId) || []).forEach(successor => {
+      if (visited.has(successor.id)) return;
+      visited.add(successor.id);
+      const predecessor = byId.get(predecessorId);
+      const original = byId.get(successor.id);
+      const workdaySpan = Math.max(1, taskDuration(original, settings));
+
+      let successorStart;
+      let successorEnd;
+      if (successor.dependencyType === 'SS') {
+        successorStart = nextWorkdayOnOrAfter(parseDate(predecessor.start), settings);
+        successorEnd = addWorkdaySpan(successorStart, workdaySpan, settings);
+      } else if (successor.dependencyType === 'FF') {
+        successorEnd = prevWorkdayOnOrBefore(parseDate(predecessor.end), settings);
+        successorStart = subtractWorkdaySpan(successorEnd, workdaySpan, settings);
+      } else {
+        successorStart = nextWorkdayAfter(parseDate(predecessor.end), settings);
+        successorEnd = addWorkdaySpan(successorStart, workdaySpan, settings);
+      }
+
+      byId.set(successor.id, { ...original, start: iso(successorStart), end: iso(successorEnd) });
+      rescheduleSuccessors(successor.id);
+    });
+  };
+
+  rescheduleSuccessors(oldTask.id);
+  return tasks.map(task => byId.get(task.id) || task);
+}
+
+function TaskModal({ task, tasks, settings, onClose, onSave }) {
   const [draft, setDraft] = useState(task);
   useEffect(() => {
     setDraft(task);
@@ -441,9 +543,7 @@ function TaskModal({ task, tasks, onClose, onSave }) {
   if (!task) return null;
 
   const set = (field, value) => setDraft(prev => ({ ...(prev || task || {}), [field]: value }));
-  const startDate = parseDate(draft?.start);
-  const endDate = parseDate(draft?.end);
-  const duration = startDate && endDate ? Math.max(1, daysBetween(startDate, endDate) + 1) : 1;
+  const duration = taskDuration(draft || task, settings);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -1068,8 +1168,10 @@ export default function ScheduleProjectPage() {
       const wouldExceedDepth = task.parentId && exceedsMaxDepth(revision.tasks, [task.id], task.parentId);
       if (wouldExceedDepth) warning(`Limite de ${MAX_HIERARCHY_LEVELS} níveis de hierarquia atingido.`);
       const safeTask = (wouldCycle || wouldExceedDepth) ? { ...task, parentId: '' } : task;
+      const oldTask = revision.tasks.find(existing => existing.id === safeTask.id);
       const nextTasks = revision.tasks.map(existing => existing.id === safeTask.id ? safeTask : existing);
-      return { ...revision, tasks: normalizeTaskOrder(nextTasks) };
+      const cascadedTasks = oldTask ? cascadeLinkedTasks(nextTasks, oldTask, safeTask, scheduleSettings) : nextTasks;
+      return { ...revision, tasks: normalizeTaskOrder(cascadedTasks) };
     });
     setEditingTask(null);
   };
@@ -1169,33 +1271,78 @@ export default function ScheduleProjectPage() {
     }
   };
 
-  const monthCells = [];
-  dayList.forEach(day => {
-    const key = `${day.getFullYear()}-${day.getMonth()}`;
-    const last = monthCells[monthCells.length - 1];
-    if (last?.key === key) last.count += 1;
-    else monthCells.push({ key, count: 1, label: day.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) });
-  });
-  const printAvailableGanttWidth = PRINT_PAGE_WIDTH - PRINT_TASK_WIDTH;
-  const printColWidth = Math.max(8, Math.min(colWidth, Math.floor(printAvailableGanttWidth / Math.max(dayList.length, 1))));
-  const printTotalWidth = dayList.length * printColWidth;
+  const buildMonthCells = (days) => {
+    const cells = [];
+    days.forEach(day => {
+      const key = `${day.getFullYear()}-${day.getMonth()}`;
+      const last = cells[cells.length - 1];
+      if (last?.key === key) last.count += 1;
+      else cells.push({ key, count: 1, label: day.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) });
+    });
+    return cells;
+  };
+  const monthCells = buildMonthCells(dayList);
+
+  // Print pagination fills each page with as many rows as fit (PRINT_BODY_MAX_H) — no row is
+  // ever left off just to keep a shared calendar in sync. Each page then gets its OWN Gantt
+  // window, starting at its first activity and spanning only as far as its own rows need — so
+  // every listed task always has its bar on the same page, nothing is left blank or hidden.
+  // All pages share one column width (px/day), sized to the widest window among them, so the
+  // time scale reads the same across the whole printout.
   const printRows = [{ kind: 'summary' }, ...tasks.map(task => ({ kind: 'task', task }))];
-  const printPages = [];
-  let currentPrintPage = [];
-  let currentPrintHeight = 0;
+  const printRowGroups = [];
+  let currentRowGroup = [];
+  let currentRowGroupHeight = 0;
   printRows.forEach(row => {
     const rowH = row.kind === 'summary' ? PRINT_SUMMARY_ROW_H : printRowHeight(row.task);
-    if (currentPrintPage.length && currentPrintHeight + rowH > PRINT_BODY_MAX_H) {
-      printPages.push(currentPrintPage);
-      currentPrintPage = [];
-      currentPrintHeight = 0;
+    if (currentRowGroup.length && currentRowGroupHeight + rowH > PRINT_BODY_MAX_H) {
+      printRowGroups.push(currentRowGroup);
+      currentRowGroup = [];
+      currentRowGroupHeight = 0;
     }
-    currentPrintPage.push(row);
-    currentPrintHeight += rowH;
+    currentRowGroup.push(row);
+    currentRowGroupHeight += rowH;
   });
-  if (currentPrintPage.length) {
-    printPages.push(currentPrintPage);
-  }
+  if (currentRowGroup.length) printRowGroups.push(currentRowGroup);
+  if (!printRowGroups.length) printRowGroups.push([]);
+
+  // The summary row spans the whole project — it doesn't get to dictate a page's window,
+  // it just gets clipped to whatever window that page ends up with.
+  const rowGroupWindow = (rowGroup) => {
+    let min = null;
+    let max = null;
+    rowGroup.forEach(row => {
+      if (row.kind === 'summary') return;
+      const start = parseDate(row.task.start);
+      const end = parseDate(row.task.end);
+      if (start && (!min || start < min)) min = start;
+      if (end && (!max || end > max)) max = end;
+    });
+    if (!min || !max) { min = range.start; max = range.start; }
+    return { min, max };
+  };
+
+  const groupWindows = printRowGroups.map(rowGroupWindow);
+  const maxSpanDays = Math.max(1, ...groupWindows.map(w => daysBetween(w.min, w.max) + 1));
+  const PRINT_COL_WIDTH = Math.max(
+    PRINT_MIN_COL_WIDTH,
+    Math.min(PRINT_MAX_COL_WIDTH, Math.floor(PRINT_GANTT_WIDTH / maxSpanDays))
+  );
+  // How many day-columns it takes to reach the right edge of the page at this scale — every
+  // page is padded out to this width so none of them ends in dead white space.
+  const fillDays = Math.max(maxSpanDays, Math.ceil(PRINT_GANTT_WIDTH / PRINT_COL_WIDTH));
+
+  const printPages = printRowGroups.map((rowGroup, index) => {
+    const { min, max } = groupWindows[index];
+    const dateWindow = [];
+    for (let cursor = new Date(min); cursor <= max; cursor = addDays(cursor, 1)) dateWindow.push(cursor);
+    // Pad the tail with calendar days past the last task so the page fills edge-to-edge —
+    // never pad the front, so the window still opens on this page's first activity.
+    while (dateWindow.length < fillDays) {
+      dateWindow.push(addDays(dateWindow[dateWindow.length - 1], 1));
+    }
+    return { rowGroup, dateWindow };
+  });
 
   const dependencyLines = tasks.flatMap((task, rowIndex) => {
     const predecessor = tasks.find(item => item.id === task.predecessorId);
@@ -1213,7 +1360,11 @@ export default function ScheduleProjectPage() {
     return [{ id: `${predecessor.id}-${task.id}`, x1, x2, y1, y2 }];
   });
 
-  const getPrintDependencyLines = (pageRows) => {
+  // Both ends of a link are guaranteed to be on the page already — every task in rowGroup has
+  // its dates inside dateWindow by construction — so no clipping is needed here.
+  const getPrintDependencyLines = (pageRows, dateWindow) => {
+    if (!dateWindow.length) return [];
+    const winStart = dateWindow[0];
     let top = 0;
     const visibleRows = new Map();
     pageRows.forEach(row => {
@@ -1237,8 +1388,8 @@ export default function ScheduleProjectPage() {
       if (!from || !to) return [];
       return [{
         id: `print-${predecessorRow.task.id}-${task.id}`,
-        x1: Math.max(0, daysBetween(range.start, from) * printColWidth + printColWidth / 2),
-        x2: Math.max(0, daysBetween(range.start, to) * printColWidth + printColWidth / 2),
+        x1: Math.max(0, daysBetween(winStart, from) * PRINT_COL_WIDTH + PRINT_COL_WIDTH / 2),
+        x2: Math.max(0, daysBetween(winStart, to) * PRINT_COL_WIDTH + PRINT_COL_WIDTH / 2),
         y1: predecessorRow.top + printRowHeight(predecessorRow.task) / 2,
         y2: currentRow.top + printRowHeight(task) / 2,
       }];
@@ -1411,7 +1562,7 @@ export default function ScheduleProjectPage() {
       <div className="schedule-workspace">
         <div className="schedule-task-pane">
           <div className="schedule-grid schedule-header-row">
-            <span>WBS</span><span>Atividade</span><span>Início</span><span>Término</span><span>%</span><span>Relação</span>
+            <span>WBS</span><span>Atividade</span><span>Início</span><span>Término</span><span>Duração</span><span>%</span>
           </div>
           <div className="schedule-task-rows">
             {tasks.length === 0 && (
@@ -1425,11 +1576,10 @@ export default function ScheduleProjectPage() {
               <span className="schedule-task-name">Resumo do cronograma</span>
               <span>{formatDate(summary.start)}</span>
               <span>{formatDate(summary.end)}</span>
-              <span><b className={`schedule-progress ${summary.progress >= 100 ? 'done' : summary.progress > 0 ? 'progress' : 'pending'}`}>{summary.progress}%</b></span>
               <span>{summary.duration ? `${summary.duration}d` : '-'}</span>
+              <span><b className={`schedule-progress ${summary.progress >= 100 ? 'done' : summary.progress > 0 ? 'progress' : 'pending'}`}>{summary.progress}%</b></span>
             </div>
             {tasks.map(task => {
-              const predecessor = tasks.find(item => item.id === task.predecessorId);
               const status = getStatus(task);
               return (
                 <button
@@ -1450,8 +1600,8 @@ export default function ScheduleProjectPage() {
                   </span>
                   <span>{formatDate(task.start)}</span>
                   <span>{formatDate(task.end)}</span>
+                  <span>{taskDuration(task, scheduleSettings)}d</span>
                   <span><b className={`schedule-progress ${status}`}>{task.progress || 0}%</b></span>
-                  <span className="schedule-link-cell">{predecessor ? `${predecessor.wbs} ${task.dependencyType}` : '-'}</span>
                 </button>
               );
             })}
@@ -1544,9 +1694,19 @@ export default function ScheduleProjectPage() {
       </div>
 
       <div className="schedule-print-pages">
-        {printPages.map((pageRows, pageIndex) => {
-          const pageHeight = pageRows.reduce((sum, row) => sum + (row.kind === 'summary' ? PRINT_SUMMARY_ROW_H : printRowHeight(row.task)), 0);
-          const printDependencyLines = getPrintDependencyLines(pageRows);
+        {printPages.map(({ rowGroup, dateWindow }, pageIndex) => {
+          const pageHeight = rowGroup.reduce((sum, row) => sum + (row.kind === 'summary' ? PRINT_SUMMARY_ROW_H : printRowHeight(row.task)), 0);
+          const printDependencyLines = getPrintDependencyLines(rowGroup, dateWindow);
+          const pageMonthCells = buildMonthCells(dateWindow);
+          const pageTotalWidth = dateWindow.length * PRINT_COL_WIDTH;
+          const winStart = dateWindow[0] || range.start;
+          const winEnd = dateWindow[dateWindow.length - 1] || range.start;
+          // Every task in rowGroup is already inside dateWindow by construction — only the
+          // project-wide summary bar can spill past this page's window and needs clipping.
+          const clipToWindow = (start, end) => {
+            if (!start || !end || end < winStart || start > winEnd) return null;
+            return { start: start < winStart ? winStart : start, end: end > winEnd ? winEnd : end };
+          };
           return (
             <section className="schedule-print-page" key={`print-page-${pageIndex}`}>
               <div className="schedule-print-header">
@@ -1555,13 +1715,13 @@ export default function ScheduleProjectPage() {
                   <p>{project.plant || 'CTG Brasil'} · {project.description || 'Cronograma de projeto'}</p>
                 </div>
               </div>
-              <div className="schedule-workspace schedule-print-workspace" style={{ gridTemplateColumns: `${PRINT_TASK_WIDTH}px ${printTotalWidth}px` }}>
+              <div className="schedule-workspace schedule-print-workspace" style={{ gridTemplateColumns: `${PRINT_TASK_WIDTH}px ${pageTotalWidth}px` }}>
                   <div className="schedule-task-pane">
                   <div className="schedule-grid schedule-header-row schedule-print-grid">
-                    <span>WBS</span><span>Atividade</span><span>Início</span><span>Término</span><span>%</span>
+                    <span>WBS</span><span>Atividade</span><span>Início</span><span>Término</span><span>Duração</span><span>%</span>
                   </div>
                   <div className="schedule-task-rows">
-                    {pageRows.map(row => {
+                    {rowGroup.map(row => {
                       if (row.kind === 'summary') {
                         return (
                           <div key="print-summary" className="schedule-grid schedule-task-row summary schedule-print-grid" style={{ height: PRINT_SUMMARY_ROW_H }}>
@@ -1569,6 +1729,7 @@ export default function ScheduleProjectPage() {
                             <span className="schedule-task-name">Resumo do cronograma</span>
                             <span>{formatDate(summary.start)}</span>
                             <span>{formatDate(summary.end)}</span>
+                            <span>{summary.duration ? `${summary.duration}d` : '-'}</span>
                             <span><b className={`schedule-progress ${summary.progress >= 100 ? 'done' : summary.progress > 0 ? 'progress' : 'pending'}`}>{summary.progress}%</b></span>
                           </div>
                         );
@@ -1588,6 +1749,7 @@ export default function ScheduleProjectPage() {
                   </span>
                           <span>{formatDate(task.start)}</span>
                           <span>{formatDate(task.end)}</span>
+                          <span>{taskDuration(task, scheduleSettings)}d</span>
                           <span><b className={`schedule-progress ${status}`}>{task.progress || 0}%</b></span>
                         </div>
                       );
@@ -1596,21 +1758,21 @@ export default function ScheduleProjectPage() {
                 </div>
                 <div className="schedule-gantt-pane">
                   <div className="schedule-gantt-scroll">
-                    <div className="schedule-gantt-inner" style={{ width: printTotalWidth }}>
+                    <div className="schedule-gantt-inner" style={{ width: pageTotalWidth }}>
                       <div className="schedule-gantt-months">
-                        {monthCells.map(cell => (
-                          <div key={`print-month-${pageIndex}-${cell.key}`} style={{ width: cell.count * printColWidth }}>{cell.label}</div>
+                        {pageMonthCells.map(cell => (
+                          <div key={`print-month-${pageIndex}-${cell.key}`} style={{ width: cell.count * PRINT_COL_WIDTH }}>{cell.label}</div>
                         ))}
                       </div>
                       <div className="schedule-gantt-days">
-                        {dayList.map(day => (
-                          <div key={`print-day-${pageIndex}-${iso(day)}`} className={dayClass(day)} style={{ width: printColWidth }}>
-                            {printColWidth >= 10 ? day.getDate() : ''}
+                        {dateWindow.map(day => (
+                          <div key={`print-day-${pageIndex}-${iso(day)}`} className={dayClass(day)} style={{ width: PRINT_COL_WIDTH }}>
+                            {PRINT_COL_WIDTH >= 10 ? day.getDate() : ''}
                           </div>
                         ))}
                       </div>
                       <div className="schedule-gantt-body" style={{ height: pageHeight }}>
-                        <svg className="schedule-dependency-layer" width={printTotalWidth} height={Math.max(1, pageHeight)}>
+                        <svg className="schedule-dependency-layer" width={pageTotalWidth} height={Math.max(1, pageHeight)}>
                           <defs>
                             <marker id={`schedulePrintArrow-${pageIndex}`} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
                               <path d="M0,0 L8,4 L0,8 Z" fill="#64748B" />
@@ -1620,17 +1782,18 @@ export default function ScheduleProjectPage() {
                             <path key={line.id} d={`M${line.x1} ${line.y1} L${line.x1 + 10} ${line.y1} L${line.x1 + 10} ${line.y2} L${line.x2} ${line.y2}`} markerEnd={`url(#schedulePrintArrow-${pageIndex})`} />
                           ))}
                         </svg>
-                        {pageRows.map(row => {
+                        {rowGroup.map(row => {
                           if (row.kind === 'summary') {
+                            const clipped = clipToWindow(parseDate(summary.start), parseDate(summary.end));
                             return (
                               <div key="print-gantt-summary" className="schedule-gantt-row summary" style={{ height: PRINT_SUMMARY_ROW_H }}>
-                                {dayList.map(day => (
-                                  <span key={`print-summary-day-${iso(day)}`} className={dayClass(day)} style={{ width: printColWidth }} />
+                                {dateWindow.map(day => (
+                                  <span key={`print-summary-day-${iso(day)}`} className={dayClass(day)} style={{ width: PRINT_COL_WIDTH }} />
                                 ))}
-                                {summary.start && summary.end && (
+                                {clipped && (
                                   <div className="schedule-bar summary progress" style={{
-                                    left: daysBetween(range.start, parseDate(summary.start)) * printColWidth,
-                                    width: Math.max(printColWidth, (daysBetween(parseDate(summary.start), parseDate(summary.end)) + 1) * printColWidth),
+                                    left: daysBetween(winStart, clipped.start) * PRINT_COL_WIDTH,
+                                    width: Math.max(PRINT_COL_WIDTH, (daysBetween(clipped.start, clipped.end) + 1) * PRINT_COL_WIDTH),
                                   }}>
                                     <i style={{ width: `${summary.progress}%` }} />
                                     <em>{summary.progress}%</em>
@@ -1640,20 +1803,20 @@ export default function ScheduleProjectPage() {
                             );
                           }
                           const task = row.task;
-                          const start = parseDate(task.start);
-                          const end = parseDate(task.end);
-                          const left = start ? daysBetween(range.start, start) * printColWidth : 0;
-                          const width = start && end ? Math.max(printColWidth, (daysBetween(start, end) + 1) * printColWidth) : printColWidth;
+                          const taskStart = parseDate(task.start);
+                          const taskEnd = parseDate(task.end);
+                          const left = taskStart ? daysBetween(winStart, taskStart) * PRINT_COL_WIDTH : 0;
+                          const width = taskStart && taskEnd ? Math.max(PRINT_COL_WIDTH, (daysBetween(taskStart, taskEnd) + 1) * PRINT_COL_WIDTH) : PRINT_COL_WIDTH;
                           const status = getStatus(task);
                           const levelColor = getLevelColor(task._depth);
                           const isCritical = showCriticalPath && criticalPathIds.has(task.id);
                           const barShadow = [status === 'late' ? 'inset 3px 0 0 0 #DC2626' : '', isCritical ? '0 0 0 3px rgba(245,158,11,.35)' : '', '0 1px 2px rgba(0,31,91,.15)'].filter(Boolean).join(', ');
                           return (
                             <div key={`print-gantt-${task.id}`} className={`schedule-gantt-row ${task.type}`} style={{ height: printRowHeight(task) }}>
-                              {dayList.map(day => (
-                                <span key={`print-task-day-${task.id}-${iso(day)}`} className={dayClass(day)} style={{ width: printColWidth }} />
+                              {dateWindow.map(day => (
+                                <span key={`print-task-day-${task.id}-${iso(day)}`} className={dayClass(day)} style={{ width: PRINT_COL_WIDTH }} />
                               ))}
-                              {start && end && (
+                              {taskStart && taskEnd && (
                                 <div className={`schedule-bar ${task.type} ${isCritical ? 'critical' : ''}`} style={{ left, width, backgroundColor: levelColor.bg, boxShadow: barShadow }}>
                                   <i style={{ width: `${task.progress || 0}%`, backgroundColor: levelColor.fill }} />
                                   <em style={{ color: levelColor.text, textShadow: 'none' }}>{task.type === 'phase' ? task.name : `${task.progress || 0}%`}</em>
@@ -1679,7 +1842,7 @@ export default function ScheduleProjectPage() {
         })}
       </div>
 
-      {editingTask && <TaskModal task={editingTask} tasks={tasks} onClose={() => setEditingTask(null)} onSave={saveTask} />}
+      {editingTask && <TaskModal task={editingTask} tasks={tasks} settings={scheduleSettings} onClose={() => setEditingTask(null)} onSave={saveTask} />}
       <ScheduleSettingsModal
         open={settingsOpen}
         settings={scheduleSettings}
