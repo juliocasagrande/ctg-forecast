@@ -112,11 +112,12 @@ export default function AlertBell() {
   const isDismissing = (type, key) => dismissing.has(`${type}|${key}`);
 
   const dismissAll = async (sectionKey, items) => {
+    if (items.length === 0) return;
     setMarkingAllSection(sectionKey);
     try {
-      await Promise.all(items.map(([alertType, alertKey]) =>
-        api.post('/forecast/alerts/dismiss', { alert_type: alertType, alert_key: String(alertKey) }).catch(() => {})
-      ));
+      await api.post('/forecast/alerts/dismiss-bulk', {
+        items: items.map(([alertType, alertKey]) => ({ alert_type: alertType, alert_key: String(alertKey) })),
+      });
       await fetchAlerts();
     } catch {}
     setMarkingAllSection(null);

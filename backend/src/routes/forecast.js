@@ -758,6 +758,28 @@ router.post('/alerts/dismiss', async (req, res) => {
   } catch (err) { safeError(res, err); }
 });
 
+// ── Dismiss all alerts of a section in one call (evita N requisições paralelas) ──
+router.post('/alerts/dismiss-bulk', async (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0)
+      return res.status(400).json({ error: 'items (array) é obrigatório' });
+
+    const types = items.map(it => String(it.alert_type || ''));
+    const keys  = items.map(it => String(it.alert_key ?? ''));
+    if (types.some(t => !t) || keys.some(k => !k))
+      return res.status(400).json({ error: 'Cada item precisa de alert_type e alert_key' });
+
+    await pool.query(`
+      INSERT INTO alert_dismissals (user_id, alert_type, alert_key, dismissed_at)
+      SELECT $1, t.alert_type, t.alert_key, NOW()
+      FROM UNNEST($2::text[], $3::text[]) AS t(alert_type, alert_key)
+      ON CONFLICT (user_id, alert_type, alert_key) DO UPDATE SET dismissed_at = NOW()
+    `, [req.user.id, types, keys]);
+    res.json({ success: true, count: items.length });
+  } catch (err) { safeError(res, err); }
+});
+
 // ── Polo Consolidado — aggregated by polo → plant → project ──────────────────
 router.get('/polo-summary', async (req, res) => {
   try {
