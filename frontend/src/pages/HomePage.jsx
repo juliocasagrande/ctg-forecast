@@ -1840,11 +1840,10 @@ export default function HomePage({ year }) {
             titleExtra={canToggleScope ? <ScopeToggle options={scopeOptions} value={viewMode} onChange={setViewMode} /> : null}
             style={{ gridColumn: '1', gridRow: '1' }}
           >
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
               <OperationalTile label="IACs" value={iacRows.length} sub={`${iacUpdatedPct}% atualizado`} color="#F59E0B" icon="warning" trend gaugeValue={iacUpdatedPct} onClick={() => navigate('/lists/iacs')} />
               <OperationalTile label="Projetos" value={projectRows.length} sub={`${projectUpdatedPct}% atualizado`} color="#0070B8" icon="folder" trend gaugeValue={projectUpdatedPct} onClick={() => navigate('/lists/projects-tracking')} />
               <OperationalTile label="Documentos" value={docsTotal} sub={`${docsPublished} publicados`} color="#6366F1" icon="file" trend gaugeValue={docsPublishedPct} onClick={() => navigate('/documents')} />
-              <OperationalTile label="Metas IACs" value={pct(metasAvg)} sub="Média Ponderada / Metas IACs" color="#10B981" icon="target" trend gaugeValue={metasAvg || 0} onClick={() => navigate('/lists/iacs')} breakdown={iacGoalBreakdown} />
             </div>
           </HomeCard>
 
