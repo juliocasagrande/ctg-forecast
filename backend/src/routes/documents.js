@@ -74,6 +74,16 @@ function parseNum(val) {
   return isNaN(n) ? null : n;
 }
 
+// Helper: normaliza plant (array ou string única) para array de usinas ou null
+function normalizePlants(val) {
+  if (Array.isArray(val)) {
+    const arr = val.map(v => String(v).trim()).filter(Boolean);
+    return arr.length ? arr : null;
+  }
+  if (typeof val === 'string' && val.trim()) return [val.trim()];
+  return null;
+}
+
 // ─── GET /  — lista todos os documentos com autores ──────────────────────────
 router.get('/', async (req, res) => {
   try {
@@ -157,7 +167,7 @@ router.post('/', async (req, res) => {
          document_link, notes, code, base_code, created_by, updated_by, created_at, updated_at)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15,NOW(),NOW())
       RETURNING *
-    `, [type, area, sequence_number, year, revision, plant||null, responsible, date, subject, status,
+    `, [type, area, sequence_number, year, revision, normalizePlants(plant), responsible, date, subject, status,
         document_link||null, notes||null, code, base_code, userId]);
 
     const docId = r.rows[0].id;
@@ -262,7 +272,7 @@ router.put('/:id', async (req, res) => {
         plant=$1, responsible=$2, date=$3, subject=$4, status=$5,
         document_link=$6, notes=$7, updated_by=$8, updated_at=NOW()
       WHERE id=$9 RETURNING *
-    `, [plant||null, responsible, date, subject, status,
+    `, [normalizePlants(plant), responsible, date, subject, status,
         document_link||null, notes||null, userId, id]);
 
     if (!r.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Documento não encontrado' }); }
@@ -339,7 +349,7 @@ router.post('/import-bulk', async (req, res) => {
               updated_by = $6,
               updated_at = NOW()
              WHERE code = $7`,
-            [doc.plant || null, doc.responsible || null, doc.date || null, doc.subject || null, doc.status || null, req.user.id, doc.code]
+            [normalizePlants(doc.plant), doc.responsible || null, doc.date || null, doc.subject || null, doc.status || null, req.user.id, doc.code]
           );
           result.updated++;
         } else {
@@ -349,7 +359,7 @@ router.post('/import-bulk', async (req, res) => {
               (type, area, sequence_number, year, revision, code, base_code, plant, responsible, date, subject, status, created_by, updated_by, created_at, updated_at)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13,NOW(),NOW())`,
             [doc.type, doc.area, doc.sequence_number, doc.year, doc.revision ?? null, doc.code, baseCode,
-             doc.plant || null, doc.responsible || null, doc.date || null, doc.subject || null,
+             normalizePlants(doc.plant), doc.responsible || null, doc.date || null, doc.subject || null,
              doc.status || 'Em elaboração', req.user.id]
           );
           result.created++;

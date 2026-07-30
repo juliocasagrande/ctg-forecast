@@ -71,6 +71,14 @@ function externalLink(path) {
   if (/^(?:www\.)?[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(?:[/?#]|$)/i.test(value)) return `https://${value}`;
   return value;
 }
+function plantsLabel(plants) {
+  if (!Array.isArray(plants) || plants.length === 0) return '—';
+  if (plants.length === ALL_PLANTS.length) return 'Todas';
+  return plants.join(', ');
+}
+function hasPlant(doc, plant) {
+  return Array.isArray(doc.plant) && doc.plant.includes(plant);
+}
 function buildCode(type, area, seq, year, revision) {
   if (!type || !area || !seq || !year) return '';
   const seqStr = String(seq).padStart(3, '0');
@@ -254,6 +262,61 @@ function Field({ label, required, children }) {
   );
 }
 
+/* ─── PlantMultiSelect — seleção de uma ou mais usinas, com opção "Todas" ────── */
+function PlantMultiSelect({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClickOutside = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [open]);
+
+  const allSelected = value.length > 0 && value.length === ALL_PLANTS.length;
+  const toggleAll   = () => onChange(allSelected ? [] : [...ALL_PLANTS]);
+  const toggleOne   = (p) => onChange(value.includes(p) ? value.filter(x => x !== p) : [...value, p]);
+
+  const label = value.length === 0 ? '— Selecionar —'
+    : allSelected ? 'Todas as usinas'
+    : value.length === 1 ? value[0]
+    : `${value.length} usinas selecionadas`;
+
+  return (
+    <div ref={ref} style={{ position:'relative' }}>
+      <button type="button" onClick={() => setOpen(o => !o)} style={{
+        ...fS, textAlign:'left', display:'flex', alignItems:'center', justifyContent:'space-between',
+        cursor:'pointer', color: value.length ? '#1E293B' : '#94A3B8',
+      }}>
+        <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{label}</span>
+        <span style={{ fontSize:'0.6rem', color:'#94A3B8', marginLeft:6, flexShrink:0 }}>▼</span>
+      </button>
+      {open && (
+        <div style={{
+          position:'absolute', top:'calc(100% + 4px)', left:0, right:0, zIndex:50,
+          background:'#fff', border:'1px solid #E2E8F0', borderRadius:8,
+          boxShadow:'0 8px 24px rgba(0,0,0,0.14)', maxHeight:230, overflowY:'auto', padding:4,
+        }}>
+          <label style={{
+            display:'flex', alignItems:'center', gap:8, padding:'6px 8px', borderRadius:6,
+            cursor:'pointer', borderBottom:'1px solid #F1F5F9', marginBottom:2,
+          }}>
+            <input type="checkbox" checked={allSelected} onChange={toggleAll} style={{ accentColor:'#0066B3', cursor:'pointer' }}/>
+            <span style={{ fontSize:'0.8rem', fontWeight:700, color:'#0066B3' }}>Todas</span>
+          </label>
+          {ALL_PLANTS.map(p => (
+            <label key={p} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 8px', borderRadius:6, cursor:'pointer' }}>
+              <input type="checkbox" checked={value.includes(p)} onChange={() => toggleOne(p)} style={{ accentColor:'#0066B3', cursor:'pointer' }}/>
+              <span style={{ fontSize:'0.8rem', color:'#1E293B' }}>{p}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── StatusModal — alterar apenas o status ─────────────────────────────────── */
 function StatusModal({ open, onClose, onSaved, doc }) {
   const { toast } = useToast();
@@ -416,7 +479,7 @@ function DocModal({ open, onClose, onSaved, doc, nextSeq, allUsers }) {
     sequence_number: doc?.sequence_number ?? nextSeq ?? '',
     year:            doc?.year  ?? CURRENT_YEAR_SHORT,
     revision:        doc?.revision !== null && doc?.revision !== undefined ? doc.revision : '',
-    plant:           doc?.plant || '',
+    plant:           doc?.plant || [],
     responsible:     doc?.responsible || '',
     date:            doc?.date ? doc.date.slice(0,10) : new Date().toISOString().slice(0,10),
     subject:         doc?.subject || '',
@@ -515,10 +578,7 @@ function DocModal({ open, onClose, onSaved, doc, nextSeq, allUsers }) {
           {/* Usina + Responsável + Data */}
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
             <Field label="Usina">
-              <select value={form.plant} onChange={e => set('plant', e.target.value)} style={fS}>
-                <option value="">— Selecionar —</option>
-                {ALL_PLANTS.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
+              <PlantMultiSelect value={form.plant} onChange={v => set('plant', v)}/>
             </Field>
             <Field label="Responsável" required>
               <select value={form.responsible} onChange={e => set('responsible', e.target.value)} style={fS}>
@@ -685,7 +745,7 @@ function generateHTMLReport(docs, stats, year) {
     const link = d.document_link ? `<a href="${d.document_link}" style="color:#0066B3;text-decoration:none">Acessar</a>` : '—';
     return `<tr style="background:${i%2===0?'#fff':'#F8FAFC'}">
       <td style="font-family:monospace;font-size:0.82rem;font-weight:700;color:#001F5B">${d.code}</td>
-      <td>${d.plant||'—'}</td><td>${d.responsible}</td><td>${fmtDateBR(d.date)}</td>
+      <td>${plantsLabel(d.plant)}</td><td>${d.responsible}</td><td>${fmtDateBR(d.date)}</td>
       <td>${d.subject}</td>
       <td><span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:0.72rem;font-weight:700;background:${sm.bg};color:${sm.text};border:1px solid ${sm.color}33">${d.status}</span></td>
       <td style="text-align:center">${link}</td></tr>`;
@@ -866,7 +926,7 @@ function ImportDocxModal({ open, onClose, onImported, allUsers }) {
             responsible,
             date: parseIsoDate(rawDate) || new Date().toISOString().slice(0, 10),
             subject,
-            plant: plant || null,
+            plant: plant ? plant.split(/[,/;]+/).map(p => p.trim()).filter(Boolean) : null,
             status,
           });
         });
@@ -1220,7 +1280,7 @@ export default function DocumentsPage() {
       data = data.filter(d => d.type === typeFilter);
     }
     if (skip !== 'plant' && plantFilter) {
-      data = data.filter(d => d.plant === plantFilter);
+      data = data.filter(d => hasPlant(d, plantFilter));
     }
     // Chart click filters
     if (skip !== 'type' && chartTypeFilter) {
@@ -1230,14 +1290,14 @@ export default function DocumentsPage() {
       data = data.filter(d => d.status === chartStatusFilter);
     }
     if (skip !== 'plant' && chartPlantFilter) {
-      data = data.filter(d => d.plant === chartPlantFilter);
+      data = data.filter(d => hasPlant(d, chartPlantFilter));
     }
     // Column filters
     if (colFilterCode.length > 0) {
       data = data.filter(d => colFilterCode.includes(d.code));
     }
     if (colFilterPlant.length > 0) {
-      data = data.filter(d => colFilterPlant.includes(d.plant || '—'));
+      data = data.filter(d => (d.plant?.length ? d.plant : ['—']).some(p => colFilterPlant.includes(p)));
     }
     if (colFilterResponsible.length > 0) {
       data = data.filter(d => colFilterResponsible.includes(d.responsible));
@@ -1257,7 +1317,7 @@ export default function DocumentsPage() {
         (d.code||'').toLowerCase().includes(q)
         || (d.responsible||'').toLowerCase().includes(q)
         || (d.subject||'').toLowerCase().includes(q)
-        || (d.plant||'').toLowerCase().includes(q)
+        || (d.plant||[]).some(p => p.toLowerCase().includes(q))
         || (d.authors||[]).some(a => a.name.toLowerCase().includes(q))
       );
     }
@@ -1317,7 +1377,7 @@ export default function DocumentsPage() {
     const itemsForType = typeChartDocs.filter(d=>d.type===t.value);
     return { label:t.value, value:itemsForType.length, color:TYPE_COLORS[i%TYPE_COLORS.length], filterKey: t.value,
       tooltipBreakdowns: [
-        { title:'Usina',  items: ALL_PLANTS.map(p => ({ label: PLANT_SIGLAS[p] || p, value: itemsForType.filter(d=>d.plant===p).length })) },
+        { title:'Usina',  items: ALL_PLANTS.map(p => ({ label: PLANT_SIGLAS[p] || p, value: itemsForType.filter(d=>hasPlant(d,p)).length })) },
         { title:'Status', items: STATUSES.map(s => ({ label: s.value, value: itemsForType.filter(d=>d.status===s.value).length, color: s.color })) },
       ] };
   });
@@ -1326,11 +1386,11 @@ export default function DocumentsPage() {
     return { label:s.value, value:itemsForStatus.length, color:s.color, filterKey: s.value,
       tooltipBreakdowns: [
         { title:'Tipo',  items: DOC_TYPES.map((t,i) => ({ label: t.value, value: itemsForStatus.filter(d=>d.type===t.value).length, color: TYPE_COLORS[i%TYPE_COLORS.length] })) },
-        { title:'Usina', items: ALL_PLANTS.map(p => ({ label: PLANT_SIGLAS[p] || p, value: itemsForStatus.filter(d=>d.plant===p).length })) },
+        { title:'Usina', items: ALL_PLANTS.map(p => ({ label: PLANT_SIGLAS[p] || p, value: itemsForStatus.filter(d=>hasPlant(d,p)).length })) },
       ] };
   });
   const plantChartData  = ALL_PLANTS.map(p => {
-    const itemsForPlant = plantChartDocs.filter(d=>d.plant===p);
+    const itemsForPlant = plantChartDocs.filter(d=>hasPlant(d,p));
     return { label: PLANT_SIGLAS[p] || p, fullName: p, value:itemsForPlant.length, color:'#0066B3', filterKey: p,
       tooltipBreakdowns: [
         { title:'Tipo',   items: DOC_TYPES.map((t,i) => ({ label: t.value, value: itemsForPlant.filter(d=>d.type===t.value).length, color: TYPE_COLORS[i%TYPE_COLORS.length] })) },
@@ -1338,7 +1398,7 @@ export default function DocumentsPage() {
       ] };
   }).filter(d=>d.value>0);
   const years = [...new Set(docs.map(d=>2000+d.year))].sort((a,b)=>b-a);
-  const plantsUsed = ALL_PLANTS.filter(p => docs.some(d => d.plant === p));
+  const plantsUsed = ALL_PLANTS.filter(p => docs.some(d => hasPlant(d, p)));
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:16, padding:'0 2px' }}>
@@ -1481,7 +1541,7 @@ export default function DocumentsPage() {
                     Usina
                     <ColumnFilterDropdown
                       column="Usina"
-                      uniqueValues={[...new Set(docs.map(d => d.plant || '—').filter(Boolean))]}
+                      uniqueValues={[...new Set(docs.flatMap(d => d.plant?.length ? d.plant : ['—']))]}
                       selectedValues={colFilterPlant}
                       onChange={setColFilterPlant}
                     />
@@ -1587,7 +1647,7 @@ export default function DocumentsPage() {
                           {isMine && <span style={{ fontSize:'0.6rem', background:'#F5F3FF', color:'#6D28D9', border:'1px solid #DDD6FE', borderRadius:10, padding:'1px 5px', fontWeight:700 }}>meu</span>}
                         </div>
                       </td>
-                      <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B' }}>{latest.plant||'—'}</td>
+                      <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B' }}>{plantsLabel(latest.plant)}</td>
                       <td style={{ ...TD, fontSize:'0.82rem' }}>{latest.responsible}</td>
                       <td style={{ ...TD, fontSize:'0.82rem', whiteSpace:'nowrap' }}>{fmtDateBR(latest.date)}</td>
                       <td style={{ ...TD, fontSize:'0.82rem', maxWidth:240 }}>
@@ -1660,7 +1720,7 @@ export default function DocumentsPage() {
                               </div>
                             </div>
                           </td>
-                          <td style={{ ...TD, fontSize:'0.75rem', color:'#94A3B8' }}>{rev.plant||'—'}</td>
+                          <td style={{ ...TD, fontSize:'0.75rem', color:'#94A3B8' }}>{plantsLabel(rev.plant)}</td>
                           <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B' }}>{rev.responsible}</td>
                           <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B', whiteSpace:'nowrap' }}>{fmtDateBR(rev.date)}</td>
                           <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B', maxWidth:280 }}>
@@ -1732,7 +1792,7 @@ function DocDetail({ doc, isAuthor }) {
     <div style={{ display:'flex', gap:20, flexWrap:'wrap' }}>
       <div style={{ flex:1, minWidth:200 }}>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))', gap:'10px 24px' }}>
-          {doc.plant    && <InfoItem label="Usina"    value={doc.plant}/>}
+          {doc.plant?.length > 0 && <InfoItem label="Usina"    value={plantsLabel(doc.plant)}/>}
           <InfoItem label="Tipo" value={`${doc.type} — ${TYPE_META[doc.type]?.label||''}`}/>
           <InfoItem label="Área" value={`${doc.area} — ${AREAS.find(a=>a.value===doc.area)?.label||doc.area}`}/>
           {doc.revision !== null && doc.revision !== undefined && <InfoItem label="Revisão" value={`R${doc.revision}`}/>}

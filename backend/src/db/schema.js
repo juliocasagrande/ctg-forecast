@@ -356,7 +356,7 @@ await client.query(`
         sequence_number INTEGER NOT NULL,
         year            INTEGER NOT NULL,
         revision        INTEGER DEFAULT NULL,
-        plant           VARCHAR(60) DEFAULT NULL,
+        plant           TEXT[] DEFAULT NULL,
         responsible     VARCHAR(120) NOT NULL,
         date            DATE NOT NULL,
         subject         TEXT NOT NULL,
@@ -385,6 +385,20 @@ await client.query(`
     /* ───────── DOCUMENT GROUP (agrupamento por base_code) ───────── */
     await client.query(`
       ALTER TABLE documents ADD COLUMN IF NOT EXISTS base_code VARCHAR(50) DEFAULT NULL;
+    `);
+
+    /* ───────── DOCUMENTS.PLANT: migrar de VARCHAR único para TEXT[] (múltiplas usinas) ───────── */
+    await client.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'documents' AND column_name = 'plant' AND data_type <> 'ARRAY'
+        ) THEN
+          ALTER TABLE documents ALTER COLUMN plant TYPE TEXT[]
+            USING (CASE WHEN plant IS NULL OR plant = '' THEN NULL ELSE ARRAY[plant] END);
+        END IF;
+      END $$;
     `);
 
     /* ───────── PMS DOCUMENTS (POL/IM/GM/MM — controle de documentos técnicos) ───────── */

@@ -1065,6 +1065,10 @@ router.get('/documents', requireAuth, async (req, res) => {
         if (key === 'authors_list' && !val) {
           val = row.responsible || '—';
         }
+        // Plant (array de usinas)
+        if (key === 'plant' && Array.isArray(val)) {
+          val = val.join(', ');
+        }
 
         cell.value = val || '—';
         cell.alignment = { vertical: 'middle', wrapText: true };
