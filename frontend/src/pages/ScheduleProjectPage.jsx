@@ -307,7 +307,7 @@ function migrateLegacyHierarchy(tasks) {
 }
 
 function makeRevision(id, label, tasks = []) {
-  return { id, label, tasks };
+  return { id, label, description: '', settings: { ...DEFAULT_SETTINGS }, tasks };
 }
 
 function normalizeProject(project) {
@@ -315,8 +315,12 @@ function normalizeProject(project) {
   const revisions = Array.isArray(project.revisions) && project.revisions.length
     ? project.revisions
     : [makeRevision('rev-0', project.revision || 'Rev. 0', sourceTasks)];
-  const normalized = revisions.map(revision => ({
+  const normalized = revisions.map((revision, index) => ({
     ...revision,
+    // Legacy projects kept description/calendar settings at project level, shared by
+    // every revision — fold them into the first revision so nothing is lost on migration.
+    description: revision.description || (index === 0 ? project.description || '' : ''),
+    settings: { ...DEFAULT_SETTINGS, ...(revision.settings || {}) },
     tasks: normalizeTaskOrder(migrateLegacyHierarchy(revision.tasks || [])),
   }));
   for (let index = normalized.length; index < 3; index++) {
@@ -328,6 +332,7 @@ function normalizeProject(project) {
     activeRevisionId: project.activeRevisionId || normalized[0].id,
     tasks: undefined,
     revision: undefined,
+    description: undefined,
   };
 }
 
@@ -804,7 +809,6 @@ export default function ScheduleProjectPage() {
   const [zoom, setZoom] = useState('day');
   const [showCriticalPath, setShowCriticalPath] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [scheduleSettings, setScheduleSettings] = useState(DEFAULT_SETTINGS);
   const [loaded, setLoaded] = useState(false);
   const [loadingError, setLoadingError] = useState('');
   const [saveState, setSaveState] = useState('idle');
@@ -817,6 +821,10 @@ export default function ScheduleProjectPage() {
   const project = projects.find(item => item.id === projectId) || projects[0];
   const activeRevision = getActiveRevision(project);
   const rawTasks = activeRevision?.tasks || [];
+  const scheduleSettings = useMemo(
+    () => ({ ...DEFAULT_SETTINGS, ...(activeRevision?.settings || {}) }),
+    [activeRevision]
+  );
   const tasks = useMemo(() => derivePhaseValues(rawTasks, scheduleSettings), [rawTasks, scheduleSettings]);
   const bodyHeight = SUMMARY_ROW_H + tasks.reduce((sum, task) => sum + rowHeight(task), 0);
 
@@ -825,17 +833,13 @@ export default function ScheduleProjectPage() {
     const load = async () => {
       try {
         setLoadingError('');
-        const [projectsRes, settingsRes] = await Promise.all([
-          api.get('/schedule-projects'),
-          api.get('/schedule-projects/settings/me'),
-        ]);
+        const projectsRes = await api.get('/schedule-projects');
 
         const remoteProjects = (projectsRes.data || []).map(normalizeProject);
 
         if (!alive) return;
         setProjects(remoteProjects);
         setProjectId(remoteProjects[0]?.id || '');
-        setScheduleSettings({ ...DEFAULT_SETTINGS, ...(settingsRes.data || {}) });
         setLoaded(true);
       } catch (err) {
         if (!alive) return;
@@ -873,16 +877,6 @@ export default function ScheduleProjectPage() {
       delete window._scheduleDeleteProject;
     };
   }, [project]);
-
-  useEffect(() => {
-    if (!loaded) return;
-    const timer = setTimeout(async () => {
-      try {
-        await api.put('/schedule-projects/settings/me', scheduleSettings);
-      } catch {}
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [loaded, scheduleSettings]);
 
   const range = useMemo(() => {
     const dated = tasks.filter(task => parseDate(task.start) && parseDate(task.end));
@@ -938,6 +932,17 @@ export default function ScheduleProjectPage() {
 
   const updateRevision = (updater) => {
     setUndoStack(prev => [...prev.slice(-19), rawTasks.map(task => ({ ...task }))]);
+    updateProject(item => ({
+      ...item,
+      revisions: item.revisions.map(revision =>
+        revision.id === activeRevision.id ? updater(revision) : revision
+      ),
+    }));
+  };
+
+  // Like updateRevision but skips the tasks undo stack — for fields (settings, description)
+  // that aren't part of the Ctrl+Z task-editing history.
+  const patchRevision = (updater) => {
     updateProject(item => ({
       ...item,
       revisions: item.revisions.map(revision =>
@@ -1236,7 +1241,6 @@ export default function ScheduleProjectPage() {
       id: `project-${Date.now()}`,
       name: 'Novo cronograma',
       plant: '',
-      description: '',
       activeRevisionId: 'rev-0',
       revisions: [
         makeRevision('rev-0', 'Rev. 0', []),
@@ -1458,7 +1462,7 @@ export default function ScheduleProjectPage() {
                 <input value={project.plant || ''} placeholder="Usina" onChange={e => updateProject(item => ({ ...item, plant: e.target.value }))} />
               </span>
               <span className="schedule-meta-chip">
-                <input value={project.description || ''} placeholder="Descrição" onChange={e => updateProject(item => ({ ...item, description: e.target.value }))} />
+                <input value={activeRevision?.description || ''} placeholder="Descrição da revisão" onChange={e => patchRevision(revision => ({ ...revision, description: e.target.value }))} />
               </span>
               <div className="schedule-revision-row">
                 <div className="schedule-revision-tabs">
@@ -1555,7 +1559,7 @@ export default function ScheduleProjectPage() {
       <div className="schedule-print-header">
         <div>
           <h1>{project.name}</h1>
-          <p>{project.plant || 'CTG Brasil'} · {project.description || 'Cronograma de projeto'}</p>
+          <p>{project.plant || 'CTG Brasil'} · {activeRevision?.description || 'Cronograma de projeto'}</p>
         </div>
       </div>
 
@@ -1712,7 +1716,7 @@ export default function ScheduleProjectPage() {
               <div className="schedule-print-header">
                 <div>
                   <h1>{project.name}</h1>
-                  <p>{project.plant || 'CTG Brasil'} · {project.description || 'Cronograma de projeto'}</p>
+                  <p>{project.plant || 'CTG Brasil'} · {activeRevision?.description || 'Cronograma de projeto'}</p>
                 </div>
               </div>
               <div className="schedule-workspace schedule-print-workspace" style={{ gridTemplateColumns: `${PRINT_TASK_WIDTH}px ${pageTotalWidth}px` }}>
@@ -1846,7 +1850,7 @@ export default function ScheduleProjectPage() {
       <ScheduleSettingsModal
         open={settingsOpen}
         settings={scheduleSettings}
-        onChange={setScheduleSettings}
+        onChange={next => patchRevision(revision => ({ ...revision, settings: next }))}
         onClose={() => setSettingsOpen(false)}
       />
     </div>

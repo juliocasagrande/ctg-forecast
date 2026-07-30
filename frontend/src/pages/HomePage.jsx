@@ -1457,17 +1457,19 @@ function IacStatusHorizontalChart({ items }) {
           top: tooltipStyle.top,
           zIndex: 9999,
           background: 'var(--bg-card)', border: '1px solid var(--border)',
-          borderRadius: 8, padding: '9px 12px', boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
-          fontSize: '0.78rem', minWidth: 170, pointerEvents: 'none',
+          borderRadius: 8, padding: '10px 14px', boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
+          fontSize: '0.8rem', minWidth: 200, maxWidth: 280, pointerEvents: 'none',
         }}>
-          <div style={{ fontWeight: 800, color: 'var(--ctg-navy)', marginBottom: 4 }}>{hovered.label}</div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-            <span style={{ color: 'var(--text-muted)' }}>Processos</span>
-            <strong style={{ color: 'var(--ctg-navy)' }}>{hovered.count}</strong>
+          <div style={{ fontWeight: 700, marginBottom: 5, color: 'var(--ctg-navy)', fontSize: '0.85rem', borderBottom: '1px solid var(--border)', paddingBottom: 5 }}>
+            {hovered.label}
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-            <span style={{ color: 'var(--text-muted)' }}>% do total</span>
-            <strong style={{ color: 'var(--ctg-navy)' }}>{total ? pct((hovered.count / total) * 100) : '-'}</strong>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: '0.76rem', marginBottom: 2 }}>
+            <span style={{ opacity: 0.85 }}>Processos</span>
+            <strong style={{ fontVariantNumeric: 'tabular-nums' }}>{hovered.count}</strong>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: '0.76rem' }}>
+            <span style={{ opacity: 0.85 }}>% do total</span>
+            <strong style={{ fontVariantNumeric: 'tabular-nums' }}>{total ? pct((hovered.count / total) * 100) : '-'}</strong>
           </div>
         </div>
       )}

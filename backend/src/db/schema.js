@@ -821,11 +821,16 @@ await client.query(`
         project_id  INTEGER NOT NULL REFERENCES schedule_projects(id) ON DELETE CASCADE,
         client_uid  VARCHAR(80) NOT NULL,
         label       VARCHAR(40) NOT NULL,
+        description TEXT DEFAULT '',
+        settings    JSONB DEFAULT '{}'::jsonb,
         sort_order  INTEGER DEFAULT 0,
         created_at  TIMESTAMPTZ DEFAULT NOW(),
         updated_at  TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(project_id, client_uid)
       );
+
+      ALTER TABLE schedule_revisions ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';
+      ALTER TABLE schedule_revisions ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT '{}'::jsonb;
 
       CREATE TABLE IF NOT EXISTS schedule_tasks (
         id              SERIAL PRIMARY KEY,

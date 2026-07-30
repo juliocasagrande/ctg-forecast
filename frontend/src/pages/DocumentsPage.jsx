@@ -5,6 +5,7 @@ import api from '../utils/api.js';
 import { useToast } from '../components/ui/Toast.jsx';
 import ColumnFilterDropdown from '../components/ui/ColumnFilterDropdown.jsx';
 import ColumnResizeHandle from '../components/ui/ColumnResizeHandle.jsx';
+import CellTooltip from '../components/ui/CellTooltip.jsx';
 import useColumnWidths from '../hooks/useColumnWidths.js';
 import * as mammoth from 'mammoth';
 
@@ -1647,11 +1648,15 @@ export default function DocumentsPage() {
                           {isMine && <span style={{ fontSize:'0.6rem', background:'#F5F3FF', color:'#6D28D9', border:'1px solid #DDD6FE', borderRadius:10, padding:'1px 5px', fontWeight:700 }}>meu</span>}
                         </div>
                       </td>
-                      <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B' }}>{plantsLabel(latest.plant)}</td>
-                      <td style={{ ...TD, fontSize:'0.82rem' }}>{latest.responsible}</td>
+                      <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B' }}>
+                        <CellTooltip text={plantsLabel(latest.plant)}/>
+                      </td>
+                      <td style={{ ...TD, fontSize:'0.82rem' }}>
+                        <CellTooltip text={latest.responsible}/>
+                      </td>
                       <td style={{ ...TD, fontSize:'0.82rem', whiteSpace:'nowrap' }}>{fmtDateBR(latest.date)}</td>
                       <td style={{ ...TD, fontSize:'0.82rem', maxWidth:240 }}>
-                        <span style={{ display:'-webkit-box', WebkitLineClamp:1, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{latest.subject}</span>
+                        <CellTooltip text={latest.subject}/>
                       </td>
                       <td style={TD}><StatusBadge status={latest.status}/></td>
                       <td style={{ ...TD }} onClick={e => e.stopPropagation()}>
@@ -1720,11 +1725,15 @@ export default function DocumentsPage() {
                               </div>
                             </div>
                           </td>
-                          <td style={{ ...TD, fontSize:'0.75rem', color:'#94A3B8' }}>{plantsLabel(rev.plant)}</td>
-                          <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B' }}>{rev.responsible}</td>
+                          <td style={{ ...TD, fontSize:'0.75rem', color:'#94A3B8' }}>
+                            <CellTooltip text={plantsLabel(rev.plant)}/>
+                          </td>
+                          <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B' }}>
+                            <CellTooltip text={rev.responsible}/>
+                          </td>
                           <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B', whiteSpace:'nowrap' }}>{fmtDateBR(rev.date)}</td>
                           <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B', maxWidth:280 }}>
-                            <span style={{ display:'-webkit-box', WebkitLineClamp:1, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{rev.subject}</span>
+                            <CellTooltip text={rev.subject}/>
                           </td>
                           <td style={TD}><StatusBadge status={rev.status}/></td>
                           <td style={{ ...TD }} onClick={e => e.stopPropagation()}>

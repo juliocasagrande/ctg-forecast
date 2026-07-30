@@ -8,6 +8,7 @@ import ColumnFilterDropdown from '../components/ui/ColumnFilterDropdown.jsx';
 import ColumnResizeHandle from '../components/ui/ColumnResizeHandle.jsx';
 import StatusDot from '../components/ui/StatusDot.jsx';
 import OpenTimeBadge from '../components/ui/OpenTimeBadge.jsx';
+import CellTooltip from '../components/ui/CellTooltip.jsx';
 import { isIacOpenedInYear } from '../utils/iacDates.js';
 import { formatActivityLine, formatRemainingTime, getCheckinRemainingMs } from '../utils/listActivity.js';
 import useColumnWidths from '../hooks/useColumnWidths.js';
@@ -1659,20 +1660,26 @@ export default function IACsPage() {
                             {item.when_open ? fmtDateBR(item.when_open) : '—'}
                           </td>
                           <td style={{ padding: '10px 12px', color: '#475569', maxWidth: 260 }}>
-                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.project || '—'}</div>
+                            <CellTooltip text={item.project || '—'}/>
                           </td>
                           <td style={{ padding: '10px 12px', color: '#475569', maxWidth: 200, fontSize: '0.75rem' }}>
-                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.comments || '—'}</div>
+                            <CellTooltip text={item.comments || '—'}/>
                           </td>
-                          <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>{item.requester || '—'}</td>
-                          <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>{item.team_leader || '—'}</td>
-                          <td style={{ padding: '10px 12px', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>{item.chinese_work_staff || '—'}</td>
+                          <td style={{ padding: '10px 12px', color: '#475569', fontSize: '0.75rem' }}>
+                            <CellTooltip text={item.requester || '—'}/>
+                          </td>
+                          <td style={{ padding: '10px 12px', color: '#475569', fontSize: '0.75rem' }}>
+                            <CellTooltip text={item.team_leader || '—'}/>
+                          </td>
+                          <td style={{ padding: '10px 12px', color: '#475569', fontSize: '0.75rem' }}>
+                            <CellTooltip text={item.chinese_work_staff || '—'}/>
+                          </td>
                           <td style={{ padding: '10px 12px' }}><PillBadge value={item.apresentado_work_team} /></td>
-                          <td title={item.organizer || '—'} style={{ padding: '10px 12px', color: '#475569', fontSize: '0.75rem', maxWidth: 130 }}>
-                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.organizer || '—'}</div>
+                          <td style={{ padding: '10px 12px', color: '#475569', fontSize: '0.75rem', maxWidth: 130 }}>
+                            <CellTooltip text={item.organizer || '—'}/>
                           </td>
-                          <td title={item.supervisor || '—'} style={{ padding: '10px 12px', color: '#475569', fontSize: '0.75rem', maxWidth: 140 }}>
-                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.supervisor || '—'}</div>
+                          <td style={{ padding: '10px 12px', color: '#475569', fontSize: '0.75rem', maxWidth: 140 }}>
+                            <CellTooltip text={item.supervisor || '—'}/>
                           </td>
                           <td style={{ padding: '10px 12px' }}><PriorityBadge value={item.priority} /></td>
                           <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: '#0F172A' }}>{item.qty_pp_line_26_priority ?? '—'}</td>

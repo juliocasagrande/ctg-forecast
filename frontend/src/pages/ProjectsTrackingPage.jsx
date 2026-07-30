@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import ColumnFilterDropdown from '../components/ui/ColumnFilterDropdown.jsx';
 import ColumnResizeHandle from '../components/ui/ColumnResizeHandle.jsx';
 import StatusDot from '../components/ui/StatusDot.jsx';
+import CellTooltip from '../components/ui/CellTooltip.jsx';
 import useColumnWidths from '../hooks/useColumnWidths.js';
 import { formatActivityLine, formatRemainingTime, getCheckinRemainingMs } from '../utils/listActivity.js';
 
@@ -2629,26 +2630,26 @@ export default function ProjectsTrackingPage() {
                         <td style={{ padding: '10px 12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           <UheBadge uhe={item.uhe} />
                         </td>
-                        <td style={{ padding: '10px 12px', fontWeight: 700, color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {item.pp_contrato || '—'}
+                        <td style={{ padding: '10px 12px', fontWeight: 700, color: '#0F172A' }}>
+                          <CellTooltip text={item.pp_contrato || '—'}/>
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {item.projeto_atividade || '—'}
+                        <td style={{ padding: '10px 12px', color: '#475569' }}>
+                          <CellTooltip text={item.projeto_atividade || '—'}/>
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {item.projeto || '—'}
+                        <td style={{ padding: '10px 12px', color: '#475569' }}>
+                          <CellTooltip text={item.projeto || '—'}/>
                         </td>
                         <td style={{ padding: '10px 12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           <StatusBadge status={item.status} />
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
-                          {item.gestor || '—'}
+                        <td style={{ padding: '10px 12px', color: '#475569', fontSize: '0.75rem' }}>
+                          <CellTooltip text={item.gestor || '—'}/>
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
-                          {item.resumo || '—'}
+                        <td style={{ padding: '10px 12px', color: '#64748B', fontSize: '0.75rem' }}>
+                          <CellTooltip text={item.resumo || '—'}/>
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
-                          {item.vencimento ? fmtDateBR(item.vencimento) : (item.vencimento_txt || '—')}
+                        <td style={{ padding: '10px 12px', color: '#475569', fontSize: '0.75rem' }}>
+                          <CellTooltip text={item.vencimento ? fmtDateBR(item.vencimento) : (item.vencimento_txt || '—')}/>
                         </td>
                         <td style={{ padding: '10px 12px', color: '#0F172A', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                           {fmtBRL(item.valor_contrato)}
@@ -2668,8 +2669,8 @@ export default function ProjectsTrackingPage() {
                         <td style={{ padding: '10px 12px', color: getSaldoSI(item) < 0 ? '#DC2626' : '#065F46', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                           {fmtBRL(getSaldoSI(item))}
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
-                          {item.fornecedor || '—'}
+                        <td style={{ padding: '10px 12px', color: '#475569', fontSize: '0.75rem' }}>
+                          <CellTooltip text={item.fornecedor || '—'}/>
                         </td>
                         <td style={{ padding: '10px 12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           <NaturezaBadge value={item.natureza} />
