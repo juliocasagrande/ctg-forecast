@@ -741,13 +741,35 @@ function updateHealthColor(value) {
   return safe >= 90 ? '#10B981' : safe >= 70 ? '#F59E0B' : '#EF4444';
 }
 
-function OperationalTile({ label, value, sub, color, icon, trend, gaugeValue, onClick }) {
+function OperationalTile({ label, value, sub, color, icon, trend, gaugeValue, onClick, breakdown }) {
   const hasGauge = gaugeValue !== undefined;
   const statusColor = hasGauge ? updateHealthColor(gaugeValue) : color;
   const hasBubble = trend || hasGauge;
+  const hasBreakdown = Array.isArray(breakdown) && breakdown.length > 0;
+  const [hovered, setHovered] = useState(false);
+  const [tipPos, setTipPos] = useState({ x: 0, y: 0 });
+  const [tooltipStyle, setTooltipStyle] = useState({ left: 0, top: 0 });
+  const tooltipRef = useRef(null);
+
+  useLayoutEffect(() => {
+    if (!hovered || !hasBreakdown || !tooltipRef.current) return;
+    const rect = tooltipRef.current.getBoundingClientRect();
+    const margin = 8;
+    let left = tipPos.x + 16;
+    let top = tipPos.y - 10;
+    if (left + rect.width + margin > window.innerWidth) left = tipPos.x - rect.width - 16;
+    if (left < margin) left = margin;
+    if (top + rect.height + margin > window.innerHeight) top = tipPos.y - rect.height - 10;
+    if (top < margin) top = margin;
+    setTooltipStyle({ left, top });
+  }, [hovered, tipPos, hasBreakdown]);
+
   return (
     <button
       onClick={onClick}
+      onMouseEnter={() => hasBreakdown && setHovered(true)}
+      onMouseMove={e => hasBreakdown && setTipPos({ x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => hasBreakdown && setHovered(false)}
       style={{
         position: 'relative',
         overflow: 'hidden',
@@ -778,6 +800,28 @@ function OperationalTile({ label, value, sub, color, icon, trend, gaugeValue, on
         </div>
         {trend && <Sparkline color={statusColor} />}
       </div>
+      {hovered && hasBreakdown && (
+        <div ref={tooltipRef} style={{
+          position: 'fixed',
+          left: tooltipStyle.left,
+          top: tooltipStyle.top,
+          zIndex: 9999,
+          background: 'var(--bg-card)', border: '1px solid var(--border)',
+          borderRadius: 8, padding: '9px 12px', boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
+          fontSize: '0.78rem', minWidth: 200, pointerEvents: 'none', cursor: 'default',
+        }}>
+          <div style={{ fontWeight: 800, color: 'var(--ctg-navy)', marginBottom: 5 }}>Composição da média</div>
+          {breakdown.map(item => (
+            <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', gap: 14, marginBottom: 2 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: item.color, flexShrink: 0 }} />
+                {item.label}
+              </span>
+              <strong style={{ color: item.color }}>{item.value === null ? '-' : pct(item.value)}</strong>
+            </div>
+          ))}
+        </div>
+      )}
     </button>
   );
 }
@@ -1190,8 +1234,8 @@ function GoalBar({ value, pct80, pct100, pct120 }) {
         <div style={{ width: `${widthPct}%`, height: '100%', background: barColor, borderRadius: 999 }} />
       </div>
       {marks.map(mark => (
-        <div key={mark.key} style={{ position: 'absolute', left: `${Math.min(100, (mark.value / scaleMax) * 100)}%`, top: 0, transform: 'translateX(-50%)', pointerEvents: 'none' }}>
-          <div style={{ width: 2, height: 8, background: mark.color, borderRadius: 1 }} />
+        <div key={mark.key} style={{ position: 'absolute', left: `${Math.min(100, (mark.value / scaleMax) * 100)}%`, top: -2, transform: 'translateX(-50%)', pointerEvents: 'none' }}>
+          <div style={{ width: 2, height: 12, background: mark.color, borderRadius: 1, boxShadow: '0 0 0 1px #fff' }} />
           <div style={{ marginTop: 2, fontSize: '0.78rem', color: mark.color, fontWeight: 900, textAlign: 'center', whiteSpace: 'nowrap' }}>{mark.value}</div>
         </div>
       ))}
@@ -1640,7 +1684,7 @@ export default function HomePage({ year }) {
   // Pipeline derivado — memoizado para não recalcular em renders que não mudam
   // `data`/`selectedPlants` (ex.: AlertBell, eventos de equipamentos no App pai).
   const {
-    metasAvg, projectRows, staleTrackingRows, iacRows,
+    metasAvg, iacGoalBreakdown, projectRows, staleTrackingRows, iacRows,
     docsTotal, docsPublished, docsPublishedPct,
     projectStaleCount, iacStaleCount, projectUpdatedPct, iacUpdatedPct,
     iacProcessData, iacPriorityGoalData, iac2026, iacAvgMonths, iacMetaColor,
@@ -1732,17 +1776,18 @@ export default function HomePage({ year }) {
     ];
     const pendingTotal = attentionItems.reduce((sum, item) => sum + item.value, 0);
 
-    const iacGoalAchievements = [
-      priorityAchievementPct(iacPriorityGoalData.Priority, IAC_PRIORITY_GOALS.Priority),
-      priorityAchievementPct(iacPriorityGoalData['Non Priority'], IAC_PRIORITY_GOALS['Non Priority']),
-      iacTimeAchievementPct(iacAvgMonths),
-    ].filter(v => v !== null);
+    const iacGoalBreakdown = [
+      { label: 'Priority', value: priorityAchievementPct(iacPriorityGoalData.Priority, IAC_PRIORITY_GOALS.Priority), color: IAC_PRIORITY_ACCENTS.Priority },
+      { label: 'Non Priority', value: priorityAchievementPct(iacPriorityGoalData['Non Priority'], IAC_PRIORITY_GOALS['Non Priority']), color: IAC_PRIORITY_ACCENTS['Non Priority'] },
+      { label: 'Média tempo', value: iacTimeAchievementPct(iacAvgMonths), color: IAC_AVG_TIME_ACCENT },
+    ];
+    const iacGoalAchievements = iacGoalBreakdown.map(item => item.value).filter(v => v !== null);
     const iacMetasAvg = iacGoalAchievements.length
       ? iacGoalAchievements.reduce((sum, v) => sum + v, 0) / iacGoalAchievements.length
       : null;
 
     return {
-      metasAvg: iacMetasAvg,
+      metasAvg: iacMetasAvg, iacGoalBreakdown,
       projectRows, staleTrackingRows, iacRows,
       docsTotal, docsPublished, docsPublishedPct,
       projectStaleCount, iacStaleCount, projectUpdatedPct, iacUpdatedPct,
@@ -1797,7 +1842,7 @@ export default function HomePage({ year }) {
               <OperationalTile label="IACs" value={iacRows.length} sub={`${iacUpdatedPct}% atualizado`} color="#F59E0B" icon="warning" trend gaugeValue={iacUpdatedPct} onClick={() => navigate('/lists/iacs')} />
               <OperationalTile label="Projetos" value={projectRows.length} sub={`${projectUpdatedPct}% atualizado`} color="#0070B8" icon="folder" trend gaugeValue={projectUpdatedPct} onClick={() => navigate('/lists/projects-tracking')} />
               <OperationalTile label="Documentos" value={docsTotal} sub={`${docsPublished} publicados`} color="#6366F1" icon="file" trend gaugeValue={docsPublishedPct} onClick={() => navigate('/documents')} />
-              <OperationalTile label="Metas IACs" value={pct(metasAvg)} sub="Média Ponderada / Metas IACs" color="#10B981" icon="target" trend gaugeValue={metasAvg || 0} onClick={() => navigate('/lists/iacs')} />
+              <OperationalTile label="Metas IACs" value={pct(metasAvg)} sub="Média Ponderada / Metas IACs" color="#10B981" icon="target" trend gaugeValue={metasAvg || 0} onClick={() => navigate('/lists/iacs')} breakdown={iacGoalBreakdown} />
             </div>
           </HomeCard>
 
