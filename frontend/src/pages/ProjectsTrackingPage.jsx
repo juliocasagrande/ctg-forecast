@@ -7,6 +7,7 @@ import ColumnFilterDropdown from '../components/ui/ColumnFilterDropdown.jsx';
 import ColumnResizeHandle from '../components/ui/ColumnResizeHandle.jsx';
 import StatusDot from '../components/ui/StatusDot.jsx';
 import CellTooltip from '../components/ui/CellTooltip.jsx';
+import DuplicatePromptModal from '../components/ui/DuplicatePromptModal.jsx';
 import useColumnWidths from '../hooks/useColumnWidths.js';
 import { formatActivityLine, formatRemainingTime, getCheckinRemainingMs } from '../utils/listActivity.js';
 
@@ -973,7 +974,7 @@ function fmtDateBR(val) {
 }
 
 /* ─── Project Modal (restyled to match DocumentsPage) ───────────────────────── */
-function ProjectModal({ item, onClose, onSave, onDelete, onCheckinSaved, isNew, saving, deleting, allUsers }) {
+function ProjectModal({ item, onClose, onSave, onDelete, onDuplicate, onCheckinSaved, isNew, saving, deleting, allUsers }) {
   const initForm = (src) => {
     if (!src) return { ...EMPTY_PROJECT };
     const next = { ...src, vencimento: toDateInput(src.vencimento) };
@@ -1456,12 +1457,18 @@ function ProjectModal({ item, onClose, onSave, onDelete, onCheckinSaved, isNew, 
 
         <div className="modal-footer" style={{ flexShrink: 0 }}>
           {!isNew && (
-            <button onClick={() => onDelete(form.id)} disabled={deleting} style={{
-              padding: '8px 18px', borderRadius: 8, border: '1.5px solid #FCA5A5',
-              background: '#FEF2F2', color: '#DC2626', fontSize: '0.82rem',
-              fontWeight: 600, cursor: deleting ? 'not-allowed' : 'pointer', opacity: deleting ? 0.6 : 1,
-              marginRight: 'auto',
-            }}>{deleting ? 'Excluindo...' : 'Excluir'}</button>
+            <div style={{ display: 'flex', gap: 8, marginRight: 'auto' }}>
+              <button onClick={() => onDelete(form.id)} disabled={deleting} style={{
+                padding: '8px 18px', borderRadius: 8, border: '1.5px solid #FCA5A5',
+                background: '#FEF2F2', color: '#DC2626', fontSize: '0.82rem',
+                fontWeight: 600, cursor: deleting ? 'not-allowed' : 'pointer', opacity: deleting ? 0.6 : 1,
+              }}>{deleting ? 'Excluindo...' : 'Excluir'}</button>
+              <button onClick={() => onDuplicate(buildPayload())} style={{
+                padding: '8px 18px', borderRadius: 8, border: '1.5px solid #BAE6FD',
+                background: '#F0F9FF', color: '#0369A1', fontSize: '0.82rem',
+                fontWeight: 600, cursor: 'pointer',
+              }}>Duplicar</button>
+            </div>
           )}
           <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
           <button className="btn btn-primary" onClick={() => onSave(buildPayload())} disabled={saving} style={{
@@ -1837,6 +1844,8 @@ export default function ProjectsTrackingPage() {
   const [isNew, setIsNew]             = useState(false);
   const [saving, setSaving]           = useState(false);
   const [deleting, setDeleting]       = useState(false);
+  const [duplicateItem, setDuplicateItem] = useState(null);
+  const [duplicating, setDuplicating] = useState(false);
   const [importPreview, setImportPreview] = useState(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importFile, setImportFile]   = useState(null);
@@ -2155,6 +2164,26 @@ export default function ProjectsTrackingPage() {
       addToast('Erro ao excluir.', 'error');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleDuplicate = async (newCode) => {
+    if (!duplicateItem) return;
+    setDuplicating(true);
+    try {
+      const { id, created_at, updated_at, last_activity_type, last_activity_at,
+        last_activity_user_id, last_activity_user_name, ...rest } = duplicateItem;
+      const r = await api.post('/lists/projects-tracking', { ...rest, pp_contrato: newCode });
+      setItems(prev => [r.data, ...prev]);
+      addToast('Projeto duplicado!', 'success');
+      setDuplicateItem(null);
+      setSelected(null);
+      setIsNew(false);
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Erro ao duplicar.';
+      addToast(msg, 'error');
+    } finally {
+      setDuplicating(false);
     }
   };
 
@@ -2702,6 +2731,7 @@ export default function ProjectsTrackingPage() {
           onClose={() => { setSelected(null); setIsNew(false); }}
           onSave={handleSave}
           onDelete={handleDelete}
+          onDuplicate={setDuplicateItem}
           onCheckinSaved={handleCheckinSaved}
           saving={saving}
           deleting={deleting}
@@ -2715,6 +2745,18 @@ export default function ProjectsTrackingPage() {
           onClose={() => { setImportPreview(null); setImportFile(null); }}
           onConfirm={handleConfirmImport}
           loading={importLoading}
+        />
+      )}
+
+      {duplicateItem && (
+        <DuplicatePromptModal
+          title="Duplicar Projeto"
+          codeLabel="Novo PP/Contrato"
+          placeholder="Ex: 4600000404"
+          initialCode={duplicateItem.pp_contrato}
+          onCancel={() => setDuplicateItem(null)}
+          onConfirm={handleDuplicate}
+          submitting={duplicating}
         />
       )}
 

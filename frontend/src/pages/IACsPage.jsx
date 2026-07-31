@@ -9,6 +9,7 @@ import ColumnResizeHandle from '../components/ui/ColumnResizeHandle.jsx';
 import StatusDot from '../components/ui/StatusDot.jsx';
 import OpenTimeBadge from '../components/ui/OpenTimeBadge.jsx';
 import CellTooltip from '../components/ui/CellTooltip.jsx';
+import DuplicatePromptModal from '../components/ui/DuplicatePromptModal.jsx';
 import { isIacOpenedInYear } from '../utils/iacDates.js';
 import { formatActivityLine, formatRemainingTime, getCheckinRemainingMs } from '../utils/listActivity.js';
 import useColumnWidths from '../hooks/useColumnWidths.js';
@@ -639,7 +640,7 @@ function fmtDateBR(val) {
 }
 
 /* ─── IAC Modal ──────────────────────────────────────────────────────────────── */
-function IACModal({ item, onClose, onSave, onDelete, onCheckinSaved, isNew, saving, deleting, allUsers, allRequesters, allChineseStaff, allOrganizers, allSupervisors }) {
+function IACModal({ item, onClose, onSave, onDelete, onDuplicate, onCheckinSaved, isNew, saving, deleting, allUsers, allRequesters, allChineseStaff, allOrganizers, allSupervisors }) {
   const initForm = (src) => src
     ? { ...src, opening_date: toDateInput(src.opening_date), when_open: toDateInput(src.when_open), acceptance_letter_signed: toDateInput(src.acceptance_letter_signed) }
     : { ...EMPTY_IAC };
@@ -932,17 +933,31 @@ function IACModal({ item, onClose, onSave, onDelete, onCheckinSaved, isNew, savi
           display: 'flex', alignItems: 'center', gap: 10,
         }}>
           {!isNew && (
-            <button onClick={() => onDelete(form.id)} disabled={deleting} style={{
-              padding: '8px 18px', borderRadius: 8, border: '1.5px solid #FCA5A5',
-              background: '#FEF2F2', color: '#DC2626', fontSize: '0.82rem',
-              fontWeight: 600, cursor: deleting ? 'not-allowed' : 'pointer', opacity: deleting ? 0.6 : 1,
-              marginRight: 'auto', display: 'flex', alignItems: 'center', gap: 5,
-            }}>
-              <svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
-                <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"/>
-              </svg>
-              {deleting ? 'Excluindo...' : 'Excluir'}
-            </button>
+            <div style={{ display: 'flex', gap: 8, marginRight: 'auto' }}>
+              <button onClick={() => onDelete(form.id)} disabled={deleting} style={{
+                padding: '8px 18px', borderRadius: 8, border: '1.5px solid #FCA5A5',
+                background: '#FEF2F2', color: '#DC2626', fontSize: '0.82rem',
+                fontWeight: 600, cursor: deleting ? 'not-allowed' : 'pointer', opacity: deleting ? 0.6 : 1,
+                display: 'flex', alignItems: 'center', gap: 5,
+              }}>
+                <svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
+                  <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"/>
+                </svg>
+                {deleting ? 'Excluindo...' : 'Excluir'}
+              </button>
+              <button onClick={() => onDuplicate(form)} style={{
+                padding: '8px 18px', borderRadius: 8, border: '1.5px solid #BAE6FD',
+                background: '#F0F9FF', color: '#0369A1', fontSize: '0.82rem',
+                fontWeight: 600, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 5,
+              }}>
+                <svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
+                  <path d="M7 3a2 2 0 00-2 2v9a2 2 0 002 2h7a2 2 0 002-2V8.414A2 2 0 0015.414 7L11 2.586A2 2 0 009.586 2H7zm0 2h2v3a1 1 0 001 1h3v7H7V5z"/>
+                  <path d="M4 7a2 2 0 00-2 2v9a2 2 0 002 2h7a2 2 0 002-2v-1H6a1 1 0 01-1-1V7H4z"/>
+                </svg>
+                Duplicar
+              </button>
+            </div>
           )}
           <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
           <button className="btn btn-primary" onClick={() => onSave(form)} disabled={saving} style={{ opacity: saving ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -981,6 +996,8 @@ export default function IACsPage() {
   const [isNew, setIsNew]               = useState(false);
   const [saving, setSaving]             = useState(false);
   const [deleting, setDeleting]         = useState(false);
+  const [duplicateItem, setDuplicateItem] = useState(null);
+  const [duplicating, setDuplicating]   = useState(false);
   const [importPreview, setImportPreview] = useState(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importFile, setImportFile]     = useState(null);
@@ -1311,6 +1328,26 @@ export default function IACsPage() {
       addToast('IAC excluído.', 'success');
     } catch { addToast('Erro ao excluir.', 'error'); }
     finally { setDeleting(false); }
+  };
+
+  const handleDuplicate = async (newCode) => {
+    if (!duplicateItem) return;
+    setDuplicating(true);
+    try {
+      const { id, created_at, updated_at, last_activity_type, last_activity_at,
+        last_activity_user_id, last_activity_user_name, ...rest } = duplicateItem;
+      const r = await api.post('/lists/iacs', { ...rest, iac_code: newCode });
+      setItems(prev => [r.data, ...prev]);
+      addToast('IAC duplicado!', 'success');
+      setDuplicateItem(null);
+      setSelected(null);
+      setIsNew(false);
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Erro ao duplicar.';
+      addToast(msg, 'error');
+    } finally {
+      setDuplicating(false);
+    }
   };
 
   /* ── Render ── */
@@ -1705,6 +1742,7 @@ export default function IACsPage() {
           onClose={() => { setSelected(null); setIsNew(false); }}
           onSave={handleSave}
           onDelete={handleDelete}
+          onDuplicate={setDuplicateItem}
           onCheckinSaved={handleCheckinSaved}
           saving={saving}
           deleting={deleting}
@@ -1721,6 +1759,17 @@ export default function IACsPage() {
           onClose={() => { setImportPreview(null); setImportFile(null); }}
           onConfirm={handleConfirmImport}
           loading={importLoading}
+        />
+      )}
+      {duplicateItem && (
+        <DuplicatePromptModal
+          title="Duplicar IAC"
+          codeLabel="Novo código IAC"
+          placeholder="IAC202600XXX"
+          initialCode={duplicateItem.iac_code}
+          onCancel={() => setDuplicateItem(null)}
+          onConfirm={handleDuplicate}
+          submitting={duplicating}
         />
       )}
     </div>

@@ -441,6 +441,75 @@ function subtractWorkdaySpan(endDate, workdayCount, settings = DEFAULT_SETTINGS)
   return cursor;
 }
 
+function normalizeTaskDates(task, settings = DEFAULT_SETTINGS, workdaySpan = null) {
+  const originalStart = parseDate(task?.start);
+  const originalEnd = parseDate(task?.end);
+  if (!originalStart || !originalEnd) return task;
+
+  const duration = Math.max(1, workdaySpan ?? taskDuration(task, settings));
+  const start = nextWorkdayOnOrAfter(originalStart, settings);
+  const end = addWorkdaySpan(start, duration, settings);
+  return { ...task, start: iso(start), end: iso(end) };
+}
+
+function calendarRules(settings = DEFAULT_SETTINGS) {
+  const dates = (items, normalize) => normalize(items)
+    .map(item => item.date)
+    .sort()
+    .join(',');
+  return [
+    [...getWorkdays(settings)].sort((a, b) => a - b).join(','),
+    dates(settings.holidays, normalizeHolidays),
+    dates(settings.extraWorkdays, normalizeExtraWorkdays),
+  ].join('|');
+}
+
+// Rebuilds every persisted date when the working calendar changes. Durations are
+// measured with the previous calendar and then laid out on the new one. Linked
+// activities are resolved from their predecessors so FS/SS/FF relationships remain valid.
+function recalculateSchedule(tasks, previousSettings, nextSettings) {
+  const durations = new Map(tasks.map(task => [
+    task.id,
+    Math.max(1, taskDuration(task, previousSettings)),
+  ]));
+  const byId = new Map(tasks.map(task => [task.id, task]));
+  const resolved = new Map();
+  const visiting = new Set();
+
+  const independent = (task) => normalizeTaskDates(task, nextSettings, durations.get(task.id));
+  const resolve = (task) => {
+    if (resolved.has(task.id)) return resolved.get(task.id);
+    if (visiting.has(task.id)) return independent(task);
+    visiting.add(task.id);
+
+    const predecessor = task.predecessorId !== task.id
+      ? byId.get(task.predecessorId)
+      : null;
+    let nextTask = independent(task);
+
+    if (predecessor) {
+      const nextPredecessor = resolve(predecessor);
+      const duration = durations.get(task.id);
+      if (task.dependencyType === 'SS') {
+        const start = nextWorkdayOnOrAfter(parseDate(nextPredecessor.start), nextSettings);
+        nextTask = { ...task, start: iso(start), end: iso(addWorkdaySpan(start, duration, nextSettings)) };
+      } else if (task.dependencyType === 'FF') {
+        const end = prevWorkdayOnOrBefore(parseDate(nextPredecessor.end), nextSettings);
+        nextTask = { ...task, start: iso(subtractWorkdaySpan(end, duration, nextSettings)), end: iso(end) };
+      } else {
+        const start = nextWorkdayAfter(parseDate(nextPredecessor.end), nextSettings);
+        nextTask = { ...task, start: iso(start), end: iso(addWorkdaySpan(start, duration, nextSettings)) };
+      }
+    }
+
+    visiting.delete(task.id);
+    resolved.set(task.id, nextTask);
+    return nextTask;
+  };
+
+  return tasks.map(resolve);
+}
+
 function getInitialSettings() {
   try {
     return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY)) };
@@ -452,86 +521,163 @@ function getInitialSettings() {
 
 function getCriticalPath(tasks, settings) {
   const taskList = tasks.filter(task => task.type !== 'phase');
-  const taskMap = new Map(taskList.map(task => [task.id, task]));
-  const memo = new Map();
+  if (!taskList.length) return new Set();
 
-  const resolve = (task, visiting = new Set()) => {
+  const taskMap = new Map(taskList.map(task => [task.id, task]));
+  const datedTasks = taskList.filter(task => parseDate(task.start) && parseDate(task.end));
+  if (!datedTasks.length) return new Set();
+
+  const projectEnd = new Date(Math.max(...datedTasks.map(task => parseDate(task.end))));
+  const successors = new Map(taskList.map(task => [task.id, []]));
+  taskList.forEach(task => {
+    if (!task.predecessorId || task.predecessorId === task.id || !taskMap.has(task.predecessorId)) return;
+    successors.get(task.predecessorId).push(task);
+  });
+
+  const memo = new Map();
+  const visiting = new Set();
+  const latestDates = (task) => {
     if (memo.has(task.id)) return memo.get(task.id);
-    // predecessorId can form a cycle (e.g. manually picked in the modal) — without
-    // this guard the recursion below blows the call stack.
-    if (visiting.has(task.id)) return { duration: 0, path: [] };
+    const duration = Math.max(1, taskDuration(task, settings));
+    const projectLatestEnd = prevWorkdayOnOrBefore(projectEnd, settings);
+    let latestEnd = projectLatestEnd;
+    let latestStart = subtractWorkdaySpan(latestEnd, duration, settings);
+
+    // A cycle is invalid schedule data. Keeping the project-end bound prevents
+    // recursion and, importantly, does not invent an implicit predecessor.
+    if (visiting.has(task.id)) return { start: latestStart, end: latestEnd };
     visiting.add(task.id);
-    const taskIndex = taskList.findIndex(item => item.id === task.id);
-    const fallbackPredecessor = taskIndex > 0 ? taskList[taskIndex - 1] : null;
-    const predecessor = task.predecessorId !== task.id ? (taskMap.get(task.predecessorId) || fallbackPredecessor) : null;
-    const base = predecessor ? resolve(predecessor, visiting) : { duration: 0, path: [] };
-    const result = {
-      duration: base.duration + taskDuration(task, settings),
-      path: [...base.path, task.id],
-    };
+
+    (successors.get(task.id) || []).forEach(successor => {
+      const successorLatest = latestDates(successor);
+      let candidateStart;
+      let candidateEnd;
+      if (successor.dependencyType === 'SS') {
+        candidateStart = successorLatest.start;
+        candidateEnd = addWorkdaySpan(candidateStart, duration, settings);
+      } else if (successor.dependencyType === 'FF') {
+        candidateEnd = successorLatest.end;
+        candidateStart = subtractWorkdaySpan(candidateEnd, duration, settings);
+      } else {
+        candidateEnd = prevWorkdayOnOrBefore(addDays(successorLatest.start, -1), settings);
+        candidateStart = subtractWorkdaySpan(candidateEnd, duration, settings);
+      }
+      if (candidateStart < latestStart) {
+        latestStart = candidateStart;
+        latestEnd = candidateEnd;
+      }
+    });
+
+    visiting.delete(task.id);
+    const result = { start: latestStart, end: latestEnd };
     memo.set(task.id, result);
     return result;
   };
 
-  let best = { duration: 0, path: [] };
-  taskList.forEach(task => {
-    const result = resolve(task);
-    const taskEnd = parseDate(task.end);
-    const bestEnd = best.path.length ? parseDate(taskMap.get(best.path.at(-1))?.end) : null;
-    if (
-      result.duration > best.duration ||
-      (result.duration === best.duration && taskEnd && (!bestEnd || taskEnd > bestEnd))
-    ) {
-      best = result;
-    }
-  });
-  return new Set(best.path);
+  return new Set(datedTasks
+    .filter(task => {
+      const latest = latestDates(task);
+      return iso(parseDate(task.start)) === iso(latest.start)
+        && iso(parseDate(task.end)) === iso(latest.end);
+    })
+    .map(task => task.id));
 }
 
-// When a task's start/end move, everything linked to it downstream should slide with it —
-// but landing on the correct next workday, not just calendar-shifting past weekends/holidays.
-// FS: successor starts the workday after the predecessor ends. SS: successor starts alongside
-// the predecessor's start. FF: successor ends alongside the predecessor's end. Each successor
-// keeps its own workday-duration and cascades into its own successors recursively.
+function workdayOffset(fromDate, toDate, settings = DEFAULT_SETTINGS) {
+  const from = nextWorkdayOnOrAfter(fromDate, settings);
+  const to = nextWorkdayOnOrAfter(toDate, settings);
+  if (from.getTime() === to.getTime()) return 0;
+  const direction = to > from ? 1 : -1;
+  let cursor = new Date(from);
+  let offset = 0;
+  while (cursor.getTime() !== to.getTime()) {
+    cursor = addDays(cursor, direction);
+    if (isWorkday(cursor, settings)) offset += direction;
+  }
+  return offset;
+}
+
+function moveByWorkdays(date, offset, settings = DEFAULT_SETTINGS) {
+  if (!offset) return new Date(date);
+  const direction = offset > 0 ? 1 : -1;
+  let remaining = Math.abs(offset);
+  let cursor = new Date(date);
+  while (remaining > 0) {
+    cursor = addDays(cursor, direction);
+    if (isWorkday(cursor, settings)) remaining -= 1;
+  }
+  return cursor;
+}
+
+function placeFromPredecessor(task, predecessor, settings = DEFAULT_SETTINGS) {
+  const duration = Math.max(1, taskDuration(task, settings));
+  if (task.dependencyType === 'SS') {
+    const start = nextWorkdayOnOrAfter(parseDate(predecessor.start), settings);
+    return { ...task, start: iso(start), end: iso(addWorkdaySpan(start, duration, settings)) };
+  }
+  if (task.dependencyType === 'FF') {
+    const end = prevWorkdayOnOrBefore(parseDate(predecessor.end), settings);
+    return { ...task, start: iso(subtractWorkdaySpan(end, duration, settings)), end: iso(end) };
+  }
+  const start = nextWorkdayAfter(parseDate(predecessor.end), settings);
+  return { ...task, start: iso(start), end: iso(addWorkdaySpan(start, duration, settings)) };
+}
+
+// Moving a linked activity's start shifts its whole connected network. Duration/end changes
+// recalculate successors, while changing the relationship first aligns the edited activity
+// with its new predecessor. Every operation preserves each activity's workday duration.
 function cascadeLinkedTasks(tasks, oldTask, newTask, settings = DEFAULT_SETTINGS) {
   const oldStart = parseDate(oldTask?.start);
   const oldEnd = parseDate(oldTask?.end);
   const newStart = parseDate(newTask?.start);
   const newEnd = parseDate(newTask?.end);
   if (!oldStart || !oldEnd || !newStart || !newEnd) return tasks;
-  if (oldStart.getTime() === newStart.getTime() && oldEnd.getTime() === newEnd.getTime()) return tasks;
+  const datesChanged = oldStart.getTime() !== newStart.getTime() || oldEnd.getTime() !== newEnd.getTime();
+  const linkChanged = (oldTask.predecessorId || '') !== (newTask.predecessorId || '')
+    || (oldTask.dependencyType || 'FS') !== (newTask.dependencyType || 'FS');
+  if (!datesChanged && !linkChanged) return tasks;
 
   const byId = new Map(tasks.map(task => [task.id, task]));
   const successorsOf = new Map();
+  const linked = new Map(tasks.map(task => [task.id, new Set()]));
   tasks.forEach(task => {
-    if (!task.predecessorId) return;
+    if (!task.predecessorId || !byId.has(task.predecessorId) || task.predecessorId === task.id) return;
     if (!successorsOf.has(task.predecessorId)) successorsOf.set(task.predecessorId, []);
     successorsOf.get(task.predecessorId).push(task);
+    linked.get(task.id).add(task.predecessorId);
+    linked.get(task.predecessorId).add(task.id);
   });
 
-  const visited = new Set();
+  if (!linkChanged && oldStart.getTime() !== newStart.getTime()) {
+    const offset = workdayOffset(oldStart, newStart, settings);
+    const connectedIds = new Set();
+    const collect = (taskId) => {
+      if (connectedIds.has(taskId)) return;
+      connectedIds.add(taskId);
+      (linked.get(taskId) || []).forEach(collect);
+    };
+    collect(newTask.id);
+    connectedIds.forEach(taskId => {
+      if (taskId === newTask.id) return;
+      const task = byId.get(taskId);
+      const start = moveByWorkdays(parseDate(task.start), offset, settings);
+      const duration = Math.max(1, taskDuration(task, settings));
+      byId.set(taskId, { ...task, start: iso(start), end: iso(addWorkdaySpan(start, duration, settings)) });
+    });
+  }
+
+  if (linkChanged && newTask.predecessorId && byId.has(newTask.predecessorId)) {
+    byId.set(newTask.id, placeFromPredecessor(byId.get(newTask.id), byId.get(newTask.predecessorId), settings));
+  }
+
+  const visited = new Set([oldTask.id]);
   const rescheduleSuccessors = (predecessorId) => {
     (successorsOf.get(predecessorId) || []).forEach(successor => {
       if (visited.has(successor.id)) return;
       visited.add(successor.id);
       const predecessor = byId.get(predecessorId);
       const original = byId.get(successor.id);
-      const workdaySpan = Math.max(1, taskDuration(original, settings));
-
-      let successorStart;
-      let successorEnd;
-      if (successor.dependencyType === 'SS') {
-        successorStart = nextWorkdayOnOrAfter(parseDate(predecessor.start), settings);
-        successorEnd = addWorkdaySpan(successorStart, workdaySpan, settings);
-      } else if (successor.dependencyType === 'FF') {
-        successorEnd = prevWorkdayOnOrBefore(parseDate(predecessor.end), settings);
-        successorStart = subtractWorkdaySpan(successorEnd, workdaySpan, settings);
-      } else {
-        successorStart = nextWorkdayAfter(parseDate(predecessor.end), settings);
-        successorEnd = addWorkdaySpan(successorStart, workdaySpan, settings);
-      }
-
-      byId.set(successor.id, { ...original, start: iso(successorStart), end: iso(successorEnd) });
+      byId.set(successor.id, placeFromPredecessor(original, predecessor, settings));
       rescheduleSuccessors(successor.id);
     });
   };
@@ -548,6 +694,20 @@ function TaskModal({ task, tasks, settings, onClose, onSave }) {
   if (!task) return null;
 
   const set = (field, value) => setDraft(prev => ({ ...(prev || task || {}), [field]: value }));
+  const setStart = (value) => {
+    const selected = parseDate(value);
+    if (!selected) {
+      set('start', value);
+      return;
+    }
+    const duration = taskDuration(draft || task, settings);
+    const start = nextWorkdayOnOrAfter(selected, settings);
+    setDraft(prev => ({
+      ...(prev || task || {}),
+      start: iso(start),
+      end: iso(addWorkdaySpan(start, duration, settings)),
+    }));
+  };
   const duration = taskDuration(draft || task, settings);
 
   return (
@@ -591,7 +751,7 @@ function TaskModal({ task, tasks, settings, onClose, onSave }) {
           <div className="schedule-form-grid">
             <label className="form-group">
               <span className="form-label">Início</span>
-              <input className="form-input" type="date" value={draft?.start || ''} onChange={e => set('start', e.target.value)} />
+              <input className="form-input" type="date" value={draft?.start || ''} onChange={e => setStart(e.target.value)} />
             </label>
             <label className="form-group">
               <span className="form-label">Término</span>
@@ -632,7 +792,7 @@ function TaskModal({ task, tasks, settings, onClose, onSave }) {
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-primary" onClick={() => draft && onSave({ ...draft, progress: Math.max(0, Math.min(100, Number(draft.progress) || 0)) })}>Salvar</button>
+          <button className="btn btn-primary" onClick={() => draft && onSave({ ...normalizeTaskDates(draft, settings), progress: Math.max(0, Math.min(100, Number(draft.progress) || 0)) })}>Salvar</button>
         </div>
       </div>
     </div>
@@ -983,14 +1143,17 @@ export default function ScheduleProjectPage() {
     }
     const siblingTasks = parentPhase ? getPhaseChildren(sourceTasks, parentPhase.id) : sourceTasks.filter(item => !item.parentId);
     const prev = siblingTasks[siblingTasks.length - 1] || sourceTasks[sourceTasks.length - 1];
-    const start = prev?.end ? iso(addDays(parseDate(prev.end), 1)) : iso(TODAY);
+    const startDate = prev?.end
+      ? nextWorkdayAfter(parseDate(prev.end), scheduleSettings)
+      : nextWorkdayOnOrAfter(TODAY, scheduleSettings);
+    const start = iso(startDate);
     const task = {
       id: `task-${Date.now()}`,
       wbs: '',
       name: type === 'phase' ? 'Nova atividade macro' : 'Nova atividade',
       type,
       start,
-      end: iso(addDays(parseDate(start), 2)),
+      end: iso(addWorkdaySpan(startDate, 3, scheduleSettings)),
       progress: 0,
       predecessorId: prev?.id || '',
       dependencyType: 'FS',
@@ -1172,7 +1335,8 @@ export default function ScheduleProjectPage() {
       const wouldCycle = task.parentId && subtreeIds(revision.tasks, task.id).has(task.parentId);
       const wouldExceedDepth = task.parentId && exceedsMaxDepth(revision.tasks, [task.id], task.parentId);
       if (wouldExceedDepth) warning(`Limite de ${MAX_HIERARCHY_LEVELS} níveis de hierarquia atingido.`);
-      const safeTask = (wouldCycle || wouldExceedDepth) ? { ...task, parentId: '' } : task;
+      const normalizedTask = normalizeTaskDates(task, scheduleSettings);
+      const safeTask = (wouldCycle || wouldExceedDepth) ? { ...normalizedTask, parentId: '' } : normalizedTask;
       const oldTask = revision.tasks.find(existing => existing.id === safeTask.id);
       const nextTasks = revision.tasks.map(existing => existing.id === safeTask.id ? safeTask : existing);
       const cascadedTasks = oldTask ? cascadeLinkedTasks(nextTasks, oldTask, safeTask, scheduleSettings) : nextTasks;
@@ -1417,6 +1581,20 @@ export default function ScheduleProjectPage() {
     const trimmed = nameDraft.trim();
     if (trimmed) updateProject(item => ({ ...item, name: trimmed }));
     setEditingName(false);
+  };
+
+  const updateScheduleSettings = (nextSettings) => {
+    patchRevision(revision => {
+      const previousSettings = { ...DEFAULT_SETTINGS, ...(revision.settings || {}) };
+      const calendarChanged = calendarRules(previousSettings) !== calendarRules(nextSettings);
+      return {
+        ...revision,
+        settings: nextSettings,
+        tasks: calendarChanged
+          ? recalculateSchedule(revision.tasks, previousSettings, nextSettings)
+          : revision.tasks,
+      };
+    });
   };
 
   if (!project) return <div className="schedule-page" />;
@@ -1850,7 +2028,7 @@ export default function ScheduleProjectPage() {
       <ScheduleSettingsModal
         open={settingsOpen}
         settings={scheduleSettings}
-        onChange={next => patchRevision(revision => ({ ...revision, settings: next }))}
+        onChange={updateScheduleSettings}
         onClose={() => setSettingsOpen(false)}
       />
     </div>
