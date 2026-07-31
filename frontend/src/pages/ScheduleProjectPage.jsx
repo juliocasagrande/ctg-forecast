@@ -13,7 +13,9 @@ const DAY_MS = 86400000;
 const TODAY = new Date();
 TODAY.setHours(0, 0, 0, 0);
 const TASK_ROW_H = 30;
-const PHASE_ROW_H = 42;
+// Phase rows are the same height as task rows on screen — only the color/weight differentiate
+// them; the print layout still uses a taller PRINT_PHASE_ROW_H, unaffected by this.
+const PHASE_ROW_H = TASK_ROW_H;
 const SUMMARY_ROW_H = 42;
 const PRINT_TASK_ROW_H = 20;
 const PRINT_PHASE_ROW_H = 24;

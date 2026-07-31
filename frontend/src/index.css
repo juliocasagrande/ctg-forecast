@@ -160,8 +160,8 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
 .schedule-content-split .schedule-scurve-card{flex:1 1 0;min-height:180px;}
 .schedule-content-split.curve-expanded .schedule-workspace{flex:1 1 0;min-height:120px;}
 .schedule-content-split.curve-expanded .schedule-scurve-card{flex:4 1 0;}
-.schedule-workspace{display:grid;grid-template-columns:minmax(560px,42%) 1fr;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-sm);}
-.schedule-task-pane{display:flex;flex-direction:column;min-width:0;border-right:2px solid var(--border);}
+.schedule-workspace{display:grid;grid-template-columns:minmax(560px,42%) 1fr;grid-template-rows:minmax(0,1fr);background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-sm);}
+.schedule-task-pane{display:flex;flex-direction:column;min-width:0;min-height:0;border-right:2px solid var(--border);}
 .schedule-grid{display:grid;grid-template-columns:58px minmax(190px,1fr) 72px 72px 66px 54px;align-items:center;}
 .schedule-header-row{height:38px;background:var(--ctg-navy);color:#fff;font-size:.63rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;}
 .schedule-header-row span,.schedule-task-row span{padding:0 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -174,16 +174,15 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
 .schedule-task-row.selected{box-shadow:inset 4px 0 0 var(--ctg-blue);}
 .schedule-task-row.critical{box-shadow:inset 4px 0 0 #F59E0B;background:#FFF7ED;}
 .schedule-task-row.summary{background:#DDE8F6!important;font-weight:900;color:var(--ctg-navy);border-bottom:2px solid rgba(0,112,184,.28);}
-.schedule-task-row.phase{background:#E8EEF8;font-weight:800;color:var(--ctg-navy);line-height:1.2;}
-.schedule-task-row.phase .schedule-task-name{white-space:normal;line-height:1.2;}
+.schedule-task-row.phase{background:#E8EEF8;font-weight:800;color:var(--ctg-navy);}
 .schedule-task-row.milestone .schedule-task-name::before{content:'◆ ';color:var(--ctg-blue);}
 .schedule-task-row.payment .schedule-task-name::before{content:'💰 ';}
 .schedule-task-name{font-weight:700;color:var(--text-primary);}
 .schedule-progress{display:inline-flex;min-width:36px;justify-content:center;border-radius:4px;padding:1px 4px;color:#fff;font-size:.68rem;}
 .schedule-progress.done{background:#16A34A}.schedule-progress.progress{background:#0070B8}.schedule-progress.pending{background:#94A3B8}.schedule-progress.late{background:#DC2626}
 .schedule-link-cell{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.68rem;color:var(--text-muted);}
-.schedule-gantt-pane{min-width:0;display:flex;flex-direction:column;}
-.schedule-gantt-scroll{overflow:auto;flex:1;}
+.schedule-gantt-pane{min-width:0;min-height:0;display:flex;flex-direction:column;}
+.schedule-gantt-scroll{overflow:auto;flex:1;min-height:0;}
 .schedule-gantt-inner{min-width:100%;position:relative;}
 .schedule-gantt-months,.schedule-gantt-days{display:flex;position:sticky;top:0;z-index:4;background:var(--ctg-navy);}
 .schedule-gantt-months{height:19px;}
@@ -209,7 +208,7 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
 .schedule-bar{position:absolute;top:6px;height:18px;border-radius:4px;overflow:hidden;z-index:2;background:#93C5FD;box-shadow:0 1px 2px rgba(0,31,91,.15);}
 .schedule-bar i{position:absolute;inset:0 auto 0 0;background:#16A34A;}
 .schedule-bar em{position:relative;z-index:1;display:block;padding:1px 6px;color:#fff;font-size:.62rem;font-style:normal;font-weight:800;line-height:17px;text-shadow:0 1px 1px rgba(0,0,0,.25);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.schedule-bar.phase{height:18px;top:12px;background:var(--ctg-navy);}
+.schedule-bar.phase{height:18px;top:6px;background:var(--ctg-navy);}
 .schedule-bar.summary{height:18px;top:12px;background:#93C5FD;}
 .schedule-bar.critical{outline:2px solid #F59E0B;box-shadow:0 0 0 3px rgba(245,158,11,.22),0 1px 2px rgba(0,31,91,.15);}
 .schedule-bar.done{background:#16A34A}.schedule-bar.progress{background:#93C5FD}.schedule-bar.pending{background:#93C5FD}.schedule-bar.late{background:#DC2626}
