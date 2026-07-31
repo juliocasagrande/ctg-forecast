@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import api from '../utils/api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../components/ui/Toast.jsx';
+import WorkdayDatePicker from '../components/ui/WorkdayDatePicker.jsx';
 
 const SETTINGS_KEY = 'ctg_schedule_settings_v1';
 const DAY_MS = 86400000;
@@ -751,11 +752,19 @@ function TaskModal({ task, tasks, settings, onClose, onSave }) {
           <div className="schedule-form-grid">
             <label className="form-group">
               <span className="form-label">Início</span>
-              <input className="form-input" type="date" value={draft?.start || ''} onChange={e => setStart(e.target.value)} />
+              <WorkdayDatePicker
+                value={draft?.start || ''}
+                onChange={setStart}
+                isDateDisabled={date => !isWorkday(date, settings)}
+              />
             </label>
             <label className="form-group">
               <span className="form-label">Término</span>
-              <input className="form-input" type="date" value={draft?.end || ''} onChange={e => set('end', e.target.value)} />
+              <WorkdayDatePicker
+                value={draft?.end || ''}
+                onChange={value => set('end', value)}
+                isDateDisabled={date => !isWorkday(date, settings)}
+              />
             </label>
             <label className="form-group">
               <span className="form-label">Duração</span>
