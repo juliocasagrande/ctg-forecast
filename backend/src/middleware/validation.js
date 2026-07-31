@@ -24,16 +24,3 @@ export function validatePassword(password) {
   }
   return { valid: true };
 }
-
-/**
- * Sanitize string inputs to prevent XSS in stored content
- */
-export function sanitizeString(str) {
-  if (typeof str !== 'string') return str;
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;');
-}

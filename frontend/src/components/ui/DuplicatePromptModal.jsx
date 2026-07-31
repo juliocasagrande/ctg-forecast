@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import useModalHotkeys from '../../hooks/useModalHotkeys.js';
 
 const inputStyle = {
   padding: '7px 10px', border: '1.5px solid #E2E8F0', borderRadius: 6,
@@ -14,6 +15,7 @@ export default function DuplicatePromptModal({ title, codeLabel, placeholder, in
     if (!value || submitting) return;
     onConfirm(value);
   };
+  useModalHotkeys(true, onCancel, confirm);
 
   return (
     <div className="modal-overlay" onClick={onCancel}>
@@ -41,7 +43,6 @@ export default function DuplicatePromptModal({ title, codeLabel, placeholder, in
               onFocus={e => e.target.select()}
               value={code}
               onChange={e => setCode(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') confirm(); }}
               placeholder={placeholder}
               style={inputStyle}
             />

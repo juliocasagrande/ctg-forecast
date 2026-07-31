@@ -309,6 +309,7 @@ export default function AdminPanel() {
 
       {/* Create/Edit Modal */}
       <Modal open={modalOpen} onClose={() => setModalOpen(false)}
+        onSave={saving || (!editingUser && !getPasswordStrength(form.password).allPassed) ? undefined : handleSave}
         title={editingUser ? 'Editar Usuário' : 'Novo Usuário'}
         footer={<>
           <button className="btn btn-secondary" onClick={() => setModalOpen(false)}>Cancelar</button>
@@ -358,6 +359,7 @@ export default function AdminPanel() {
 
       {/* Reset Password Modal */}
       <Modal open={!!resetModal} onClose={() => setResetModal(null)}
+        onSave={!getPasswordStrength(newPassword).allPassed ? undefined : handleResetPassword}
         title={`Redefinir Senha — ${resetModal?.name}`}
         footer={<>
           <button className="btn btn-secondary" onClick={() => setResetModal(null)}>Cancelar</button>

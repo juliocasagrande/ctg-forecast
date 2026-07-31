@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useAuth } from '../context/AuthContext.jsx';
-import { useRole } from '../context/AuthContext.jsx';
+import { useState, useEffect, useCallback } from 'react';
+import { useAuth, useRole } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
 import AppSelect from '../components/ui/AppSelect.jsx';
 

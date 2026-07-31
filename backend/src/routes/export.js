@@ -42,18 +42,6 @@ function yearMonthToCol(year, month, minYear) {
 //   row 8  = "Previsto para Janeiro/YEAR",  row 9 = value
 //   ...
 
-function getDetailRow(sheetName, year, month, minYear) {
-  // Returns the row number where the VALUE for that month goes
-  const yearIdx = year - minYear; // 0-based
-  if (sheetName === 'Viagens') {
-    const yearStartRow = 8 + yearIdx * 26;
-    return yearStartRow + (month - 1) * 2 + 1;
-  } else {
-    const yearStartRow = 9 + yearIdx * 26;
-    return yearStartRow + (month - 1) * 2 + 1;
-  }
-}
-
 // ── Styles ──────────────────────────────────────────────────────────────────
 const NAVY    = '001F5B';
 const BLUE    = '0070B8';
@@ -103,11 +91,6 @@ function getVal(d, cat, type, year, month) {
 }
 function getCmt(d, cat, type, year, month) {
   return d[cat]?.[type]?.[year]?.[month]?.comment ?? '';
-}
-
-function getYears(entries) {
-  const ys = [...new Set(entries.map(e => parseInt(e.year)))].sort();
-  return ys.length ? ys : [new Date().getFullYear()];
 }
 
 // ── Resumo sheet ────────────────────────────────────────────────────────────

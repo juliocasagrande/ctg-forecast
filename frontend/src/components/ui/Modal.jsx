@@ -1,13 +1,7 @@
-import { useEffect } from 'react';
+import useModalHotkeys from '../../hooks/useModalHotkeys.js';
 
-export default function Modal({ open, onClose, title, children, footer, maxWidth = 560 }) {
-  useEffect(() => {
-    if (!open) return;
-    const h = e => e.key === 'Escape' && onClose();
-    document.addEventListener('keydown', h);
-    document.body.style.overflow = 'hidden';
-    return () => { document.removeEventListener('keydown', h); document.body.style.overflow = ''; };
-  }, [open, onClose]);
+export default function Modal({ open, onClose, onSave, title, children, footer, maxWidth = 560 }) {
+  useModalHotkeys(open, onClose, onSave);
 
   if (!open) return null;
   return (

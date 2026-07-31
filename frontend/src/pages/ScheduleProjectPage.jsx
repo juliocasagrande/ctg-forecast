@@ -7,6 +7,7 @@ import WorkdayDatePicker from '../components/ui/WorkdayDatePicker.jsx';
 import AppSelect from '../components/ui/AppSelect.jsx';
 import { formatBRL, formatBRLShort } from '../utils/format.js';
 import ScheduleSCurveChart, { SCurveComposedChart, SCURVE_ALL_VISIBLE, SCURVE_LEGEND } from '../components/ScheduleSCurveChart.jsx';
+import useModalHotkeys from '../hooks/useModalHotkeys.js';
 
 const SETTINGS_KEY = 'ctg_schedule_settings_v1';
 const DAY_MS = 86400000;
@@ -360,8 +361,20 @@ function rowHeight(task) {
   return task.type === 'phase' ? PHASE_ROW_H : TASK_ROW_H;
 }
 
+// The printed name column is ~142px usable (PRINT_TASK_WIDTH minus the other fixed columns and
+// padding) at the print stylesheet's tiny font — long names wrap there (.schedule-print-workspace
+// .schedule-task-name sets white-space:normal). A row with a fixed height too short for the
+// wrapped text just gets visually squeezed, so grow the row for every extra line the name needs.
+const PRINT_NAME_COL_USABLE_PX = 142;
+const PRINT_NAME_CHAR_PX = 4.6;
+const PRINT_NAME_EXTRA_LINE_H = 9;
 function printRowHeight(task) {
-  return task.type === 'phase' ? PRINT_PHASE_ROW_H : PRINT_TASK_ROW_H;
+  const base = task.type === 'phase' ? PRINT_PHASE_ROW_H : PRINT_TASK_ROW_H;
+  const indent = (task._depth || 0) * 14;
+  const availableChars = Math.max(8, Math.floor((PRINT_NAME_COL_USABLE_PX - indent) / PRINT_NAME_CHAR_PX));
+  const nameLength = (task.name || '').length;
+  const extraLines = nameLength > availableChars ? Math.ceil(nameLength / availableChars) - 1 : 0;
+  return base + extraLines * PRINT_NAME_EXTRA_LINE_H;
 }
 
 function rowTop(tasks, index) {
@@ -606,9 +619,25 @@ function clamp01(value) {
 // sampled across the project's date range. The app keeps no history of progress-over-time, so
 // "actual physical" is approximated by distributing each task's current progress% linearly
 // across its planned window, frozen at today's value for any date beyond today.
+// A payment event's date (start/actualDate) is the real due/paid date of the event itself.
+// The S-curve, however, only counts money as disbursed 30 calendar days after that date — the
+// usual settlement lag — so every date read from a payment task for curve purposes goes through
+// this shift. Nothing outside the S-curve (Gantt position, task list, PDF, modal) is shifted.
+const PAYMENT_SCURVE_LAG_DAYS = 30;
+function paymentSCurveDate(dateStr) {
+  const parsed = parseDate(dateStr);
+  return parsed ? iso(addDays(parsed, PAYMENT_SCURVE_LAG_DAYS)) : null;
+}
+
 function buildSCurveSeries(tasks, settings, range) {
   const leafTasks = tasks.filter(task => task.type !== 'phase' && task.type !== 'payment' && parseDate(task.start) && parseDate(task.end));
-  const paymentTasks = tasks.filter(task => task.type === 'payment' && parseDate(task.start));
+  const paymentTasks = tasks
+    .filter(task => task.type === 'payment' && parseDate(task.start))
+    .map(task => ({
+      ...task,
+      _sCurveDate: paymentSCurveDate(task.start),
+      _sCurveActualDate: task.actualDate ? paymentSCurveDate(task.actualDate) : null,
+    }));
   const totalDuration = leafTasks.reduce((sum, task) => sum + taskDuration(task, settings), 0) || 1;
 
   const days = [];
@@ -622,7 +651,7 @@ function buildSCurveSeries(tasks, settings, range) {
     const dayIso = iso(day);
     if (dayIso === iso(TODAY)) mustKeep.add(index);
     paymentTasks.forEach(task => {
-      if (dayIso === task.start || (task.actualDate && dayIso === task.actualDate)) mustKeep.add(index);
+      if (dayIso === task._sCurveDate || (task._sCurveActualDate && dayIso === task._sCurveActualDate)) mustKeep.add(index);
     });
   });
   const sampledDays = [...mustKeep].sort((a, b) => a - b).map(index => days[index]);
@@ -639,7 +668,7 @@ function buildSCurveSeries(tasks, settings, range) {
   // Otherwise a flat line beyond today would look like something was recorded when nothing was.
   const realizedDates = [
     ...leafTasks.map(task => parseDate(task.actualEnd)).filter(Boolean),
-    ...paymentTasks.map(task => parseDate(task.actualDate)).filter(Boolean),
+    ...paymentTasks.map(task => parseDate(task._sCurveActualDate)).filter(Boolean),
   ];
   const realizedCutoff = realizedDates.length
     ? new Date(Math.max(TODAY, ...realizedDates))
@@ -683,9 +712,9 @@ function buildSCurveSeries(tasks, settings, range) {
     let realizadoFinanceiro = 0;
     const events = [];
     paymentTasks.forEach(task => {
-      if (task.start <= dayIso) planejadoFinanceiro += Number(task.value) || 0;
-      if (task.actualDate && task.actualDate <= dayIso) realizadoFinanceiro += Number(task.value) || 0;
-      if (task.start === dayIso || task.actualDate === dayIso) events.push(task);
+      if (task._sCurveDate <= dayIso) planejadoFinanceiro += Number(task.value) || 0;
+      if (task._sCurveActualDate && task._sCurveActualDate <= dayIso) realizadoFinanceiro += Number(task.value) || 0;
+      if (task._sCurveDate === dayIso || task._sCurveActualDate === dayIso) events.push(task);
     });
     return {
       date: dayIso,
@@ -694,8 +723,8 @@ function buildSCurveSeries(tasks, settings, range) {
       realizadoFisico: beyondRealized ? null : Math.round((realizadoFisico / totalDuration) * 1000) / 10,
       planejadoFinanceiro,
       realizadoFinanceiro: beyondRealized ? null : realizadoFinanceiro,
-      eventPlanned: events.some(item => item.start === dayIso) ? planejadoFinanceiro : null,
-      eventActual: !beyondRealized && events.some(item => item.actualDate === dayIso) ? realizadoFinanceiro : null,
+      eventPlanned: events.some(item => item._sCurveDate === dayIso) ? planejadoFinanceiro : null,
+      eventActual: !beyondRealized && events.some(item => item._sCurveActualDate === dayIso) ? realizadoFinanceiro : null,
       isToday: dayIso === iso(TODAY),
       events,
     };
@@ -837,6 +866,8 @@ function TaskModal({ task, tasks, settings, canEdit = true, onClose, onSave }) {
   useEffect(() => {
     setDraft(task);
   }, [task]);
+  const handleSave = () => draft && onSave({ ...normalizeTaskDates(draft, settings), progress: Math.max(0, Math.min(100, Number(draft.progress) || 0)) });
+  useModalHotkeys(!!task, onClose, canEdit ? handleSave : undefined);
   if (!task) return null;
 
   const set = (field, value) => setDraft(prev => ({ ...(prev || task || {}), [field]: value }));
@@ -862,12 +893,13 @@ function TaskModal({ task, tasks, settings, canEdit = true, onClose, onSave }) {
     return nextType === 'payment' ? { ...base, type: nextType, end: base.start } : { ...base, type: nextType };
   });
 
-  // Standard net-30: payment is only really disbursed 30 days after the linked activity wraps
-  // up. These are just one-click suggestions computed from the linked activity's dates — they
-  // never overwrite anything on their own.
+  // The date typed here is the payment event's own due/paid date — same as the linked activity's
+  // conclusion by default. The 30-day settlement lag is applied automatically, only inside the
+  // S-curve financial calculation, never to this field. These are just one-click suggestions
+  // pulled from the linked activity's dates — they never overwrite anything on their own.
   const linkedTask = isPayment ? tasks.find(item => item.id === draft?.predecessorId) : null;
-  const suggestedPlannedDate = linkedTask?.end ? iso(addDays(parseDate(linkedTask.end), 30)) : null;
-  const suggestedActualDate = linkedTask?.actualEnd ? iso(addDays(parseDate(linkedTask.actualEnd), 30)) : null;
+  const suggestedPlannedDate = linkedTask?.end || null;
+  const suggestedActualDate = linkedTask?.actualEnd || null;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -938,7 +970,7 @@ function TaskModal({ task, tasks, settings, canEdit = true, onClose, onSave }) {
             {isPayment && (
               <div className="schedule-payment-hint">
                 <span>
-                  💡 O pagamento só costuma ser efetivado <strong>30 dias após a conclusão</strong> da atividade vinculada — leve esse prazo em conta ao definir a data prevista e a data de realização.
+                  💡 Informe aqui a data real do evento (normalmente a mesma conclusão da atividade vinculada) — <strong>não</strong> adiante 30 dias manualmente. A Curva S já desloca esse valor <strong>30 dias à frente</strong> automaticamente, só para o cálculo financeiro, pois o pagamento costuma ser efetivado 30 dias após a conclusão.
                 </span>
                 {linkedTask && (suggestedPlannedDate || suggestedActualDate) && (
                   <div className="schedule-payment-hint-actions">
@@ -948,7 +980,7 @@ function TaskModal({ task, tasks, settings, canEdit = true, onClose, onSave }) {
                         className="schedule-payment-hint-btn"
                         onClick={() => setDraft(prev => ({ ...(prev || task || {}), start: suggestedPlannedDate, end: suggestedPlannedDate }))}
                       >
-                        Usar {formatDate(suggestedPlannedDate)} (conclusão prevista + 30d) como data prevista
+                        Usar {formatDate(suggestedPlannedDate)} (conclusão prevista da atividade) como data prevista
                       </button>
                     )}
                     {suggestedActualDate && (
@@ -957,7 +989,7 @@ function TaskModal({ task, tasks, settings, canEdit = true, onClose, onSave }) {
                         className="schedule-payment-hint-btn"
                         onClick={() => set('actualDate', suggestedActualDate)}
                       >
-                        Usar {formatDate(suggestedActualDate)} (conclusão real + 30d) como data de realização
+                        Usar {formatDate(suggestedActualDate)} (conclusão real da atividade) como data de realização
                       </button>
                     )}
                   </div>
@@ -1056,7 +1088,7 @@ function TaskModal({ task, tasks, settings, canEdit = true, onClose, onSave }) {
           {canEdit ? (
             <>
               <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-              <button className="btn btn-primary" onClick={() => draft && onSave({ ...normalizeTaskDates(draft, settings), progress: Math.max(0, Math.min(100, Number(draft.progress) || 0)) })}>Salvar</button>
+              <button className="btn btn-primary" onClick={handleSave}>Salvar</button>
             </>
           ) : (
             <button className="btn btn-primary" onClick={onClose}>Fechar</button>
@@ -1070,6 +1102,9 @@ function TaskModal({ task, tasks, settings, canEdit = true, onClose, onSave }) {
 function ScheduleSettingsModal({ open, settings, canEdit = true, onChange, onClose }) {
   const [holidayDraft, setHolidayDraft] = useState({ date: '', name: '' });
   const [extraWorkdayDraft, setExtraWorkdayDraft] = useState({ date: '', name: '' });
+  // No Enter-to-save here on purpose: this modal has its own small "add holiday/workday" inputs
+  // where Enter should submit that row, not close the whole modal.
+  useModalHotkeys(open, onClose);
   if (!open) return null;
   const set = (field, value) => onChange({ ...settings, [field]: value });
   const workdays = getWorkdays(settings);
@@ -1236,6 +1271,8 @@ function ScheduleShareModal({ project, onClose }) {
   const [pickedUserId, setPickedUserId] = useState('');
   const [pickedRole, setPickedRole] = useState('viewer');
   const [busy, setBusy] = useState(false);
+  // No Enter-to-save here on purpose: the user-search field should keep Enter for its own use.
+  useModalHotkeys(true, onClose);
 
   useEffect(() => {
     let alive = true;
@@ -1412,12 +1449,35 @@ function GanttHoverTip({ children, content, style }) {
 const PAYMENT_STATUS_LABEL = { done: 'Pago', late: 'Atrasado', pending: 'Previsto' };
 const PAYMENT_STATUS_COLOR = { done: '#16A34A', late: '#DC2626', pending: '#0070B8' };
 
+// Row marker in the task list: same diamond shape/color used for payment events in the Gantt
+// itself, so a payment row is recognizable at a glance without a differently-shaped icon.
+function TaskRowMarker({ task, status }) {
+  if (task.type === 'payment') {
+    return (
+      <i style={{
+        display: 'inline-block', width: 7, height: 7, marginRight: 7,
+        background: PAYMENT_STATUS_COLOR[status] || PAYMENT_STATUS_COLOR.pending,
+        transform: 'rotate(45deg)', flexShrink: 0,
+      }} />
+    );
+  }
+  return <i style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 2, marginRight: 6, background: getLevelColor(task._depth).fill, flexShrink: 0 }} />;
+}
+
 // Diamond marker for a payment-event row in the interactive Gantt: one diamond at the planned
 // date, plus (when the payment was realized on a different day) a small check marker at the
 // actual date connected by a dashed line — makes the forecast slip visible at a glance.
-function PaymentMarker({ task, plannedLeft, actualLeft, status, linkedName }) {
+function PaymentMarker({ task, plannedLeft, actualLeft, status, linkedName, compact = false }) {
   const color = PAYMENT_STATUS_COLOR[status] || PAYMENT_STATUS_COLOR.pending;
   const showActual = actualLeft != null && actualLeft !== plannedLeft;
+  // `compact` shrinks the marker to fit the shorter print row height (20px vs 30px on screen).
+  const diamond = compact ? 9 : 12;
+  const diamondTop = compact ? 5 : 8;
+  const labelTop = compact ? 4 : 6;
+  const labelFontSize = compact ? '0.42rem' : '0.6rem';
+  const dashTop = compact ? 9 : 14;
+  const actualSize = compact ? 7 : 10;
+  const actualTop = compact ? 6 : 9;
   return (
     <GanttHoverTip
       style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, pointerEvents: 'none' }}
@@ -1434,25 +1494,25 @@ function PaymentMarker({ task, plannedLeft, actualLeft, status, linkedName }) {
     >
       {showActual && (
         <div style={{
-          position: 'absolute', top: 14, height: 1, borderTop: '1px dashed #94A3B8',
+          position: 'absolute', top: dashTop, height: 1, borderTop: '1px dashed #94A3B8',
           left: Math.min(plannedLeft, actualLeft) + 6, width: Math.abs(actualLeft - plannedLeft),
           pointerEvents: 'none',
         }} />
       )}
       <span style={{
-        position: 'absolute', left: plannedLeft, top: 8, width: 12, height: 12,
+        position: 'absolute', left: plannedLeft, top: diamondTop, width: diamond, height: diamond,
         transform: 'rotate(45deg)', background: color, boxShadow: '0 1px 2px rgba(0,31,91,.3)',
         pointerEvents: 'auto',
       }} />
       <span style={{
-        position: 'absolute', left: plannedLeft + 16, top: 6, fontSize: '0.6rem', fontWeight: 800,
+        position: 'absolute', left: plannedLeft + 16, top: labelTop, fontSize: labelFontSize, fontWeight: 800,
         color, whiteSpace: 'nowrap', pointerEvents: 'none',
       }}>
         {formatBRLShort(task.value || 0)}
       </span>
       {showActual && (
         <span style={{
-          position: 'absolute', left: actualLeft, top: 9, width: 10, height: 10, borderRadius: '50%',
+          position: 'absolute', left: actualLeft, top: actualTop, width: actualSize, height: actualSize, borderRadius: '50%',
           background: '#fff', border: `2px solid ${PAYMENT_STATUS_COLOR.done}`, pointerEvents: 'auto',
         }} />
       )}
@@ -1462,7 +1522,7 @@ function PaymentMarker({ task, plannedLeft, actualLeft, status, linkedName }) {
 
 export default function ScheduleProjectPage() {
   const { user } = useAuth();
-  const { confirm, warning } = useToast();
+  const { confirm, warning, success } = useToast();
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState('');
   const [selectedId, setSelectedId] = useState('');
@@ -1490,6 +1550,8 @@ export default function ScheduleProjectPage() {
   const [nameDraft, setNameDraft] = useState('');
   const nameInputRef = useRef(null);
   const ganttScrollRef = useRef(null);
+  const taskRowsRef = useRef(null);
+  const syncingVScrollRef = useRef(false);
   const ganttDragRef = useRef({ active: false, moved: false, captured: false, startX: 0, scrollLeft: 0, pointerId: null });
 
   const project = projects.find(item => item.id === projectId) || projects[0];
@@ -1780,6 +1842,23 @@ export default function ScheduleProjectPage() {
     window.setTimeout(() => { ganttDragRef.current.moved = false; }, moved ? 80 : 0);
   };
 
+  // Keeps the task list and the Gantt bars scrolling together vertically — they're two
+  // independent scroll containers (the Gantt also needs its own horizontal scroll for the wide
+  // timeline), so without this syncing them, scrolling one leaves the other behind and the
+  // activity rows no longer line up with their bars.
+  const handleTaskRowsScroll = (event) => {
+    if (syncingVScrollRef.current) return;
+    syncingVScrollRef.current = true;
+    if (ganttScrollRef.current) ganttScrollRef.current.scrollTop = event.currentTarget.scrollTop;
+    syncingVScrollRef.current = false;
+  };
+  const handleGanttVScroll = (event) => {
+    if (syncingVScrollRef.current) return;
+    syncingVScrollRef.current = true;
+    if (taskRowsRef.current) taskRowsRef.current.scrollTop = event.currentTarget.scrollTop;
+    syncingVScrollRef.current = false;
+  };
+
   const handleGanttRowClick = (taskId, event) => {
     if (ganttDragRef.current.moved) return;
     selectTask(taskId, event);
@@ -1890,6 +1969,7 @@ export default function ScheduleProjectPage() {
       return { ...revision, tasks: normalizeTaskOrder(cascadedTasks) };
     });
     setEditingTask(null);
+    success('Atividade salva com sucesso!');
   };
 
   const deleteTask = (taskId) => {
@@ -2315,7 +2395,7 @@ export default function ScheduleProjectPage() {
           <div className="schedule-grid schedule-header-row">
             <span>WBS</span><span>Atividade</span><span>Início</span><span>Término</span><span>Duração</span><span>%</span>
           </div>
-          <div className="schedule-task-rows">
+          <div className="schedule-task-rows" ref={taskRowsRef} onScroll={handleTaskRowsScroll}>
             {tasks.length === 0 && (
               <div className="empty-state schedule-empty">
                 <h3>Nenhuma atividade cadastrada</h3>
@@ -2346,7 +2426,7 @@ export default function ScheduleProjectPage() {
                 >
                   <span>{task.wbs}</span>
                   <span className="schedule-task-name" style={{ paddingLeft: (task._depth || 0) * 14 }}>
-                    <i style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 2, marginRight: 6, background: getLevelColor(task._depth).fill, flexShrink: 0 }} />
+                    <TaskRowMarker task={task} status={status} />
                     {task.name}
                   </span>
                   <span>{formatDate(task.start)}</span>
@@ -2367,6 +2447,7 @@ export default function ScheduleProjectPage() {
             onPointerMove={handleGanttPointerMove}
             onPointerUp={stopGanttDrag}
             onPointerCancel={stopGanttDrag}
+            onScroll={handleGanttVScroll}
             style={{ cursor: 'grab', userSelect: ganttDragRef.current.active ? 'none' : 'auto' }}
           >
             <div className="schedule-gantt-inner" style={{ width: totalWidth }}>
@@ -2515,7 +2596,7 @@ export default function ScheduleProjectPage() {
                         >
                           <span>{task.wbs}</span>
                           <span className="schedule-task-name" style={{ paddingLeft: (task._depth || 0) * 14 }}>
-                    <i style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 2, marginRight: 6, background: getLevelColor(task._depth).fill, flexShrink: 0 }} />
+                    <TaskRowMarker task={task} status={status} />
                     {task.name}
                   </span>
                           <span>{formatDate(task.start)}</span>
@@ -2587,7 +2668,18 @@ export default function ScheduleProjectPage() {
                               {dateWindow.map(day => (
                                 <span key={`print-task-day-${task.id}-${iso(day)}`} className={dayClass(day)} style={{ width: PRINT_COL_WIDTH }} />
                               ))}
-                              {taskStart && taskEnd && (
+                              {task.type === 'payment' && taskStart ? (
+                                <PaymentMarker
+                                  task={task}
+                                  plannedLeft={left + PRINT_COL_WIDTH / 2 - 6}
+                                  actualLeft={task.actualDate && parseDate(task.actualDate)
+                                    ? daysBetween(winStart, parseDate(task.actualDate)) * PRINT_COL_WIDTH + PRINT_COL_WIDTH / 2 - 5
+                                    : null}
+                                  status={status}
+                                  linkedName={tasks.find(item => item.id === task.predecessorId)?.name}
+                                  compact
+                                />
+                              ) : taskStart && taskEnd && (
                                 <div className={`schedule-bar ${task.type} ${isCritical ? 'critical' : ''}`} style={{ left, width, backgroundColor: levelColor.bg, boxShadow: barShadow }}>
                                   <i style={{ width: `${task.progress || 0}%`, backgroundColor: levelColor.fill }} />
                                   <em style={{ color: levelColor.text, textShadow: 'none' }}>{task.type === 'phase' ? task.name : `${task.progress || 0}%`}</em>

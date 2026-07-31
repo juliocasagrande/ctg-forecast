@@ -66,12 +66,16 @@ function SCurveTooltip({ active, payload, label }) {
           <div style={{ fontSize: '0.64rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', marginBottom: 3 }}>
             Eventos de pagamento
           </div>
-          {point.events.map(event => (
-            <div key={event.id} style={{ marginBottom: 2 }}>
-              <strong>{event.name}</strong> — {formatBRL(event.value || 0)}
-              {' '}({event.actualDate === point.date ? 'realizado' : 'previsto'})
-            </div>
-          ))}
+          {point.events.map(event => {
+            const isRealized = event._sCurveActualDate === point.date;
+            const eventDate = isRealized ? event.actualDate : event.start;
+            return (
+              <div key={event.id} style={{ marginBottom: 2 }}>
+                <strong>{event.name}</strong> — {formatBRL(event.value || 0)}
+                {' '}({isRealized ? 'realizado' : 'previsto'} em {eventDate?.split('-').reverse().join('/')} + 30d)
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

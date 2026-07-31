@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { pool } from '../db/schema.js';
-import { requireAuth, requireRole } from '../middleware/auth.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -237,7 +237,6 @@ router.post('/', async (req, res) => {
  * Atualiza período existente
  * ──────────────────────────────────────────────── */
 router.put('/:id', async (req, res) => {
-  const { role, id: requesterId } = req.user;
   const { id } = req.params;
 
   // Busca o registro para verificar ownership
@@ -273,7 +272,6 @@ router.put('/:id', async (req, res) => {
  * Remove período (admin: qualquer; engenheiro: só o próprio)
  * ──────────────────────────────────────────────── */
 router.delete('/:id', async (req, res) => {
-  const { role, id: requesterId } = req.user;
   const { id } = req.params;
 
   const existing = await pool.query('SELECT user_id FROM vacation_periods WHERE id = $1', [id]);

@@ -1,5 +1,6 @@
 // ── Export Modal — category + type selection ──────────────────────────────────
 import { useState } from 'react';
+import useModalHotkeys from '../hooks/useModalHotkeys.js';
 
 const EXPORT_CATEGORIES = ['Viagens', 'Contratos', 'POs'];
 const EXPORT_TYPES_BY_ROLE = {
@@ -19,6 +20,9 @@ export default function ExportModal({ open, onClose, onConfirm, role, isEngenhei
   const toggle = (arr, setArr, val) =>
     setArr(prev => prev.includes(val) ? prev.filter(x => x !== val) : [...prev, val]);
 
+  const canConfirm = selTypes.length > 0 && (exportScope !== 'projeto' || selCats.length > 0);
+  const confirm = () => { if (!canConfirm) return; onConfirm(selCats, selTypes, exportScope); onClose(); };
+  useModalHotkeys(open, onClose, confirm);
   if (!open) return null;
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -121,8 +125,8 @@ export default function ExportModal({ open, onClose, onConfirm, role, isEngenhei
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
           <button className="btn btn-export"
-            disabled={selTypes.length === 0 || (exportScope==='projeto' && selCats.length === 0)}
-            onClick={() => { onConfirm(selCats, selTypes, exportScope); onClose(); }}>
+            disabled={!canConfirm}
+            onClick={confirm}>
             📊 Exportar
           </button>
         </div>

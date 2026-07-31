@@ -13,14 +13,6 @@ function safeError(res, err) {
   res.status(500).json({ error: err.message });
 }
 
-function validateProjectId(req, res) {
-  const id = parseInt(req.params.projectId || req.params.id);
-  if (!id || id < 1 || !Number.isInteger(id)) {
-    res.status(400).json({ error: 'ID de projeto inválido' });
-    return null;
-  }
-  return id;
-}
 router.use(requireAuth);
 
 // GET entries for a project

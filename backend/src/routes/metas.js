@@ -203,7 +203,7 @@ router.post('/', async (req, res) => {
 });
 
 router.put('/:id', async (req, res) => {
-  const { role, id: requesterId } = req.user;
+  const { id: requesterId } = req.user;
   const { id } = req.params;
   const existing = await pool.query(`
     SELECT m.user_id, m.is_general, m.area, m.year, m.meta_number, COALESCE(m.assigned_area, m.area) AS assigned_area,
@@ -269,7 +269,6 @@ router.put('/:id', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
-  const { role, id: requesterId } = req.user;
   const { id } = req.params;
   const existing = await pool.query(`
     SELECT m.user_id, m.is_general, COALESCE(m.assigned_area, m.area) AS assigned_area,
@@ -288,7 +287,6 @@ router.delete('/:id', async (req, res) => {
 });
 
 router.post('/:id/evidence', upload.array('evidence', 4), async (req, res) => {
-  const { role, id: requesterId } = req.user;
   const { id } = req.params;
   const existing = await pool.query(`
     SELECT m.user_id, m.is_general, COALESCE(m.assigned_area, m.area) AS assigned_area,

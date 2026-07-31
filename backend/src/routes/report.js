@@ -26,23 +26,6 @@ const POLOS = [
 ];
 const MONTHS_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
-function fmtBRL(v) {
-  if (!v || v === 0) return 'R$ 0';
-  const abs = Math.abs(parseFloat(v));
-  const sig = v < 0 ? '-' : '';
-  if (abs >= 1_000_000) return `${sig}R$ ${(abs/1_000_000).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})}M`;
-  if (abs >= 1_000)     return `${sig}R$ ${(abs/1_000).toLocaleString('pt-BR',{maximumFractionDigits:0})}k`;
-  return `${sig}R$ ${abs.toLocaleString('pt-BR',{maximumFractionDigits:0})}`;
-}
-function fmtPct(a,b) {
-  if (!b || b===0) return '—';
-  const p = ((a/b)*100).toFixed(1);
-  return `${p}%`;
-}
-function sum(rows, type, yearStart, yearEnd) {
-  return rows.filter(r => r.type===type && r.year>=yearStart && r.year<=yearEnd)
-             .reduce((s,r) => s + parseFloat(r.total||0), 0);
-}
 function monthlyArr(rows, type, year) {
   return MONTHS_PT.map((_,mi) => {
     const r = rows.find(r => r.type===type && parseInt(r.year)===year && parseInt(r.month)===mi+1);

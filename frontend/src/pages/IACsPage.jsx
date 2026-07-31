@@ -10,6 +10,7 @@ import StatusDot from '../components/ui/StatusDot.jsx';
 import OpenTimeBadge from '../components/ui/OpenTimeBadge.jsx';
 import CellTooltip from '../components/ui/CellTooltip.jsx';
 import DuplicatePromptModal from '../components/ui/DuplicatePromptModal.jsx';
+import useModalHotkeys from '../hooks/useModalHotkeys.js';
 import AppSelect from '../components/ui/AppSelect.jsx';
 import AppCombobox from '../components/ui/AppCombobox.jsx';
 import { isIacOpenedInYear } from '../utils/iacDates.js';
@@ -465,6 +466,7 @@ function Field({ label, required, children }) {
 
 /* ─── Import Preview Modal ───────────────────────────────────────────────────── */
 function ImportPreviewModal({ preview, onClose, onConfirm, loading }) {
+  useModalHotkeys(!!preview, onClose, loading ? undefined : onConfirm);
   if (!preview) return null;
   const { totalRows, skipped, newCount, updateCount, areas, statuses, priorities, previewRows } = preview;
 
@@ -655,6 +657,7 @@ function IACModal({ item, onClose, onSave, onDelete, onDuplicate, onCheckinSaved
   const toast = useToast().toast;
   const { user } = useAuth();
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+  useModalHotkeys(true, onClose, saving ? undefined : () => onSave(form));
 
   // Fetch last viewed and last edited info
   useEffect(() => {

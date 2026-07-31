@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ComposedChart, BarChart, Bar, LineChart, Line, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { ComposedChart, BarChart, Bar, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import api from '../utils/api.js';
 import { useTypeColors, useSettings } from '../context/SettingsContext.jsx';
 import { useAuth, useRole } from '../context/AuthContext.jsx';
@@ -626,6 +626,7 @@ export default function ProjectDetail({ onEdit }) {
       link.download = filename;
       link.click();
       URL.revokeObjectURL(link.href);
+      toast('Excel exportado com sucesso!', 'success');
     } catch (e) {
       toast('Erro ao exportar Excel', 'error');
     }

@@ -4,6 +4,7 @@ import { useToast } from '../components/ui/Toast.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import AppSelect from '../components/ui/AppSelect.jsx';
 import AppCombobox from '../components/ui/AppCombobox.jsx';
+import useModalHotkeys from '../hooks/useModalHotkeys.js';
 
 const USINAS = [
   'UHE Capivara', 'UHE Canoas 1', 'UHE Canoas 2', 'UHE Chavantes',
@@ -96,6 +97,7 @@ function EquipamentoModal({ item, onSave, onClose, onDelete, equipOptions, tabel
       setSaving(false);
     }
   };
+  useModalHotkeys(true, onClose, saving ? undefined : handleSave);
 
   const handleDelete = async () => {
     setSaving(true);
@@ -254,6 +256,7 @@ function ImportModal({ onClose, onImported, myTabelas }) {
       setLoading(false);
     }
   };
+  useModalHotkeys(true, onClose, result ? onClose : ((!file || !tipoTabela || loading) ? undefined : handleImport));
 
   return (
     <div className="modal-overlay" onClick={onClose} style={{ zIndex: 300 }}>
@@ -375,10 +378,12 @@ function ExportModal({ onClose, tabelaOptions }) {
       a.download = `Equipamentos_${new Date().toISOString().slice(0, 10)}.xlsx`;
       a.click();
       URL.revokeObjectURL(a.href);
+      toast('Excel exportado com sucesso!', 'success');
       onClose();
     } catch { toast('Erro ao exportar', 'error'); }
     finally { setLoading(false); }
   };
+  useModalHotkeys(true, onClose, loading ? undefined : handleExport);
 
   return (
     <div className="modal-overlay" onClick={onClose} style={{ zIndex: 300 }}>

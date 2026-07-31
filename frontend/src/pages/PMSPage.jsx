@@ -6,6 +6,7 @@ import { useToast } from '../components/ui/Toast.jsx';
 import ColumnFilterDropdown from '../components/ui/ColumnFilterDropdown.jsx';
 import ColumnResizeHandle from '../components/ui/ColumnResizeHandle.jsx';
 import useColumnWidths from '../hooks/useColumnWidths.js';
+import useModalHotkeys from '../hooks/useModalHotkeys.js';
 import AppSelect from '../components/ui/AppSelect.jsx';
 
 /* ─── Constants ──────────────────────────────────────────────────────────────── */
@@ -328,9 +329,8 @@ function StatusModal({ open, onClose, onSaved, doc }) {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => { if (open && doc) { setStatus(doc.status); setLink(doc.document_link || ''); } }, [open, doc]);
-  if (!open) return null;
 
-  const handleSave = async () => {
+  async function handleSave() {
     setSaving(true);
     try {
       await api.patch(`/pms/${doc.id}/status`, { status, ...(status === 'Publicado' ? { document_link: link } : {}) });
@@ -339,8 +339,10 @@ function StatusModal({ open, onClose, onSaved, doc }) {
       setTimeout(() => onClose(), 500);
     } catch (err) { toast(err.response?.data?.error || 'Erro ao atualizar status.', 'error'); }
     finally { setSaving(false); }
-  };
+  }
   const hasChanges = status !== doc?.status || (status === 'Publicado' && link !== (doc?.document_link || ''));
+  useModalHotkeys(open, onClose, (saving || !hasChanges) ? undefined : handleSave);
+  if (!open) return null;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -397,12 +399,11 @@ function RevisionModal({ open, onClose, onSaved, doc, allUsers }) {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => { if (open && doc) { setDate(new Date().toISOString().slice(0,10)); setResponsible(doc.responsible || ''); } }, [open, doc]);
-  if (!open || !doc) return null;
 
-  const currentRev = doc.revision ?? -1;
+  const currentRev = (doc?.revision ?? -1);
   const nextRev = currentRev + 1;
 
-  const handleSave = async () => {
+  async function handleSave() {
     if (!date) { toast('Data é obrigatória.', 'error'); return; }
     setSaving(true);
     try {
@@ -412,7 +413,9 @@ function RevisionModal({ open, onClose, onSaved, doc, allUsers }) {
       setTimeout(() => onClose(), 500);
     } catch (err) { toast(err.response?.data?.error || 'Erro ao criar revisão.', 'error'); }
     finally { setSaving(false); }
-  };
+  }
+  useModalHotkeys(open && !!doc, onClose, saving ? undefined : handleSave);
+  if (!open || !doc) return null;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -484,7 +487,7 @@ function PMSDocModal({ open, onClose, onSaved, doc, allUsers }) {
   const needsPlant = form.type === 'GM' || form.type === 'MM';
   const needsEquip = form.type === 'MM';
 
-  const handleSubmit = async () => {
+  async function handleSubmit() {
     const missing = [];
     if (!form.code)        missing.push('Código');
     if (!form.area)        missing.push('Área');
@@ -506,7 +509,8 @@ function PMSDocModal({ open, onClose, onSaved, doc, allUsers }) {
       setTimeout(() => onClose(), 600);
     } catch (err) { toast(err.response?.data?.error || 'Erro ao salvar.', 'error'); }
     finally { setSaving(false); }
-  };
+  }
+  useModalHotkeys(open, onClose, saving ? undefined : handleSubmit);
 
   if (!open) return null;
 
@@ -650,7 +654,6 @@ function ImportExcelModal({ open, onClose, onImported }) {
   const [result, setResult] = useState(null);
 
   useEffect(() => { if (!open) { setFile(null); setPreview(null); setResult(null); } }, [open]);
-  if (!open) return null;
 
   const handleFile = async (f) => {
     if (!f) return;
@@ -663,7 +666,7 @@ function ImportExcelModal({ open, onClose, onImported }) {
     finally { setParsing(false); }
   };
 
-  const handleImport = async () => {
+  async function handleImport() {
     if (!file) return;
     setImporting(true);
     try {
@@ -674,7 +677,9 @@ function ImportExcelModal({ open, onClose, onImported }) {
       onImported();
     } catch (err) { toast(err.response?.data?.error || 'Erro ao importar.', 'error'); }
     finally { setImporting(false); }
-  };
+  }
+  useModalHotkeys(open, onClose, (preview && !importing && !result) ? handleImport : undefined);
+  if (!open) return null;
 
   return (
     <div className="modal-overlay" onClick={onClose}>

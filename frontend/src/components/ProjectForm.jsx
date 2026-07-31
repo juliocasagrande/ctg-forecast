@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import Modal from './ui/Modal.jsx';
 import api from '../utils/api.js';
 import { useToast } from './ui/Toast.jsx';
-import { useRole } from '../context/AuthContext.jsx';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useRole, useAuth } from '../context/AuthContext.jsx';
 
 const PLANTS = [
   'PCH Palmeiras',
@@ -144,6 +143,7 @@ export default function ProjectForm({ open, onClose, project, onSaved, onDeleted
     <Modal
       open={open}
       onClose={onClose}
+      onSave={saving ? undefined : handleSubmit}
       title={project ? 'Editar Projeto' : 'Novo Projeto'}
       maxWidth={620}
       footer={

@@ -9,6 +9,7 @@ import StatusDot from '../components/ui/StatusDot.jsx';
 import CellTooltip from '../components/ui/CellTooltip.jsx';
 import DuplicatePromptModal from '../components/ui/DuplicatePromptModal.jsx';
 import useColumnWidths from '../hooks/useColumnWidths.js';
+import useModalHotkeys from '../hooks/useModalHotkeys.js';
 import AppSelect from '../components/ui/AppSelect.jsx';
 import { formatActivityLine, formatRemainingTime, getCheckinRemainingMs } from '../utils/listActivity.js';
 
@@ -1158,6 +1159,8 @@ function ProjectModal({ item, onClose, onSave, onDelete, onDuplicate, onCheckinS
     };
   };
 
+  useModalHotkeys(true, onClose, saving ? undefined : () => onSave(buildPayload()));
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 720, width: '95vw', maxHeight: '93vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
@@ -1524,6 +1527,8 @@ function ReportSourceModal({ onClose, onGenerate }) {
     onGenerate({ source, mes, ano, file });
   }
 
+  useModalHotkeys(true, onClose, handleConfirm);
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 560, width: '95vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
@@ -1692,6 +1697,7 @@ function ReportSourceModal({ onClose, onGenerate }) {
 
 /* ─── Import Preview Modal ──────────────────────────────────────────────────── */
 function ImportPreviewModal({ preview, onClose, onConfirm, loading }) {
+  useModalHotkeys(!!preview, onClose, loading ? undefined : onConfirm);
   if (!preview) return null;
   const { totalRows, skipped, newCount, updateCount, areas, statuses, naturezas, totalContrato, previewRows } = preview;
 
