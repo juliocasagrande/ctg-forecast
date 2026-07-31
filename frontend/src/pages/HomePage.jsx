@@ -1728,14 +1728,14 @@ export default function HomePage({ year }) {
       count: iacRows.filter(i => i.status_current === option.value).length,
     }));
     const IAC_NAMED_STATUSES = new Set(['91 - Hired 2025', '0 - Not started yet', '10 - Cancelado', '8 - Draft Contract', '9 - Contract signed']);
-    const buildPriorityGoalBucket = (rows, quantityField) => {
+    const buildPriorityGoalBucket = (rows, allRows, quantityField) => {
       const hiring2025Rows = rows.filter(r => r.status_current === '91 - Hired 2025');
       const pendingRows = rows.filter(r => r.status_current === '0 - Not started yet');
       const cancelRows = rows.filter(r => r.status_current === '10 - Cancelado');
       const draftRows = rows.filter(r => r.status_current === '8 - Draft Contract');
       const signedRows = rows.filter(r => r.status_current === '9 - Contract signed');
       const hiringRows = rows.filter(r => !IAC_NAMED_STATUSES.has(r.status_current));
-      const total = rows.reduce((sum, r) => sum + (Number(r[quantityField]) || 0), 0);
+      const total = allRows.reduce((sum, r) => sum + (Number(r[quantityField]) || 0), 0);
       return {
         total, hiring2025: hiring2025Rows.length, pending: pendingRows.length, cancel: cancelRows.length,
         hiring: hiringRows.length, draft: draftRows.length, signed: signedRows.length,
@@ -1747,8 +1747,8 @@ export default function HomePage({ year }) {
       };
     };
     const iacPriorityGoalData = {
-      Priority: buildPriorityGoalBucket(data.allIacs.filter(r => r.priority === 'Priority'), 'qty_pp_line_26_priority'),
-      'Non Priority': buildPriorityGoalBucket(data.allIacs.filter(r => r.priority === 'Non Priority'), 'qty_pp_line_26_no_priority'),
+      Priority: buildPriorityGoalBucket(data.allIacs.filter(r => r.priority === 'Priority'), data.allIacs, 'qty_pp_line_26_priority'),
+      'Non Priority': buildPriorityGoalBucket(data.allIacs.filter(r => r.priority === 'Non Priority'), data.allIacs, 'qty_pp_line_26_no_priority'),
     };
     const iac2026 = iacRows.filter(i => isIacOpenedInYear(i, 2026));
     const iacMonths = iac2026.map(i => iacElapsedMonths(i)).filter(v => v !== null);

@@ -1273,15 +1273,14 @@ export default function IACsPage() {
   const priorityData = useMemo(() =>
     PRIORITY_CHART_OPTIONS.map(p => {
       const c = PRIORITY_COLORS[p] || PRIORITY_COLORS['Non Priority'];
-      const itemsForPriority = priorityChartItems.filter(i => i.priority === p);
       const quantityField = p === 'Priority'
         ? 'qty_pp_line_26_priority'
         : p === 'Non Priority'
           ? 'qty_pp_line_26_no_priority'
           : null;
       const value = quantityField
-        ? itemsForPriority.reduce((sum, item) => sum + (Number(item[quantityField]) || 0), 0)
-        : itemsForPriority.length;
+        ? priorityChartItems.reduce((sum, item) => sum + (Number(item[quantityField]) || 0), 0)
+        : priorityChartItems.filter(i => i.priority === p).length;
       return { label: p, value, ...c };
     }),
   [priorityChartItems]);
