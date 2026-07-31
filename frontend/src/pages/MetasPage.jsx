@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
 import { useToast } from '../components/ui/Toast.jsx';
+import AppSelect from '../components/ui/AppSelect.jsx';
 
 const AREAS = [
   { value: 'eletrica', label: 'Eng. Eletrica' },
@@ -588,9 +589,9 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
           {canEditOthers && !isReadOnly && !form.is_general && (
             <div>
               <label style={label}>COLABORADOR</label>
-              <select value={form.user_id} onChange={e => setForm(f => ({ ...f, user_id: parseInt(e.target.value) }))} style={inp}>
+              <AppSelect value={form.user_id} onChange={e => setForm(f => ({ ...f, user_id: parseInt(e.target.value) }))} style={inp}>
                 {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
+              </AppSelect>
             </div>
           )}
 
@@ -600,14 +601,14 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
                 <div style={{ fontSize: '0.76rem', fontWeight: 700, color: '#1D4ED8' }}>Meta coletiva</div>
                 <label>
                   <span style={{ ...label, marginBottom: 3 }}>AREA DA META</span>
-                  <select value={form.assigned_area} disabled={isReadOnly} onChange={e => {
+                  <AppSelect value={form.assigned_area} disabled={isReadOnly} onChange={e => {
                     const nextArea = e.target.value;
                     const eligible = members.filter(m => m.role === 'engenheiro' && m.area === nextArea);
                     setForm(f => ({ ...f, assigned_area: nextArea, area: nextArea }));
                     setAssignedUserIds(new Set(eligible.map(m => m.id)));
                   }} style={inp}>
                     {AREAS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
-                  </select>
+                  </AppSelect>
                 </label>
               </div>
               {collectiveMembers.length > 0 && (
@@ -676,15 +677,15 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
               <label style={label}>AREA</label>
-              <select value={form.area} disabled={isReadOnly} onChange={e => setForm(f => ({ ...f, area: e.target.value, assigned_area: f.is_general ? e.target.value : f.assigned_area }))} style={inp}>
+              <AppSelect value={form.area} disabled={isReadOnly} onChange={e => setForm(f => ({ ...f, area: e.target.value, assigned_area: f.is_general ? e.target.value : f.assigned_area }))} style={inp}>
                 {AREAS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
-              </select>
+              </AppSelect>
             </div>
             <div>
               <label style={label}>META</label>
-              <select value={form.meta_number} disabled={isReadOnly} onChange={e => setForm(f => ({ ...f, meta_number: parseInt(e.target.value) }))} style={inp}>
+              <AppSelect value={form.meta_number} disabled={isReadOnly} onChange={e => setForm(f => ({ ...f, meta_number: parseInt(e.target.value) }))} style={inp}>
                 {Array.from({ length: 10 }, (_, i) => i + 1).map(n => <option key={n} value={n}>Meta {n}</option>)}
-              </select>
+              </AppSelect>
             </div>
           </div>
 
@@ -695,10 +696,10 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
 
           <div>
             <label style={label}>KPI / INDICADOR</label>
-            <select value={form.kpi} disabled={isReadOnly} onChange={e => setForm(f => ({ ...f, kpi: e.target.value }))} style={inp}>
+            <AppSelect value={form.kpi} disabled={isReadOnly} onChange={e => setForm(f => ({ ...f, kpi: e.target.value }))} style={inp}>
               <option value="">-- Selecione --</option>
               {KPI_OPTIONS.map(k => <option key={k} value={k}>{k}</option>)}
-            </select>
+            </AppSelect>
           </div>
 
           <div>
@@ -761,9 +762,9 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
               <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 8 }}>
                 <div>
                   <label style={label}>LAYOUT DAS IMAGENS</label>
-                  <select value={form.evidence_layout} disabled={isReadOnly} onChange={e => setForm(f => ({ ...f, evidence_layout: e.target.value }))} style={inp}>
+                  <AppSelect value={form.evidence_layout} disabled={isReadOnly} onChange={e => setForm(f => ({ ...f, evidence_layout: e.target.value }))} style={inp}>
                     {EVIDENCE_LAYOUTS.map(layout => <option key={layout.value} value={layout.value}>{layout.label}</option>)}
-                  </select>
+                  </AppSelect>
                   {!isReadOnly && <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 7, padding: '7px 10px', fontSize: '0.7rem', color: '#92400E', marginTop: 6 }}>
                     As imagens somente poderão ser incluídas após o salvamento do layout desejado e reabertura do modal.
                   </div>}
@@ -816,9 +817,9 @@ function MetaModal({ meta, userId, area, year, members, canEditOthers, currentUs
           {!meta?.id && (
             <div>
               <label style={label}>LAYOUT DAS IMAGENS</label>
-              <select value={form.evidence_layout} disabled={isReadOnly} onChange={e => setForm(f => ({ ...f, evidence_layout: e.target.value }))} style={inp}>
+              <AppSelect value={form.evidence_layout} disabled={isReadOnly} onChange={e => setForm(f => ({ ...f, evidence_layout: e.target.value }))} style={inp}>
                 {EVIDENCE_LAYOUTS.map(layout => <option key={layout.value} value={layout.value}>{layout.label}</option>)}
-              </select>
+              </AppSelect>
               {!isReadOnly && <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 7, padding: '7px 10px', fontSize: '0.7rem', color: '#92400E', marginTop: 6 }}>
                 As imagens somente poderão ser incluídas após o salvamento do layout desejado e reabertura do modal.
               </div>}

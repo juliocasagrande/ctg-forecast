@@ -7,6 +7,7 @@ import ColumnFilterDropdown from '../components/ui/ColumnFilterDropdown.jsx';
 import ColumnResizeHandle from '../components/ui/ColumnResizeHandle.jsx';
 import CellTooltip from '../components/ui/CellTooltip.jsx';
 import useColumnWidths from '../hooks/useColumnWidths.js';
+import AppSelect from '../components/ui/AppSelect.jsx';
 import * as mammoth from 'mammoth';
 
 const DOCS_COL_WIDTHS = [40, 150, 130, 150, 100, 320, 130, 110]; // 🔗 Código Usina Responsável Data Título Status Ações
@@ -451,10 +452,10 @@ function RevisionModal({ open, onClose, onSaved, doc, allUsers }) {
               <input type="date" value={date} onChange={e => setDate(e.target.value)} style={fS}/>
             </Field>
             <Field label="Responsável">
-              <select value={responsible} onChange={e => setResponsible(e.target.value)} style={fS}>
+              <AppSelect value={responsible} onChange={e => setResponsible(e.target.value)} style={fS}>
                 <option value="">— Manter atual —</option>
                 {allUsers.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
-              </select>
+              </AppSelect>
             </Field>
           </div>
         </div>
@@ -547,17 +548,17 @@ function DocModal({ open, onClose, onSaved, doc, nextSeq, allUsers }) {
           {/* Tipo + Área — bloqueados em edição */}
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
             <Field label="Tipo de Documento" required>
-              <select value={form.type} onChange={e => set('type', e.target.value)}
+              <AppSelect value={form.type} onChange={e => set('type', e.target.value)}
                 style={isEdit ? fLocked : fS} disabled={isEdit}>
                 <option value="">— Selecionar —</option>
                 {DOC_TYPES.map(o => <option key={o.value} value={o.value}>{o.value} — {o.label}</option>)}
-              </select>
+              </AppSelect>
             </Field>
             <Field label="Área" required>
-              <select value={form.area} onChange={e => set('area', e.target.value)}
+              <AppSelect value={form.area} onChange={e => set('area', e.target.value)}
                 style={isEdit ? fLocked : fS} disabled={isEdit}>
                 {AREAS.map(o => <option key={o.value} value={o.value}>{o.value} — {o.label}</option>)}
-              </select>
+              </AppSelect>
             </Field>
           </div>
 
@@ -582,10 +583,10 @@ function DocModal({ open, onClose, onSaved, doc, nextSeq, allUsers }) {
               <PlantMultiSelect value={form.plant} onChange={v => set('plant', v)}/>
             </Field>
             <Field label="Responsável" required>
-              <select value={form.responsible} onChange={e => set('responsible', e.target.value)} style={fS}>
+              <AppSelect value={form.responsible} onChange={e => set('responsible', e.target.value)} style={fS}>
                 <option value="">— Selecionar —</option>
                 {allUsers.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
-              </select>
+              </AppSelect>
             </Field>
             <Field label="Data" required>
               <input type="date" value={form.date} onChange={e => set('date', e.target.value)} style={fS}/>
@@ -1031,14 +1032,14 @@ function ImportDocxModal({ open, onClose, onImported, allUsers }) {
                         ({preview.filter(r => r._originalResponsible === name).length} doc{preview.filter(r => r._originalResponsible === name).length !== 1 ? 's' : ''})
                       </span>
                     </div>
-                    <select
+                    <AppSelect
                       value={userMappings[name] || ''}
                       onChange={e => setUserMappings(prev => ({ ...prev, [name]: e.target.value ? parseInt(e.target.value) : null }))}
                       style={{ padding: '6px 10px', border: '1.5px solid #E2E8F0', borderRadius: 6, fontSize: '0.8rem', fontFamily: 'var(--font-body)', color: '#1E293B', background: '#fff', flexShrink: 0, minWidth: 200 }}
                     >
                       <option value="">— Não associar —</option>
                       {(allUsers || []).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                    </select>
+                    </AppSelect>
                   </div>
                 ))}
               </div>

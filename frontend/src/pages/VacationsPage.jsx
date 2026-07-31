@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useRole } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
+import AppSelect from '../components/ui/AppSelect.jsx';
 
 /* ─────────────────────────────────────────────
  * CONSTANTES
@@ -319,17 +320,17 @@ function PeriodModal({ period, userId, area, year, members, canEditOthers, onSav
           {canEditOthers && (
             <div>
               <label style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>COLABORADOR</label>
-              <select value={form.user_id} onChange={e => setForm(f => ({ ...f, user_id: parseInt(e.target.value) }))} style={inp}>
+              <AppSelect value={form.user_id} onChange={e => setForm(f => ({ ...f, user_id: parseInt(e.target.value) }))} style={inp}>
                 {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
+              </AppSelect>
             </div>
           )}
 
           <div>
             <label style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>ÁREA</label>
-            <select value={form.area} onChange={e => setForm(f => ({ ...f, area: e.target.value }))} style={inp}>
+            <AppSelect value={form.area} onChange={e => setForm(f => ({ ...f, area: e.target.value }))} style={inp}>
               {ALL_AREAS_FOR_MODAL.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
-            </select>
+            </AppSelect>
           </div>
 
           <div>

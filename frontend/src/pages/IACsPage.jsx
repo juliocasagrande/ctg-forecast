@@ -10,6 +10,8 @@ import StatusDot from '../components/ui/StatusDot.jsx';
 import OpenTimeBadge from '../components/ui/OpenTimeBadge.jsx';
 import CellTooltip from '../components/ui/CellTooltip.jsx';
 import DuplicatePromptModal from '../components/ui/DuplicatePromptModal.jsx';
+import AppSelect from '../components/ui/AppSelect.jsx';
+import AppCombobox from '../components/ui/AppCombobox.jsx';
 import { isIacOpenedInYear } from '../utils/iacDates.js';
 import { formatActivityLine, formatRemainingTime, getCheckinRemainingMs } from '../utils/listActivity.js';
 import useColumnWidths from '../hooks/useColumnWidths.js';
@@ -780,15 +782,15 @@ function IACModal({ item, onClose, onSave, onDelete, onDuplicate, onCheckinSaved
                 <input value={form.iac_code || ''} onChange={e => set('iac_code', e.target.value)} placeholder="IAC202600XXX" style={fS} />
               </Field>
               <Field label="Tipo" required>
-                <select value={form.type_line} onChange={e => set('type_line', e.target.value)} style={fS}>
+                <AppSelect value={form.type_line} onChange={e => set('type_line', e.target.value)} style={fS}>
                   {TYPE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
+                </AppSelect>
               </Field>
             </div>
             <Field label="Área" required>
-              <select value={form.area} onChange={e => set('area', e.target.value)} style={fS}>
+              <AppSelect value={form.area} onChange={e => set('area', e.target.value)} style={fS}>
                 {AREAS.map(a => <option key={a} value={a}>{a}</option>)}
-              </select>
+              </AppSelect>
             </Field>
             <Field label="Projeto">
               <textarea value={form.project || ''} onChange={e => set('project', e.target.value)}
@@ -831,31 +833,31 @@ function IACModal({ item, onClose, onSave, onDelete, onDuplicate, onCheckinSaved
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label="Status Atual" required>
-                <select value={form.status_current} onChange={e => set('status_current', e.target.value)} style={fS}>
+                <AppSelect value={form.status_current} onChange={e => set('status_current', e.target.value)} style={fS}>
                   {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.value}</option>)}
-                </select>
+                </AppSelect>
               </Field>
               <Field label="Prioridade">
-                <select value={form.priority} onChange={e => set('priority', e.target.value)} style={fS}>
+                <AppSelect value={form.priority} onChange={e => set('priority', e.target.value)} style={fS}>
                   {PRIORITY_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
+                </AppSelect>
               </Field>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginTop: 12 }}>
               <Field label="Ap. Work Team">
-                <select value={form.apresentado_work_team} onChange={e => set('apresentado_work_team', e.target.value)} style={fS}>
+                <AppSelect value={form.apresentado_work_team} onChange={e => set('apresentado_work_team', e.target.value)} style={fS}>
                   {SIM_NAO.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
+                </AppSelect>
               </Field>
               <Field label="Validade">
-                <select value={form.validity} onChange={e => set('validity', e.target.value)} style={fS}>
+                <AppSelect value={form.validity} onChange={e => set('validity', e.target.value)} style={fS}>
                   {VALIDITY_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
+                </AppSelect>
               </Field>
               <Field label="Continuidade">
-                <select value={form.continuidade} onChange={e => set('continuidade', e.target.value)} style={fS}>
+                <AppSelect value={form.continuidade} onChange={e => set('continuidade', e.target.value)} style={fS}>
                   {SIM_NAO.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
+                </AppSelect>
               </Field>
             </div>
           </div>
@@ -869,13 +871,10 @@ function IACModal({ item, onClose, onSave, onDelete, onDuplicate, onCheckinSaved
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label="Solicitante">
-                <input list="requesters-list" value={form.requester || ''} onChange={e => set('requester', e.target.value)} placeholder="Nome" style={fS} />
-                <datalist id="requesters-list">
-                  {allRequesters.map((r, i) => <option key={i} value={r} />)}
-                </datalist>
+                <AppCombobox options={allRequesters} value={form.requester || ''} onChange={e => set('requester', e.target.value)} placeholder="Nome" style={fS} />
               </Field>
               <Field label="Team Leader">
-                <select
+                <AppSelect
                   value={form.team_leader_user_id || ''}
                   onChange={e => {
                     const uid = e.target.value ? parseInt(e.target.value) : null;
@@ -886,25 +885,16 @@ function IACModal({ item, onClose, onSave, onDelete, onDuplicate, onCheckinSaved
                 >
                   <option value="">— Selecionar —</option>
                   {allUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                </select>
+                </AppSelect>
               </Field>
               <Field label="Chinese Work Staff">
-                <input list="chinese-staff-list" value={form.chinese_work_staff || ''} onChange={e => set('chinese_work_staff', e.target.value)} placeholder="Nome" style={fS} />
-                <datalist id="chinese-staff-list">
-                  {allChineseStaff.map((r, i) => <option key={i} value={r} />)}
-                </datalist>
+                <AppCombobox options={allChineseStaff} value={form.chinese_work_staff || ''} onChange={e => set('chinese_work_staff', e.target.value)} placeholder="Nome" style={fS} />
               </Field>
               <Field label="Organizador">
-                <input list="organizers-list" value={form.organizer || ''} onChange={e => set('organizer', e.target.value)} placeholder="Nome" style={fS} />
-                <datalist id="organizers-list">
-                  {allOrganizers.map((r, i) => <option key={i} value={r} />)}
-                </datalist>
+                <AppCombobox options={allOrganizers} value={form.organizer || ''} onChange={e => set('organizer', e.target.value)} placeholder="Nome" style={fS} />
               </Field>
               <Field label="Supervisor">
-                <input list="supervisors-list" value={form.supervisor || ''} onChange={e => set('supervisor', e.target.value)} placeholder="Nome" style={fS} />
-                <datalist id="supervisors-list">
-                  {allSupervisors.map((r, i) => <option key={i} value={r} />)}
-                </datalist>
+                <AppCombobox options={allSupervisors} value={form.supervisor || ''} onChange={e => set('supervisor', e.target.value)} placeholder="Nome" style={fS} />
               </Field>
               <Field label="Eq. de Avaliação">
                 <input value={form.evaluation_team || ''} onChange={e => set('evaluation_team', e.target.value)} placeholder="Membros" style={fS} />

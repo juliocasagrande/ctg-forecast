@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
+import AppSelect from '../components/ui/AppSelect.jsx';
 
 const STATUS_META = {
   planejada: { label: 'Planejada', color: '#78a5de', soft: '#edf4fd', text: '#356aab' },
@@ -193,7 +194,7 @@ function DemandDrawer({ demand, member, members, canPickMember, onSave, onDelete
         </div>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'grid', gap: 14 }}>
-        {canPickMember && <div><label style={label}>Responsavel</label><select value={form.user_id} onChange={e => set('user_id', Number(e.target.value))} style={input}>{members.map(person => <option key={person.id} value={person.id}>{person.name} - {roleLabel(person.role)}</option>)}</select></div>}
+        {canPickMember && <div><label style={label}>Responsavel</label><AppSelect value={form.user_id} onChange={e => set('user_id', Number(e.target.value))} style={input}>{members.map(person => <option key={person.id} value={person.id}>{person.name} - {roleLabel(person.role)}</option>)}</AppSelect></div>}
         <div><label style={label}>Nome da demanda</label><input value={form.title} onChange={e => set('title', e.target.value)} placeholder="Ex: Relatorio de Progresso Q3" style={input} /></div>
         <div><label style={label}>Descricao <span style={{ fontWeight: 500 }}>(opcional)</span></label><textarea value={form.description} onChange={e => set('description', e.target.value)} placeholder="Contexto ou detalhes da demanda" rows={3} style={{ ...input, height: 'auto', padding: 11, resize: 'vertical' }} /></div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}><div><label style={label}>Inicio</label><input type="date" value={form.start_date} onChange={e => set('start_date', e.target.value)} style={input} /></div><div><label style={label}>Fim</label><input type="date" value={form.due_date} onChange={e => set('due_date', e.target.value)} style={input} /></div></div>

@@ -9,6 +9,7 @@ import StatusDot from '../components/ui/StatusDot.jsx';
 import CellTooltip from '../components/ui/CellTooltip.jsx';
 import DuplicatePromptModal from '../components/ui/DuplicatePromptModal.jsx';
 import useColumnWidths from '../hooks/useColumnWidths.js';
+import AppSelect from '../components/ui/AppSelect.jsx';
 import { formatActivityLine, formatRemainingTime, getCheckinRemainingMs } from '../utils/listActivity.js';
 
 const PROJECTS_COL_WIDTHS = [40, 46, 130, 110, 280, 180, 160, 170, 220, 100, 120, 110, 110, 100, 100, 100, 150, 100, 90];
@@ -851,14 +852,14 @@ function UheBreakdownEditor({ label, rows, onChange, options }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {rows.map((r, idx) => (
           <div key={idx} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <select
+            <AppSelect
               value={r.uhe}
               onChange={e => updateRow(idx, { uhe: e.target.value })}
               style={{ ...fS, flex: '0 0 150px' }}
             >
               <option value={r.uhe}>{r.uhe}</option>
               {availableOptions.map(o => <option key={o} value={o}>{o}</option>)}
-            </select>
+            </AppSelect>
             <input
               value={r.valor || ''}
               onChange={e => updateRow(idx, { valor: maskBRL(e.target.value) })}
@@ -1201,14 +1202,14 @@ function ProjectModal({ item, onClose, onSave, onDelete, onDuplicate, onCheckinS
           {/* Identificação */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <Field label="Área" required>
-              <select value={form.area} onChange={e => set('area', e.target.value)} style={fS}>
+              <AppSelect value={form.area} onChange={e => set('area', e.target.value)} style={fS}>
                 {AREAS.map(a => <option key={a} value={a}>{a}</option>)}
-              </select>
+              </AppSelect>
             </Field>
             <Field label="UHE">
-              <select value={form.uhe} onChange={e => set('uhe', e.target.value)} style={fS}>
+              <AppSelect value={form.uhe} onChange={e => set('uhe', e.target.value)} style={fS}>
                 {UHE_LIST.map(u => <option key={u} value={u}>{u}</option>)}
-              </select>
+              </AppSelect>
             </Field>
           </div>
 
@@ -1249,7 +1250,7 @@ function ProjectModal({ item, onClose, onSave, onDelete, onDuplicate, onCheckinS
             </div>
           </Field>
           <Field label="Gestor">
-            <select
+            <AppSelect
               value={form.gestor_user_id || ''}
               onChange={e => {
                 const uid = e.target.value ? parseInt(e.target.value) : null;
@@ -1260,7 +1261,7 @@ function ProjectModal({ item, onClose, onSave, onDelete, onDuplicate, onCheckinS
             >
               <option value="">— Selecionar —</option>
               {allUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
+            </AppSelect>
           </Field>
 
           <div style={{ borderTop: '1px solid #F1F5F9', margin: '4px 0' }} />
@@ -1275,14 +1276,14 @@ function ProjectModal({ item, onClose, onSave, onDelete, onDuplicate, onCheckinS
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <Field label="Natureza">
-              <select value={form.natureza} onChange={e => set('natureza', e.target.value)} style={fS}>
+              <AppSelect value={form.natureza} onChange={e => set('natureza', e.target.value)} style={fS}>
                 {NATUREZA_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
+              </AppSelect>
             </Field>
             <Field label="Aditivo em And.">
-              <select value={form.aditivo_em_andamento} onChange={e => set('aditivo_em_andamento', e.target.value)} style={fS}>
+              <AppSelect value={form.aditivo_em_andamento} onChange={e => set('aditivo_em_andamento', e.target.value)} style={fS}>
                 {['SIM', 'NÃO'].map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
+              </AppSelect>
             </Field>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -1551,23 +1552,23 @@ function ReportSourceModal({ onClose, onGenerate }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: '#64748B', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Mês</label>
-                <select value={mes} onChange={e => setMes(e.target.value)} style={{
+                <AppSelect value={mes} onChange={e => setMes(e.target.value)} style={{
                   padding: '8px 12px', border: '1.5px solid #E2E8F0', borderRadius: 6,
                   fontSize: '0.88rem', fontFamily: 'var(--font-body)', color: '#1E293B',
                   background: '#fff', outline: 'none', width: '100%', boxSizing: 'border-box',
                 }}>
                   {MESES.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
+                </AppSelect>
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: '#64748B', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Ano</label>
-                <select value={ano} onChange={e => setAno(e.target.value)} style={{
+                <AppSelect value={ano} onChange={e => setAno(e.target.value)} style={{
                   padding: '8px 12px', border: '1.5px solid #E2E8F0', borderRadius: 6,
                   fontSize: '0.88rem', fontFamily: 'var(--font-body)', color: 'var(--text-primary)',
                   background: '#fff', outline: 'none', width: '100%', boxSizing: 'border-box',
                 }}>
                   {ANOS.map(a => <option key={a} value={a}>{a}</option>)}
-                </select>
+                </AppSelect>
               </div>
             </div>
           </div>

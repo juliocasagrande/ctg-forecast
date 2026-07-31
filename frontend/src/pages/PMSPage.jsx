@@ -6,6 +6,7 @@ import { useToast } from '../components/ui/Toast.jsx';
 import ColumnFilterDropdown from '../components/ui/ColumnFilterDropdown.jsx';
 import ColumnResizeHandle from '../components/ui/ColumnResizeHandle.jsx';
 import useColumnWidths from '../hooks/useColumnWidths.js';
+import AppSelect from '../components/ui/AppSelect.jsx';
 
 /* ─── Constants ──────────────────────────────────────────────────────────────── */
 const PMS_COL_WIDTHS = [40, 150, 80, 180, 160, 140, 320, 130, 110]; // 🔗 Código Usina Área Responsável Validade Título Status Ações
@@ -433,10 +434,10 @@ function RevisionModal({ open, onClose, onSaved, doc, allUsers }) {
               <input type="date" value={date} onChange={e => setDate(e.target.value)} style={fS}/>
             </Field>
             <Field label="Responsável">
-              <select value={responsible} onChange={e => setResponsible(e.target.value)} style={fS}>
+              <AppSelect value={responsible} onChange={e => setResponsible(e.target.value)} style={fS}>
                 <option value="">— Manter atual —</option>
                 {allUsers.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
-              </select>
+              </AppSelect>
             </Field>
           </div>
         </div>
@@ -520,9 +521,9 @@ function PMSDocModal({ open, onClose, onSaved, doc, allUsers }) {
 
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
             <Field label="Tipo" required>
-              <select value={form.type} onChange={e => set('type', e.target.value)} style={isEdit ? fLocked : fS} disabled={isEdit}>
+              <AppSelect value={form.type} onChange={e => set('type', e.target.value)} style={isEdit ? fLocked : fS} disabled={isEdit}>
                 {TYPES.map(o => <option key={o.value} value={o.value}>{o.value} — {o.label}</option>)}
-              </select>
+              </AppSelect>
             </Field>
             <Field label="Código" required>
               <input value={form.code} onChange={e => set('code', e.target.value)}
@@ -534,10 +535,10 @@ function PMSDocModal({ open, onClose, onSaved, doc, allUsers }) {
           <div style={{ display:'grid', gridTemplateColumns: needsPlant ? (needsEquip ? '1fr 1fr 1fr' : '1fr 1fr') : '1fr', gap:12 }}>
             {needsPlant && (
               <Field label="Usina">
-                <select value={form.plant} onChange={e => set('plant', e.target.value)} style={fS}>
+                <AppSelect value={form.plant} onChange={e => set('plant', e.target.value)} style={fS}>
                   <option value="">— Selecionar —</option>
                   {PLANTS.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
+                </AppSelect>
               </Field>
             )}
             {needsEquip && (
@@ -565,10 +566,10 @@ function PMSDocModal({ open, onClose, onSaved, doc, allUsers }) {
                 placeholder="ex: Engenharia Elétrica" style={fS}/>
             </Field>
             <Field label="Responsável" required>
-              <select value={form.responsible} onChange={e => set('responsible', e.target.value)} style={fS}>
+              <AppSelect value={form.responsible} onChange={e => set('responsible', e.target.value)} style={fS}>
                 <option value="">— Selecionar —</option>
                 {allUsers.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
-              </select>
+              </AppSelect>
             </Field>
           </div>
 

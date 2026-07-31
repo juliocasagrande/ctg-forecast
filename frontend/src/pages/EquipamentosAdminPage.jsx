@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import api from '../utils/api.js';
 import { useToast } from '../components/ui/Toast.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
+import AppSelect from '../components/ui/AppSelect.jsx';
+import AppCombobox from '../components/ui/AppCombobox.jsx';
 
 const USINAS = [
   'UHE Capivara', 'UHE Canoas 1', 'UHE Canoas 2', 'UHE Chavantes',
@@ -120,36 +122,30 @@ function EquipamentoModal({ item, onSave, onClose, onDelete, equipOptions, tabel
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
 
             <Field label="Usina" required>
-              <select value={form.usina} onChange={e => set('usina', e.target.value)} style={inputStyle}>
+              <AppSelect value={form.usina} onChange={e => set('usina', e.target.value)} style={inputStyle}>
                 <option value="">Selecione...</option>
                 {USINAS.map(u => <option key={u} value={u}>{u}</option>)}
-              </select>
+              </AppSelect>
             </Field>
 
             <Field label="Tabela" required>
-              <input
-                list="tabela-list"
+              <AppCombobox
+                options={tabelaOptions}
                 value={form.tipo_tabela}
                 onChange={e => set('tipo_tabela', e.target.value)}
                 placeholder="Ex: Subestação"
                 style={inputStyle}
               />
-              <datalist id="tabela-list">
-                {tabelaOptions.map(t => <option key={t} value={t} />)}
-              </datalist>
             </Field>
 
             <Field label="Equipamento" required>
-              <input
-                list="equip-list"
+              <AppCombobox
+                options={equipOptions}
                 value={form.equipamento}
                 onChange={e => set('equipamento', e.target.value)}
                 placeholder="Ex: Transformador de corrente"
                 style={inputStyle}
               />
-              <datalist id="equip-list">
-                {equipOptions.map(e => <option key={e} value={e} />)}
-              </datalist>
             </Field>
 
             <Field label="UG (Unidade Geradora)" required>
@@ -183,9 +179,9 @@ function EquipamentoModal({ item, onSave, onClose, onDelete, equipOptions, tabel
             </Field>
 
             <Field label="Tem sobressalente?">
-              <select value={form.tem_sobressalente} onChange={e => set('tem_sobressalente', e.target.value)} style={inputStyle}>
+              <AppSelect value={form.tem_sobressalente} onChange={e => set('tem_sobressalente', e.target.value)} style={inputStyle}>
                 {SIM_NAO.map(v => <option key={v} value={v}>{v}</option>)}
-              </select>
+              </AppSelect>
             </Field>
 
             <Field label="Quantos?">
@@ -288,7 +284,7 @@ function ImportModal({ onClose, onImported, myTabelas }) {
                 }}>
                   Tabela de destino <span style={{ color: '#EF4444' }}>*</span>
                 </label>
-                <select
+                <AppSelect
                   value={tipoTabela}
                   onChange={e => setTipoTabela(e.target.value)}
                   style={{
@@ -301,7 +297,7 @@ function ImportModal({ onClose, onImported, myTabelas }) {
                   }}
                 >
                   {myTabelas.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
+                </AppSelect>
               </div>
 
               <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: 10 }}>

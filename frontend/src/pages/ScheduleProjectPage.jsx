@@ -3,6 +3,7 @@ import api from '../utils/api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../components/ui/Toast.jsx';
 import WorkdayDatePicker from '../components/ui/WorkdayDatePicker.jsx';
+import AppSelect from '../components/ui/AppSelect.jsx';
 
 const SETTINGS_KEY = 'ctg_schedule_settings_v1';
 const DAY_MS = 86400000;
@@ -726,11 +727,11 @@ function TaskModal({ task, tasks, settings, onClose, onSave }) {
             </label>
             <label className="form-group">
               <span className="form-label">Tipo</span>
-              <select className="form-select" value={draft?.type || 'task'} onChange={e => set('type', e.target.value)}>
+              <AppSelect className="form-select" value={draft?.type || 'task'} onChange={e => set('type', e.target.value)}>
                 <option value="task">Atividade</option>
                 <option value="phase">Atividade Macro</option>
                 <option value="milestone">Marco</option>
-              </select>
+              </AppSelect>
             </label>
           </div>
           <label className="form-group">
@@ -739,7 +740,7 @@ function TaskModal({ task, tasks, settings, onClose, onSave }) {
           </label>
           <label className="form-group">
             <span className="form-label">Atividade macro pai</span>
-            <select className="form-select" value={draft?.parentId || ''} onChange={e => set('parentId', e.target.value)}>
+            <AppSelect className="form-select" value={draft?.parentId || ''} onChange={e => set('parentId', e.target.value)}>
               <option value="">Nível superior (sem pai)</option>
               {tasks
                 .filter(item => item.type === 'phase' && item.id !== draft?.id && !subtreeIds(tasks, draft?.id || '').has(item.id))
@@ -747,7 +748,7 @@ function TaskModal({ task, tasks, settings, onClose, onSave }) {
                 .map(item => (
                   <option key={item.id} value={item.id}>{item.wbs} - {item.name}</option>
                 ))}
-            </select>
+            </AppSelect>
           </label>
           <div className="schedule-form-grid">
             <label className="form-group">
@@ -778,20 +779,20 @@ function TaskModal({ task, tasks, settings, onClose, onSave }) {
             </label>
             <label className="form-group">
               <span className="form-label">Predecessora</span>
-              <select className="form-select" value={draft?.predecessorId || ''} onChange={e => set('predecessorId', e.target.value)}>
+              <AppSelect className="form-select" value={draft?.predecessorId || ''} onChange={e => set('predecessorId', e.target.value)}>
                 <option value="">Sem vínculo</option>
                 {tasks.filter(item => item.id !== draft?.id).map(item => (
                   <option key={item.id} value={item.id}>{item.wbs} - {item.name}</option>
                 ))}
-              </select>
+              </AppSelect>
             </label>
             <label className="form-group">
               <span className="form-label">Relação</span>
-              <select className="form-select" value={draft?.dependencyType || 'FS'} onChange={e => set('dependencyType', e.target.value)}>
+              <AppSelect className="form-select" value={draft?.dependencyType || 'FS'} onChange={e => set('dependencyType', e.target.value)}>
                 <option value="FS">Fim-Início</option>
                 <option value="SS">Início-Início</option>
                 <option value="FF">Fim-Fim</option>
-              </select>
+              </AppSelect>
             </label>
           </div>
           <label className="form-group">
