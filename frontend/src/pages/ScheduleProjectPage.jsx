@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import api from '../utils/api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../components/ui/Toast.jsx';
 import WorkdayDatePicker from '../components/ui/WorkdayDatePicker.jsx';
 import AppSelect from '../components/ui/AppSelect.jsx';
+import { formatBRL, formatBRLShort } from '../utils/format.js';
+import ScheduleSCurveChart, { SCurveComposedChart, SCURVE_ALL_VISIBLE, SCURVE_LEGEND } from '../components/ScheduleSCurveChart.jsx';
 
 const SETTINGS_KEY = 'ctg_schedule_settings_v1';
 const DAY_MS = 86400000;
@@ -27,6 +30,9 @@ const PRINT_FOOTER_H = 30;       // .schedule-print-footer, fixed 8mm tall
 const PRINT_TABLE_HEADER_H = 28; // .schedule-header-row / gantt months+days header row
 const PRINT_BODY_MAX_H = Math.floor(204 * PRINT_MM_TO_PX) - PRINT_HEADER_H - PRINT_FOOTER_H - PRINT_TABLE_HEADER_H;
 const PRINT_GANTT_WIDTH = PRINT_PAGE_WIDTH - PRINT_TASK_WIDTH;
+// The S-curve print page has no gantt table header row to budget for, just a legend row and the chart.
+const PRINT_CURVE_LEGEND_H = 26;
+const PRINT_CURVE_BODY_H = Math.floor(204 * PRINT_MM_TO_PX) - PRINT_HEADER_H - PRINT_FOOTER_H - PRINT_CURVE_LEGEND_H - 12;
 const PRINT_MIN_COL_WIDTH = 4;
 const PRINT_MAX_COL_WIDTH = 40;
 const DEFAULT_SETTINGS = {
@@ -109,6 +115,11 @@ function formatDate(value) {
 }
 
 function getStatus(task) {
+  if (task.type === 'payment') {
+    if (task.actualDate) return 'done';
+    const planned = parseDate(task.start);
+    return (planned && planned < TODAY) ? 'late' : 'pending';
+  }
   const progress = Number(task.progress) || 0;
   const end = parseDate(task.end);
   if (progress >= 100) return 'done';
@@ -247,7 +258,7 @@ function derivePhaseValues(tasks, settings) {
     if (visited.has(id)) return [];
     visited.add(id);
     return (byParent.get(id) || []).flatMap(child => (
-      child.type === 'phase' ? leafDescendants(child.id, visited) : [child]
+      child.type === 'phase' ? leafDescendants(child.id, visited) : child.type === 'payment' ? [] : [child]
     ));
   };
 
@@ -585,6 +596,125 @@ function getCriticalPath(tasks, settings) {
     .map(task => task.id));
 }
 
+function clamp01(value) {
+  return Math.max(0, Math.min(1, value));
+}
+
+// Builds a lightweight S-curve dataset (planned/actual physical %, planned/actual financial R$)
+// sampled across the project's date range. The app keeps no history of progress-over-time, so
+// "actual physical" is approximated by distributing each task's current progress% linearly
+// across its planned window, frozen at today's value for any date beyond today.
+function buildSCurveSeries(tasks, settings, range) {
+  const leafTasks = tasks.filter(task => task.type !== 'phase' && task.type !== 'payment' && parseDate(task.start) && parseDate(task.end));
+  const paymentTasks = tasks.filter(task => task.type === 'payment' && parseDate(task.start));
+  const totalDuration = leafTasks.reduce((sum, task) => sum + taskDuration(task, settings), 0) || 1;
+
+  const days = [];
+  for (let cursor = new Date(range.start); cursor <= range.end; cursor = addDays(cursor, 1)) days.push(new Date(cursor));
+  const totalDays = Math.max(1, days.length);
+  const step = totalDays > 180 ? 7 : 1;
+
+  const mustKeep = new Set([0, days.length - 1]);
+  days.forEach((day, index) => {
+    if (index % step === 0) mustKeep.add(index);
+    const dayIso = iso(day);
+    if (dayIso === iso(TODAY)) mustKeep.add(index);
+    paymentTasks.forEach(task => {
+      if (dayIso === task.start || (task.actualDate && dayIso === task.actualDate)) mustKeep.add(index);
+    });
+  });
+  const sampledDays = [...mustKeep].sort((a, b) => a - b).map(index => days[index]);
+
+  const fraction = (task, date) => {
+    const start = parseDate(task.start);
+    const end = parseDate(task.end);
+    const span = Math.max(1, daysBetween(start, end) + 1);
+    return clamp01((daysBetween(start, date) + 1) / span);
+  };
+
+  // The "realizado" lines never draw past today — unless real data (Término real / Data de
+  // realização) was actually entered further out, in which case they draw up to that point.
+  // Otherwise a flat line beyond today would look like something was recorded when nothing was.
+  const realizedDates = [
+    ...leafTasks.map(task => parseDate(task.actualEnd)).filter(Boolean),
+    ...paymentTasks.map(task => parseDate(task.actualDate)).filter(Boolean),
+  ];
+  const realizedCutoff = realizedDates.length
+    ? new Date(Math.max(TODAY, ...realizedDates))
+    : TODAY;
+
+  // How much of a task's weight counts as "really done" as of `date`. Prefers the real
+  // Início real/Término real dates (Início real → ramps to 100% by Término real, or toward
+  // the current progress% as of today if still open). Falls back to the old approximation
+  // — ramping the *planned* window by progress% — for tasks that don't have real dates yet,
+  // so existing projects without them filled in still show a sensible curve.
+  const realizedFraction = (task, date) => {
+    const actualStart = parseDate(task.actualStart);
+    if (!actualStart) {
+      const plannedStart = parseDate(task.start);
+      if (!plannedStart || date < plannedStart) return 0;
+      return fraction(task, date) * ((Number(task.progress) || 0) / 100);
+    }
+    if (date < actualStart) return 0;
+    const actualEnd = parseDate(task.actualEnd);
+    if (actualEnd) {
+      const span = Math.max(1, daysBetween(actualStart, actualEnd) + 1);
+      return clamp01((daysBetween(actualStart, date) + 1) / span);
+    }
+    const span = Math.max(1, daysBetween(actualStart, TODAY) + 1);
+    return clamp01((daysBetween(actualStart, date) + 1) / span) * ((Number(task.progress) || 0) / 100);
+  };
+
+  const points = sampledDays.map(day => {
+    const dayIso = iso(day);
+    const cappedDay = day > TODAY ? TODAY : day;
+    const beyondRealized = day > realizedCutoff;
+    let plannedFisico = 0;
+    let realizadoFisico = 0;
+    leafTasks.forEach(task => {
+      const duration = taskDuration(task, settings);
+      const start = parseDate(task.start);
+      if (day >= start) plannedFisico += duration * fraction(task, day);
+      realizadoFisico += duration * realizedFraction(task, cappedDay);
+    });
+    let planejadoFinanceiro = 0;
+    let realizadoFinanceiro = 0;
+    const events = [];
+    paymentTasks.forEach(task => {
+      if (task.start <= dayIso) planejadoFinanceiro += Number(task.value) || 0;
+      if (task.actualDate && task.actualDate <= dayIso) realizadoFinanceiro += Number(task.value) || 0;
+      if (task.start === dayIso || task.actualDate === dayIso) events.push(task);
+    });
+    return {
+      date: dayIso,
+      label: formatDate(dayIso),
+      planejadoFisico: Math.round((plannedFisico / totalDuration) * 1000) / 10,
+      realizadoFisico: beyondRealized ? null : Math.round((realizadoFisico / totalDuration) * 1000) / 10,
+      planejadoFinanceiro,
+      realizadoFinanceiro: beyondRealized ? null : realizadoFinanceiro,
+      eventPlanned: events.some(item => item.start === dayIso) ? planejadoFinanceiro : null,
+      eventActual: !beyondRealized && events.some(item => item.actualDate === dayIso) ? realizadoFinanceiro : null,
+      isToday: dayIso === iso(TODAY),
+      events,
+    };
+  });
+
+  const totalPlannedValue = paymentTasks.reduce((sum, task) => sum + (Number(task.value) || 0), 0);
+  const totalActualValue = paymentTasks.filter(task => task.actualDate).reduce((sum, task) => sum + (Number(task.value) || 0), 0);
+  const todayPoint = points.find(point => point.isToday) || points[points.length - 1] || null;
+
+  return {
+    points,
+    paymentTasks,
+    totals: {
+      plannedValue: totalPlannedValue,
+      actualValue: totalActualValue,
+      plannedPhysical: leafTasks.length ? 100 : 0,
+      actualPhysical: todayPoint?.realizadoFisico || 0,
+    },
+  };
+}
+
 function workdayOffset(fromDate, toDate, settings = DEFAULT_SETTINGS) {
   const from = nextWorkdayOnOrAfter(fromDate, settings);
   const to = nextWorkdayOnOrAfter(toDate, settings);
@@ -688,7 +818,19 @@ function cascadeLinkedTasks(tasks, oldTask, newTask, settings = DEFAULT_SETTINGS
   return tasks.map(task => byId.get(task.id) || task);
 }
 
-function TaskModal({ task, tasks, settings, onClose, onSave }) {
+// Groups a chunk of the TaskModal form under a small uppercase caption with a subtle
+// top divider — enough to separate "what this thing is" from "when" from "who it links to"
+// without turning the modal into a stack of heavy boxed panels.
+function ModalSection({ title, first, children }) {
+  return (
+    <div className={`schedule-modal-section ${first ? 'first' : ''}`}>
+      <div className="schedule-modal-section-title">{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function TaskModal({ task, tasks, settings, canEdit = true, onClose, onSave }) {
   const [draft, setDraft] = useState(task);
   useEffect(() => {
     setDraft(task);
@@ -711,105 +853,219 @@ function TaskModal({ task, tasks, settings, onClose, onSave }) {
     }));
   };
   const duration = taskDuration(draft || task, settings);
+  const isPayment = draft?.type === 'payment';
+  const isLeaf = draft?.type === 'task' || draft?.type === 'milestone';
+  const setType = (nextType) => setDraft(prev => {
+    const base = prev || task || {};
+    return nextType === 'payment' ? { ...base, type: nextType, end: base.start } : { ...base, type: nextType };
+  });
+
+  // Standard net-30: payment is only really disbursed 30 days after the linked activity wraps
+  // up. These are just one-click suggestions computed from the linked activity's dates — they
+  // never overwrite anything on their own.
+  const linkedTask = isPayment ? tasks.find(item => item.id === draft?.predecessorId) : null;
+  const suggestedPlannedDate = linkedTask?.end ? iso(addDays(parseDate(linkedTask.end), 30)) : null;
+  const suggestedActualDate = linkedTask?.actualEnd ? iso(addDays(parseDate(linkedTask.actualEnd), 30)) : null;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal schedule-modal" onClick={event => event.stopPropagation()}>
         <div className="modal-header">
-          <h2 className="modal-title">Editar atividade</h2>
+          <h2 className="modal-title">{canEdit ? 'Editar atividade' : 'Detalhes da atividade'}</h2>
           <button className="btn btn-ghost btn-icon" onClick={onClose}>×</button>
         </div>
-        <div className="modal-body">
-          <div className="schedule-form-grid">
+        <div className="modal-body" style={canEdit ? undefined : { pointerEvents: 'none', opacity: .72 }}>
+          <ModalSection title="Identificação" first>
+            <div className="schedule-form-grid">
+              <label className="form-group">
+                <span className="form-label">WBS</span>
+                <input className="form-input" value={draft?.wbs || ''} onChange={e => set('wbs', e.target.value)} />
+              </label>
+              <label className="form-group">
+                <span className="form-label">Tipo</span>
+                <AppSelect className="form-select" value={draft?.type || 'task'} onChange={e => setType(e.target.value)}>
+                  <option value="task">Atividade</option>
+                  <option value="phase">Atividade Macro</option>
+                  <option value="milestone">Marco</option>
+                  <option value="payment">Evento de Pagamento</option>
+                </AppSelect>
+              </label>
+            </div>
             <label className="form-group">
-              <span className="form-label">WBS</span>
-              <input className="form-input" value={draft?.wbs || ''} onChange={e => set('wbs', e.target.value)} />
+              <span className="form-label">Nome</span>
+              <input className="form-input" value={draft?.name || ''} onChange={e => set('name', e.target.value)} />
             </label>
             <label className="form-group">
-              <span className="form-label">Tipo</span>
-              <AppSelect className="form-select" value={draft?.type || 'task'} onChange={e => set('type', e.target.value)}>
-                <option value="task">Atividade</option>
-                <option value="phase">Atividade Macro</option>
-                <option value="milestone">Marco</option>
+              <span className="form-label">Atividade macro pai</span>
+              <AppSelect className="form-select" value={draft?.parentId || ''} onChange={e => set('parentId', e.target.value)}>
+                <option value="">Nível superior (sem pai)</option>
+                {tasks
+                  .filter(item => item.type === 'phase' && item.id !== draft?.id && !subtreeIds(tasks, draft?.id || '').has(item.id))
+                  .filter(item => !exceedsMaxDepth(tasks, [draft?.id || ''], item.id))
+                  .map(item => (
+                    <option key={item.id} value={item.id}>{item.wbs} - {item.name}</option>
+                  ))}
               </AppSelect>
             </label>
-          </div>
-          <label className="form-group">
-            <span className="form-label">Nome</span>
-            <input className="form-input" value={draft?.name || ''} onChange={e => set('name', e.target.value)} />
-          </label>
-          <label className="form-group">
-            <span className="form-label">Atividade macro pai</span>
-            <AppSelect className="form-select" value={draft?.parentId || ''} onChange={e => set('parentId', e.target.value)}>
-              <option value="">Nível superior (sem pai)</option>
-              {tasks
-                .filter(item => item.type === 'phase' && item.id !== draft?.id && !subtreeIds(tasks, draft?.id || '').has(item.id))
-                .filter(item => !exceedsMaxDepth(tasks, [draft?.id || ''], item.id))
-                .map(item => (
-                  <option key={item.id} value={item.id}>{item.wbs} - {item.name}</option>
-                ))}
-            </AppSelect>
-          </label>
-          <div className="schedule-form-grid">
-            <label className="form-group">
-              <span className="form-label">Início</span>
-              <WorkdayDatePicker
-                value={draft?.start || ''}
-                onChange={setStart}
-                isDateDisabled={date => !isWorkday(date, settings)}
-              />
+          </ModalSection>
+
+          <ModalSection title={isPayment ? 'Datas e valor' : 'Datas, duração e progresso'}>
+            {isPayment ? (
+              <div className="schedule-form-grid">
+                <label className="form-group">
+                  <span className="form-label">Data prevista</span>
+                  <WorkdayDatePicker
+                    value={draft?.start || ''}
+                    onChange={value => setDraft(prev => ({ ...(prev || task || {}), start: value, end: value }))}
+                    isDateDisabled={date => !isWorkday(date, settings)}
+                  />
+                </label>
+                <label className="form-group">
+                  <span className="form-label">Data de realização</span>
+                  <WorkdayDatePicker
+                    value={draft?.actualDate || ''}
+                    onChange={value => set('actualDate', value)}
+                  />
+                </label>
+                <label className="form-group">
+                  <span className="form-label">Valor (R$)</span>
+                  <input className="form-input" type="number" min="0" step="0.01" value={draft?.value ?? 0} onChange={e => set('value', e.target.value)} />
+                </label>
+              </div>
+            ) : null}
+            {isPayment && (
+              <div className="schedule-payment-hint">
+                <span>
+                  💡 O pagamento só costuma ser efetivado <strong>30 dias após a conclusão</strong> da atividade vinculada — leve esse prazo em conta ao definir a data prevista e a data de realização.
+                </span>
+                {linkedTask && (suggestedPlannedDate || suggestedActualDate) && (
+                  <div className="schedule-payment-hint-actions">
+                    {suggestedPlannedDate && (
+                      <button
+                        type="button"
+                        className="schedule-payment-hint-btn"
+                        onClick={() => setDraft(prev => ({ ...(prev || task || {}), start: suggestedPlannedDate, end: suggestedPlannedDate }))}
+                      >
+                        Usar {formatDate(suggestedPlannedDate)} (conclusão prevista + 30d) como data prevista
+                      </button>
+                    )}
+                    {suggestedActualDate && (
+                      <button
+                        type="button"
+                        className="schedule-payment-hint-btn"
+                        onClick={() => set('actualDate', suggestedActualDate)}
+                      >
+                        Usar {formatDate(suggestedActualDate)} (conclusão real + 30d) como data de realização
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {!isPayment && (
+              <>
+                <span className="schedule-modal-subhead">Planejado — usado no cálculo do cronograma e dos vínculos</span>
+                <div className="schedule-form-grid">
+                  <label className="form-group">
+                    <span className="form-label">Início previsto</span>
+                    <WorkdayDatePicker
+                      value={draft?.start || ''}
+                      onChange={setStart}
+                      isDateDisabled={date => !isWorkday(date, settings)}
+                    />
+                  </label>
+                  <label className="form-group">
+                    <span className="form-label">Término previsto</span>
+                    <WorkdayDatePicker
+                      value={draft?.end || ''}
+                      onChange={value => set('end', value)}
+                      isDateDisabled={date => !isWorkday(date, settings)}
+                    />
+                  </label>
+                  <label className="form-group">
+                    <span className="form-label">Duração prevista</span>
+                    <input className="form-input" value={`${duration} dia${duration === 1 ? '' : 's'}`} disabled />
+                  </label>
+                </div>
+                {isLeaf && (
+                  <>
+                    <span className="schedule-modal-subhead">Realizado — o que de fato aconteceu, usado na curva S</span>
+                    <div className="schedule-form-grid">
+                      <label className="form-group">
+                        <span className="form-label">Início real</span>
+                        <WorkdayDatePicker
+                          value={draft?.actualStart || ''}
+                          onChange={value => set('actualStart', value)}
+                        />
+                      </label>
+                      <label className="form-group">
+                        <span className="form-label">Término real</span>
+                        <WorkdayDatePicker
+                          value={draft?.actualEnd || ''}
+                          onChange={value => set('actualEnd', value)}
+                        />
+                      </label>
+                      <label className="form-group">
+                        <span className="form-label">Progresso (%)</span>
+                        <input className="form-input" type="number" min="0" max="100" value={draft?.progress ?? 0} onChange={e => set('progress', e.target.value)} />
+                      </label>
+                    </div>
+                  </>
+                )}
+                {!isLeaf && (
+                  <label className="form-group">
+                    <span className="form-label">Progresso (%)</span>
+                    <input className="form-input" type="number" min="0" max="100" value={draft?.progress ?? 0} onChange={e => set('progress', e.target.value)} />
+                  </label>
+                )}
+              </>
+            )}
+          </ModalSection>
+
+          <ModalSection title="Vínculo com outra atividade">
+            <div className="schedule-form-grid">
+              <label className="form-group">
+                <span className="form-label">{isPayment ? 'Atividade vinculada' : 'Predecessora'}</span>
+                <AppSelect className="form-select" value={draft?.predecessorId || ''} onChange={e => set('predecessorId', e.target.value)}>
+                  <option value="">Sem vínculo</option>
+                  {tasks.filter(item => item.id !== draft?.id).map(item => (
+                    <option key={item.id} value={item.id}>{item.wbs} - {item.name}</option>
+                  ))}
+                </AppSelect>
+              </label>
+              <label className="form-group">
+                <span className="form-label">Relação</span>
+                <AppSelect className="form-select" value={draft?.dependencyType || 'FS'} onChange={e => set('dependencyType', e.target.value)}>
+                  <option value="FS">Fim-Início</option>
+                  <option value="SS">Início-Início</option>
+                  <option value="FF">Fim-Fim</option>
+                </AppSelect>
+              </label>
+            </div>
+          </ModalSection>
+
+          <ModalSection title="Notas">
+            <label className="form-group" style={{ marginBottom: 0 }}>
+              <textarea className="form-textarea" value={draft?.notes || ''} onChange={e => set('notes', e.target.value)} />
             </label>
-            <label className="form-group">
-              <span className="form-label">Término</span>
-              <WorkdayDatePicker
-                value={draft?.end || ''}
-                onChange={value => set('end', value)}
-                isDateDisabled={date => !isWorkday(date, settings)}
-              />
-            </label>
-            <label className="form-group">
-              <span className="form-label">Duração</span>
-              <input className="form-input" value={`${duration} dia${duration === 1 ? '' : 's'}`} disabled />
-            </label>
-          </div>
-          <div className="schedule-form-grid">
-            <label className="form-group">
-              <span className="form-label">Progresso (%)</span>
-              <input className="form-input" type="number" min="0" max="100" value={draft?.progress ?? 0} onChange={e => set('progress', e.target.value)} />
-            </label>
-            <label className="form-group">
-              <span className="form-label">Predecessora</span>
-              <AppSelect className="form-select" value={draft?.predecessorId || ''} onChange={e => set('predecessorId', e.target.value)}>
-                <option value="">Sem vínculo</option>
-                {tasks.filter(item => item.id !== draft?.id).map(item => (
-                  <option key={item.id} value={item.id}>{item.wbs} - {item.name}</option>
-                ))}
-              </AppSelect>
-            </label>
-            <label className="form-group">
-              <span className="form-label">Relação</span>
-              <AppSelect className="form-select" value={draft?.dependencyType || 'FS'} onChange={e => set('dependencyType', e.target.value)}>
-                <option value="FS">Fim-Início</option>
-                <option value="SS">Início-Início</option>
-                <option value="FF">Fim-Fim</option>
-              </AppSelect>
-            </label>
-          </div>
-          <label className="form-group">
-            <span className="form-label">Notas</span>
-            <textarea className="form-textarea" value={draft?.notes || ''} onChange={e => set('notes', e.target.value)} />
-          </label>
+          </ModalSection>
         </div>
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-primary" onClick={() => draft && onSave({ ...normalizeTaskDates(draft, settings), progress: Math.max(0, Math.min(100, Number(draft.progress) || 0)) })}>Salvar</button>
+          {canEdit ? (
+            <>
+              <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+              <button className="btn btn-primary" onClick={() => draft && onSave({ ...normalizeTaskDates(draft, settings), progress: Math.max(0, Math.min(100, Number(draft.progress) || 0)) })}>Salvar</button>
+            </>
+          ) : (
+            <button className="btn btn-primary" onClick={onClose}>Fechar</button>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function ScheduleSettingsModal({ open, settings, onChange, onClose }) {
+function ScheduleSettingsModal({ open, settings, canEdit = true, onChange, onClose }) {
   const [holidayDraft, setHolidayDraft] = useState({ date: '', name: '' });
   const [extraWorkdayDraft, setExtraWorkdayDraft] = useState({ date: '', name: '' });
   if (!open) return null;
@@ -851,7 +1107,7 @@ function ScheduleSettingsModal({ open, settings, onChange, onClose }) {
           <h2 className="modal-title">Configurações do cronograma</h2>
           <button className="btn btn-ghost btn-icon" onClick={onClose}>×</button>
         </div>
-        <div className="modal-body">
+        <div className="modal-body" style={canEdit ? undefined : { pointerEvents: 'none', opacity: .72 }}>
           <section className="schedule-settings-section">
             <div>
               <strong>Dias úteis</strong>
@@ -966,6 +1222,242 @@ function ScheduleSettingsModal({ open, settings, onChange, onClose }) {
   );
 }
 
+// Owner-only dialog to grant/revoke viewer or editor access to a schedule project.
+// Candidate users come from /api/users/for-delegation (same roster used elsewhere in the app
+// for assigning people to things); current shares from /api/schedule-projects/:id/shares.
+function ScheduleShareModal({ project, onClose }) {
+  const { warning } = useToast();
+  const [shares, setShares] = useState([]);
+  const [candidates, setCandidates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
+  const [pickedUserId, setPickedUserId] = useState('');
+  const [pickedRole, setPickedRole] = useState('viewer');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const [sharesRes, usersRes] = await Promise.all([
+          api.get(`/schedule-projects/${encodeURIComponent(project.id)}/shares`),
+          api.get('/users/for-delegation'),
+        ]);
+        if (!alive) return;
+        setShares(sharesRes.data || []);
+        setCandidates(usersRes.data || []);
+      } catch {
+        if (alive) warning('Erro ao carregar compartilhamento');
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [project.id]);
+
+  const sharedIds = new Set(shares.map(share => share.id));
+  const availableUsers = candidates
+    .filter(user => !sharedIds.has(user.id))
+    .filter(user => `${user.name} ${user.email}`.toLowerCase().includes(query.toLowerCase()));
+
+  const addShare = async () => {
+    if (!pickedUserId) return;
+    setBusy(true);
+    try {
+      const res = await api.post(`/schedule-projects/${encodeURIComponent(project.id)}/shares`, {
+        userId: pickedUserId,
+        role: pickedRole,
+      });
+      setShares(res.data || []);
+      setPickedUserId('');
+      setQuery('');
+    } catch (err) {
+      warning(err.response?.data?.error || 'Erro ao compartilhar cronograma');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const changeRole = async (userId, role) => {
+    setBusy(true);
+    try {
+      const res = await api.post(`/schedule-projects/${encodeURIComponent(project.id)}/shares`, { userId, role });
+      setShares(res.data || []);
+    } catch (err) {
+      warning(err.response?.data?.error || 'Erro ao alterar permissão');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeShare = async (userId) => {
+    setBusy(true);
+    try {
+      await api.delete(`/schedule-projects/${encodeURIComponent(project.id)}/shares/${userId}`);
+      setShares(prev => prev.filter(share => share.id !== userId));
+    } catch (err) {
+      warning(err.response?.data?.error || 'Erro ao remover acesso');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal schedule-modal schedule-share-modal" onClick={event => event.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">Compartilhar cronograma</h2>
+          <button className="btn btn-ghost btn-icon" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          {loading ? (
+            <p style={{ color: 'var(--text-secondary)' }}>Carregando...</p>
+          ) : (
+            <>
+              <div className="schedule-share-list">
+                {shares.length === 0 && (
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '.82rem' }}>
+                    Ninguém tem acesso além de você.
+                  </p>
+                )}
+                {shares.map(share => (
+                  <div key={share.id} className="schedule-share-row">
+                    <span className="schedule-share-avatar">{share.avatar_initials || share.name?.[0] || '?'}</span>
+                    <span className="schedule-share-info">
+                      <strong>{share.name}</strong>
+                      <small>{share.email}</small>
+                    </span>
+                    <AppSelect
+                      className="form-select"
+                      value={share.role}
+                      disabled={busy}
+                      onChange={e => changeRole(share.id, e.target.value)}
+                    >
+                      <option value="viewer">Visualizador</option>
+                      <option value="editor">Editor</option>
+                    </AppSelect>
+                    <button type="button" className="btn btn-ghost btn-icon" disabled={busy} onClick={() => removeShare(share.id)}>×</button>
+                  </div>
+                ))}
+              </div>
+              <div className="schedule-share-add">
+                <span className="form-label">Adicionar pessoa</span>
+                <input
+                  className="form-input"
+                  placeholder="Buscar por nome ou e-mail..."
+                  value={query}
+                  onChange={e => { setQuery(e.target.value); setPickedUserId(''); }}
+                />
+                <AppSelect className="form-select" value={pickedUserId} onChange={e => setPickedUserId(e.target.value)}>
+                  <option value="">{availableUsers.length ? 'Selecione um usuário' : 'Nenhum resultado'}</option>
+                  {availableUsers.map(user => (
+                    <option key={user.id} value={user.id}>{user.name} — {user.email}</option>
+                  ))}
+                </AppSelect>
+                <div className="schedule-form-grid">
+                  <AppSelect className="form-select" value={pickedRole} onChange={e => setPickedRole(e.target.value)}>
+                    <option value="viewer">Visualizador (só vê)</option>
+                    <option value="editor">Editor (pode editar)</option>
+                  </AppSelect>
+                  <button type="button" className="btn btn-primary" disabled={!pickedUserId || busy} onClick={addShare}>
+                    Adicionar
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-primary" onClick={onClose}>Concluir</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Floating hover tooltip, styled like the app's other chart/cell tooltips (CellTooltip.jsx,
+// ChartTooltip.jsx) but shown immediately on hover instead of gated by text truncation —
+// used for the payment-event markers on the Gantt, which need rich content on hover.
+function GanttHoverTip({ children, content, style }) {
+  const [pos, setPos] = useState(null);
+  const ref = useRef(null);
+
+  const show = () => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setPos({ top: r.bottom + 6, left: r.left });
+  };
+
+  return (
+    <span ref={ref} onMouseEnter={show} onMouseLeave={() => setPos(null)} style={style}>
+      {children}
+      {pos && createPortal(
+        <div style={{
+          position: 'fixed', top: pos.top, left: Math.max(8, Math.min(pos.left, window.innerWidth - 260)),
+          maxWidth: 240, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8,
+          padding: '9px 12px', boxShadow: '0 4px 20px rgba(0,0,0,0.12)', fontSize: '0.74rem',
+          lineHeight: 1.5, color: 'var(--text-primary)', zIndex: 9999, pointerEvents: 'none',
+        }}>
+          {content}
+        </div>,
+        document.body
+      )}
+    </span>
+  );
+}
+
+const PAYMENT_STATUS_LABEL = { done: 'Pago', late: 'Atrasado', pending: 'Previsto' };
+const PAYMENT_STATUS_COLOR = { done: '#16A34A', late: '#DC2626', pending: '#0070B8' };
+
+// Diamond marker for a payment-event row in the interactive Gantt: one diamond at the planned
+// date, plus (when the payment was realized on a different day) a small check marker at the
+// actual date connected by a dashed line — makes the forecast slip visible at a glance.
+function PaymentMarker({ task, plannedLeft, actualLeft, status, linkedName }) {
+  const color = PAYMENT_STATUS_COLOR[status] || PAYMENT_STATUS_COLOR.pending;
+  const showActual = actualLeft != null && actualLeft !== plannedLeft;
+  return (
+    <GanttHoverTip
+      style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, pointerEvents: 'none' }}
+      content={
+        <div>
+          <div style={{ fontWeight: 800, color: 'var(--ctg-navy)', marginBottom: 4 }}>{task.name}</div>
+          <div>Previsto: {formatDate(task.start)}</div>
+          <div>Realizado: {task.actualDate ? formatDate(task.actualDate) : 'Em aberto'}</div>
+          <div>Valor: {formatBRL(task.value || 0)}</div>
+          {linkedName && <div>Vínculo: {linkedName}</div>}
+          <div>Status: {PAYMENT_STATUS_LABEL[status] || status}</div>
+        </div>
+      }
+    >
+      {showActual && (
+        <div style={{
+          position: 'absolute', top: 14, height: 1, borderTop: '1px dashed #94A3B8',
+          left: Math.min(plannedLeft, actualLeft) + 6, width: Math.abs(actualLeft - plannedLeft),
+          pointerEvents: 'none',
+        }} />
+      )}
+      <span style={{
+        position: 'absolute', left: plannedLeft, top: 8, width: 12, height: 12,
+        transform: 'rotate(45deg)', background: color, boxShadow: '0 1px 2px rgba(0,31,91,.3)',
+        pointerEvents: 'auto',
+      }} />
+      <span style={{
+        position: 'absolute', left: plannedLeft + 16, top: 6, fontSize: '0.6rem', fontWeight: 800,
+        color, whiteSpace: 'nowrap', pointerEvents: 'none',
+      }}>
+        {formatBRLShort(task.value || 0)}
+      </span>
+      {showActual && (
+        <span style={{
+          position: 'absolute', left: actualLeft, top: 9, width: 10, height: 10, borderRadius: '50%',
+          background: '#fff', border: `2px solid ${PAYMENT_STATUS_COLOR.done}`, pointerEvents: 'auto',
+        }} />
+      )}
+    </GanttHoverTip>
+  );
+}
+
 export default function ScheduleProjectPage() {
   const { user } = useAuth();
   const { confirm, warning } = useToast();
@@ -978,7 +1470,17 @@ export default function ScheduleProjectPage() {
   const [editingTask, setEditingTask] = useState(null);
   const [zoom, setZoom] = useState('day');
   const [showCriticalPath, setShowCriticalPath] = useState(false);
+  const [visibleSeries, setVisibleSeries] = useState({
+    planejadoFisico: true,
+    realizadoFisico: true,
+    planejadoFinanceiro: true,
+    realizadoFinanceiro: true,
+  });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [curveExpanded, setCurveExpanded] = useState(false);
+  const [printIncludeCurve, setPrintIncludeCurve] = useState(false);
+  const [printTrigger, setPrintTrigger] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [loadingError, setLoadingError] = useState('');
   const [saveState, setSaveState] = useState('idle');
@@ -989,6 +1491,8 @@ export default function ScheduleProjectPage() {
   const ganttDragRef = useRef({ active: false, moved: false, captured: false, startX: 0, scrollLeft: 0, pointerId: null });
 
   const project = projects.find(item => item.id === projectId) || projects[0];
+  const canEdit = project?.access !== 'viewer';
+  const isOwner = !project?.access || project.access === 'owner';
   const activeRevision = getActiveRevision(project);
   const rawTasks = activeRevision?.tasks || [];
   const scheduleSettings = useMemo(
@@ -1024,7 +1528,7 @@ export default function ScheduleProjectPage() {
   }, []);
 
   useEffect(() => {
-    if (!loaded || !project) return;
+    if (!loaded || !project || !canEdit) return;
     const timer = setTimeout(async () => {
       try {
         setSaveState('saving');
@@ -1037,9 +1541,32 @@ export default function ScheduleProjectPage() {
     return () => clearTimeout(timer);
   }, [loaded, project]);
 
+  // Printing goes through a chooser first: does the S-curve get its own extra page at the end
+  // of the PDF? The extra page only exists in the DOM once printIncludeCurve is set, so the
+  // actual window.print() call is deferred to the effect below, which fires once that page
+  // (or its absence) has committed — a plain requestAnimationFrame after setState is not
+  // guaranteed to run after React's commit, so we key off printTrigger instead.
+  const requestPrint = async () => {
+    const includeCurve = await confirm({
+      title: 'Imprimir cronograma',
+      message: 'Deseja incluir a Curva S (previsto x realizado) como uma página adicional ao final do PDF?',
+      confirmLabel: 'Incluir Curva S',
+      cancelLabel: 'Não incluir',
+      variant: 'info',
+    });
+    setPrintIncludeCurve(includeCurve);
+    setPrintTrigger(prev => prev + 1);
+  };
+
+  useEffect(() => {
+    if (!printTrigger) return;
+    const raf = requestAnimationFrame(() => window.print());
+    return () => cancelAnimationFrame(raf);
+  }, [printTrigger]);
+
   useEffect(() => {
     window._scheduleCreateProject = createProject;
-    window._schedulePrint = () => window.print();
+    window._schedulePrint = requestPrint;
     window._scheduleDeleteProject = deleteProject;
     return () => {
       delete window._scheduleCreateProject;
@@ -1068,7 +1595,7 @@ export default function ScheduleProjectPage() {
     if (!datedTasks.length) return { start: null, end: null, progress: 0, duration: 0 };
     const start = new Date(Math.min(...datedTasks.map(task => parseDate(task.start))));
     const end = new Date(Math.max(...datedTasks.map(task => parseDate(task.end))));
-    const progressTasks = tasks.filter(task => task.type !== 'phase' && parseDate(task.start) && parseDate(task.end));
+    const progressTasks = tasks.filter(task => task.type !== 'phase' && task.type !== 'payment' && parseDate(task.start) && parseDate(task.end));
     const totalDuration = progressTasks.reduce((sum, task) => sum + taskDuration(task, scheduleSettings), 0);
     const weightedProgress = progressTasks.reduce((sum, task) => sum + (Number(task.progress) || 0) * taskDuration(task, scheduleSettings), 0);
     return {
@@ -1085,6 +1612,11 @@ export default function ScheduleProjectPage() {
     [tasks, scheduleSettings]
   );
 
+  const sCurve = useMemo(
+    () => buildSCurveSeries(tasks, scheduleSettings, range),
+    [tasks, scheduleSettings, range]
+  );
+
   const dayClass = (day) => {
     const classes = [];
     const holiday = isHoliday(day, scheduleSettings);
@@ -1097,6 +1629,7 @@ export default function ScheduleProjectPage() {
   };
 
   const updateProject = (updater) => {
+    if (!canEdit) return;
     setProjects(prev => prev.map(item => item.id === project.id ? updater(item) : item));
   };
 
@@ -1142,8 +1675,9 @@ export default function ScheduleProjectPage() {
   };
 
   const addTask = (type = 'task') => {
+    const isPayment = type === 'payment';
     const sourceTasks = activeRevision?.tasks || [];
-    let parentPhase = type === 'task' ? findParentPhase(sourceTasks, selectedId) : null;
+    let parentPhase = (type === 'task' || isPayment) ? findParentPhase(sourceTasks, selectedId) : null;
     if (parentPhase) {
       const taskMapById = new Map(sourceTasks.map(item => [item.id, item]));
       if (getTaskDepth(parentPhase.id, taskMapById) + 1 > MAX_HIERARCHY_LEVELS - 1) {
@@ -1160,15 +1694,16 @@ export default function ScheduleProjectPage() {
     const task = {
       id: `task-${Date.now()}`,
       wbs: '',
-      name: type === 'phase' ? 'Nova atividade macro' : 'Nova atividade',
+      name: isPayment ? 'Novo evento de pagamento' : (type === 'phase' ? 'Nova atividade macro' : 'Nova atividade'),
       type,
       start,
-      end: iso(addWorkdaySpan(startDate, 3, scheduleSettings)),
+      end: isPayment ? start : iso(addWorkdaySpan(startDate, 3, scheduleSettings)),
       progress: 0,
       predecessorId: prev?.id || '',
       dependencyType: 'FS',
       notes: '',
       parentId: parentPhase ? parentPhase.id : '',
+      ...(isPayment ? { value: 0, actualDate: '' } : {}),
     };
     updateRevision(revision => {
       if (!parentPhase) return { ...revision, tasks: normalizeTaskOrder([...revision.tasks, task]) };
@@ -1380,6 +1915,7 @@ export default function ScheduleProjectPage() {
     const onKeyDown = (event) => {
       const tag = event.target?.tagName?.toLowerCase();
       if (['input', 'select', 'textarea'].includes(tag) || event.target?.isContentEditable) return;
+      if (!canEdit) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !editingTask && !settingsOpen) {
         event.preventDefault();
         undoLast();
@@ -1391,7 +1927,7 @@ export default function ScheduleProjectPage() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedId, selectedIds, editingTask, settingsOpen, undoStack, rawTasks]);
+  }, [selectedId, selectedIds, editingTask, settingsOpen, undoStack, rawTasks, canEdit]);
 
   const importRevision = async (sourceRevisionId) => {
     if (!sourceRevisionId || sourceRevisionId === activeRevision.id) return;
@@ -1430,7 +1966,7 @@ export default function ScheduleProjectPage() {
   };
 
   const deleteProject = async () => {
-    if (!project) return;
+    if (!project || !isOwner) return;
     if (!await confirm({
       title: 'Excluir cronograma',
       message: `Excluir o cronograma "${project.name}" e todas as suas revisoes?`,
@@ -1575,9 +2111,9 @@ export default function ScheduleProjectPage() {
   };
 
   const stats = {
-    total: tasks.filter(task => task.type !== 'phase').length,
-    done: tasks.filter(task => task.type !== 'phase' && Number(task.progress) >= 100).length,
-    late: tasks.filter(task => getStatus(task) === 'late').length,
+    total: tasks.filter(task => task.type !== 'phase' && task.type !== 'payment').length,
+    done: tasks.filter(task => task.type !== 'phase' && task.type !== 'payment' && Number(task.progress) >= 100).length,
+    late: tasks.filter(task => task.type !== 'payment' && getStatus(task) === 'late').length,
     links: tasks.filter(task => task.predecessorId).length,
   };
   const generatedBy = user?.name || user?.email || 'Usuário não identificado';
@@ -1630,27 +2166,40 @@ export default function ScheduleProjectPage() {
                   {projects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
                 </select>
               )}
-              <button
-                onClick={editingName ? commitName : startEditingName}
-                title="Renomear cronograma"
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '3px 4px', color: '#94A3B8', display: 'flex', alignItems: 'center', borderRadius: 4, flexShrink: 0 }}
-                onMouseEnter={e => e.currentTarget.style.color = '#0b5cab'}
-                onMouseLeave={e => e.currentTarget.style.color = '#94A3B8'}
-              >
-                <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
-                  <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
-                </svg>
-              </button>
+              {canEdit && (
+                <button
+                  onClick={editingName ? commitName : startEditingName}
+                  title="Renomear cronograma"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '3px 4px', color: '#94A3B8', display: 'flex', alignItems: 'center', borderRadius: 4, flexShrink: 0 }}
+                  onMouseEnter={e => e.currentTarget.style.color = '#0b5cab'}
+                  onMouseLeave={e => e.currentTarget.style.color = '#94A3B8'}
+                >
+                  <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
+                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                  </svg>
+                </button>
+              )}
+              {!isOwner && (
+                <span className="schedule-access-badge" title={project.ownerName ? `Compartilhado por ${project.ownerName}` : 'Cronograma compartilhado'}>
+                  {canEdit ? 'Editor' : 'Somente visualização'}
+                </span>
+              )}
+              {isOwner && (
+                <button type="button" className="schedule-share-btn" onClick={() => setShareOpen(true)}>
+                  <svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13"><path d="M13 8a3 3 0 10-2.83-4H10a3 3 0 00-2.83 4H7a3 3 0 100 2h.17A3 3 0 0010 14a3 3 0 002.83-2H13a3 3 0 100-2h-.17A3 3 0 0013 8z"/></svg>
+                  Compartilhar
+                </button>
+              )}
             </div>
             <div className="schedule-project-meta">
               <span className="schedule-meta-chip schedule-meta-chip-usina">
                 <svg viewBox="0 0 20 20" fill="currentColor" width="11" height="11" style={{flexShrink:0}}>
                   <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/>
                 </svg>
-                <input value={project.plant || ''} placeholder="Usina" onChange={e => updateProject(item => ({ ...item, plant: e.target.value }))} />
+                <input value={project.plant || ''} placeholder="Usina" disabled={!canEdit} onChange={e => updateProject(item => ({ ...item, plant: e.target.value }))} />
               </span>
               <span className="schedule-meta-chip">
-                <input value={activeRevision?.description || ''} placeholder="Descrição da revisão" onChange={e => patchRevision(revision => ({ ...revision, description: e.target.value }))} />
+                <input value={activeRevision?.description || ''} placeholder="Descrição da revisão" disabled={!canEdit} onChange={e => patchRevision(revision => ({ ...revision, description: e.target.value }))} />
               </span>
               <div className="schedule-revision-row">
                 <div className="schedule-revision-tabs">
@@ -1664,20 +2213,22 @@ export default function ScheduleProjectPage() {
                     </button>
                   ))}
                 </div>
-                <select
-                  className="schedule-revision-import"
-                  value=""
-                  onChange={event => importRevision(event.target.value)}
-                >
-                  <option value="">Importar de...</option>
-                  {project.revisions
-                    .filter(revision => revision.id !== activeRevision.id)
-                    .map(revision => (
-                      <option key={revision.id} value={revision.id}>
-                        {revision.label} ({revision.tasks.length} atividade{revision.tasks.length === 1 ? '' : 's'})
-                      </option>
-                    ))}
-                </select>
+                {canEdit && (
+                  <select
+                    className="schedule-revision-import"
+                    value=""
+                    onChange={event => importRevision(event.target.value)}
+                  >
+                    <option value="">Importar de...</option>
+                    {project.revisions
+                      .filter(revision => revision.id !== activeRevision.id)
+                      .map(revision => (
+                        <option key={revision.id} value={revision.id}>
+                          {revision.label} ({revision.tasks.length} atividade{revision.tasks.length === 1 ? '' : 's'})
+                        </option>
+                      ))}
+                  </select>
+                )}
               </div>
             </div>
           </div>
@@ -1703,14 +2254,19 @@ export default function ScheduleProjectPage() {
       </div>
 
       <div className="schedule-toolbar no-print">
-        <div className="schedule-toolbar-group schedule-toolbar-actions" aria-label="Criar itens">
-          <button className="btn btn-primary" onClick={() => addTask('phase')}>
-            <span aria-hidden="true">+</span> Ativ. Macro
-          </button>
-          <button className="btn btn-primary" onClick={() => addTask('task')}>
-            <span aria-hidden="true">+</span> Atividade
-          </button>
-        </div>
+        {canEdit && (
+          <div className="schedule-toolbar-group schedule-toolbar-actions" aria-label="Criar itens">
+            <button className="btn btn-primary" onClick={() => addTask('phase')}>
+              <span aria-hidden="true">+</span> Ativ. Macro
+            </button>
+            <button className="btn btn-primary" onClick={() => addTask('task')}>
+              <span aria-hidden="true">+</span> Atividade
+            </button>
+            <button className="btn btn-primary" onClick={() => addTask('payment')}>
+              <span aria-hidden="true">+</span> Evento Pagto
+            </button>
+          </div>
+        )}
         <div className="schedule-toolbar-group">
           <div className="tabs schedule-zoom-tabs" aria-label="Escala do Gantt">
             {[
@@ -1751,6 +2307,7 @@ export default function ScheduleProjectPage() {
         </div>
       </div>
 
+      <div className={`schedule-content-split no-print ${curveExpanded ? 'curve-expanded' : ''}`}>
       <div className="schedule-workspace">
         <div className="schedule-task-pane">
           <div className="schedule-grid schedule-header-row">
@@ -1778,12 +2335,12 @@ export default function ScheduleProjectPage() {
                   key={task.id}
                   className={`schedule-grid schedule-task-row ${task.type} ${showCriticalPath && criticalPathIds.has(task.id) ? 'critical' : ''} ${selectedIds.includes(task.id) ? 'selected' : ''}`}
                   style={{ height: rowHeight(task) }}
-                  draggable
+                  draggable={canEdit}
                   onClick={event => selectTask(task.id, event)}
                   onDoubleClick={() => setEditingTask(task)}
-                  onDragStart={event => handleTaskDragStart(task.id, event)}
-                  onDragOver={event => event.preventDefault()}
-                  onDrop={event => handleTaskDrop(task.id, event)}
+                  onDragStart={event => canEdit && handleTaskDragStart(task.id, event)}
+                  onDragOver={event => canEdit && event.preventDefault()}
+                  onDrop={event => canEdit && handleTaskDrop(task.id, event)}
                 >
                   <span>{task.wbs}</span>
                   <span className="schedule-task-name" style={{ paddingLeft: (task._depth || 0) * 14 }}>
@@ -1864,13 +2421,23 @@ export default function ScheduleProjectPage() {
                       style={{ height: rowHeight(task) }}
                       onClick={event => handleGanttRowClick(task.id, event)}
                       onDoubleClick={() => handleGanttRowDoubleClick(task)}
-                      onDragOver={event => event.preventDefault()}
-                      onDrop={event => handleTaskDrop(task.id, event)}
+                      onDragOver={event => canEdit && event.preventDefault()}
+                      onDrop={event => canEdit && handleTaskDrop(task.id, event)}
                     >
                       {dayList.map(day => (
                         <span key={iso(day)} className={dayClass(day)} style={{ width: colWidth }} />
                       ))}
-                      {start && end && (
+                      {task.type === 'payment' && start ? (
+                        <PaymentMarker
+                          task={task}
+                          plannedLeft={left + colWidth / 2 - 6}
+                          actualLeft={task.actualDate && parseDate(task.actualDate)
+                            ? daysBetween(range.start, parseDate(task.actualDate)) * colWidth + colWidth / 2 - 5
+                            : null}
+                          status={status}
+                          linkedName={tasks.find(item => item.id === task.predecessorId)?.name}
+                        />
+                      ) : start && end && (
                         <div className={`schedule-bar ${task.type} ${isCritical ? 'critical' : ''}`} style={{ left, width, backgroundColor: levelColor.bg, boxShadow: barShadow }}>
                           <i style={{ width: `${task.progress || 0}%`, backgroundColor: levelColor.fill }} />
                           <em style={{ color: levelColor.text, textShadow: 'none' }}>{task.type === 'phase' ? task.name : `${task.progress || 0}%`}</em>
@@ -1883,6 +2450,16 @@ export default function ScheduleProjectPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      <ScheduleSCurveChart
+        points={sCurve.points}
+        totals={sCurve.totals}
+        visibleSeries={visibleSeries}
+        onToggleSeries={key => setVisibleSeries(prev => ({ ...prev, [key]: !prev[key] }))}
+        expanded={curveExpanded}
+        onToggleExpand={() => setCurveExpanded(prev => !prev)}
+      />
       </div>
 
       <div className="schedule-print-pages">
@@ -2027,20 +2604,64 @@ export default function ScheduleProjectPage() {
                   <strong>CTG.Engenharia</strong>
                   <small>Responsável: {generatedBy} · {activeRevision?.label || 'Rev. 0'} · Gerado em {TODAY.toLocaleDateString('pt-BR')}</small>
                 </div>
-                <span className="schedule-print-page-number">Página {pageIndex + 1} de {printPages.length}</span>
+                <span className="schedule-print-page-number">Página {pageIndex + 1} de {printPages.length + (printIncludeCurve ? 1 : 0)}</span>
               </div>
             </section>
           );
         })}
+
+        {printIncludeCurve && (
+          <section className="schedule-print-page schedule-print-curve-page">
+            <div className="schedule-print-header">
+              <div>
+                <h1>{project.name}</h1>
+                <p>{project.plant || 'CTG Brasil'} · Curva S — previsto x realizado (físico e financeiro)</p>
+              </div>
+            </div>
+            <div className="schedule-print-curve-legend">
+              {SCURVE_LEGEND.map(item => (
+                <span key={item.key}>
+                  <i style={{ background: item.color }} />
+                  {item.label}
+                </span>
+              ))}
+            </div>
+            <div className="schedule-print-curve-body" style={{ height: PRINT_CURVE_BODY_H }}>
+              {sCurve.points.length > 0 && (
+                <SCurveComposedChart
+                  points={sCurve.points}
+                  visibleSeries={SCURVE_ALL_VISIBLE}
+                  width={PRINT_PAGE_WIDTH}
+                  height={PRINT_CURVE_BODY_H}
+                  interactive={false}
+                />
+              )}
+            </div>
+            <div className="schedule-print-footer">
+              <div className="schedule-print-brand">
+                <strong>CTG.Engenharia</strong>
+                <small>Responsável: {generatedBy} · {activeRevision?.label || 'Rev. 0'} · Gerado em {TODAY.toLocaleDateString('pt-BR')}</small>
+              </div>
+              <span className="schedule-print-page-number">Página {printPages.length + 1} de {printPages.length + 1}</span>
+            </div>
+          </section>
+        )}
       </div>
 
-      {editingTask && <TaskModal task={editingTask} tasks={tasks} settings={scheduleSettings} onClose={() => setEditingTask(null)} onSave={saveTask} />}
+      {editingTask && <TaskModal task={editingTask} tasks={tasks} settings={scheduleSettings} canEdit={canEdit} onClose={() => setEditingTask(null)} onSave={saveTask} />}
       <ScheduleSettingsModal
         open={settingsOpen}
         settings={scheduleSettings}
+        canEdit={canEdit}
         onChange={updateScheduleSettings}
         onClose={() => setSettingsOpen(false)}
       />
+      {shareOpen && (
+        <ScheduleShareModal
+          project={project}
+          onClose={() => setShareOpen(false)}
+        />
+      )}
     </div>
   );
 }

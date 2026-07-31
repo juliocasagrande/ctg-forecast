@@ -851,6 +851,24 @@ await client.query(`
         UNIQUE(revision_id, client_uid)
       );
 
+      ALTER TABLE schedule_tasks ADD COLUMN IF NOT EXISTS actual_date DATE;
+      ALTER TABLE schedule_tasks ADD COLUMN IF NOT EXISTS value NUMERIC(14,2) DEFAULT 0;
+      ALTER TABLE schedule_tasks ADD COLUMN IF NOT EXISTS actual_start_date DATE;
+      ALTER TABLE schedule_tasks ADD COLUMN IF NOT EXISTS actual_end_date DATE;
+
+      CREATE TABLE IF NOT EXISTS schedule_project_shares (
+        id          SERIAL PRIMARY KEY,
+        project_id  INTEGER NOT NULL REFERENCES schedule_projects(id) ON DELETE CASCADE,
+        user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        role        VARCHAR(10) NOT NULL DEFAULT 'viewer',
+        shared_by   INTEGER REFERENCES users(id),
+        created_at  TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(project_id, user_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_schedule_project_shares_project ON schedule_project_shares(project_id);
+      CREATE INDEX IF NOT EXISTS idx_schedule_project_shares_user    ON schedule_project_shares(user_id);
+
       CREATE TABLE IF NOT EXISTS schedule_user_settings (
         user_id               INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
         weekends_as_workdays  BOOLEAN DEFAULT false,
