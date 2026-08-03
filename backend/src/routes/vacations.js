@@ -5,6 +5,9 @@ import { requireAuth } from '../middleware/auth.js';
 const router = Router();
 router.use(requireAuth);
 
+// Usuários que não devem aparecer na página de Férias
+const VACATIONS_EXCLUDED_EMAILS = ['renato.castilho@ctgbr.com.br'];
+
 function sameArea(left, right) {
   return String(left || 'eletrica').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
     === String(right || 'eletrica').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -48,9 +51,10 @@ router.get('/', async (req, res) => {
     JOIN users u ON u.id = vp.user_id
     WHERE vp.year = $1
       AND u.active = true
+      AND u.email <> ALL($${area ? 3 : 2}::text[])
       ${area ? 'AND vp.area = $2' : ''}
     ORDER BY u.name, vp.period_number
-  `, area ? [year, area] : [year]);
+  `, area ? [year, area, VACATIONS_EXCLUDED_EMAILS] : [year, VACATIONS_EXCLUDED_EMAILS]);
 
   res.json(rows);
 });
@@ -76,10 +80,11 @@ router.get('/members', async (req, res) => {
       FROM users u
       WHERE u.active = true
         AND u.role IN ('engenheiro','coordenador','gerente','planejador')
+        AND u.email <> ALL($${area ? 2 : 1}::text[])
         ${area ? "AND COALESCE(u.area, 'eletrica') = $1" : ''}
       ORDER BY u.name
     `;
-    params = area ? [area] : [];
+    params = area ? [area, VACATIONS_EXCLUDED_EMAILS] : [VACATIONS_EXCLUDED_EMAILS];
   } else if (role === 'coordenador') {
     // Coordenador: o próprio coordenador, engenheiros ativos da sua área,
     // todos os coordenadores ativos e todos os gerentes ativos
@@ -90,6 +95,7 @@ router.get('/members', async (req, res) => {
              COALESCE(u.area, 'eletrica') AS area
       FROM users u
       WHERE u.active = true
+        AND u.email <> ALL($2::text[])
         AND (
           (u.role = 'engenheiro' AND COALESCE(u.area, 'eletrica') = $1)
           OR u.role = 'coordenador'
@@ -97,7 +103,7 @@ router.get('/members', async (req, res) => {
         )
       ORDER BY u.name
     `;
-    params = [userArea];
+    params = [userArea, VACATIONS_EXCLUDED_EMAILS];
   } else {
     // Engenheiro: todos da sua mesma área + coordenadores
     const engArea = req.user.area || 'eletrica';
@@ -106,13 +112,14 @@ router.get('/members', async (req, res) => {
              COALESCE(u.area, 'eletrica') AS area
       FROM users u
       WHERE u.active = true
+        AND u.email <> ALL($2::text[])
         AND (
           (u.role = 'engenheiro' AND COALESCE(u.area, 'eletrica') = $1)
           OR (u.role = 'coordenador' AND COALESCE(u.area, 'eletrica') = $1)
         )
       ORDER BY u.name
     `;
-    params = [engArea];
+    params = [engArea, VACATIONS_EXCLUDED_EMAILS];
   }
 
   const { rows } = await pool.query(query, params);

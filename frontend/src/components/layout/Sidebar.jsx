@@ -30,6 +30,10 @@ const FULL_SIDEBAR_EMAILS = new Set([
   'lucas.vitti@ctgbr.com.br',
 ]);
 
+const HIDE_VACATIONS_EMAILS = new Set([
+  'renato.castilho@ctgbr.com.br',
+]);
+
 // Group projects by their plants, keeping plant order
 // Projects with no plant go to a "Sem usina" group
 function groupByPlant(projects) {
@@ -62,6 +66,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
   const { isAdmin, isGestor, isCoordenador, isPlanejador, isGerente } = useRole();
   const userEmail = user?.email?.trim().toLowerCase() || '';
   const hasFullSidebarAccess = FULL_SIDEBAR_EMAILS.has(userEmail);
+  const hideVacationsNav = HIDE_VACATIONS_EMAILS.has(userEmail);
   const isNativeAdmin = isAdmin && (!user?._originalRole || user._originalRole === 'admin');
   const canManageSidebar = isGestor || isCoordenador || isPlanejador;
   const navigate = useNavigate();
@@ -162,7 +167,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
               Gestão de Pessoas
             </div>
             {navItem('/workload', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M3 17a1 1 0 011-1h1v-5a1 1 0 112 0v5h2V9a1 1 0 112 0v8h2v-3a1 1 0 112 0v3h1a1 1 0 110 2H4a1 1 0 01-1-1z"/></svg>, 'Controle de Carga')}
-            {navItem('/vacations', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd"/></svg>, 'Férias')}
+            {!hideVacationsNav && navItem('/vacations', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd"/></svg>, 'Férias')}
             {navItem('/metas', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9zM4 5a2 2 0 00-2 2v6a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2H4zm0 2h12v6H4V7z"/></svg>, 'Metas')}
 
             {/* ── SEÇÃO: Gestão de Ativos ── */}
@@ -209,7 +214,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
               Gestão de Pessoas
             </div>
             {navItem('/workload', IC.report, 'Controle de Carga')}
-            {navItem('/vacations', IC.monthly, 'Férias')}
+            {!hideVacationsNav && navItem('/vacations', IC.monthly, 'Férias')}
           </>}
 
           {/* Projects listed only on Projects page */}

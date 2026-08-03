@@ -5,7 +5,7 @@ import { useSettings } from '../context/SettingsContext.jsx';
 import AlertBell from '../components/ui/AlertBell.jsx';
 import api from '../utils/api.js';
 import { formatBRL } from '../utils/format.js';
-import { iacElapsedMonths, isIacOpenedInYear } from '../utils/iacDates.js';
+import { iacElapsedMonthsProjected, isIacOpenedInYear } from '../utils/iacDates.js';
 
 function pct(v) {
   const n = Number(v);
@@ -1188,8 +1188,7 @@ const IAC_CARD_TITLE_FONT = 'clamp(0.6rem, 0.9vw, 0.72rem)';
 
 const PRIORITY_GOAL_STAT_COLUMNS = [
   { key: 'total', label: 'Total' },
-  { key: 'hiring2025', label: 'Hiring 2025' },
-  { key: 'pending', label: 'Pending' },
+  { key: 'pending', label: 'Not Started Yet' },
   { key: 'cancel', label: 'Cancel' },
   { key: 'hiring', label: 'Hiring' },
   { key: 'draft', label: 'Draft' },
@@ -1369,17 +1368,76 @@ function IacPriorityGoalPanel({ data }) {
 
 function IacAvgTimeMetaCard({ avgMonths, metaColor, iac2026Count }) {
   const widthPct = avgMonths === null ? 0 : Math.min(100, (avgMonths / 8) * 100);
+  const [hovered, setHovered] = useState(false);
+  const [tipPos, setTipPos] = useState({ x: 0, y: 0 });
+  const [tooltipStyle, setTooltipStyle] = useState({ left: 0, top: 0 });
+  const tooltipRef = useRef(null);
+
+  useLayoutEffect(() => {
+    if (!hovered || !tooltipRef.current) return;
+    const rect = tooltipRef.current.getBoundingClientRect();
+    const margin = 8;
+    let left = tipPos.x + 16;
+    let top = tipPos.y - 10;
+    if (left + rect.width + margin > window.innerWidth) left = tipPos.x - rect.width - 16;
+    if (left < margin) left = margin;
+    if (top + rect.height + margin > window.innerHeight) top = tipPos.y - rect.height - 10;
+    if (top < margin) top = margin;
+    setTooltipStyle({ left, top });
+  }, [hovered, tipPos]);
+
   return (
     <div style={{ borderRadius: 8, overflow: 'hidden', background: '#FBFDFF', minHeight: 0 }}>
       <div style={{ background: `linear-gradient(135deg, ${IAC_AVG_TIME_ACCENT}26, ${IAC_AVG_TIME_ACCENT}0d)`, padding: '4px 10px' }}>
         <span style={{ color: IAC_AVG_TIME_ACCENT, fontSize: IAC_CARD_TITLE_FONT, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Média tempo META</span>
       </div>
       <div style={{ padding: '6px 8px', display: 'flex', alignItems: 'center', gap: 16 }}>
-        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'baseline', gap: 6 }}>
+        <div
+          style={{ flexShrink: 0, display: 'flex', alignItems: 'baseline', gap: 6, cursor: 'default' }}
+          onMouseEnter={() => setHovered(true)}
+          onMouseMove={e => setTipPos({ x: e.clientX, y: e.clientY })}
+          onMouseLeave={() => setHovered(false)}
+        >
           <span style={{ color: metaColor, fontFamily: 'var(--font-display)', fontSize: 'clamp(1.15rem, 1.8vw, 1.6rem)', fontWeight: 900, lineHeight: 1 }}>
-            {avgMonths === null ? '-' : `${avgMonths}m`}
+            {avgMonths === null ? '-' : `${avgMonths.toFixed(1)}m`}
           </span>
           <span style={{ color: 'var(--text-muted)', fontSize: '0.66rem', whiteSpace: 'nowrap' }}>{iac2026Count} IAC(s) de 2026</span>
+          {hovered && (
+            <div ref={tooltipRef} style={{
+              position: 'fixed',
+              left: tooltipStyle.left,
+              top: tooltipStyle.top,
+              zIndex: 9999,
+              background: 'var(--bg-card)', border: '1px solid var(--border)',
+              borderRadius: 8, padding: '9px 12px', boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
+              fontSize: '0.76rem', minWidth: 240, maxWidth: 300, pointerEvents: 'none', textAlign: 'left',
+            }}>
+              <div style={{ fontWeight: 800, color: 'var(--ctg-navy)', marginBottom: 5 }}>Como a média é calculada</div>
+              <div style={{ color: 'var(--text-secondary)', marginBottom: 4 }}>
+                O cálculo da média de tempo é feito da seguinte maneira:
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                <div style={{ color: 'var(--text-secondary)' }}>
+                  <strong style={{ color: 'var(--ctg-navy)' }}>1.</strong> Se o IAC possuir data de assinatura da carta de aceitação (Acceptance Letter Signed):
+                  <div style={{ marginTop: 3, fontFamily: 'monospace', fontSize: '0.72rem', color: IAC_AVG_TIME_ACCENT, background: `${IAC_AVG_TIME_ACCENT}17`, border: `1px solid ${IAC_AVG_TIME_ACCENT}33`, borderRadius: 5, padding: '3px 6px' }}>
+                    Data de Assinatura da Carta − Data de Abertura
+                  </div>
+                </div>
+                <div style={{ color: 'var(--text-secondary)' }}>
+                  <strong style={{ color: 'var(--ctg-navy)' }}>2.</strong> Se o IAC não possuir data de assinatura:
+                  <div style={{ marginTop: 3, fontFamily: 'monospace', fontSize: '0.72rem', color: IAC_AVG_TIME_ACCENT, background: `${IAC_AVG_TIME_ACCENT}17`, border: `1px solid ${IAC_AVG_TIME_ACCENT}33`, borderRadius: 5, padding: '3px 6px' }}>
+                    (Data de Abertura + 144 dias) − Data de Abertura
+                  </div>
+                </div>
+                <div style={{ color: 'var(--text-secondary)' }}>
+                  <strong style={{ color: 'var(--ctg-navy)' }}>3.</strong> Se o IAC não possuir data de assinatura e hoje já passou de Data de Abertura + 144 dias:
+                  <div style={{ marginTop: 3, fontFamily: 'monospace', fontSize: '0.72rem', color: IAC_AVG_TIME_ACCENT, background: `${IAC_AVG_TIME_ACCENT}17`, border: `1px solid ${IAC_AVG_TIME_ACCENT}33`, borderRadius: 5, padding: '3px 6px' }}>
+                    Hoje − Data de Abertura
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         <div style={{ position: 'relative', paddingBottom: 12, flex: 1, minWidth: 0 }}>
           <div style={{ height: 7, background: '#E2E8F0', borderRadius: 999, overflow: 'hidden' }}>
@@ -1751,8 +1809,8 @@ export default function HomePage({ year }) {
       'Non Priority': buildPriorityGoalBucket(data.allIacs.filter(r => r.priority === 'Non Priority'), data.allIacs, 'qty_pp_line_26_no_priority'),
     };
     const iac2026 = iacRows.filter(i => isIacOpenedInYear(i, 2026));
-    const iacMonths = iac2026.map(i => iacElapsedMonths(i)).filter(v => v !== null);
-    const iacAvgMonths = iacMonths.length ? Math.round(iacMonths.reduce((sum, v) => sum + v, 0) / iacMonths.length) : null;
+    const iacMonths = iac2026.map(i => iacElapsedMonthsProjected(i)).filter(v => v !== null);
+    const iacAvgMonths = iacMonths.length ? iacMonths.reduce((sum, v) => sum + v, 0) / iacMonths.length : null;
     const iacMetaColor = iacAvgMonths === null ? '#10B981' : iacAvgMonths < 5 ? '#10B981' : iacAvgMonths < 6 ? '#0070B8' : iacAvgMonths < 7 ? '#F59E0B' : '#EF4444';
     const projectNatureData = countBy(projectRows, 'natureza').map(item => ({
       ...item,

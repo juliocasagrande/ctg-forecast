@@ -40,7 +40,7 @@ export default function OpenTimeBadge({ openingDate, acceptanceLetterSigned }) {
       border: `1px solid ${border}`,
       whiteSpace: 'nowrap',
     }}>
-      {months}m
+      {months.toFixed(1)}m
     </span>
   );
 }

@@ -37,5 +37,29 @@ export function iacElapsedMonths(iac, now = new Date()) {
   const end = signed || parseDateValue(now);
   if (!end) return null;
 
-  return Math.max(0, Math.floor((end.getTime() - opened.getTime()) / (1000 * 60 * 60 * 24 * 30)));
+  return Math.max(0, (end.getTime() - opened.getTime()) / (1000 * 60 * 60 * 24 * 30));
+}
+
+const IAC_PROJECTED_OPEN_DAYS = 144;
+
+// Used only for the home page average time metric: when the acceptance
+// letter hasn't been signed yet, projects the open time to opening_date +
+// 144 days instead of today, unless today has already passed that mark.
+export function iacElapsedMonthsProjected(iac, now = new Date()) {
+  const opened = parseDateValue(iac?.opening_date);
+  if (!opened) return null;
+
+  const signed = parseDateValue(iac?.acceptance_letter_signed);
+  const today = parseDateValue(now);
+  if (!today) return null;
+
+  let end;
+  if (signed) {
+    end = signed;
+  } else {
+    const projected = new Date(opened.getTime() + IAC_PROJECTED_OPEN_DAYS * 24 * 60 * 60 * 1000);
+    end = today.getTime() > projected.getTime() ? today : projected;
+  }
+
+  return Math.max(0, (end.getTime() - opened.getTime()) / (1000 * 60 * 60 * 24 * 30));
 }
