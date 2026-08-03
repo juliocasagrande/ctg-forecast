@@ -35,6 +35,7 @@ function normalizeTask(task = {}, index = 0) {
     progress: Math.max(0, Math.min(100, parseInt(task.progress, 10) || 0)),
     predecessor_uid: task.predecessorId || task.predecessor_uid || '',
     dependency_type: task.dependencyType || task.dependency_type || 'FS',
+    dependency_lag: parseInt(task.dependencyLag ?? task.dependency_lag, 10) || 0,
     notes: task.notes || '',
     actual_date: task.actualDate || task.actual_date || null,
     value: Number(task.value) || 0,
@@ -88,7 +89,7 @@ async function readProjectsForUser(userId) {
       r.id AS revision_db_id, r.client_uid AS revision_uid, r.label, r.description AS revision_description,
       r.settings AS revision_settings, r.sort_order AS revision_order,
       t.client_uid AS task_uid, t.wbs, t.name AS task_name, t.type, t.start_date, t.end_date,
-      t.progress, t.predecessor_uid, t.dependency_type, t.notes, t.actual_date, t.value,
+      t.progress, t.predecessor_uid, t.dependency_type, t.dependency_lag, t.notes, t.actual_date, t.value,
       t.actual_start_date, t.actual_end_date, t.sort_order AS task_order
     FROM schedule_projects p
     JOIN users u ON u.id = p.user_id
@@ -143,6 +144,7 @@ async function readProjectsForUser(userId) {
         progress: parseInt(row.progress, 10) || 0,
         predecessorId: row.predecessor_uid || '',
         dependencyType: row.dependency_type || 'FS',
+        dependencyLag: parseInt(row.dependency_lag, 10) || 0,
         notes: row.notes || '',
         actualDate: dateOut(row.actual_date),
         value: parseFloat(row.value) || 0,
@@ -203,13 +205,13 @@ async function replaceProjectPayload(client, userId, payload, targetProjectId = 
       await client.query(`
         INSERT INTO schedule_tasks (
           revision_id, client_uid, wbs, name, type, start_date, end_date, progress,
-          predecessor_uid, dependency_type, notes, actual_date, value,
+          predecessor_uid, dependency_type, dependency_lag, notes, actual_date, value,
           actual_start_date, actual_end_date, sort_order
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
       `, [
         revisionId, task.client_uid, task.wbs, task.name, task.type, task.start_date,
-        task.end_date, task.progress, task.predecessor_uid, task.dependency_type,
+        task.end_date, task.progress, task.predecessor_uid, task.dependency_type, task.dependency_lag,
         task.notes, task.actual_date, task.value, task.actual_start_date, task.actual_end_date,
         task.sort_order,
       ]);

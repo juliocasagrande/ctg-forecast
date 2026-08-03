@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../utils/api.js';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -18,6 +18,8 @@ const TASK_ROW_H = 30;
 // them; the print layout still uses a taller PRINT_PHASE_ROW_H, unaffected by this.
 const PHASE_ROW_H = TASK_ROW_H;
 const SUMMARY_ROW_H = 42;
+const MIN_COL_WIDTH = 4;
+const MAX_COL_WIDTH = 60;
 const PRINT_TASK_ROW_H = 20;
 const PRINT_PHASE_ROW_H = 24;
 const PRINT_SUMMARY_ROW_H = 26;
@@ -517,17 +519,7 @@ function recalculateSchedule(tasks, previousSettings, nextSettings) {
 
     if (predecessor) {
       const nextPredecessor = resolve(predecessor);
-      const duration = durations.get(task.id);
-      if (task.dependencyType === 'SS') {
-        const start = nextWorkdayOnOrAfter(parseDate(nextPredecessor.start), nextSettings);
-        nextTask = { ...task, start: iso(start), end: iso(addWorkdaySpan(start, duration, nextSettings)) };
-      } else if (task.dependencyType === 'FF') {
-        const end = prevWorkdayOnOrBefore(parseDate(nextPredecessor.end), nextSettings);
-        nextTask = { ...task, start: iso(subtractWorkdaySpan(end, duration, nextSettings)), end: iso(end) };
-      } else {
-        const start = nextWorkdayAfter(parseDate(nextPredecessor.end), nextSettings);
-        nextTask = { ...task, start: iso(start), end: iso(addWorkdaySpan(start, duration, nextSettings)) };
-      }
+      nextTask = placeFromPredecessor(task, nextPredecessor, nextSettings, durations.get(task.id));
     }
 
     visiting.delete(task.id);
@@ -576,18 +568,25 @@ function getCriticalPath(tasks, settings) {
     if (visiting.has(task.id)) return { start: latestStart, end: latestEnd };
     visiting.add(task.id);
 
+    // Inverse of placeFromPredecessor's forward formulas, undoing the successor's own lag
+    // to find how late `task` (their predecessor) could still run.
     (successors.get(task.id) || []).forEach(successor => {
       const successorLatest = latestDates(successor);
+      const lag = Number(successor.dependencyLag) || 0;
       let candidateStart;
       let candidateEnd;
       if (successor.dependencyType === 'SS') {
-        candidateStart = successorLatest.start;
+        candidateStart = moveByWorkdays(successorLatest.start, -lag, settings);
         candidateEnd = addWorkdaySpan(candidateStart, duration, settings);
       } else if (successor.dependencyType === 'FF') {
-        candidateEnd = successorLatest.end;
+        candidateEnd = moveByWorkdays(successorLatest.end, -lag, settings);
         candidateStart = subtractWorkdaySpan(candidateEnd, duration, settings);
+      } else if (successor.dependencyType === 'SF') {
+        candidateStart = moveByWorkdays(nextWorkdayAfter(successorLatest.end, settings), -lag, settings);
+        candidateEnd = addWorkdaySpan(candidateStart, duration, settings);
       } else {
-        candidateEnd = prevWorkdayOnOrBefore(addDays(successorLatest.start, -1), settings);
+        const anchor = moveByWorkdays(successorLatest.start, -lag, settings);
+        candidateEnd = prevWorkdayOnOrBefore(addDays(anchor, -1), settings);
         candidateStart = subtractWorkdaySpan(candidateEnd, duration, settings);
       }
       if (candidateStart < latestStart) {
@@ -602,13 +601,33 @@ function getCriticalPath(tasks, settings) {
     return result;
   };
 
-  return new Set(datedTasks
+  const criticalIds = new Set(datedTasks
     .filter(task => {
       const latest = latestDates(task);
       return iso(parseDate(task.start)) === iso(latest.start)
         && iso(parseDate(task.end)) === iso(latest.end);
     })
     .map(task => task.id));
+
+  // A phase's own bar never carries dates/durations independent of its children (see
+  // derivePhaseValues), so it's never a member of `datedTasks` above and would otherwise never
+  // show as critical — even when every child driving the project's finish date sits inside it.
+  // Walk each critical task's ancestor chain and mark those phases critical too, so the
+  // highlighted path reads as continuous instead of stopping at the leaf level.
+  const allById = new Map(tasks.map(task => [task.id, task]));
+  criticalIds.forEach(id => {
+    let current = allById.get(id);
+    const visited = new Set();
+    while (current?.parentId && !visited.has(current.id)) {
+      visited.add(current.id);
+      const parent = allById.get(current.parentId);
+      if (!parent) break;
+      criticalIds.add(parent.id);
+      current = parent;
+    }
+  });
+
+  return criticalIds;
 }
 
 function clamp01(value) {
@@ -772,17 +791,27 @@ function moveByWorkdays(date, offset, settings = DEFAULT_SETTINGS) {
   return cursor;
 }
 
-function placeFromPredecessor(task, predecessor, settings = DEFAULT_SETTINGS) {
-  const duration = Math.max(1, taskDuration(task, settings));
+// `dependencyLag` shifts the linked date by N workdays (negative = lead/overlap, positive =
+// gap) before the relation type's own start/end alignment is applied.
+function placeFromPredecessor(task, predecessor, settings = DEFAULT_SETTINGS, workdaySpan = null) {
+  const duration = Math.max(1, workdaySpan ?? taskDuration(task, settings));
+  const lag = Number(task.dependencyLag) || 0;
   if (task.dependencyType === 'SS') {
-    const start = nextWorkdayOnOrAfter(parseDate(predecessor.start), settings);
+    const start = moveByWorkdays(nextWorkdayOnOrAfter(parseDate(predecessor.start), settings), lag, settings);
     return { ...task, start: iso(start), end: iso(addWorkdaySpan(start, duration, settings)) };
   }
   if (task.dependencyType === 'FF') {
-    const end = prevWorkdayOnOrBefore(parseDate(predecessor.end), settings);
+    const end = moveByWorkdays(prevWorkdayOnOrBefore(parseDate(predecessor.end), settings), lag, settings);
     return { ...task, start: iso(subtractWorkdaySpan(end, duration, settings)), end: iso(end) };
   }
-  const start = nextWorkdayAfter(parseDate(predecessor.end), settings);
+  // SF (Início-Fim): this task must finish before its linked activity starts — the task ends
+  // up scheduled earlier in the calendar than the activity it's "linked to", which is the
+  // whole point of this (rarely used) relation type.
+  if (task.dependencyType === 'SF') {
+    const end = moveByWorkdays(prevWorkdayOnOrBefore(addDays(parseDate(predecessor.start), -1), settings), lag, settings);
+    return { ...task, start: iso(subtractWorkdaySpan(end, duration, settings)), end: iso(end) };
+  }
+  const start = moveByWorkdays(nextWorkdayAfter(parseDate(predecessor.end), settings), lag, settings);
   return { ...task, start: iso(start), end: iso(addWorkdaySpan(start, duration, settings)) };
 }
 
@@ -797,7 +826,8 @@ function cascadeLinkedTasks(tasks, oldTask, newTask, settings = DEFAULT_SETTINGS
   if (!oldStart || !oldEnd || !newStart || !newEnd) return tasks;
   const datesChanged = oldStart.getTime() !== newStart.getTime() || oldEnd.getTime() !== newEnd.getTime();
   const linkChanged = (oldTask.predecessorId || '') !== (newTask.predecessorId || '')
-    || (oldTask.dependencyType || 'FS') !== (newTask.dependencyType || 'FS');
+    || (oldTask.dependencyType || 'FS') !== (newTask.dependencyType || 'FS')
+    || (Number(oldTask.dependencyLag) || 0) !== (Number(newTask.dependencyLag) || 0);
   if (!datesChanged && !linkChanged) return tasks;
 
   const byId = new Map(tasks.map(task => [task.id, task]));
@@ -1073,7 +1103,18 @@ function TaskModal({ task, tasks, settings, canEdit = true, onClose, onSave }) {
                   <option value="FS">Fim-Início</option>
                   <option value="SS">Início-Início</option>
                   <option value="FF">Fim-Fim</option>
+                  <option value="SF">Início-Fim</option>
                 </AppSelect>
+              </label>
+              <label className="form-group">
+                <span className="form-label">Deslocamento (dias úteis)</span>
+                <input
+                  className="form-input"
+                  type="number"
+                  step="1"
+                  value={draft?.dependencyLag ?? 0}
+                  onChange={e => set('dependencyLag', e.target.value === '' ? 0 : parseInt(e.target.value, 10) || 0)}
+                />
               </label>
             </div>
           </ModalSection>
@@ -1467,7 +1508,7 @@ function TaskRowMarker({ task, status }) {
 // Diamond marker for a payment-event row in the interactive Gantt: one diamond at the planned
 // date, plus (when the payment was realized on a different day) a small check marker at the
 // actual date connected by a dashed line — makes the forecast slip visible at a glance.
-function PaymentMarker({ task, plannedLeft, actualLeft, status, linkedName, compact = false }) {
+function PaymentMarker({ task, plannedLeft, actualLeft, status, linkedName, compact = false, isCritical = false }) {
   const color = PAYMENT_STATUS_COLOR[status] || PAYMENT_STATUS_COLOR.pending;
   const showActual = actualLeft != null && actualLeft !== plannedLeft;
   // `compact` shrinks the marker to fit the shorter print row height (20px vs 30px on screen).
@@ -1501,7 +1542,8 @@ function PaymentMarker({ task, plannedLeft, actualLeft, status, linkedName, comp
       )}
       <span style={{
         position: 'absolute', left: plannedLeft, top: diamondTop, width: diamond, height: diamond,
-        transform: 'rotate(45deg)', background: color, boxShadow: '0 1px 2px rgba(0,31,91,.3)',
+        transform: 'rotate(45deg)', background: color,
+        boxShadow: isCritical ? '0 1px 2px rgba(0,31,91,.3), 0 0 0 3px rgba(245,158,11,.35)' : '0 1px 2px rgba(0,31,91,.3)',
         pointerEvents: 'auto',
       }} />
       <span style={{
@@ -1530,7 +1572,7 @@ export default function ScheduleProjectPage() {
   const [lastSelectedId, setLastSelectedId] = useState('');
   const [undoStack, setUndoStack] = useState([]);
   const [editingTask, setEditingTask] = useState(null);
-  const [zoom, setZoom] = useState('day');
+  const [colWidth, setColWidth] = useState(28);
   const [showCriticalPath, setShowCriticalPath] = useState(false);
   const [visibleSeries, setVisibleSeries] = useState({
     planejadoFisico: true,
@@ -1628,6 +1670,7 @@ export default function ScheduleProjectPage() {
     return () => cancelAnimationFrame(raf);
   }, [printTrigger]);
 
+
   useEffect(() => {
     window._scheduleCreateProject = createProject;
     window._schedulePrint = requestPrint;
@@ -1650,7 +1693,6 @@ export default function ScheduleProjectPage() {
     };
   }, [tasks]);
 
-  const colWidth = zoom === 'month' ? 12 : zoom === 'week' ? 20 : 28;
   const days = Math.max(1, daysBetween(range.start, range.end) + 1);
   const dayList = Array.from({ length: days }, (_, index) => addDays(range.start, index));
   const totalWidth = days * colWidth;
@@ -1765,6 +1807,7 @@ export default function ScheduleProjectPage() {
       progress: 0,
       predecessorId: prev?.id || '',
       dependencyType: 'FS',
+      dependencyLag: 0,
       notes: '',
       parentId: parentPhase ? parentPhase.id : '',
       ...(isPayment ? { value: 0, actualDate: '' } : {}),
@@ -1831,6 +1874,42 @@ export default function ScheduleProjectPage() {
     if (!drag.moved) return;
     node.scrollLeft = drag.scrollLeft - dx;
   };
+
+  // Ctrl/Cmd + wheel zooms the timeline continuously instead of the old Dia/Semana/Mês
+  // presets, keeping the point under the cursor fixed so zooming feels anchored rather than
+  // yanking the view sideways. Attached as a native listener (via callback ref, not a
+  // mount-time useEffect) because: (1) React's onWheel is passive by default, which would
+  // silently ignore preventDefault() and let the browser's own Ctrl+Scroll page-zoom fire
+  // instead; and (2) the Gantt pane doesn't exist on the first render (project loads async),
+  // so a `useEffect(() => {...}, [])` would run while the node is still null and never
+  // reattach once it mounts.
+  const ganttWheelCleanupRef = useRef(null);
+  const setGanttScrollNode = useCallback((node) => {
+    if (ganttWheelCleanupRef.current) {
+      ganttWheelCleanupRef.current();
+      ganttWheelCleanupRef.current = null;
+    }
+    ganttScrollRef.current = node;
+    if (!node) return;
+    const onWheel = (event) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      event.preventDefault();
+      const rect = node.getBoundingClientRect();
+      const cursorX = event.clientX - rect.left;
+      const pointerX = cursorX + node.scrollLeft;
+      setColWidth(prev => {
+        const factor = Math.exp(-event.deltaY * 0.0015);
+        const next = Math.min(MAX_COL_WIDTH, Math.max(MIN_COL_WIDTH, prev * factor));
+        const ratio = next / prev;
+        requestAnimationFrame(() => {
+          node.scrollLeft = pointerX * ratio - cursorX;
+        });
+        return next;
+      });
+    };
+    node.addEventListener('wheel', onWheel, { passive: false });
+    ganttWheelCleanupRef.current = () => node.removeEventListener('wheel', onWheel);
+  }, []);
 
   const stopGanttDrag = () => {
     const node = ganttScrollRef.current;
@@ -2143,8 +2222,8 @@ export default function ScheduleProjectPage() {
   const dependencyLines = tasks.flatMap((task, rowIndex) => {
     const predecessor = tasks.find(item => item.id === task.predecessorId);
     if (!predecessor) return [];
-    const fromDate = task.dependencyType === 'SS' ? predecessor.start : predecessor.end;
-    const toDate = task.dependencyType === 'FF' ? task.end : task.start;
+    const fromDate = (task.dependencyType === 'SS' || task.dependencyType === 'SF') ? predecessor.start : predecessor.end;
+    const toDate = (task.dependencyType === 'FF' || task.dependencyType === 'SF') ? task.end : task.start;
     const from = parseDate(fromDate);
     const to = parseDate(toDate);
     if (!from || !to) return [];
@@ -2177,8 +2256,8 @@ export default function ScheduleProjectPage() {
       const predecessorRow = visibleRows.get(task.predecessorId);
       const currentRow = visibleRows.get(task.id);
       if (!predecessorRow || !currentRow) return [];
-      const fromDate = task.dependencyType === 'SS' ? predecessorRow.task.start : predecessorRow.task.end;
-      const toDate = task.dependencyType === 'FF' ? task.end : task.start;
+      const fromDate = (task.dependencyType === 'SS' || task.dependencyType === 'SF') ? predecessorRow.task.start : predecessorRow.task.end;
+      const toDate = (task.dependencyType === 'FF' || task.dependencyType === 'SF') ? task.end : task.start;
       const from = parseDate(fromDate);
       const to = parseDate(toDate);
       if (!from || !to) return [];
@@ -2192,12 +2271,6 @@ export default function ScheduleProjectPage() {
     });
   };
 
-  const stats = {
-    total: tasks.filter(task => task.type !== 'phase' && task.type !== 'payment').length,
-    done: tasks.filter(task => task.type !== 'phase' && task.type !== 'payment' && Number(task.progress) >= 100).length,
-    late: tasks.filter(task => task.type !== 'payment' && getStatus(task) === 'late').length,
-    links: tasks.filter(task => task.predecessorId).length,
-  };
   const generatedBy = user?.name || user?.email || 'Usuário não identificado';
 
   const startEditingName = () => {
@@ -2229,142 +2302,88 @@ export default function ScheduleProjectPage() {
 
   return (
     <div className="schedule-page">
-      <div className="schedule-summary no-print">
-        <div className="schedule-info-main">
-          <div className="schedule-summary-fields">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              {editingName ? (
-                <input
-                  ref={nameInputRef}
-                  className="schedule-project-name-select"
-                  value={nameDraft}
-                  onChange={e => setNameDraft(e.target.value)}
-                  onBlur={commitName}
-                  onKeyDown={e => { if (e.key === 'Enter') commitName(); if (e.key === 'Escape') setEditingName(false); }}
-                  style={{ minWidth: 200 }}
-                />
-              ) : (
-                <select className="schedule-project-name-select" value={project.id} onChange={e => { setProjectId(e.target.value); setSelectedId(''); setSelectedIds([]); setUndoStack([]); }}>
-                  {projects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-                </select>
-              )}
-              {canEdit && (
-                <button
-                  onClick={editingName ? commitName : startEditingName}
-                  title="Renomear cronograma"
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '3px 4px', color: '#94A3B8', display: 'flex', alignItems: 'center', borderRadius: 4, flexShrink: 0 }}
-                  onMouseEnter={e => e.currentTarget.style.color = '#0b5cab'}
-                  onMouseLeave={e => e.currentTarget.style.color = '#94A3B8'}
-                >
-                  <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
-                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
-                  </svg>
-                </button>
-              )}
-              {!isOwner && (
-                <span className="schedule-access-badge" title={project.ownerName ? `Compartilhado por ${project.ownerName}` : 'Cronograma compartilhado'}>
-                  {canEdit ? 'Editor' : 'Somente visualização'}
-                </span>
-              )}
-              {isOwner && (
-                <button type="button" className="schedule-share-btn" onClick={() => setShareOpen(true)}>
-                  <svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13"><path d="M13 8a3 3 0 10-2.83-4H10a3 3 0 00-2.83 4H7a3 3 0 100 2h.17A3 3 0 0010 14a3 3 0 002.83-2H13a3 3 0 100-2h-.17A3 3 0 0013 8z"/></svg>
-                  Compartilhar
-                </button>
-              )}
-            </div>
-            <div className="schedule-project-meta">
-              <span className="schedule-meta-chip schedule-meta-chip-usina">
-                <svg viewBox="0 0 20 20" fill="currentColor" width="11" height="11" style={{flexShrink:0}}>
-                  <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/>
-                </svg>
-                <input value={project.plant || ''} placeholder="Usina" disabled={!canEdit} onChange={e => updateProject(item => ({ ...item, plant: e.target.value }))} />
-              </span>
-              <span className="schedule-meta-chip">
-                <input value={activeRevision?.description || ''} placeholder="Descrição da revisão" disabled={!canEdit} onChange={e => patchRevision(revision => ({ ...revision, description: e.target.value }))} />
-              </span>
-              <div className="schedule-revision-row">
-                <div className="schedule-revision-tabs">
-                  {project.revisions.map(revision => (
-                    <button
-                      key={revision.id}
-                      className={revision.id === activeRevision.id ? 'active' : ''}
-                      onClick={() => { setSelectedId(''); setSelectedIds([]); setUndoStack([]); updateProject(item => ({ ...item, activeRevisionId: revision.id })); }}
-                    >
-                      {revision.label}
-                    </button>
-                  ))}
-                </div>
-                {canEdit && (
-                  <select
-                    className="schedule-revision-import"
-                    value=""
-                    onChange={event => importRevision(event.target.value)}
-                  >
-                    <option value="">Importar de...</option>
-                    {project.revisions
-                      .filter(revision => revision.id !== activeRevision.id)
-                      .map(revision => (
-                        <option key={revision.id} value={revision.id}>
-                          {revision.label} ({revision.tasks.length} atividade{revision.tasks.length === 1 ? '' : 's'})
-                        </option>
-                      ))}
-                  </select>
-                )}
-              </div>
-            </div>
-          </div>
+      <div className="schedule-topbar no-print">
+        <div className="schedule-topbar-row schedule-topbar-row1">
+          {editingName ? (
+            <input
+              ref={nameInputRef}
+              className="schedule-project-name-select"
+              value={nameDraft}
+              onChange={e => setNameDraft(e.target.value)}
+              onBlur={commitName}
+              onKeyDown={e => { if (e.key === 'Enter') commitName(); if (e.key === 'Escape') setEditingName(false); }}
+              style={{ minWidth: 200 }}
+            />
+          ) : (
+            <select className="schedule-project-name-select" value={project.id} onChange={e => { setProjectId(e.target.value); setSelectedId(''); setSelectedIds([]); setUndoStack([]); }}>
+              {projects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+          )}
+          {canEdit && (
+            <button
+              onClick={editingName ? commitName : startEditingName}
+              title="Renomear cronograma"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '3px 4px', color: 'rgba(255,255,255,.7)', display: 'flex', alignItems: 'center', borderRadius: 4, flexShrink: 0 }}
+              onMouseEnter={e => e.currentTarget.style.color = '#fff'}
+              onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,.7)'}
+            >
+              <svg viewBox="0 0 20 20" fill="currentColor" width="15" height="15">
+                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+              </svg>
+            </button>
+          )}
+          <div className="schedule-topbar-div" />
+          <span className="schedule-meta-chip schedule-meta-chip-usina">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="11" height="11" style={{flexShrink:0}}>
+              <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/>
+            </svg>
+            <input value={project.plant || ''} placeholder="Usina" disabled={!canEdit} onChange={e => updateProject(item => ({ ...item, plant: e.target.value }))} />
+          </span>
+          <span className="schedule-meta-chip">
+            <input value={activeRevision?.description || ''} placeholder="Descrição da revisão" disabled={!canEdit} onChange={e => patchRevision(revision => ({ ...revision, description: e.target.value }))} />
+          </span>
+          <div style={{ flex: 1 }} />
+          {!isOwner && (
+            <span className="schedule-access-badge" title={project.ownerName ? `Compartilhado por ${project.ownerName}` : 'Cronograma compartilhado'}>
+              {canEdit ? 'Editor' : 'Somente visualização'}
+            </span>
+          )}
+          {isOwner && (
+            <button type="button" className="schedule-share-btn" onClick={() => setShareOpen(true)}>
+              <svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13"><path d="M13 8a3 3 0 10-2.83-4H10a3 3 0 00-2.83 4H7a3 3 0 100 2h.17A3 3 0 0010 14a3 3 0 002.83-2H13a3 3 0 100-2h-.17A3 3 0 0013 8z"/></svg>
+              Compartilhar
+            </button>
+          )}
         </div>
-        <div className="schedule-stat-strip">
-          <span>
-            <svg className="schedule-stat-icon" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 4a1 1 0 000 2h14a1 1 0 100-2H3zm0 4a1 1 0 000 2h14a1 1 0 100-2H3zm0 4a1 1 0 000 2h8a1 1 0 100-2H3z" clipRule="evenodd"/></svg>
-            <strong>{stats.total}</strong>Atividades
-          </span>
-          <span>
-            <svg className="schedule-stat-icon" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
-            <strong>{stats.done}</strong>Concluídas
-          </span>
-          <span>
-            <svg className="schedule-stat-icon" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd"/></svg>
-            <strong>{stats.late}</strong>Atrasadas
-          </span>
-          <span>
-            <svg className="schedule-stat-icon" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z" clipRule="evenodd"/></svg>
-            <strong>{stats.links}</strong>Vínculos
-          </span>
-        </div>
-      </div>
-
-      <div className="schedule-toolbar no-print">
-        {canEdit && (
-          <div className="schedule-toolbar-group schedule-toolbar-actions" aria-label="Criar itens">
-            <button className="btn btn-primary" onClick={() => addTask('phase')}>
-              <span aria-hidden="true">+</span> Ativ. Macro
-            </button>
-            <button className="btn btn-primary" onClick={() => addTask('task')}>
-              <span aria-hidden="true">+</span> Atividade
-            </button>
-            <button className="btn btn-primary" onClick={() => addTask('payment')}>
-              <span aria-hidden="true">+</span> Evento Pagto
-            </button>
-          </div>
-        )}
-        <div className="schedule-toolbar-group">
-          <div className="tabs schedule-zoom-tabs" aria-label="Escala do Gantt">
-            {[
-              ['day', 'Dia'],
-              ['week', 'Semana'],
-              ['month', 'Mês'],
-            ].map(([id, label]) => (
-              <button key={id} className={`tab-btn ${zoom === id ? 'active' : ''}`} onClick={() => setZoom(id)}>{label}</button>
+        <div className="schedule-topbar-row schedule-topbar-row2">
+          <div className="tabs schedule-topbar-tabs">
+            {project.revisions.map(revision => (
+              <button
+                key={revision.id}
+                className={`tab-btn ${revision.id === activeRevision.id ? 'active' : ''}`}
+                onClick={() => { setSelectedId(''); setSelectedIds([]); setUndoStack([]); updateProject(item => ({ ...item, activeRevisionId: revision.id })); }}
+              >
+                {revision.label}
+              </button>
             ))}
           </div>
-        </div>
-        <div className="schedule-toolbar-group">
-          <button className="schedule-settings-btn" onClick={() => setSettingsOpen(true)}>
-            <span aria-hidden="true">⚙</span> Configurações
-          </button>
-          <label className="schedule-critical-toggle">
+          {canEdit && (
+            <select
+              className="schedule-import-select"
+              value=""
+              onChange={event => importRevision(event.target.value)}
+            >
+              <option value="">Importar de...</option>
+              {project.revisions
+                .filter(revision => revision.id !== activeRevision.id)
+                .map(revision => (
+                  <option key={revision.id} value={revision.id}>
+                    {revision.label} ({revision.tasks.length} atividade{revision.tasks.length === 1 ? '' : 's'})
+                  </option>
+                ))}
+            </select>
+          )}
+          <label className="schedule-critical-toggle schedule-critical-toggle-light">
             <input
               type="checkbox"
               checked={showCriticalPath}
@@ -2372,13 +2391,17 @@ export default function ScheduleProjectPage() {
             />
             Caminho crítico
           </label>
-        </div>
-        <div className="schedule-toolbar-spacer" />
-        <div className="schedule-toolbar-group schedule-legend">
-          <span className="done" /> Concluída
-          <span className="progress" /> Em andamento
-          <span className="pending" /> Planejada
-          <span className="late" /> Atrasada
+          <div style={{ flex: 1 }} />
+          <div className="schedule-legend schedule-legend-light">
+            <span className="done" /> Concluída
+            <span className="progress" /> Em andamento
+            <span className="pending" /> Planejada
+            <span className="late" /> Atrasada
+          </div>
+          <div className="schedule-topbar-div" />
+          <button className="schedule-settings-btn schedule-settings-btn-primary" onClick={() => setSettingsOpen(true)}>
+            <span aria-hidden="true">⚙</span> Configurações
+          </button>
         </div>
       </div>
 
@@ -2393,7 +2416,21 @@ export default function ScheduleProjectPage() {
       <div className="schedule-workspace">
         <div className="schedule-task-pane">
           <div className="schedule-grid schedule-header-row">
-            <span>WBS</span><span>Atividade</span><span>Início</span><span>Término</span><span>Duração</span><span>%</span>
+            <span>WBS</span>
+            <span className="schedule-header-activity-cell">
+              Atividade
+              {canEdit && (
+                <GanttHoverTip content="Adicionar atividade">
+                  <button
+                    type="button"
+                    className="schedule-inline-add-btn"
+                    onClick={() => addTask('task')}
+                    aria-label="Adicionar atividade"
+                  >+</button>
+                </GanttHoverTip>
+              )}
+            </span>
+            <span>Início</span><span>Término</span><span>Duração</span><span>%</span>
           </div>
           <div className="schedule-task-rows" ref={taskRowsRef} onScroll={handleTaskRowsScroll}>
             {tasks.length === 0 && (
@@ -2442,7 +2479,7 @@ export default function ScheduleProjectPage() {
         <div className="schedule-gantt-pane">
           <div
             className="schedule-gantt-scroll"
-            ref={ganttScrollRef}
+            ref={setGanttScrollNode}
             onPointerDown={handleGanttPointerDown}
             onPointerMove={handleGanttPointerMove}
             onPointerUp={stopGanttDrag}
@@ -2519,6 +2556,7 @@ export default function ScheduleProjectPage() {
                             : null}
                           status={status}
                           linkedName={tasks.find(item => item.id === task.predecessorId)?.name}
+                          isCritical={isCritical}
                         />
                       ) : start && end && (
                         <div className={`schedule-bar ${task.type} ${isCritical ? 'critical' : ''}`} style={{ left, width, backgroundColor: levelColor.bg, boxShadow: barShadow }}>
@@ -2677,6 +2715,7 @@ export default function ScheduleProjectPage() {
                                     : null}
                                   status={status}
                                   linkedName={tasks.find(item => item.id === task.predecessorId)?.name}
+                                  isCritical={isCritical}
                                   compact
                                 />
                               ) : taskStart && taskEnd && (

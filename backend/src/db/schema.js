@@ -855,6 +855,7 @@ await client.query(`
       ALTER TABLE schedule_tasks ADD COLUMN IF NOT EXISTS value NUMERIC(14,2) DEFAULT 0;
       ALTER TABLE schedule_tasks ADD COLUMN IF NOT EXISTS actual_start_date DATE;
       ALTER TABLE schedule_tasks ADD COLUMN IF NOT EXISTS actual_end_date DATE;
+      ALTER TABLE schedule_tasks ADD COLUMN IF NOT EXISTS dependency_lag INTEGER DEFAULT 0;
 
       CREATE TABLE IF NOT EXISTS schedule_project_shares (
         id          SERIAL PRIMARY KEY,
