@@ -152,7 +152,7 @@ function VacationTimeline({ periodsByUser, allMembers, year }) {
     <div style={{ overflowX: 'auto' }}>
       <div style={{ minWidth: 640 }}>
         {/* Cabeçalho meses */}
-        <div style={{ display: 'flex', marginLeft: 172, borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', marginLeft: 210, borderBottom: '1px solid var(--border)' }}>
           {MONTHS.map((m, i) => (
             <div key={i} style={{
               flex: 1, textAlign: 'center', fontSize: '0.68rem', fontWeight: 600,
@@ -176,7 +176,7 @@ function VacationTimeline({ periodsByUser, allMembers, year }) {
             <div key={group.key}>
               {/* Label do grupo — cor sólida pastel da área */}
               <div style={{ display: 'flex', alignItems: 'center', background: ac.header, borderBottom: '1px solid var(--border)', borderTop: '1px solid var(--border)' }}>
-                <div style={{ width: 172, flexShrink: 0, padding: '4px 10px', fontSize: '0.62rem', fontWeight: 700, color: ac.headerText, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                <div style={{ width: 210, flexShrink: 0, padding: '4px 10px', fontSize: '0.62rem', fontWeight: 700, color: ac.headerText, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                   {group.label}
                 </div>
                 <div style={{ flex: 1, position: 'relative', height: 22, background: ac.header }}>
@@ -195,10 +195,10 @@ function VacationTimeline({ periodsByUser, allMembers, year }) {
                 const rowBg = mi % 2 === 0 ? ac.memberBg : ac.stripe;
                 return (
                   <div key={member.id} style={{ display: 'flex', alignItems: 'center', minHeight: 34, borderBottom: '1px solid var(--border)', background: rowBg }}>
-                    <div style={{ width: 172, flexShrink: 0, padding: '0 10px 0 8px', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden' }}>
+                    <div style={{ width: 210, flexShrink: 0, padding: '0 10px 0 8px', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden' }}>
                       <Avatar name={member.name} initials={member.avatar_initials} size={24} />
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {member.name.split(' ')[0]}
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={member.name}>
+                        {(() => { const parts = member.name.split(' ').filter(Boolean); return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1]}` : member.name; })()}
                       </span>
                     </div>
                     <div style={{ flex: 1, position: 'relative', height: 34, display: 'flex', alignItems: 'center', background: rowBg }}>
