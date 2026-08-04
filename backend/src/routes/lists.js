@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { pool } from '../db/schema.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requirePageAccess } from '../middleware/auth.js';
 import multer from 'multer';
 import ExcelJS from 'exceljs';
 
 const router = Router();
 router.use(requireAuth);
+router.use('/iacs', requirePageAccess('iacs'));
+router.use('/projects-tracking', requirePageAccess('projects_tracking'));
 
 let iacSchemaReady;
 
@@ -103,7 +105,7 @@ router.get('/iacs', async (req, res) => {
 });
 
 // POST /api/lists/iacs
-router.post('/iacs', async (req, res) => {
+router.post('/iacs', requirePageAccess('iacs', { write: true }), async (req, res) => {
   try {
     await ensureIacSchema();
     const {
@@ -142,7 +144,7 @@ router.post('/iacs', async (req, res) => {
 });
 
 // PUT /api/lists/iacs/:id
-router.put('/iacs/:id', async (req, res) => {
+router.put('/iacs/:id', requirePageAccess('iacs', { write: true }), async (req, res) => {
   try {
     await ensureIacSchema();
     const { id } = req.params;
@@ -186,7 +188,7 @@ router.put('/iacs/:id', async (req, res) => {
 });
 
 // DELETE /api/lists/iacs/:id
-router.delete('/iacs/:id', async (req, res) => {
+router.delete('/iacs/:id', requirePageAccess('iacs', { write: true }), async (req, res) => {
   try {
     await pool.query('DELETE FROM lists_iacs WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
@@ -269,7 +271,7 @@ router.get('/projects-tracking', async (req, res) => {
 });
 
 // POST /api/lists/projects-tracking
-router.post('/projects-tracking', async (req, res) => {
+router.post('/projects-tracking', requirePageAccess('projects_tracking', { write: true }), async (req, res) => {
   try {
     const {
       area, uhe, pp_contrato, projeto_atividade, projeto, caminho_projeto,
@@ -316,7 +318,7 @@ router.post('/projects-tracking', async (req, res) => {
 });
 
 // PUT /api/lists/projects-tracking/:id
-router.put('/projects-tracking/:id', async (req, res) => {
+router.put('/projects-tracking/:id', requirePageAccess('projects_tracking', { write: true }), async (req, res) => {
   try {
     await ensureTrackingSchema();
     const { id } = req.params;
@@ -369,7 +371,7 @@ router.put('/projects-tracking/:id', async (req, res) => {
 });
 
 // DELETE /api/lists/projects-tracking/clear — remove ALL records (admin only)
-router.delete('/projects-tracking/clear', async (req, res) => {
+router.delete('/projects-tracking/clear', requirePageAccess('projects_tracking', { write: true }), async (req, res) => {
   try {
     const { user } = req;
     if (!user || user.role !== 'admin') {
@@ -381,7 +383,7 @@ router.delete('/projects-tracking/clear', async (req, res) => {
 });
 
 // DELETE /api/lists/projects-tracking/:id
-router.delete('/projects-tracking/:id', async (req, res) => {
+router.delete('/projects-tracking/:id', requirePageAccess('projects_tracking', { write: true }), async (req, res) => {
   try {
     await pool.query('DELETE FROM lists_projects_tracking WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
@@ -572,7 +574,7 @@ router.get('/iacs/stale-iacs', async (req, res) => {
 });
 
 // POST /api/lists/projects-tracking/import
-router.post('/projects-tracking/import', upload.single('file'), async (req, res) => {
+router.post('/projects-tracking/import', requirePageAccess('projects_tracking', { write: true }), upload.single('file'), async (req, res) => {
   const client = await pool.connect();
   try {
     if (!req.file) return res.status(400).json({ error: 'Arquivo não enviado' });
@@ -818,7 +820,7 @@ function resolveUserName(spreadsheetName, userNameMap, users) {
   return users.find(u => u.id === userId)?.name || null;
 }
 
-router.post('/iacs/import', upload.single('file'), async (req, res) => {
+router.post('/iacs/import', requirePageAccess('iacs', { write: true }), upload.single('file'), async (req, res) => {
   const client = await pool.connect();
   try {
     await ensureIacSchema();

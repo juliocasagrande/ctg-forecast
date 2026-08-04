@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import { createPortal } from 'react-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useAuth, usePageAccess } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
 import { useToast } from '../components/ui/Toast.jsx';
 import ColumnFilterDropdown from '../components/ui/ColumnFilterDropdown.jsx';
@@ -1114,6 +1114,7 @@ function ImportDocxModal({ open, onClose, onImported, allUsers }) {
 /* ─── Main Page ──────────────────────────────────────────────────────────────── */
 export default function DocumentsPage() {
   const { user }    = useAuth();
+  const pageReadOnly = usePageAccess('documents') === 'viewer';
   const { toast }   = useToast();
 
   const [docs, setDocs]         = useState([]);
@@ -1165,6 +1166,7 @@ export default function DocumentsPage() {
 
   // canAct: pode editar/status/revisão = dono OU superior OU delegado ativo
   const canAct = (doc) => {
+    if (pageReadOnly) return false;
     if (isOwner(doc)) return true;
     if (isSuperior) return true;
     // Delegação: delegator_name corresponde ao responsável do doc
@@ -1448,11 +1450,11 @@ export default function DocumentsPage() {
 
       {/* Filter bar */}
       <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-        <button onClick={openNew} style={{
+        {!pageReadOnly && <button onClick={openNew} style={{
           display:'flex', alignItems:'center', gap:6, padding:'8px 16px',
           border:'none', borderRadius:8, background:'#10B981',
           fontSize:'0.8rem', fontWeight:700, cursor:'pointer', color:'#fff', flexShrink:0,
-        }}>+ Novo Documento</button>
+        }}>+ Novo Documento</button>}
 
         {/* Filtro Meus docs — destacado */}
         <button onClick={() => setMyDocsOnly(v=>!v)} style={{

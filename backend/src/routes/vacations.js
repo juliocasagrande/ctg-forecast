@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { pool } from '../db/schema.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requirePageAccess } from '../middleware/auth.js';
 
 const router = Router();
 router.use(requireAuth);
+router.use(requirePageAccess('vacations'));
 
 // Usuários que não devem aparecer na página de Férias
 const VACATIONS_EXCLUDED_EMAILS = ['renato.castilho@ctgbr.com.br'];
@@ -132,7 +133,7 @@ router.get('/members', async (req, res) => {
  * POST /api/vacations
  * Cria novo período de férias
  * ──────────────────────────────────────────────── */
-router.post('/', async (req, res) => {
+router.post('/', requirePageAccess('vacations', { write: true }), async (req, res) => {
   const { role, id: requesterId } = req.user;
   const { user_id, area, period_number, start_date, end_date, adp_registered, year, notes } = req.body;
 
@@ -243,7 +244,7 @@ router.post('/', async (req, res) => {
  * PUT /api/vacations/:id
  * Atualiza período existente
  * ──────────────────────────────────────────────── */
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePageAccess('vacations', { write: true }), async (req, res) => {
   const { id } = req.params;
 
   // Busca o registro para verificar ownership
@@ -278,7 +279,7 @@ router.put('/:id', async (req, res) => {
  * DELETE /api/vacations/:id
  * Remove período (admin: qualquer; engenheiro: só o próprio)
  * ──────────────────────────────────────────────── */
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePageAccess('vacations', { write: true }), async (req, res) => {
   const { id } = req.params;
 
   const existing = await pool.query('SELECT user_id FROM vacation_periods WHERE id = $1', [id]);

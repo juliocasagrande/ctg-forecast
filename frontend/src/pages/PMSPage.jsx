@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import { createPortal } from 'react-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useAuth, usePageAccess } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
 import { useToast } from '../components/ui/Toast.jsx';
 import ColumnFilterDropdown from '../components/ui/ColumnFilterDropdown.jsx';
@@ -775,6 +775,7 @@ function ImportExcelModal({ open, onClose, onImported }) {
 /* ─── Main Page ──────────────────────────────────────────────────────────────── */
 export default function PMSPage() {
   const { user } = useAuth();
+  const pageReadOnly = usePageAccess('pms') === 'viewer';
   const { toast } = useToast();
 
   const [docs, setDocs] = useState([]);
@@ -816,7 +817,7 @@ export default function PMSPage() {
     if (!user?.name || !doc.responsible) return false;
     return doc.responsible.trim().toLowerCase() === user.name.trim().toLowerCase();
   };
-  const canAct = (doc) => isOwner(doc) || isSuperior;
+  const canAct = (doc) => !pageReadOnly && (isOwner(doc) || isSuperior);
 
   const fetchDocs = useCallback(async () => {
     setLoading(true);
@@ -1046,11 +1047,11 @@ export default function PMSPage() {
 
       {/* Filter bar */}
       <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-        <button onClick={openNew} style={{
+        {!pageReadOnly && <button onClick={openNew} style={{
           display:'flex', alignItems:'center', gap:6, padding:'8px 16px',
           border:'none', borderRadius:8, background:'#10B981',
           fontSize:'0.8rem', fontWeight:700, cursor:'pointer', color:'#fff', flexShrink:0,
-        }}>+ Novo Documento</button>
+        }}>+ Novo Documento</button>}
 
         <button onClick={() => setMyDocsOnly(v=>!v)} style={{
           display:'flex', alignItems:'center', gap:7, padding:'8px 16px',

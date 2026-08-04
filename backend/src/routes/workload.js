@@ -1,9 +1,10 @@
 ﻿import { Router } from 'express';
 import { pool } from '../db/schema.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requirePageAccess } from '../middleware/auth.js';
 
 const router = Router();
 router.use(requireAuth);
+router.use(requirePageAccess('workload'));
 
 const STATUS_VALUES = ['planejada', 'em_andamento', 'bloqueada', 'concluida'];
 const PRIORITY_VALUES = ['baixa', 'media', 'alta'];
@@ -116,7 +117,7 @@ router.get('/alerts/late', async (req, res) => {
   const demands = rows.filter(row => !dismissed.has(String(row.id)));
   res.json({ count: demands.length, demands });
 });
-router.post('/', async (req, res) => {
+router.post('/', requirePageAccess('workload', { write: true }), async (req, res) => {
   const { role, id: requesterId } = req.user;
   const { user_id, title, description, status, priority, load_percent, start_date, due_date } = req.body;
 
@@ -156,7 +157,7 @@ router.post('/', async (req, res) => {
   res.status(201).json(rows[0]);
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePageAccess('workload', { write: true }), async (req, res) => {
   const { role } = req.user;
   const { id } = req.params;
   const existing = await pool.query(`
@@ -206,7 +207,7 @@ router.put('/:id', async (req, res) => {
   res.json(rows[0]);
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePageAccess('workload', { write: true }), async (req, res) => {
   const { id } = req.params;
   const existing = await pool.query(`
     SELECT w.user_id, u.role AS owner_role, COALESCE(u.area,'eletrica') AS owner_area

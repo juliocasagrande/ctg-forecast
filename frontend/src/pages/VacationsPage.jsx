@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth, useRole } from '../context/AuthContext.jsx';
+import { useAuth, useRole, usePageAccess } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
 import AppSelect from '../components/ui/AppSelect.jsx';
 
@@ -396,9 +396,10 @@ function PeriodModal({ period, userId, area, year, members, canEditOthers, onSav
 export default function VacationsPage({ areaFilter: areaFilterProp = '', year: yearProp, onYearChange }) {
   const { user } = useAuth();
   const { isEngenheiro } = useRole();
+  const pageReadOnly = usePageAccess('vacations') === 'viewer';
   const role = user?.role;
   const viewRole = user?._managerAccessOverride ? role : (user?._originalRole || role);
-  const canEditOthers = (viewRole === 'admin' || viewRole === 'gestor' || viewRole === 'coordenador' || viewRole === 'gerente');
+  const canEditOthers = !pageReadOnly && (viewRole === 'admin' || viewRole === 'gestor' || viewRole === 'coordenador' || viewRole === 'gerente');
 
   // year and area driven by App.jsx header props
   const year    = yearProp ?? new Date().getFullYear();
@@ -651,7 +652,7 @@ export default function VacationsPage({ areaFilter: areaFilterProp = '', year: y
                   const total = mp.reduce((s, p) => s + (p.days||0), 0);
                   const next = [...mp].sort((a,b) => new Date(String(a.start_date).slice(0,10))-new Date(String(b.start_date).slice(0,10))).find(p => daysUntil(p.start_date) > 0);
                   const daysLeft = next ? daysUntil(next.start_date) : null;
-                  const canEdit = canEditOthers || member.id === user.id;
+                  const canEdit = !pageReadOnly && (canEditOthers || member.id === user.id);
 
                   return (
                     <tr key={member.id} style={{ background: i%2 ? '#F8FAFC' : 'var(--bg-card)', borderBottom: '1px solid #E2E8F0' }}>

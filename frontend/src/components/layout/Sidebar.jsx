@@ -1,7 +1,7 @@
 ﻿import Icon from '../ui/Icon.jsx';
 import { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { useAuth, useRole } from '../../context/AuthContext.jsx';
+import { useAuth, useRole, usePageAccess } from '../../context/AuthContext.jsx';
 import api from '../../utils/api.js';
 
 const IC = {
@@ -24,15 +24,6 @@ const ORDERED_PLANTS = [
   'UHE Jupiá','UHE Jurumirim','UHE Rosana','UHE Salto',
   'UHE Salto Grande','UHE Taquaruçu',
 ];
-
-const FULL_SIDEBAR_EMAILS = new Set([
-  'julio.casagrande@ctgbr.com.br',
-  'lucas.vitti@ctgbr.com.br',
-]);
-
-const HIDE_VACATIONS_EMAILS = new Set([
-  'renato.castilho@ctgbr.com.br',
-]);
 
 // Group projects by their plants, keeping plant order
 // Projects with no plant go to a "Sem usina" group
@@ -64,9 +55,29 @@ function groupByPlant(projects) {
 export default function Sidebar({ open, onClose, onNewProject, projects }) {
   const { user, logout } = useAuth();
   const { isAdmin, isGestor, isCoordenador, isPlanejador, isGerente } = useRole();
+  const forecastAccess         = usePageAccess('forecast');
+  const projectsAccess         = usePageAccess('projects');
+  const polosAccess            = usePageAccess('polos');
+  const reportAccess           = usePageAccess('report');
+  const projectsTrackingAccess = usePageAccess('projects_tracking');
+  const iacsAccess             = usePageAccess('iacs');
+  const scheduleProjectAccess  = usePageAccess('schedule_project');
+  const workloadAccess         = usePageAccess('workload');
+  const vacationsAccess        = usePageAccess('vacations');
+  const metasAccess            = usePageAccess('metas');
+  const documentsAccess        = usePageAccess('documents');
+  const drawingsAccess         = usePageAccess('drawings');
+  const pmsAccess              = usePageAccess('pms');
+  const equipamentosAccess     = usePageAccess('equipamentos');
+  const equipamentosAdminAccess = usePageAccess('equipamentos_admin');
+
+  const showOrcamentoSection  = [forecastAccess, projectsAccess, polosAccess, reportAccess].some(a => a !== 'none');
+  const showProcessosSection = [projectsTrackingAccess, iacsAccess, scheduleProjectAccess].some(a => a !== 'none');
+  const showPessoasSection   = [workloadAccess, vacationsAccess, metasAccess].some(a => a !== 'none');
+  const showDocumentosSection = [documentsAccess, drawingsAccess, pmsAccess].some(a => a !== 'none');
+  const showAtivosSection    = [equipamentosAccess, equipamentosAdminAccess].some(a => a !== 'none');
+
   const userEmail = user?.email?.trim().toLowerCase() || '';
-  const hasFullSidebarAccess = FULL_SIDEBAR_EMAILS.has(userEmail);
-  const hideVacationsNav = HIDE_VACATIONS_EMAILS.has(userEmail);
   const isNativeAdmin = isAdmin && (!user?._originalRole || user._originalRole === 'admin');
   const canManageSidebar = isGestor || isCoordenador || isPlanejador;
   const navigate = useNavigate();
@@ -144,49 +155,75 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
         </div>
 
         <div className="sidebar-nav">
-          {hasFullSidebarAccess ? <>
             {navItem('/', IC.dashboard, 'Início')}
 
           {/* Gestor / Engenheiro / Planejador (also shown for override-admins who have a non-admin original role) */}
           {!isNativeAdmin && <>
 
-            {/* ── SEÇÃO: Gestão de Processos ── */}
-            <div style={{ margin: '6px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
-            <div className="nav-section-label" style={{color:"rgba(255,255,255,0.75)"}}>
-              Gestão de Processos
-            </div>
-            {navItem('/lists/projects-tracking', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>, 'Acompanhamento Projetos')}
-            {navItem('/lists/iacs', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd"/></svg>, 'IACs 2026')}
-            {navItem('/documents', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd"/></svg>, 'Documentos')}
-            {navItem('/pms', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z"/></svg>, 'PMS')}
-            {navItem('/lists/schedule-project', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v3H3V4zm0 5h14v7a1 1 0 01-1 1H4a1 1 0 01-1-1V9zm3 2a1 1 0 000 2h2a1 1 0 100-2H6zm5 0a1 1 0 100 2h3a1 1 0 100-2h-3z"/></svg>, 'Project CTG')}
+            {showOrcamentoSection && <>
+              {/* ── SEÇÃO: Gestão de Orçamento ── */}
+              <div style={{ margin: '6px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
+              <div className="nav-section-label" style={{color:"rgba(255,255,255,0.75)"}}>
+                Gestão de Orçamento
+              </div>
+              {forecastAccess !== 'none' && navItem('/forecast', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M2 4a1 1 0 011-1h5a1 1 0 011 1v5H3V4zm9 0a1 1 0 011-1h5v3h-6V4zM2 11h7v5H3a1 1 0 01-1-1v-4zm9 0h6v4a1 1 0 01-1 1h-5v-5z"/></svg>, 'Forecast')}
+              {projectsAccess !== 'none' && navItem('/projects', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>, 'Projetos')}
+              {polosAccess !== 'none' && navItem('/polos', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm0 6a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2zm0 6a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2z"/></svg>, 'Polos')}
+              {reportAccess !== 'none' && navItem('/report', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd"/></svg>, 'Relatórios')}
+            </>}
 
-            {/* ── SEÇÃO: Gestão de Pessoas ── */}
-            <div style={{ margin: '6px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
-            <div className="nav-section-label" style={{color:"rgba(255,255,255,0.75)"}}>
-              Gestão de Pessoas
-            </div>
-            {navItem('/workload', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M3 17a1 1 0 011-1h1v-5a1 1 0 112 0v5h2V9a1 1 0 112 0v8h2v-3a1 1 0 112 0v3h1a1 1 0 110 2H4a1 1 0 01-1-1z"/></svg>, 'Controle de Carga')}
-            {!hideVacationsNav && navItem('/vacations', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd"/></svg>, 'Férias')}
-            {navItem('/metas', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9zM4 5a2 2 0 00-2 2v6a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2H4zm0 2h12v6H4V7z"/></svg>, 'Metas')}
+            {showProcessosSection && <>
+              {/* ── SEÇÃO: Gestão de Processos ── */}
+              <div style={{ margin: '6px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
+              <div className="nav-section-label" style={{color:"rgba(255,255,255,0.75)"}}>
+                Gestão de Processos
+              </div>
+              {projectsTrackingAccess !== 'none' && navItem('/lists/projects-tracking', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>, 'Acompanhamento Projetos')}
+              {iacsAccess !== 'none' && navItem('/lists/iacs', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd"/></svg>, 'IACs 2026')}
+              {scheduleProjectAccess !== 'none' && navItem('/lists/schedule-project', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v3H3V4zm0 5h14v7a1 1 0 01-1 1H4a1 1 0 01-1-1V9zm3 2a1 1 0 000 2h2a1 1 0 100-2H6zm5 0a1 1 0 100 2h3a1 1 0 100-2h-3z"/></svg>, 'Project CTG')}
+            </>}
 
-            {/* ── SEÇÃO: Gestão de Ativos ── */}
-            <div style={{ margin: '6px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
-            <div className="nav-section-label" style={{color:"rgba(255,255,255,0.75)"}}>
-              Gestão de Ativos
-            </div>
-            {navItem('/engineering/equipamentos',
-              <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
-                <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9zM4 5a2 2 0 00-2 2v6a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-2V4a1 1 0 00-1-1H7a1 1 0 00-1 1v1H4zm7 5a1 1 0 10-2 0v3a1 1 0 102 0v-3z"/>
-              </svg>,
-              'Mapa de Equipamentos'
-            )}
-            {navItem('/engineering/equipamentos-admin',
-              <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
-                <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd"/>
-              </svg>,
-              'Tabela de Equipamentos'
-            )}
+            {showPessoasSection && <>
+              {/* ── SEÇÃO: Gestão de Pessoas ── */}
+              <div style={{ margin: '6px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
+              <div className="nav-section-label" style={{color:"rgba(255,255,255,0.75)"}}>
+                Gestão de Pessoas
+              </div>
+              {workloadAccess !== 'none' && navItem('/workload', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M3 17a1 1 0 011-1h1v-5a1 1 0 112 0v5h2V9a1 1 0 112 0v8h2v-3a1 1 0 112 0v3h1a1 1 0 110 2H4a1 1 0 01-1-1z"/></svg>, 'Controle de Carga')}
+              {vacationsAccess !== 'none' && navItem('/vacations', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd"/></svg>, 'Férias')}
+              {metasAccess !== 'none' && navItem('/metas', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9zM4 5a2 2 0 00-2 2v6a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2H4zm0 2h12v6H4V7z"/></svg>, 'Metas')}
+            </>}
+
+            {showDocumentosSection && <>
+              {/* ── SEÇÃO: Gestão de Documentos ── */}
+              <div style={{ margin: '6px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
+              <div className="nav-section-label" style={{color:"rgba(255,255,255,0.75)"}}>
+                Gestão de Documentos
+              </div>
+              {documentsAccess !== 'none' && navItem('/documents', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd"/></svg>, 'Controle Documentos')}
+              {drawingsAccess !== 'none' && navItem('/drawings', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M4 3a1 1 0 00-1 1v12a1 1 0 001 1h12a1 1 0 001-1V4a1 1 0 00-1-1H4zm1 2h10v10H5V5zm2 2v2h2V7H7zm4 0v2h2V7h-2zM7 11v2h2v-2H7zm4 0v2h6v-2h-6z" clipRule="evenodd"/></svg>, 'Controle Desenhos')}
+              {pmsAccess !== 'none' && navItem('/pms', <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z"/></svg>, 'PMS')}
+            </>}
+
+            {showAtivosSection && <>
+              {/* ── SEÇÃO: Gestão de Ativos ── */}
+              <div style={{ margin: '6px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
+              <div className="nav-section-label" style={{color:"rgba(255,255,255,0.75)"}}>
+                Gestão de Ativos
+              </div>
+              {equipamentosAccess !== 'none' && navItem('/engineering/equipamentos',
+                <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+                  <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9zM4 5a2 2 0 00-2 2v6a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-2V4a1 1 0 00-1-1H7a1 1 0 00-1 1v1H4zm7 5a1 1 0 10-2 0v3a1 1 0 102 0v-3z"/>
+                </svg>,
+                'Mapa de Equipamentos'
+              )}
+              {equipamentosAdminAccess !== 'none' && navItem('/engineering/equipamentos-admin',
+                <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+                  <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd"/>
+                </svg>,
+                'Tabela de Equipamentos'
+              )}
+            </>}
 
           </>}
 
@@ -195,26 +232,6 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
             <div style={{ margin: '6px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
             <div className="nav-section-label">Administração</div>
             {navItem('/admin', IC.users, 'Gerenciar Usuários')}
-          </>}
-
-          </> : <>
-            {navItem('/', IC.dashboard, 'Início')}
-
-            <div style={{ margin: '6px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
-            <div className={'nav-section-label'} style={{ color: 'rgba(255,255,255,0.75)' }}>
-              Gestão de Processos
-            </div>
-            {navItem('/lists/projects-tracking', IC.projects, 'Acompanhamento Projetos')}
-            {navItem('/lists/iacs', IC.report, 'IACs 2026')}
-            {navItem('/documents', IC.report, 'Documentos')}
-            {navItem('/lists/schedule-project', IC.monthly, 'Project CTG')}
-
-            <div style={{ margin: '6px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
-            <div className={'nav-section-label'} style={{ color: 'rgba(255,255,255,0.75)' }}>
-              Gestão de Pessoas
-            </div>
-            {navItem('/workload', IC.report, 'Controle de Carga')}
-            {!hideVacationsNav && navItem('/vacations', IC.monthly, 'Férias')}
           </>}
 
           {/* Projects listed only on Projects page */}
@@ -276,7 +293,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
           </div>
 
           {/* Nav items — one per line */}
-          {hasFullSidebarAccess && (isPlanejador || isGestor || userEmail === 'julio.casagrande@ctgbr.com.br') && (
+          {(isPlanejador || isGestor || userEmail === 'julio.casagrande@ctgbr.com.br') && (
             <NavLink to="/settings" onClick={onClose}
               className={({ isActive }) => `nav-item sidebar-footer-item ${isActive ? 'active' : ''}`}>
               <Icon name="gear" style={{ width: 16, textAlign: 'center' }} />

@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { pool } from '../db/schema.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requirePageAccess } from '../middleware/auth.js';
 import multer from 'multer';
 
 const router = Router();
 router.use(requireAuth);
+router.use(requirePageAccess('metas'));
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -148,7 +149,7 @@ router.get('/members', async (req, res) => {
   res.json(rows);
 });
 
-router.post('/', async (req, res) => {
+router.post('/', requirePageAccess('metas', { write: true }), async (req, res) => {
   const { role, id: requesterId } = req.user;
   const {
     user_id, area, year, meta_number, description, kpi, detailed, weight,
@@ -202,7 +203,7 @@ router.post('/', async (req, res) => {
   res.status(201).json(rows[0]);
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePageAccess('metas', { write: true }), async (req, res) => {
   const { id: requesterId } = req.user;
   const { id } = req.params;
   const existing = await pool.query(`
@@ -268,7 +269,7 @@ router.put('/:id', async (req, res) => {
   res.json(rows[0]);
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePageAccess('metas', { write: true }), async (req, res) => {
   const { id } = req.params;
   const existing = await pool.query(`
     SELECT m.user_id, m.is_general, COALESCE(m.assigned_area, m.area) AS assigned_area,
@@ -286,7 +287,7 @@ router.delete('/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
-router.post('/:id/evidence', upload.array('evidence', 4), async (req, res) => {
+router.post('/:id/evidence', requirePageAccess('metas', { write: true }), upload.array('evidence', 4), async (req, res) => {
   const { id } = req.params;
   const existing = await pool.query(`
     SELECT m.user_id, m.is_general, COALESCE(m.assigned_area, m.area) AS assigned_area,
@@ -323,7 +324,7 @@ router.post('/:id/evidence', upload.array('evidence', 4), async (req, res) => {
   res.json({ ok: true, evidence_image: rows[0].evidence_image, evidence_images: rows[0].evidence_images });
 });
 
-router.post('/:id/evidence-slot', upload.single('evidence'), async (req, res) => {
+router.post('/:id/evidence-slot', requirePageAccess('metas', { write: true }), upload.single('evidence'), async (req, res) => {
   const { id } = req.params;
   const slot = Math.max(0, Math.min(3, parseInt(req.body?.slot, 10) || 0));
   const layout = normalizeEvidenceLayout(req.body?.layout);
@@ -368,7 +369,7 @@ router.post('/:id/evidence-slot', upload.single('evidence'), async (req, res) =>
   res.json({ ok: true, ...rows[0] });
 });
 
-router.delete('/:id/evidence-slot/:slot', async (req, res) => {
+router.delete('/:id/evidence-slot/:slot', requirePageAccess('metas', { write: true }), async (req, res) => {
   const { id, slot } = req.params;
   const slotIndex = Math.max(0, Math.min(3, parseInt(slot, 10) || 0));
   const layout = normalizeEvidenceLayout(req.query?.layout);
@@ -404,7 +405,7 @@ router.delete('/:id/evidence-slot/:slot', async (req, res) => {
   res.json({ ok: true, ...rows[0] });
 });
 
-router.put('/:id/evidence-slot/:slot/fit', async (req, res) => {
+router.put('/:id/evidence-slot/:slot/fit', requirePageAccess('metas', { write: true }), async (req, res) => {
   const { id, slot } = req.params;
   const slotIndex = Math.max(0, Math.min(3, parseInt(slot, 10) || 0));
   const layout = normalizeEvidenceLayout(req.body?.layout);

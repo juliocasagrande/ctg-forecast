@@ -1,7 +1,7 @@
 import Icon from './components/ui/Icon.jsx';
 import React, { useState, useEffect, useRef, useMemo, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate, NavLink } from 'react-router-dom';
-import { useAuth, useRole } from './context/AuthContext.jsx';
+import { useAuth, useRole, usePageAccess } from './context/AuthContext.jsx';
 import { useSettings } from './context/SettingsContext.jsx';
 import Sidebar from './components/layout/Sidebar.jsx';
 import { ToastProvider, useToast } from './components/ui/Toast.jsx';
@@ -14,6 +14,7 @@ import useModalHotkeys from './hooks/useModalHotkeys.js';
 
 // Route-level code splitting — these pages aren't needed for the initial load
 const HomePage                = lazy(() => import('./pages/HomePage.jsx'));
+const Dashboard                = lazy(() => import('./pages/Dashboard.jsx'));
 const ProjectsPage            = lazy(() => import('./pages/ProjectsPage.jsx'));
 const ProjectDetail           = lazy(() => import('./components/ProjectDetail.jsx'));
 const Profile                 = lazy(() => import('./components/Profile.jsx'));
@@ -27,6 +28,7 @@ const VacationsPage           = lazy(() => import('./pages/VacationsPage.jsx'));
 const MetasPage                = lazy(() => import('./pages/MetasPage.jsx'));
 const WorkloadPage            = lazy(() => import('./pages/WorkloadPage.jsx'));
 const DocumentsPage           = lazy(() => import('./pages/DocumentsPage.jsx'));
+const ControleDesenhosPage    = lazy(() => import('./pages/ControleDesenhosPage.jsx'));
 const PMSPage                  = lazy(() => import('./pages/PMSPage.jsx'));
 const IACsPage                 = lazy(() => import('./pages/IACsPage.jsx'));
 const ProjectsTrackingPage    = lazy(() => import('./pages/ProjectsTrackingPage.jsx'));
@@ -399,6 +401,12 @@ function RequireAuth({ children }) {
 function RequireRole({ roles, children }) {
   const { user } = useAuth();
   if (!roles.includes(user?.role)) return <Navigate to="/" replace />;
+  return children;
+}
+
+function RequirePageAccess({ pageKey, children }) {
+  const access = usePageAccess(pageKey);
+  if (access === 'none') return <Navigate to="/" replace />;
   return children;
 }
 
@@ -1312,18 +1320,20 @@ export default function App() {
 
             <Route path="/projects" element={
               <RequireAuth>
-                <ProjectsPage
-                  projects={projects}
-                  period={period}
-                  plantFilter={plantFilter}
-                  onEditProject={openEditProject}
-                  onProjectsChange={fetchProjects}
-                />
+                <RequirePageAccess pageKey="projects">
+                  <ProjectsPage
+                    projects={projects}
+                    period={period}
+                    plantFilter={plantFilter}
+                    onEditProject={openEditProject}
+                    onProjectsChange={fetchProjects}
+                  />
+                </RequirePageAccess>
               </RequireAuth>
             } />
 
             <Route path="/projects/:id" element={
-              <RequireAuth><ProjectDetail onEdit={openEditProject} /></RequireAuth>
+              <RequireAuth><RequirePageAccess pageKey="projects"><ProjectDetail onEdit={openEditProject} /></RequirePageAccess></RequireAuth>
             } />
 
             <Route path="/admin" element={
@@ -1334,21 +1344,23 @@ export default function App() {
 
             <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
             <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
-            <Route path="/polos" element={<RequireAuth><PolosPage period={period} plantFilter={plantFilter} /></RequireAuth>} />
-            <Route path="/report" element={<RequireAuth><ReportPage /></RequireAuth>} />
+            <Route path="/polos" element={<RequireAuth><RequirePageAccess pageKey="polos"><PolosPage period={period} plantFilter={plantFilter} /></RequirePageAccess></RequireAuth>} />
+            <Route path="/report" element={<RequireAuth><RequirePageAccess pageKey="report"><ReportPage /></RequirePageAccess></RequireAuth>} />
             <Route path="/tutorial" element={<RequireAuth><TutorialPage /></RequireAuth>} />
             <Route path="/feedback" element={<RequireAuth><FeedbackPage /></RequireAuth>} />
             <Route path="/feedback/inbox" element={<RequireAuth><FeedbackInbox /></RequireAuth>} />
-             <Route path="/vacations" element={<RequireAuth><VacationsPage areaFilter={areaFilter} year={vacYear} onYearChange={setVacYear} /></RequireAuth>} />
-             <Route path="/metas" element={<RequireAuth><MetasPage areaFilter={areaFilter} year={vacYear} onYearChange={setVacYear} /></RequireAuth>} />
-             <Route path="/workload" element={<RequireAuth><WorkloadPage /></RequireAuth>} />
-             <Route path="/documents" element={<RequireAuth><DocumentsPage /></RequireAuth>} />
-             <Route path="/pms" element={<RequireAuth><PMSPage /></RequireAuth>} />
-            <Route path="/lists/iacs" element={<RequireAuth><IACsPage /></RequireAuth>} />
-            <Route path="/lists/projects-tracking" element={<RequireAuth><ProjectsTrackingPage /></RequireAuth>} />
-            <Route path="/lists/schedule-project" element={<RequireAuth><ScheduleProjectPage /></RequireAuth>} />
-            <Route path="/engineering/equipamentos" element={<RequireAuth><EquipamentosPage /></RequireAuth>} />
-            <Route path="/engineering/equipamentos-admin" element={<RequireAuth><EquipamentosAdminPage /></RequireAuth>} />
+            <Route path="/forecast" element={<RequireAuth><RequirePageAccess pageKey="forecast"><Dashboard period={period} plantFilter={plantFilter} projectFilter={projectFilter} /></RequirePageAccess></RequireAuth>} />
+             <Route path="/vacations" element={<RequireAuth><RequirePageAccess pageKey="vacations"><VacationsPage areaFilter={areaFilter} year={vacYear} onYearChange={setVacYear} /></RequirePageAccess></RequireAuth>} />
+             <Route path="/metas" element={<RequireAuth><RequirePageAccess pageKey="metas"><MetasPage areaFilter={areaFilter} year={vacYear} onYearChange={setVacYear} /></RequirePageAccess></RequireAuth>} />
+             <Route path="/workload" element={<RequireAuth><RequirePageAccess pageKey="workload"><WorkloadPage /></RequirePageAccess></RequireAuth>} />
+             <Route path="/documents" element={<RequireAuth><RequirePageAccess pageKey="documents"><DocumentsPage /></RequirePageAccess></RequireAuth>} />
+             <Route path="/drawings" element={<RequireAuth><RequirePageAccess pageKey="drawings"><ControleDesenhosPage /></RequirePageAccess></RequireAuth>} />
+             <Route path="/pms" element={<RequireAuth><RequirePageAccess pageKey="pms"><PMSPage /></RequirePageAccess></RequireAuth>} />
+            <Route path="/lists/iacs" element={<RequireAuth><RequirePageAccess pageKey="iacs"><IACsPage /></RequirePageAccess></RequireAuth>} />
+            <Route path="/lists/projects-tracking" element={<RequireAuth><RequirePageAccess pageKey="projects_tracking"><ProjectsTrackingPage /></RequirePageAccess></RequireAuth>} />
+            <Route path="/lists/schedule-project" element={<RequireAuth><RequirePageAccess pageKey="schedule_project"><ScheduleProjectPage /></RequirePageAccess></RequireAuth>} />
+            <Route path="/engineering/equipamentos" element={<RequireAuth><RequirePageAccess pageKey="equipamentos"><EquipamentosPage /></RequirePageAccess></RequireAuth>} />
+            <Route path="/engineering/equipamentos-admin" element={<RequireAuth><RequirePageAccess pageKey="equipamentos_admin"><EquipamentosAdminPage /></RequirePageAccess></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           </Suspense>

@@ -98,6 +98,17 @@ await client.query(`
         CHECK (role IN ('admin','coordenador','engenheiro','planejador','gerente'));
     `);
 
+    /* ───────── USER PAGE ACCESS ───────── */
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_page_access (
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        page_key VARCHAR(50) NOT NULL,
+        access VARCHAR(10) NOT NULL DEFAULT 'editor' CHECK (access IN ('none','viewer','editor')),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (user_id, page_key)
+      );
+    `);
+
     /* ───────── PROJECTS ───────── */
     await client.query(`
       CREATE TABLE IF NOT EXISTS projects (

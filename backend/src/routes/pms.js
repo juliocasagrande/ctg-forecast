@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { pool } from '../db/schema.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requirePageAccess } from '../middleware/auth.js';
 import { loadWorkbookFromBuffer, parseLegacyWorkbook } from '../utils/pmsExcelFormat.js';
 
 const router = Router();
 router.use(requireAuth);
+router.use(requirePageAccess('pms'));
 
 function safeError(res, err) {
   console.error(`[PMS ERROR] ${err.message}`);
@@ -143,7 +144,7 @@ router.get('/alerts', async (req, res) => {
 });
 
 // ─── POST /  — criar documento ────────────────────────────────────────────────
-router.post('/', async (req, res) => {
+router.post('/', requirePageAccess('pms', { write: true }), async (req, res) => {
   const {
     type, code, category, plant, equipment_number, sub_item, area,
     title_pt, title_en, has_pt, has_en, responsible, date, status,
@@ -176,7 +177,7 @@ router.post('/', async (req, res) => {
 });
 
 // ─── POST /:id/revision — nova revisão (reinicia validade) ──────────────────
-router.post('/:id/revision', async (req, res) => {
+router.post('/:id/revision', requirePageAccess('pms', { write: true }), async (req, res) => {
   const origId = parseInt(req.params.id);
   const { date, responsible } = req.body;
   const userId = req.user.id;
@@ -220,7 +221,7 @@ router.post('/:id/revision', async (req, res) => {
 });
 
 // ─── PUT /:id  — editar documento ────────────────────────────────────────────
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePageAccess('pms', { write: true }), async (req, res) => {
   const id = parseInt(req.params.id);
   const {
     category, plant, equipment_number, sub_item, area, title_pt, title_en,
@@ -248,7 +249,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // ─── PATCH /:id/status — alterar só o status de fluxo ────────────────────────
-router.patch('/:id/status', async (req, res) => {
+router.patch('/:id/status', requirePageAccess('pms', { write: true }), async (req, res) => {
   const id = parseInt(req.params.id);
   const { status, document_link } = req.body;
   const userId = req.user.id;
@@ -298,7 +299,7 @@ router.post('/import/preview', upload.single('file'), async (req, res) => {
 });
 
 // POST /api/pms/import — grava (cria ou atualiza por código)
-router.post('/import', upload.single('file'), async (req, res) => {
+router.post('/import', requirePageAccess('pms', { write: true }), upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Arquivo não enviado' });
   const client = await pool.connect();
   const result = { created: 0, updated: 0, errors: 0 };

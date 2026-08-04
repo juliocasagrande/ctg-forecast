@@ -1785,21 +1785,21 @@ export default function HomePage({ year }) {
       status: option.value,
       count: iacRows.filter(i => i.status_current === option.value).length,
     }));
-    const IAC_NAMED_STATUSES = new Set(['91 - Hired 2025', '0 - Not started yet', '10 - Cancelado', '8 - Draft Contract', '9 - Contract signed']);
+    const IAC_NAMED_STATUSES = new Set(['0 - Not started yet', '10 - Cancelado', '8 - Draft Contract', '9 - Contract signed']);
     const buildPriorityGoalBucket = (rows, allRows, quantityField) => {
-      const hiring2025Rows = rows.filter(r => r.status_current === '91 - Hired 2025');
       const pendingRows = rows.filter(r => r.status_current === '0 - Not started yet');
       const cancelRows = rows.filter(r => r.status_current === '10 - Cancelado');
       const draftRows = rows.filter(r => r.status_current === '8 - Draft Contract');
       const signedRows = rows.filter(r => r.status_current === '9 - Contract signed');
       const hiringRows = rows.filter(r => !IAC_NAMED_STATUSES.has(r.status_current));
+      const sumQty = list => list.reduce((sum, r) => sum + (Number(r[quantityField]) || 0), 0);
       const total = allRows.reduce((sum, r) => sum + (Number(r[quantityField]) || 0), 0);
       return {
-        total, hiring2025: hiring2025Rows.length, pending: pendingRows.length, cancel: cancelRows.length,
-        hiring: hiringRows.length, draft: draftRows.length, signed: signedRows.length,
-        goalValue: draftRows.length + signedRows.length,
+        total, pending: sumQty(pendingRows), cancel: sumQty(cancelRows),
+        hiring: sumQty(hiringRows), draft: sumQty(draftRows), signed: sumQty(signedRows),
+        goalValue: sumQty(draftRows) + sumQty(signedRows),
         rowsByColumn: {
-          total: rows, hiring2025: hiring2025Rows, pending: pendingRows, cancel: cancelRows,
+          total: rows, pending: pendingRows, cancel: cancelRows,
           hiring: hiringRows, draft: draftRows, signed: signedRows,
         },
       };

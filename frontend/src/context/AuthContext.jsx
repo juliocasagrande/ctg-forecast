@@ -115,4 +115,14 @@ export function useRole() {
   };
 }
 
+// Permissão de página configurada para o usuário logado (ver AdminPanel).
+// Sem override, o padrão é 'editor' (mesmo comportamento de antes desta feature).
+// Isso vale também para admins: o backend sempre libera admin nas rotas (bypass
+// de segurança), mas a visibilidade no menu/rotas respeita a configuração — assim
+// o próprio admin pode enxugar a sidebar sem perder acesso real via URL/API.
+export function usePageAccess(pageKey) {
+  const { user } = useAuth();
+  return user?._pageAccess?.[pageKey] || 'editor';
+}
+
 export default AuthContext;

@@ -261,6 +261,7 @@ router.get('/me', requireAuth, async (req, res) => {
       _accessOverride: req.user._accessOverride || null,
       _managerAccessOverride: req.user._managerAccessOverride || false,
       _allAreasAccess: req.user._allAreasAccess || false,
+      _pageAccess: req.user._pageAccess || {},
       must_change_password: dbUser.must_change_password || false,
       azure_upn: dbUser.azure_upn || null,
     });

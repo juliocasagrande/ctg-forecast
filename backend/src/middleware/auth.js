@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import { PAGE_KEYS } from '../config/pages.js';
 
 const IS_PROD = process.env.NODE_ENV === 'production';
 const JWT_SECRET = process.env.JWT_SECRET || (IS_PROD ? null : 'ctg-forecast-dev-only-secret');
@@ -110,6 +111,17 @@ export async function requireAuth(req, res, next) {
     }
     const allAreasAccess = emailOverride === 'gerente';
 
+    // 3. Permissões de página configuradas individualmente (ver user_page_access).
+    //    Página sem linha aqui é tratada como 'editor' (comportamento padrão).
+    const pageAccessR = await pool.query(
+      'SELECT page_key, access FROM user_page_access WHERE user_id = $1',
+      [decoded.id]
+    );
+    const pageAccess = {};
+    for (const row of pageAccessR.rows) {
+      if (PAGE_KEYS.includes(row.page_key)) pageAccess[row.page_key] = row.access;
+    }
+
     req.user = {
       ...decoded,
       role: effectiveRole,
@@ -119,6 +131,7 @@ export async function requireAuth(req, res, next) {
       _managerAccessOverride: allAreasAccess,
       _allAreasAccess: allAreasAccess,
       _delegatorIds: delegatorIds, // IDs dos delegadores — permite acesso aos projetos deles
+      _pageAccess: pageAccess,
     };
   } catch (dbErr) {
     console.error('[AUTH] Falha ao revalidar usuário no banco:', dbErr.message);
@@ -133,6 +146,25 @@ export function requireRole(...roles) {
   return (req, res, next) => {
     if (!roles.includes(req.user?.role)) {
       return res.status(403).json({ error: 'Acesso não autorizado' });
+    }
+    next();
+  };
+}
+
+/**
+ * Restringe uma rota conforme a permissão de página configurada para o usuário
+ * (ver user_page_access / AdminPanel). Admin sempre tem acesso total.
+ * Sem override configurado, o acesso padrão é 'editor' (comportamento atual).
+ */
+export function requirePageAccess(pageKey, { write = false } = {}) {
+  return (req, res, next) => {
+    if (req.user?.role === 'admin') return next();
+    const access = req.user?._pageAccess?.[pageKey] || 'editor';
+    if (access === 'none') {
+      return res.status(403).json({ error: 'Sem acesso a esta página' });
+    }
+    if (write && access === 'viewer') {
+      return res.status(403).json({ error: 'Acesso somente leitura a esta página' });
     }
     next();
   };

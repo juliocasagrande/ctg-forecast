@@ -3,6 +3,76 @@ import api from '../../utils/api.js';
 import { useToast } from '../ui/Toast.jsx';
 import Modal from '../ui/Modal.jsx';
 import PasswordInput, { getPasswordStrength } from '../ui/PasswordInput.jsx';
+import { PAGE_REGISTRY } from '../../config/pages.js';
+
+const PAGE_ACCESS_OPTS = [
+  { value: 'none',   icon: '—', label: '— Sem acesso',  title: 'Sem acesso' },
+  { value: 'viewer', icon: '👁', label: '👁 Ver',        title: 'Somente visualização' },
+  { value: 'editor', icon: '✏', label: '✏ Editar',      title: 'Visualizar e editar' },
+];
+
+// Agrupa as páginas (já ordenadas por seção em PAGE_REGISTRY) em blocos contíguos
+// para exibir um cabeçalho de seção acima das colunas na grade de permissões.
+const PAGE_SECTIONS = PAGE_REGISTRY.reduce((groups, p) => {
+  const last = groups[groups.length - 1];
+  if (last && last.section === p.section) last.count += 1;
+  else groups.push({ section: p.section, count: 1 });
+  return groups;
+}, []);
+
+// Uma cor pastel por seção (mesma ordem das seções do Sidebar), usada para tingir
+// o cabeçalho de grupo e as colunas correspondentes na grade de permissões.
+const SECTION_COLORS = {
+  'Gestão de Orçamento':  { r: 14,  g: 165, b: 233 }, // sky
+  'Gestão de Processos':  { r: 139, g: 92,  b: 246 }, // violet
+  'Gestão de Pessoas':    { r: 16,  g: 185, b: 129 }, // emerald
+  'Gestão de Documentos': { r: 245, g: 158, b: 11  }, // amber
+  'Gestão de Ativos':     { r: 236, g: 72,  b: 153 }, // pink
+};
+
+function sectionRgba(section, alpha) {
+  const c = SECTION_COLORS[section];
+  return c ? `rgba(${c.r},${c.g},${c.b},${alpha})` : undefined;
+}
+
+function PageAccessCell({ current, onChange, disabled }) {
+  return (
+    <div style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1.5px solid var(--border-strong)', opacity: disabled ? 0.5 : 1 }}>
+      {PAGE_ACCESS_OPTS.map(opt => {
+        const active = current === opt.value;
+        const colors = {
+          none:   { activeBg: '#E2E8F0', activeColor: '#475569' },
+          viewer: { activeBg: '#DBEAFE', activeColor: '#1D4ED8' },
+          editor: { activeBg: '#DCFCE7', activeColor: '#15803D' },
+        }[opt.value];
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            title={opt.title}
+            disabled={disabled}
+            onClick={() => onChange(opt.value)}
+            style={{
+              padding: '5px 8px',
+              border: 'none',
+              borderRight: opt.value !== 'editor' ? '1px solid var(--border)' : 'none',
+              cursor: disabled ? 'default' : 'pointer',
+              background: active ? colors.activeBg : 'var(--bg-card)',
+              color: active ? colors.activeColor : 'var(--text-muted)',
+              fontWeight: active ? 700 : 400,
+              fontSize: '0.8rem',
+              lineHeight: 1,
+              whiteSpace: 'nowrap',
+              transition: 'all 0.12s',
+            }}
+          >
+            {opt.icon}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 const ROLE_LABELS = {
   admin:       'Administrador',
@@ -75,6 +145,10 @@ export default function AdminPanel() {
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
   const [filterRole, setFilterRole] = useState('');
+  const [pageAccessMatrix, setPageAccessMatrix] = useState([]);
+  const [pageAccessLoading, setPageAccessLoading] = useState(false);
+  const [pageAccessSavingCell, setPageAccessSavingCell] = useState(null);
+  const [pageAccessLoaded, setPageAccessLoaded] = useState(false);
   const { toast, confirm } = useToast();
 
   const fetchUsers = async () => {
@@ -90,6 +164,10 @@ export default function AdminPanel() {
   };
 
   useEffect(() => { fetchUsers(); }, []);
+
+  useEffect(() => {
+    if (activeTab === 'pageAccess' && !pageAccessLoaded) loadPageAccessMatrix();
+  }, [activeTab, pageAccessLoaded]);
 
   const handleApprove = async (u) => {
     try {
@@ -118,6 +196,33 @@ export default function AdminPanel() {
     setEditingUser(u);
     setForm({ name: u.name, email: u.email, password: '', role: u.role, area: u.area || '' });
     setModalOpen(true);
+  };
+
+  const loadPageAccessMatrix = async () => {
+    setPageAccessLoading(true);
+    try {
+      const r = await api.get('/users/page-access');
+      setPageAccessMatrix(r.data);
+      setPageAccessLoaded(true);
+    } catch {
+      toast('Erro ao carregar permissões', 'error');
+    } finally { setPageAccessLoading(false); }
+  };
+
+  const handlePageAccessCellChange = async (userId, pageKey, value) => {
+    const cellId = `${userId}:${pageKey}`;
+    setPageAccessMatrix(prev => prev.map(u =>
+      u.id === userId ? { ...u, pages: { ...u.pages, [pageKey]: value } } : u
+    ));
+    setPageAccessSavingCell(cellId);
+    try {
+      await api.put(`/users/${userId}/page-access`, { pages: [{ page_key: pageKey, access: value }] });
+    } catch {
+      toast('Erro ao salvar permissão', 'error');
+      loadPageAccessMatrix();
+    } finally {
+      setPageAccessSavingCell(prev => prev === cellId ? null : prev);
+    }
   };
 
   const handleSave = async () => {
@@ -214,6 +319,9 @@ export default function AdminPanel() {
             </span>
           )}
         </button>
+        <button className={`tab-btn ${activeTab === 'pageAccess' ? 'active' : ''}`} onClick={() => setActiveTab('pageAccess')}>
+          Acesso por Página
+        </button>
       </div>
 
       {/* Pending tab */}
@@ -307,6 +415,88 @@ export default function AdminPanel() {
         </div>
       )}
 
+      {/* Page access tab */}
+      {activeTab === 'pageAccess' && (
+        <div>
+          {pageAccessLoading ? (
+            <div className="loading-spinner"><div className="spinner" /></div>
+          ) : (
+            <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th style={{
+                      position: 'sticky', left: 0, zIndex: 2,
+                      background: 'var(--ctg-navy)', borderBottom: '1px solid rgba(255,255,255,0.15)',
+                    }} />
+                    {PAGE_SECTIONS.map(g => (
+                      <th key={g.section} colSpan={g.count} style={{
+                        background: sectionRgba(g.section, 0.5), color: 'var(--ctg-navy)',
+                        padding: '5px 4px', textAlign: 'center', fontWeight: 700, fontSize: '0.62rem',
+                        textTransform: 'uppercase', letterSpacing: '0.05em',
+                        borderBottom: '1px solid var(--border)',
+                        borderLeft: '1px solid var(--bg-card)',
+                      }}>{g.section}</th>
+                    ))}
+                  </tr>
+                  <tr>
+                    <th style={{
+                      position: 'sticky', left: 0, zIndex: 2,
+                      background: 'var(--ctg-navy)', color: '#fff',
+                      padding: '9px 14px', textAlign: 'left', fontWeight: 600, fontSize: '0.75rem',
+                      minWidth: 200,
+                    }}>Usuário</th>
+                    {PAGE_REGISTRY.map(p => (
+                      <th key={p.key} style={{
+                        background: sectionRgba(p.section, 0.25), color: 'var(--ctg-navy)',
+                        padding: '8px 4px', textAlign: 'left', fontWeight: 600, fontSize: '0.72rem',
+                        whiteSpace: 'nowrap', width: 36,
+                        writingMode: 'vertical-rl', transform: 'rotate(180deg)',
+                      }}>{p.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageAccessMatrix.map((u, i) => (
+                    <tr key={u.id} style={{ background: i % 2 ? 'var(--bg-app)' : 'var(--bg-card)', opacity: u.active ? 1 : 0.5 }}>
+                      <td style={{
+                        position: 'sticky', left: 0, zIndex: 1,
+                        background: i % 2 ? 'var(--bg-app)' : 'var(--bg-card)',
+                        padding: '8px 14px', fontSize: '0.82rem',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <Avatar initials={u.name.split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() || '').join('')} role={u.role} />
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</div>
+                            <RoleBadge role={u.role} />
+                          </div>
+                        </div>
+                      </td>
+                      {PAGE_REGISTRY.map(p => (
+                        <td key={p.key} style={{ padding: '8px 10px', textAlign: 'center', background: sectionRgba(p.section, 0.08) }}>
+                          <PageAccessCell
+                            current={u.pages[p.key]}
+                            onChange={val => handlePageAccessCellChange(u.id, p.key, val)}
+                            disabled={pageAccessSavingCell === `${u.id}:${p.key}`}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 16, marginTop: 12, flexWrap: 'wrap' }}>
+            {PAGE_ACCESS_OPTS.map(opt => (
+              <span key={opt.value} style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                <strong>{opt.label}</strong> — {opt.title}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Create/Edit Modal */}
       <Modal open={modalOpen} onClose={() => setModalOpen(false)}
         onSave={saving || (!editingUser && !getPasswordStrength(form.password).allPassed) ? undefined : handleSave}
@@ -346,7 +536,7 @@ export default function AdminPanel() {
           </select>
         </div>
         {formNeedsArea && (
-          <div className="form-group" style={{ marginBottom: 0 }}>
+          <div className="form-group">
             <label className="form-label">Área de atuação *</label>
             <select className="form-select" value={form.area}
               onChange={e => setForm(f => ({ ...f, area: e.target.value }))}>
@@ -355,6 +545,7 @@ export default function AdminPanel() {
             </select>
           </div>
         )}
+
       </Modal>
 
       {/* Reset Password Modal */}

@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { pool } from '../db/schema.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requirePageAccess } from '../middleware/auth.js';
 
 const router = Router();
 router.use(requireAuth);
+router.use(requirePageAccess('documents'));
 
 function safeError(res, err) {
   console.error(`[DOCS ERROR] ${err.message}`);
@@ -142,7 +143,7 @@ router.get('/next-sequence', async (req, res) => {
 });
 
 // ─── POST /  — criar documento ────────────────────────────────────────────────
-router.post('/', async (req, res) => {
+router.post('/', requirePageAccess('documents', { write: true }), async (req, res) => {
   const { type, area, plant, responsible, date, subject, status, document_link, notes, author_ids } = req.body;
   const sequence_number = parseNum(req.body.sequence_number);
   const year            = parseNum(req.body.year);
@@ -193,7 +194,7 @@ router.post('/', async (req, res) => {
 });
 
 // ─── POST /:id/revision — nova revisão ────────────────────────────────────────
-router.post('/:id/revision', async (req, res) => {
+router.post('/:id/revision', requirePageAccess('documents', { write: true }), async (req, res) => {
   const origId = parseInt(req.params.id);
   const { date, responsible } = req.body;
   const userId = req.user.id;
@@ -256,7 +257,7 @@ router.post('/:id/revision', async (req, res) => {
 });
 
 // ─── PUT /:id  — editar documento ────────────────────────────────────────────
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePageAccess('documents', { write: true }), async (req, res) => {
   const id = parseInt(req.params.id);
   const { plant, responsible, date, subject, status, document_link, notes, author_ids } = req.body;
   const userId = req.user.id;
@@ -299,7 +300,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // ─── PATCH /:id/status — alterar só o status ─────────────────────────────────
-router.patch('/:id/status', async (req, res) => {
+router.patch('/:id/status', requirePageAccess('documents', { write: true }), async (req, res) => {
   const id = parseInt(req.params.id);
   const { status, document_link } = req.body;
   const userId = req.user.id;
@@ -322,7 +323,7 @@ router.patch('/:id/status', async (req, res) => {
 });
 
 // ─── POST /import-bulk  — importação em massa via .docx ────────────────────
-router.post('/import-bulk', async (req, res) => {
+router.post('/import-bulk', requirePageAccess('documents', { write: true }), async (req, res) => {
   const { documents } = req.body;
   if (!Array.isArray(documents) || documents.length === 0)
     return res.status(400).json({ error: 'Nenhum documento enviado' });

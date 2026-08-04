@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { pool } from '../db/schema.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requirePageAccess } from '../middleware/auth.js';
 import multer from 'multer';
 import ExcelJS from 'exceljs';
 
 const router = Router();
 router.use(requireAuth);
+router.use(requirePageAccess('equipamentos'));
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },
@@ -121,7 +122,7 @@ router.get('/acesso', async (req, res) => {
 });
 
 /* ── POST /tabelas-pre — criar tabela pré-configurada ────────────────────── */
-router.post('/tabelas-pre', async (req, res) => {
+router.post('/tabelas-pre', requirePageAccess('equipamentos_admin', { write: true }), async (req, res) => {
   if (!canManage(req.user)) return res.status(403).json({ error: 'Sem permissão' });
   const tipo_tabela = String(req.body.tipo_tabela || '').trim();
   if (!tipo_tabela) return res.status(400).json({ error: 'Nome da tabela é obrigatório' });
@@ -136,7 +137,7 @@ router.post('/tabelas-pre', async (req, res) => {
 });
 
 /* ── DELETE /tabelas-pre — remover tabela pré-configurada ────────────────── */
-router.delete('/tabelas-pre', async (req, res) => {
+router.delete('/tabelas-pre', requirePageAccess('equipamentos_admin', { write: true }), async (req, res) => {
   if (!canManage(req.user)) return res.status(403).json({ error: 'Sem permissão' });
   const tipo_tabela = String(req.body.tipo_tabela || '').trim();
   if (!tipo_tabela) return res.status(400).json({ error: 'tipo_tabela é obrigatório' });
@@ -153,7 +154,7 @@ router.delete('/tabelas-pre', async (req, res) => {
 });
 
 /* ── PUT /acesso ─────────────────────────────────────────────────────────── */
-router.put('/acesso', async (req, res) => {
+router.put('/acesso', requirePageAccess('equipamentos_admin', { write: true }), async (req, res) => {
   if (!canManage(req.user)) return res.status(403).json({ error: 'Sem permissão' });
   const assignments = req.body;
   if (!Array.isArray(assignments)) return res.status(400).json({ error: 'Formato inválido' });
@@ -185,7 +186,7 @@ router.put('/acesso', async (req, res) => {
 
 /* ── DELETE /tabela — cascade delete all records of a tipo_tabela ────────── */
 // Only bypass users (admin, planejador, julio) may use this.
-router.delete('/tabela', async (req, res) => {
+router.delete('/tabela', requirePageAccess('equipamentos_admin', { write: true }), async (req, res) => {
   if (!bypassesFilter(req.user)) return res.status(403).json({ error: 'Sem permissão' });
   const tipo_tabela = String(req.body.tipo_tabela || '').trim();
   if (!tipo_tabela) return res.status(400).json({ error: 'tipo_tabela é obrigatório' });
@@ -209,7 +210,7 @@ router.delete('/tabela', async (req, res) => {
 });
 
 /* ── POST create ─────────────────────────────────────────────────────────── */
-router.post('/', async (req, res) => {
+router.post('/', requirePageAccess('equipamentos', { write: true }), async (req, res) => {
   if (!canManage(req.user)) return res.status(403).json({ error: 'Sem permissão' });
   const { tipo_tabela, equipamento, ug, tag, fabricante, modelo, num_serie,
     tem_sobressalente, quantos, ano, url_imagem } = req.body;
@@ -231,7 +232,7 @@ router.post('/', async (req, res) => {
 });
 
 /* ── PUT update ──────────────────────────────────────────────────────────── */
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePageAccess('equipamentos', { write: true }), async (req, res) => {
   if (!canManage(req.user)) return res.status(403).json({ error: 'Sem permissão' });
   const { tipo_tabela, equipamento, ug, tag, fabricante, modelo, num_serie,
     tem_sobressalente, quantos, ano, url_imagem } = req.body;
@@ -261,7 +262,7 @@ router.put('/:id', async (req, res) => {
 });
 
 /* ── DELETE single record ────────────────────────────────────────────────── */
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePageAccess('equipamentos', { write: true }), async (req, res) => {
   if (!canManage(req.user)) return res.status(403).json({ error: 'Sem permissão' });
   try {
     const existing = await pool.query(
@@ -319,7 +320,7 @@ router.get('/my-tabelas', async (req, res) => {
 });
 
 /* ── POST import Excel ───────────────────────────────────────────────────── */
-router.post('/import', upload.single('file'), async (req, res) => {
+router.post('/import', requirePageAccess('equipamentos', { write: true }), upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
 
   const tipoTabela = String(req.body.tipo_tabela || '').trim();

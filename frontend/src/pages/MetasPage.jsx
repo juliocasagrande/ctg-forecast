@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useAuth, usePageAccess } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
 import { useToast } from '../components/ui/Toast.jsx';
 import AppSelect from '../components/ui/AppSelect.jsx';
@@ -912,9 +912,10 @@ function MetaCell({ meta, member, canEdit, deleting, uploading, onEdit, onDelete
 export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearProp }) {
   const { user } = useAuth();
   const { alert: showAlert, confirm } = useToast();
+  const pageReadOnly = usePageAccess('metas') === 'viewer';
   const role = user?.role;
   const viewRole = user?._managerAccessOverride ? role : (user?._originalRole || role);
-  const canEditOthers = ['admin', 'gestor', 'coordenador', 'gerente'].includes(viewRole);
+  const canEditOthers = !pageReadOnly && ['admin', 'gestor', 'coordenador', 'gerente'].includes(viewRole);
   const canViewAllMetas = ['admin', 'gestor', 'planejador', 'gerente'].includes(viewRole);
   const year = yearProp ?? new Date().getFullYear();
   const area = ['engenheiro', 'coordenador'].includes(viewRole)
@@ -1223,7 +1224,7 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
   function renderGeneralGoalsTable() {
     const targetArea = role === 'coordenador' ? (user?.area || 'eletrica') : area;
     const rows = generalMetas.filter(m => canViewAllMetas || (m.assigned_area || m.area) === targetArea);
-    const canManageGeneral = role === 'coordenador' || ['admin', 'gestor', 'planejador'].includes(role);
+    const canManageGeneral = !pageReadOnly && (role === 'coordenador' || ['admin', 'gestor', 'planejador'].includes(role));
     if (!canManageGeneral && rows.length === 0) return null;
     return (
       <CollapsibleSection
@@ -1299,7 +1300,7 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
                 const evidences = mm.filter(m => visibleEvidenceImages(m).length > 0).length;
                 const canEdit = includeRole
                   ? canEditOthers && !(role === 'coordenador' && ['gerente', 'gestor'].includes(member.role))
-                  : canEditOthers || member.id === user?.id;
+                  : !pageReadOnly && (canEditOthers || member.id === user?.id);
                 const roleLabel = { gerente: 'Gerente', gestor: 'Gestor', coordenador: 'Coord.', planejador: 'Planejador' }[member.role] || member.role;
 
                 return (
@@ -1350,7 +1351,7 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
 
   function renderCollaboratorTable(member, memberMetas, options = {}) {
     const { open = false, sectionKey = `member-${member.id}`, title = member.name, sub, tone = TABLE_TONES.subordinate } = options;
-    const canEdit = canEditOthers || member.id === user?.id;
+    const canEdit = !pageReadOnly && (canEditOthers || member.id === user?.id);
     const personalMetas = (metasByUser[member.id] || []).sort((a, b) => a.meta_number - b.meta_number);
     const sortedMetas = [...memberMetas].sort((a, b) => {
       if (!!a.is_general !== !!b.is_general) return a.is_general ? -1 : 1;

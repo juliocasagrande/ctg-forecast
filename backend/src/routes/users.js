@@ -4,6 +4,7 @@ import { pool } from '../db/schema.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { validatePassword } from '../middleware/validation.js';
 import { logAuthEvent, getClientIP } from '../middleware/audit.js';
+import { PAGE_REGISTRY, PAGE_KEYS } from '../config/pages.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -206,6 +207,90 @@ router.post('/:id/reset-password', requireRole('admin'), async (req, res) => {
       success: true,
       detail: `Reset por admin ${req.user.email}`,
     });
+
+    res.json({ success: true });
+  } catch (err) { safeError(res, err); }
+});
+
+// GET /api/users/page-access — admin only, retorna a matriz completa (todos os usuários x todas as páginas)
+router.get('/page-access', requireRole('admin'), async (req, res) => {
+  try {
+    const [usersR, accessR] = await Promise.all([
+      pool.query(`SELECT id, name, email, role, active FROM users ORDER BY role, name`),
+      pool.query(`SELECT user_id, page_key, access FROM user_page_access`),
+    ]);
+
+    const overridesByUser = {};
+    for (const row of accessR.rows) {
+      (overridesByUser[row.user_id] ??= {})[row.page_key] = row.access;
+    }
+
+    const result = usersR.rows.map(u => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      active: u.active,
+      pages: Object.fromEntries(
+        PAGE_REGISTRY.map(p => [p.key, overridesByUser[u.id]?.[p.key] || 'editor'])
+      ),
+    }));
+
+    res.json(result);
+  } catch (err) { safeError(res, err); }
+});
+
+// GET /api/users/:id/page-access — admin only, retorna o catálogo mesclado com os overrides do usuário
+router.get('/:id/page-access', requireRole('admin'), async (req, res) => {
+  try {
+    const r = await pool.query(
+      'SELECT page_key, access FROM user_page_access WHERE user_id=$1',
+      [req.params.id]
+    );
+    const overrides = Object.fromEntries(r.rows.map(row => [row.page_key, row.access]));
+    const pages = PAGE_REGISTRY.map(p => ({
+      page_key: p.key,
+      label: p.label,
+      access: overrides[p.key] || 'editor',
+    }));
+    res.json(pages);
+  } catch (err) { safeError(res, err); }
+});
+
+// PUT /api/users/:id/page-access — admin only, upsert das permissões de página do usuário
+router.put('/:id/page-access', requireRole('admin'), async (req, res) => {
+  try {
+    const targetId = parseInt(req.params.id);
+    const entries = Array.isArray(req.body?.pages) ? req.body.pages : [];
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const { page_key, access } of entries) {
+        if (!PAGE_KEYS.includes(page_key)) continue;
+        if (!['none', 'viewer', 'editor'].includes(access)) continue;
+        if (access === 'editor') {
+          // 'editor' é o default — remove o override para manter a tabela enxuta
+          await client.query(
+            'DELETE FROM user_page_access WHERE user_id=$1 AND page_key=$2',
+            [targetId, page_key]
+          );
+        } else {
+          await client.query(
+            `INSERT INTO user_page_access (user_id, page_key, access, updated_at)
+             VALUES ($1, $2, $3, NOW())
+             ON CONFLICT (user_id, page_key) DO UPDATE SET access=EXCLUDED.access, updated_at=NOW()`,
+            [targetId, page_key, access]
+          );
+        }
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
 
     res.json({ success: true });
   } catch (err) { safeError(res, err); }

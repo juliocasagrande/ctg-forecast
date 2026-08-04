@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { pool } from '../db/schema.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requirePageAccess } from '../middleware/auth.js';
 
 const router = Router();
 router.use(requireAuth);
+router.use(requirePageAccess('schedule_project'));
 
 function safeError(res, err) {
   console.error(`[SCHEDULE ERROR] ${err.message}`);
@@ -229,7 +230,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', requirePageAccess('schedule_project', { write: true }), async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -244,7 +245,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.put('/:clientUid', async (req, res) => {
+router.put('/:clientUid', requirePageAccess('schedule_project', { write: true }), async (req, res) => {
   if (String(req.params.clientUid) !== String(req.body?.id || req.body?.client_uid || '')) {
     return res.status(400).json({ error: 'Identificador do cronograma não confere' });
   }
@@ -283,7 +284,7 @@ router.put('/:clientUid', async (req, res) => {
   }
 });
 
-router.delete('/:clientUid', async (req, res) => {
+router.delete('/:clientUid', requirePageAccess('schedule_project', { write: true }), async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -328,7 +329,7 @@ router.get('/:clientUid/shares', async (req, res) => {
   }
 });
 
-router.post('/:clientUid/shares', async (req, res) => {
+router.post('/:clientUid/shares', requirePageAccess('schedule_project', { write: true }), async (req, res) => {
   try {
     const { userId, role } = req.body;
     if (!userId || !isValidShareRole(role)) {
@@ -363,7 +364,7 @@ router.post('/:clientUid/shares', async (req, res) => {
   }
 });
 
-router.delete('/:clientUid/shares/:userId', async (req, res) => {
+router.delete('/:clientUid/shares/:userId', requirePageAccess('schedule_project', { write: true }), async (req, res) => {
   try {
     const { rows: projectRows } = await pool.query(
       'SELECT id FROM schedule_projects WHERE user_id=$1 AND client_uid=$2',

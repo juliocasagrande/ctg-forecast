@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useAuth, usePageAccess } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
 import AppSelect from '../components/ui/AppSelect.jsx';
 
@@ -352,8 +352,9 @@ function Timeline({ groups, range, today, expanded, onExpand, onEdit, canManage,
 
 export default function WorkloadPage() {
   const { user } = useAuth();
+  const pageReadOnly = usePageAccess('workload') === 'viewer';
   const viewRole = user?._managerAccessOverride ? user.role : (user?._originalRole || user?.role);
-  const canManageOthers = MGMT_ROLES.includes(viewRole) || viewRole === 'coordenador';
+  const canManageOthers = !pageReadOnly && (MGMT_ROLES.includes(viewRole) || viewRole === 'coordenador');
   const [demands, setDemands] = useState([]);
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -376,7 +377,7 @@ export default function WorkloadPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const canManage = member => member && (MGMT_ROLES.includes(viewRole) || viewRole === 'coordenador'
+  const canManage = member => !pageReadOnly && member && (MGMT_ROLES.includes(viewRole) || viewRole === 'coordenador'
     ? (viewRole !== 'coordenador' || member.id === user?.id || (member.role === 'engenheiro' && member.area === (user?.area || 'eletrica')))
     : member.id === user?.id);
 
