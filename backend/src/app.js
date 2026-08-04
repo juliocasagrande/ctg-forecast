@@ -28,6 +28,7 @@ import sapMappingRouter  from './routes/sap-mapping.js';
 import reportRouter      from './routes/report.js';
 import feedbackRouter    from './routes/feedback.js';
 import documentsRouter   from './routes/documents.js';
+import drawingsRouter    from './routes/drawings.js';
 import delegationsRouter from './routes/delegations.js';
 import vacationsRouter   from './routes/vacations.js';
 import metasRouter       from './routes/metas.js';
@@ -99,6 +100,7 @@ export function createApp({ disableRateLimit = false } = {}) {
   app.use('/api/report',   reportRouter);
   app.use('/api/feedback', feedbackRouter);
   app.use('/api/documents',   documentsRouter);
+  app.use('/api/drawings',    drawingsRouter);
   app.use('/api/delegations', delegationsRouter);
    app.use('/api/vacations',   vacationsRouter);
    app.use('/api/metas',      metasRouter);

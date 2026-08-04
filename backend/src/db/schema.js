@@ -414,6 +414,43 @@ await client.query(`
       END $$;
     `);
 
+    /* ───────── DRAWINGS (Controle de Numeração de Desenhos) ───────── */
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS drawings (
+        id              SERIAL PRIMARY KEY,
+        code            VARCHAR(60) UNIQUE,
+        type            VARCHAR(20) NOT NULL,
+        area            VARCHAR(30) NOT NULL,
+        sequence_number INTEGER NOT NULL,
+        year            INTEGER NOT NULL,
+        revision        INTEGER DEFAULT NULL,
+        plant           TEXT[] DEFAULT NULL,
+        responsible     VARCHAR(120) NOT NULL,
+        date            DATE NOT NULL,
+        subject         TEXT NOT NULL,
+        status          VARCHAR(30) NOT NULL DEFAULT 'Em elaboração',
+        document_link   TEXT DEFAULT NULL,
+        notes           TEXT DEFAULT NULL,
+        base_code       VARCHAR(50) DEFAULT NULL,
+        created_by      INTEGER REFERENCES users(id),
+        updated_by      INTEGER REFERENCES users(id),
+        created_at      TIMESTAMPTZ DEFAULT NOW(),
+        updated_at      TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    /* ───────── DRAWING AUTHORS (multi-author support) ───────── */
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS drawing_authors (
+        id          SERIAL PRIMARY KEY,
+        drawing_id  INTEGER REFERENCES drawings(id) ON DELETE CASCADE,
+        user_id     INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        added_by    INTEGER REFERENCES users(id),
+        added_at    TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(drawing_id, user_id)
+      );
+    `);
+
     /* ───────── PMS DOCUMENTS (POL/IM/GM/MM — controle de documentos técnicos) ───────── */
     await client.query(`
       CREATE TABLE IF NOT EXISTS pms_documents (
@@ -910,6 +947,7 @@ await client.query(`
       CREATE INDEX IF NOT EXISTS idx_audit_log_user_created          ON audit_log(user_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_alert_dismissals_user           ON alert_dismissals(user_id, dismissed_at DESC);
       CREATE INDEX IF NOT EXISTS idx_documents_year_responsible      ON documents(year, responsible);
+      CREATE INDEX IF NOT EXISTS idx_drawings_year_responsible       ON drawings(year, responsible);
       CREATE INDEX IF NOT EXISTS idx_metas_user_year                 ON metas(user_id, year);
       CREATE INDEX IF NOT EXISTS idx_forecast_entries_project        ON forecast_entries(project_id);
       CREATE INDEX IF NOT EXISTS idx_forecast_entries_project_year   ON forecast_entries(project_id, year);
