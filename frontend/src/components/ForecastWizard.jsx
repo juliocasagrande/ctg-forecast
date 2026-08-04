@@ -216,7 +216,7 @@ export default function ForecastWizard({
   const TYPE_THEME = getTypeTheme(C);
   const { user } = useAuth();
   const role = user?.role;
-  const isGerente = role === 'gerente';
+  const isGerente = role === 'gerente' || role === 'diretor';
   const types = availableTypes?.length ? availableTypes : [editType];
 
   const activeStart = yearConfig?.activeStart || 2026;

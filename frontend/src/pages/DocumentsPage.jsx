@@ -1154,7 +1154,7 @@ export default function DocumentsPage() {
   const [chartStatusFilter, setChartStatusFilter] = useState('');
   const [chartPlantFilter, setChartPlantFilter] = useState('');
 
-  const SUPERIOR_ROLES = ['admin','gestor','planejador','coordenador'];
+  const SUPERIOR_ROLES = ['admin','planejador','coordenador'];
   const isSuperior = SUPERIOR_ROLES.includes(user?.role);
 
   // isOwner: o documento É do usuário — SOMENTE se for o responsável pelo nome

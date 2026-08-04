@@ -86,12 +86,13 @@ export function useRole() {
   const isEngenheiro  = role === 'engenheiro';
   const isPlanejador  = role === 'planejador';
   const isGerente     = role === 'gerente';
+  const isDiretor     = role === 'diretor';
 
   // Pode ver tudo (sem restrição de área ou projeto)
-  const canViewAll = isAdmin || isCoordenador || isPlanejador || isGerente;
+  const canViewAll = isAdmin || isCoordenador || isPlanejador || isGerente || isDiretor;
 
-  // Pode editar (gerente é view-only)
-  const canEdit = !isGerente && role !== undefined;
+  // Pode editar (gerente e diretor são view-only)
+  const canEdit = !isGerente && !isDiretor && role !== undefined;
 
   // Pode gerenciar projetos (criar, editar, excluir)
   const canManage = isAdmin || isCoordenador || isPlanejador;
@@ -107,6 +108,7 @@ export function useRole() {
     isEngenheiro,
     isPlanejador,
     isGerente,
+    isDiretor,
     canEdit,
     canManage,
     canViewAll,
@@ -123,6 +125,13 @@ export function useRole() {
 export function usePageAccess(pageKey) {
   const { user } = useAuth();
   return user?._pageAccess?.[pageKey] || 'editor';
+}
+
+// Habilitado por padrão — só retorna false quando o admin desabilitou explicitamente
+// este botão para o usuário (ver AdminPanel > Configurações de Funções).
+export function useButtonAccess(pageKey, buttonKey) {
+  const { user } = useAuth();
+  return user?._buttonAccess?.[pageKey]?.[buttonKey] !== false;
 }
 
 export default AuthContext;

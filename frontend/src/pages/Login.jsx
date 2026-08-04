@@ -98,9 +98,16 @@ const ROLE_OPTIONS = [
   },
   {
     value: 'gerente',
-    label: 'Gerente / Diretor',
+    label: 'Gerente',
     desc: 'Visualização de todos os dados. Sem poder de edição.',
     icon: 'GER',
+    needsArea: false,
+  },
+  {
+    value: 'diretor',
+    label: 'Diretor',
+    desc: 'Visualização de todos os dados. Sem poder de edição e sem alertas no sino.',
+    icon: 'DIR',
     needsArea: false,
   },
 ];

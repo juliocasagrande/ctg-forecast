@@ -25,7 +25,7 @@ function safeError(res, err) {
 }
 
 function canManage(user) {
-  return ['admin', 'coordenador', 'planejador', 'gestor'].includes(user?.role) ||
+  return ['admin', 'coordenador', 'planejador'].includes(user?.role) ||
     user?.email === 'julio.casagrande@ctgbr.com.br';
 }
 

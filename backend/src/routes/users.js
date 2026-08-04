@@ -5,6 +5,7 @@ import { requireAuth, requireRole } from '../middleware/auth.js';
 import { validatePassword } from '../middleware/validation.js';
 import { logAuthEvent, getClientIP } from '../middleware/audit.js';
 import { PAGE_REGISTRY, PAGE_KEYS } from '../config/pages.js';
+import { BUTTON_REGISTRY } from '../config/buttons.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -281,6 +282,99 @@ router.put('/:id/page-access', requireRole('admin'), async (req, res) => {
              VALUES ($1, $2, $3, NOW())
              ON CONFLICT (user_id, page_key) DO UPDATE SET access=EXCLUDED.access, updated_at=NOW()`,
             [targetId, page_key, access]
+          );
+        }
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    res.json({ success: true });
+  } catch (err) { safeError(res, err); }
+});
+
+// GET /api/users/button-access — admin only, retorna a matriz completa (todos os usuários x todos os botões)
+router.get('/button-access', requireRole('admin'), async (req, res) => {
+  try {
+    const [usersR, accessR] = await Promise.all([
+      pool.query(`SELECT id, name, email, role, active FROM users ORDER BY role, name`),
+      pool.query(`SELECT user_id, page_key, button_key, enabled FROM user_button_access`),
+    ]);
+
+    const overridesByUser = {};
+    for (const row of accessR.rows) {
+      ((overridesByUser[row.user_id] ??= {})[row.page_key] ??= {})[row.button_key] = row.enabled;
+    }
+
+    const result = usersR.rows.map(u => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      active: u.active,
+      buttons: Object.fromEntries(
+        Object.entries(BUTTON_REGISTRY).map(([pageKey, buttons]) => [
+          pageKey,
+          Object.fromEntries(buttons.map(b => [b.key, overridesByUser[u.id]?.[pageKey]?.[b.key] ?? true])),
+        ])
+      ),
+    }));
+
+    res.json(result);
+  } catch (err) { safeError(res, err); }
+});
+
+// GET /api/users/:id/button-access — admin only, retorna o catálogo mesclado com os overrides do usuário
+router.get('/:id/button-access', requireRole('admin'), async (req, res) => {
+  try {
+    const r = await pool.query(
+      'SELECT page_key, button_key, enabled FROM user_button_access WHERE user_id=$1',
+      [req.params.id]
+    );
+    const overrides = {};
+    for (const row of r.rows) {
+      (overrides[row.page_key] ??= {})[row.button_key] = row.enabled;
+    }
+    const pages = Object.entries(BUTTON_REGISTRY).map(([pageKey, buttons]) => ({
+      page_key: pageKey,
+      buttons: buttons.map(b => ({
+        button_key: b.key,
+        label: b.label,
+        enabled: overrides[pageKey]?.[b.key] ?? true,
+      })),
+    }));
+    res.json(pages);
+  } catch (err) { safeError(res, err); }
+});
+
+// PUT /api/users/:id/button-access — admin only, upsert das permissões de botão do usuário
+router.put('/:id/button-access', requireRole('admin'), async (req, res) => {
+  try {
+    const targetId = parseInt(req.params.id);
+    const entries = Array.isArray(req.body?.buttons) ? req.body.buttons : [];
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const { page_key, button_key, enabled } of entries) {
+        const validButtons = BUTTON_REGISTRY[page_key];
+        if (!validButtons || !validButtons.some(b => b.key === button_key)) continue;
+        if (enabled === true) {
+          // habilitado é o default — remove o override para manter a tabela enxuta
+          await client.query(
+            'DELETE FROM user_button_access WHERE user_id=$1 AND page_key=$2 AND button_key=$3',
+            [targetId, page_key, button_key]
+          );
+        } else {
+          await client.query(
+            `INSERT INTO user_button_access (user_id, page_key, button_key, enabled, updated_by, updated_at)
+             VALUES ($1, $2, $3, false, $4, NOW())
+             ON CONFLICT (user_id, page_key, button_key) DO UPDATE SET enabled=false, updated_by=$4, updated_at=NOW()`,
+            [targetId, page_key, button_key, req.user.id]
           );
         }
       }

@@ -41,6 +41,7 @@ const FORECAST_TABS = {
     { id: 'Meta',     label: 'Meta'      },
   ],
   gerente: [], // read-only, no wizard tabs
+  diretor: [], // read-only, no wizard tabs
 };
 
 function Avatar({ name, initials, role, size=32 }) {
@@ -278,6 +279,7 @@ export default function ProjectDetail({ onEdit }) {
   const { user } = useAuth();
   const { isEngenheiro, isPlanejador, isAdmin, canManage, isCoordenador } = useRole();
   const isGerente = user?.role === 'gerente';
+  const isDiretor = user?.role === 'diretor';
 
   // Year config from settings
   const activeStart = parseInt(settings.active_year_start) || 2026;
@@ -661,7 +663,7 @@ export default function ProjectDetail({ onEdit }) {
     return [];
   };
 
-  const activeRole = isPlanejador ? 'planejador' : isCoordenador ? 'coordenador' : isGerente ? 'gerente' : isEngenheiro ? 'engenheiro' : 'coordenador';
+  const activeRole = isPlanejador ? 'planejador' : isCoordenador ? 'coordenador' : isGerente ? 'gerente' : isDiretor ? 'diretor' : isEngenheiro ? 'engenheiro' : 'coordenador';
   const roleForecastTabs = getTabsForRole(activeRole);
   const readOnlyTypes    = getReadOnlyTypesForRole(activeRole);
 

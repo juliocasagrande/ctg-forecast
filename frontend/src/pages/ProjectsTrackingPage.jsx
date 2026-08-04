@@ -1888,8 +1888,8 @@ export default function ProjectsTrackingPage() {
     const handleNew = () => { setIsNew(true); setSelected(EMPTY_PROJECT); };
     window.addEventListener('new-project', handleNew);
 
-    // Check if user can import: gestor, coordenador, planejador, or julio.casagrande@ctgbr.com.br
-    const canImport = ['gestor', 'coordenador', 'planejador'].includes(user?.role) ||
+    // Check if user can import: coordenador, planejador, or julio.casagrande@ctgbr.com.br
+    const canImport = ['coordenador', 'planejador'].includes(user?.role) ||
       user?.email === 'julio.casagrande@ctgbr.com.br';
 
     const handleImport = () => {

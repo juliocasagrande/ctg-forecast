@@ -564,7 +564,7 @@ export default function EquipamentosAdminPage() {
   const [newTableDropdown, setNewTableDropdown] = useState(false);
   const dropdownRef = useRef(null);
 
-  const canManage = ['admin', 'coordenador', 'planejador', 'gestor'].includes(user?.role) ||
+  const canManage = ['admin', 'coordenador', 'planejador'].includes(user?.role) ||
     user?.email === 'julio.casagrande@ctgbr.com.br';
   const canCascadeDelete = ['admin', 'planejador'].includes(user?.role) ||
     user?.email === 'julio.casagrande@ctgbr.com.br';

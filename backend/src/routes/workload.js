@@ -23,13 +23,13 @@ function canManageDemand(req, ownerId, ownerRole = '', ownerArea = '') {
     return Number(ownerId) === Number(requesterId)
       || (ownerRole === 'engenheiro' && ownerArea === (requesterArea || 'eletrica'));
   }
-  return ['admin', 'gestor', 'planejador', 'gerente'].includes(role);
+  return ['admin', 'planejador', 'gerente', 'diretor'].includes(role);
 }
 
 function buildVisibilityWhere(req, baseParamCount = 0, tableAlias = 'w', userAlias = 'u') {
   const { id, area } = req.user;
   const role = effectiveRole(req);
-  if (['admin', 'gestor', 'planejador', 'gerente'].includes(role)) {
+  if (['admin', 'planejador', 'gerente', 'diretor'].includes(role)) {
     return { sql: '', params: [] };
   }
   if (role === 'coordenador') {
@@ -71,9 +71,9 @@ router.get('/members', async (req, res) => {
   const { id: requesterId } = req.user;
 
   let query, params;
-  if (['admin', 'gestor', 'planejador', 'gerente'].includes(role)) {
+  if (['admin', 'planejador', 'gerente', 'diretor'].includes(role)) {
     query = `SELECT u.id, u.name, u.avatar_initials, u.role, COALESCE(u.area,'eletrica') AS area
-              FROM users u WHERE u.active = true AND u.role IN ('engenheiro','coordenador','gerente','planejador')
+              FROM users u WHERE u.active = true AND u.role IN ('engenheiro','coordenador','gerente','diretor','planejador')
               ORDER BY u.name`;
     params = [];
   } else if (role === 'coordenador') {

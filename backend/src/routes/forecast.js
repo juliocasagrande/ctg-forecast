@@ -13,6 +13,24 @@ function safeError(res, err) {
   res.status(500).json({ error: err.message });
 }
 
+// Cargos que, quando configurados com um prazo maior que o do engenheiro, passam a
+// enxergar o item pendente de forma organizacional (não apenas os próprios) — dando
+// tempo para o responsável original agir antes de escalar para a gestão.
+const ELEVATED_ALERT_ROLES = ['coordenador', 'planejador', 'gerente', 'diretor', 'admin'];
+
+// Lê um mapa JSON {cargo: dias} de system_settings (chave `jsonKey`), com fallback
+// para o valor numérico global (`globalKey`) e por fim para `defaultDays`.
+function roleDaysResolver(cfg, jsonKey, globalKey, defaultDays) {
+  let map = {};
+  try { map = JSON.parse(cfg[jsonKey] || '{}'); } catch { map = {}; }
+  const globalDays = parseInt(cfg[globalKey]);
+  const fallback = !isNaN(globalDays) && globalDays > 0 ? globalDays : defaultDays;
+  return (role) => {
+    const v = parseInt(map[role]);
+    return !isNaN(v) && v > 0 ? v : fallback;
+  };
+}
+
 router.use(requireAuth);
 
 // GET entries for a project
@@ -37,7 +55,7 @@ router.post('/project/:projectId/bulk', requireProjectAccess, async (req, res) =
   const { role, id: userId } = req.user;
   if (!Array.isArray(entries) || entries.length === 0)
     return res.status(400).json({ error: 'Nenhuma entrada fornecida' });
-  if (role === 'gerente') return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
+  if (['gerente', 'diretor'].includes(role)) return res.status(403).json({ error: 'Gerentes e diretores têm acesso somente leitura' });
   const VALID_CATS = ['Viagens', 'Contratos', 'POs'];
   const VALID_TYPES = ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'];
   const ENGENHEIRO_TYPES = ['Forecast', 'Actual'];
@@ -86,7 +104,7 @@ router.put('/project/:projectId', requireProjectAccess, async (req, res) => {
   try {
     const { category, type, year, month, value, comment } = req.body;
     const { role, id: userId } = req.user;
-    if (role === 'gerente') return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
+    if (['gerente', 'diretor'].includes(role)) return res.status(403).json({ error: 'Gerentes e diretores têm acesso somente leitura' });
     const ENGENHEIRO_TYPES = ['Forecast', 'Actual'];
     const PLANEJADOR_TYPES = ['Budget', 'Forecast', 'Actual', 'Meta', 'Pool'];
     const VALID_CATS = ['Viagens', 'Contratos', 'POs'];
@@ -425,7 +443,13 @@ router.get('/alerts', async (req, res) => {
 
     // Load configurable thresholds
     const cfgRes = await pool.query(
-      "SELECT key, value FROM system_settings WHERE key IN ('alert_stale_days','actual_deadline_business_day','doc_alert_enabled','doc_alert_interval_days','doc_alert_exclude_cancelled','doc_alert_exclude_published','doc_alert_roles','doc_alert_areas')"
+      `SELECT key, value FROM system_settings WHERE key IN (
+        'alert_stale_days','alert_stale_role_days','actual_deadline_business_day',
+        'doc_alert_enabled','doc_alert_interval_days','doc_alert_role_days',
+        'doc_alert_exclude_cancelled','doc_alert_exclude_published','doc_alert_roles','doc_alert_areas',
+        'drawing_alert_enabled','drawing_alert_interval_days','drawing_alert_role_days',
+        'drawing_alert_exclude_cancelled','drawing_alert_exclude_published','drawing_alert_roles','drawing_alert_areas'
+      )`
     );
     const cfg = {};
     cfgRes.rows.forEach(r => { cfg[r.key] = r.value; });
@@ -691,20 +715,26 @@ router.get('/alerts', async (req, res) => {
           const alertAreas = (cfg.doc_alert_areas || '').split(',').map(a => a.trim()).filter(Boolean);
           if (alertAreas.length > 0 && !alertAreas.includes(req.user.area || '')) return { count: 0, docs: [] };
 
-          const intervalDays = parseInt(cfg.doc_alert_interval_days || '7');
+          const getDocDays = roleDaysResolver(cfg, 'doc_alert_role_days', 'doc_alert_interval_days', 7);
+          const intervalDays = getDocDays(alertRole);
           const excCancelled = cfg.doc_alert_exclude_cancelled !== 'false';
           const excPublished  = cfg.doc_alert_exclude_published !== 'false';
 
           const threshold = new Date();
           threshold.setDate(threshold.getDate() - intervalDays);
+          // Engenheiro só vê os próprios; cargos elevados (coordenador/planejador/...) enxergam
+          // todos os itens pendentes da organização — o prazo maior configurado para o cargo
+          // é o que dá tempo ao responsável original de resolver antes da escalada.
           const docScopeSql = alertRole === 'engenheiro'
             ? '($1::int IS NOT NULL AND LOWER(d.responsible) = LOWER($5))'
-            : `(d.created_by = $1
-                OR LOWER(d.responsible) = LOWER($5)
-                OR EXISTS (
-                  SELECT 1 FROM document_authors da
-                  WHERE da.document_id = d.id AND da.user_id = $1
-                ))`;
+            : ELEVATED_ALERT_ROLES.includes(alertRole)
+              ? '($1::int IS NOT NULL OR $5::text IS NOT NULL OR TRUE)'
+              : `(d.created_by = $1
+                  OR LOWER(d.responsible) = LOWER($5)
+                  OR EXISTS (
+                    SELECT 1 FROM document_authors da
+                    WHERE da.document_id = d.id AND da.user_id = $1
+                  ))`;
 
           const r = await pool.query(`
             SELECT d.id, d.code, d.subject, d.status, d.document_link, d.created_at
@@ -730,6 +760,62 @@ router.get('/alerts', async (req, res) => {
         } catch (docErr) {
           console.error('[DOC ALERT ERROR]', docErr.message);
           return { count: 0, docs: [] };
+        }
+      })(),
+      drawing_unpublished: await (async () => {
+        try {
+          const drawingAlertEnabled = cfg.drawing_alert_enabled !== 'false';
+          if (!drawingAlertEnabled) return { count: 0, drawings: [] };
+
+          const alertRole = req.user._managerAccessOverride ? role : (req.user._originalRole || role);
+          const alertRoles = (cfg.drawing_alert_roles || 'engenheiro,coordenador,planejador,admin').split(',').map(r => r.trim()).filter(Boolean);
+          if (!alertRoles.includes(alertRole)) return { count: 0, drawings: [] };
+
+          const alertAreas = (cfg.drawing_alert_areas || '').split(',').map(a => a.trim()).filter(Boolean);
+          if (alertAreas.length > 0 && !alertAreas.includes(req.user.area || '')) return { count: 0, drawings: [] };
+
+          const getDrawingDays = roleDaysResolver(cfg, 'drawing_alert_role_days', 'drawing_alert_interval_days', 7);
+          const intervalDays = getDrawingDays(alertRole);
+          const excCancelled = cfg.drawing_alert_exclude_cancelled !== 'false';
+          const excPublished  = cfg.drawing_alert_exclude_published !== 'false';
+
+          const threshold = new Date();
+          threshold.setDate(threshold.getDate() - intervalDays);
+          const drawingScopeSql = alertRole === 'engenheiro'
+            ? '($1::int IS NOT NULL AND LOWER(d.responsible) = LOWER($5))'
+            : ELEVATED_ALERT_ROLES.includes(alertRole)
+              ? '($1::int IS NOT NULL OR $5::text IS NOT NULL OR TRUE)'
+              : `(d.created_by = $1
+                  OR LOWER(d.responsible) = LOWER($5)
+                  OR EXISTS (
+                    SELECT 1 FROM drawing_authors da
+                    WHERE da.drawing_id = d.id AND da.user_id = $1
+                  ))`;
+
+          const r = await pool.query(`
+            SELECT d.id, d.code, d.subject, d.status, d.document_link, d.created_at
+            FROM drawings d
+            WHERE (${drawingScopeSql})
+              AND ($2::boolean = false OR d.status <> 'Cancelado')
+              AND (
+                $3::boolean = false
+                OR d.status <> 'Publicado'
+                OR d.document_link IS NULL
+                OR d.document_link = ''
+              )
+              AND d.created_at < $4
+            ORDER BY d.created_at ASC
+            LIMIT 20
+          `, [userId, excCancelled, excPublished, threshold, req.user.name || '']);
+
+          const undismissed = r.rows.filter(d =>
+            !isDismissed('drawing_unpublished', String(d.id))
+          );
+
+          return { count: undismissed.length, drawings: undismissed };
+        } catch (drawErr) {
+          console.error('[DRAWING ALERT ERROR]', drawErr.message);
+          return { count: 0, drawings: [] };
         }
       })(),
     });
@@ -874,8 +960,8 @@ router.post('/project/:projectId/year-consolidated', requireProjectAccess, async
   const ENGENHEIRO_CONS_TYPES = ['Forecast', 'Actual'];
   if (role === 'engenheiro' && !ENGENHEIRO_CONS_TYPES.includes(type))
     return res.status(403).json({ error: 'Engenheiros só podem editar Forecast e Realizado consolidado' });
-  if (role === 'gerente')
-    return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
+  if (['gerente', 'diretor'].includes(role))
+    return res.status(403).json({ error: 'Gerentes e diretores têm acesso somente leitura' });
   if (!['planejador', 'admin', 'engenheiro', 'coordenador'].includes(role))
     return res.status(403).json({ error: 'Sem permissão para editar valores consolidados' });
   try {
@@ -896,8 +982,8 @@ router.post('/project/:projectId/year-consolidated/bulk', requireProjectAccess, 
   const { role, id: userId } = req.user;
   // Engenheiros can only save Forecast and Actual consolidated
   const ENGENHEIRO_CONS_TYPES = ['Forecast', 'Actual'];
-  if (role === 'gerente')
-    return res.status(403).json({ error: 'Gerentes têm acesso somente leitura' });
+  if (['gerente', 'diretor'].includes(role))
+    return res.status(403).json({ error: 'Gerentes e diretores têm acesso somente leitura' });
   if (!['planejador', 'admin', 'engenheiro', 'coordenador'].includes(role))
     return res.status(403).json({ error: 'Sem permissão para editar valores consolidados' });
   const client = await pool.connect();

@@ -8,6 +8,7 @@ const ROLE_LABEL = {
   engenheiro:   'Engenheiro',
   planejador:   'Planejador',
   gerente:      'Gerente',
+  diretor:      'Diretor',
 };
 const ROLE_COLOR = {
   admin:        { bg: '#FEE2E2', text: '#DC2626' },
@@ -15,6 +16,7 @@ const ROLE_COLOR = {
   engenheiro:   { bg: '#EFF6FF', text: '#1D4ED8' },
   planejador:   { bg: '#D1FAE5', text: '#065F46' },
   gerente:      { bg: '#FEF3C7', text: '#92400E' },
+  diretor:      { bg: '#FCE7F3', text: '#9D174D' },
 };
 
 const AREA_LABEL = {

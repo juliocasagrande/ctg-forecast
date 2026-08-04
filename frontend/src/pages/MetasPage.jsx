@@ -915,8 +915,8 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
   const pageReadOnly = usePageAccess('metas') === 'viewer';
   const role = user?.role;
   const viewRole = user?._managerAccessOverride ? role : (user?._originalRole || role);
-  const canEditOthers = !pageReadOnly && ['admin', 'gestor', 'coordenador', 'gerente'].includes(viewRole);
-  const canViewAllMetas = ['admin', 'gestor', 'planejador', 'gerente'].includes(viewRole);
+  const canEditOthers = !pageReadOnly && ['admin', 'coordenador', 'gerente', 'diretor'].includes(viewRole);
+  const canViewAllMetas = ['admin', 'planejador', 'gerente', 'diretor'].includes(viewRole);
   const year = yearProp ?? new Date().getFullYear();
   const area = ['engenheiro', 'coordenador'].includes(viewRole)
     ? (user?.area || 'eletrica')
@@ -1036,7 +1036,7 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
     .filter(m => m.is_general)
     .sort((a, b) => (a.assigned_area || a.area || '').localeCompare(b.assigned_area || b.area || '', 'pt-BR') || a.meta_number - b.meta_number);
 
-  const mgmtRoles = ['gerente', 'gestor', 'coordenador', 'planejador'];
+  const mgmtRoles = ['gerente', 'diretor', 'coordenador', 'planejador'];
   const mgmtMembers = allMembers.filter(m => mgmtRoles.includes(m.role));
   const areaMembers = members.filter(m => (canViewAllMetas || m.area === area) && !mgmtRoles.includes(m.role));
   const selfMember = members.find(m => m.id === user?.id) || allMembers.find(m => m.id === user?.id) || user;
@@ -1224,7 +1224,7 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
   function renderGeneralGoalsTable() {
     const targetArea = role === 'coordenador' ? (user?.area || 'eletrica') : area;
     const rows = generalMetas.filter(m => canViewAllMetas || (m.assigned_area || m.area) === targetArea);
-    const canManageGeneral = !pageReadOnly && (role === 'coordenador' || ['admin', 'gestor', 'planejador'].includes(role));
+    const canManageGeneral = !pageReadOnly && (role === 'coordenador' || ['admin', 'planejador'].includes(role));
     if (!canManageGeneral && rows.length === 0) return null;
     return (
       <CollapsibleSection
@@ -1299,9 +1299,9 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
                 const concluded = mm.filter(m => m.status === 'Concluida').length;
                 const evidences = mm.filter(m => visibleEvidenceImages(m).length > 0).length;
                 const canEdit = includeRole
-                  ? canEditOthers && !(role === 'coordenador' && ['gerente', 'gestor'].includes(member.role))
+                  ? canEditOthers && !(role === 'coordenador' && ['gerente', 'diretor'].includes(member.role))
                   : !pageReadOnly && (canEditOthers || member.id === user?.id);
-                const roleLabel = { gerente: 'Gerente', gestor: 'Gestor', coordenador: 'Coord.', planejador: 'Planejador' }[member.role] || member.role;
+                const roleLabel = { gerente: 'Gerente', diretor: 'Diretor', coordenador: 'Coord.', planejador: 'Planejador' }[member.role] || member.role;
 
                 return (
                   <tr key={member.id} style={{ background: i % 2 ? '#F8FAFC' : 'var(--bg-card)', borderBottom: '1px solid #E2E8F0' }}>
@@ -1448,7 +1448,7 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
                 </tr>
               ) : sortedMetas.map((m, i) => {
                 const rowTone = m.is_general ? TABLE_TONES.collective : tone;
-                const canManageCollective = m.is_general && (role === 'coordenador' || ['admin', 'gestor', 'planejador'].includes(role));
+                const canManageCollective = m.is_general && (role === 'coordenador' || ['admin', 'planejador'].includes(role));
                 const canEditRow = m.is_general ? canManageCollective : canEdit;
                 const canOpenRow = m.is_general || canEditRow;
                 return (

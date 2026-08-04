@@ -95,7 +95,7 @@ await client.query(`
       UPDATE users SET role = 'coordenador' WHERE role = 'gestor';
       ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
       ALTER TABLE users ADD CONSTRAINT users_role_check
-        CHECK (role IN ('admin','coordenador','engenheiro','planejador','gerente'));
+        CHECK (role IN ('admin','coordenador','engenheiro','planejador','gerente','diretor'));
     `);
 
     /* ───────── USER PAGE ACCESS ───────── */
@@ -106,6 +106,19 @@ await client.query(`
         access VARCHAR(10) NOT NULL DEFAULT 'editor' CHECK (access IN ('none','viewer','editor')),
         updated_at TIMESTAMPTZ DEFAULT NOW(),
         PRIMARY KEY (user_id, page_key)
+      );
+    `);
+
+    /* ───────── USER BUTTON ACCESS (habilitar/desabilitar botões de ação por usuário) ── */
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_button_access (
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        page_key VARCHAR(50) NOT NULL,
+        button_key VARCHAR(50) NOT NULL,
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        updated_by INTEGER REFERENCES users(id),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (user_id, page_key, button_key)
       );
     `);
 
@@ -248,10 +261,21 @@ await client.query(`
         ('doc_alert_areas',''),
         ('tracking_alert_interval_days','6'),
         ('tracking_alert_enabled','true'),
-        ('tracking_alert_roles','gerente,coordenador,engenheiro,admin'),
+        ('tracking_alert_roles','gerente,diretor,coordenador,engenheiro,admin'),
         ('iac_alert_interval_days','6'),
         ('iac_alert_enabled','true'),
-        ('iac_alert_roles','gerente,coordenador,engenheiro,admin')
+        ('iac_alert_roles','gerente,diretor,coordenador,engenheiro,admin'),
+        ('drawing_alert_enabled','true'),
+        ('drawing_alert_interval_days','7'),
+        ('drawing_alert_exclude_cancelled','true'),
+        ('drawing_alert_exclude_published','true'),
+        ('drawing_alert_roles','engenheiro,coordenador,planejador'),
+        ('drawing_alert_areas',''),
+        ('alert_stale_role_days','{"engenheiro":30,"coordenador":35,"planejador":35,"gerente":40,"diretor":40,"admin":40}'),
+        ('doc_alert_role_days','{"engenheiro":7,"coordenador":14,"planejador":14,"gerente":21,"diretor":21,"admin":21}'),
+        ('drawing_alert_role_days','{"engenheiro":7,"coordenador":14,"planejador":14,"gerente":21,"diretor":21,"admin":21}'),
+        ('tracking_alert_role_days','{"engenheiro":6,"coordenador":10,"gerente":14,"diretor":14,"admin":14}'),
+        ('iac_alert_role_days','{"engenheiro":6,"coordenador":10,"gerente":14,"diretor":14,"admin":14}')
       ON CONFLICT (key) DO NOTHING;
     `);
 
@@ -483,8 +507,22 @@ await client.query(`
       INSERT INTO system_settings (key, value) VALUES
         ('pms_alert_enabled','true'),
         ('pms_alert_days','30'),
-        ('pms_alert_roles','coordenador,gerente,admin')
+        ('pms_alert_roles','coordenador,gerente,diretor,admin'),
+        ('pms_alert_role_days','{"engenheiro":30,"coordenador":15,"planejador":15,"gerente":15,"diretor":15,"admin":15}')
       ON CONFLICT (key) DO NOTHING;
+    `);
+
+    /* ───────── DIRETOR: backfill em configuracoes ja existentes (banco ja migrado) ─────────
+       As INSERTs acima usam ON CONFLICT DO NOTHING e nao alteram linhas ja existentes, entao
+       aqui garantimos que o cargo 'diretor' espelhe 'gerente' nas configuracoes de alerta. */
+    await client.query(`
+      UPDATE system_settings SET value = value || ',diretor'
+      WHERE key IN ('tracking_alert_roles','iac_alert_roles','pms_alert_roles')
+        AND value ~ '(^|,)gerente(,|$)' AND value !~ '(^|,)diretor(,|$)';
+
+      UPDATE system_settings SET value = regexp_replace(value, '"gerente":\\s*(\\d+)', '"gerente":\\1,"diretor":\\1')
+      WHERE key IN ('alert_stale_role_days','doc_alert_role_days','drawing_alert_role_days','tracking_alert_role_days','iac_alert_role_days')
+        AND value ~ '"gerente"\\s*:' AND value !~ '"diretor"\\s*:';
     `);
 
     /* ───────── VACATION PERIODS ───────── */

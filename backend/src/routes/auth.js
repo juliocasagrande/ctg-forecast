@@ -86,11 +86,11 @@ router.post('/register', registerLimiter, async (req, res) => {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
       return res.status(400).json({ error: 'Formato de email inválido' });
 
-    const validRoles = ['coordenador', 'engenheiro', 'gerente'];
+    const validRoles = ['coordenador', 'engenheiro', 'gerente', 'diretor'];
     if (!validRoles.includes(role))
       return res.status(400).json({ error: 'Perfil inválido' });
 
-    // Engenheiros e coordenadores precisam de área; gerentes não
+    // Engenheiros e coordenadores precisam de área; gerentes e diretores não
     const needsArea = ['engenheiro', 'coordenador'].includes(role);
     const validAreas = ['eletrica', 'mecanica', 'confiabilidade', 'modernizacao'];
     if (needsArea && !validAreas.includes(area))
@@ -262,6 +262,7 @@ router.get('/me', requireAuth, async (req, res) => {
       _managerAccessOverride: req.user._managerAccessOverride || false,
       _allAreasAccess: req.user._allAreasAccess || false,
       _pageAccess: req.user._pageAccess || {},
+      _buttonAccess: req.user._buttonAccess || {},
       must_change_password: dbUser.must_change_password || false,
       azure_upn: dbUser.azure_upn || null,
     });

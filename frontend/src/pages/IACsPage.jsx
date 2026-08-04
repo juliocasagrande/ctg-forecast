@@ -1075,7 +1075,7 @@ export default function IACsPage() {
     const handleNew = () => { setIsNew(true); setSelected({ ...EMPTY_IAC }); };
     window.addEventListener('new-iac', handleNew);
 
-    const canImport = ['gestor', 'coordenador', 'planejador', 'admin'].includes(user?.role) ||
+    const canImport = ['coordenador', 'planejador', 'admin'].includes(user?.role) ||
       user?.email === 'julio.casagrande@ctgbr.com.br';
 
     const handleImport = () => {

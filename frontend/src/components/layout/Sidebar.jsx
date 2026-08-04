@@ -119,8 +119,8 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
     coordenador: 'Coordenador',
     engenheiro:  'Engenheiro',
     planejador:  'Planejador',
-    gerente:     'Gerente / Diretor',
-    gestor:      'Gestor',
+    gerente:     'Gerente',
+    diretor:     'Diretor',
   }[user?._originalRole || user?.role] || '';
   const areaLabel = {
     eletrica:       'Eng. Elétrica',

@@ -1100,7 +1100,7 @@ export default function ControleDesenhosPage() {
   const [chartStatusFilter, setChartStatusFilter] = useState('');
   const [chartPlantFilter, setChartPlantFilter] = useState('');
 
-  const SUPERIOR_ROLES = ['admin','gestor','planejador','coordenador'];
+  const SUPERIOR_ROLES = ['admin','planejador','coordenador'];
   const isSuperior = SUPERIOR_ROLES.includes(user?.role);
 
   const isOwner = (doc) => {

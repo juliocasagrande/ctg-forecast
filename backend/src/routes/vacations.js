@@ -15,7 +15,7 @@ function sameArea(left, right) {
 }
 
 async function canManageVacationUser(user, targetUserId) {
-  if (['admin', 'planejador', 'gerente'].includes(user.role) || user._allAreasAccess) return true;
+  if (['admin', 'planejador', 'gerente', 'diretor'].includes(user.role) || user._allAreasAccess) return true;
   if (user.role === 'engenheiro') return Number(targetUserId) === Number(user.id);
   if (user.role !== 'coordenador') return false;
   const target = await pool.query("SELECT COALESCE(area, 'eletrica') AS area FROM users WHERE id=$1", [targetUserId]);
@@ -52,10 +52,13 @@ router.get('/', async (req, res) => {
     JOIN users u ON u.id = vp.user_id
     WHERE vp.year = $1
       AND u.active = true
-      AND u.email <> ALL($${area ? 3 : 2}::text[])
-      ${area ? 'AND vp.area = $2' : ''}
+      AND u.email <> ALL($${area ? 4 : 2}::text[])
+      ${area ? 'AND (vp.area = $2 OR vp.user_id = $3)' : ''}
     ORDER BY u.name, vp.period_number
-  `, area ? [year, area, VACATIONS_EXCLUDED_EMAILS] : [year, VACATIONS_EXCLUDED_EMAILS]);
+  `, area ? [year, area, req.user.id, VACATIONS_EXCLUDED_EMAILS] : [year, VACATIONS_EXCLUDED_EMAILS]);
+  // Nota: mesmo com filtro de área (coordenador), o próprio usuário sempre vê seus
+  // períodos — evita que um período registrado antes de uma mudança de área do
+  // usuário (vp.area desatualizado) fique invisível para o dono do período.
 
   res.json(rows);
 });
@@ -73,14 +76,14 @@ router.get('/members', async (req, res) => {
 
   let query, params;
 
-  if (role === 'admin' || role === 'planejador' || role === 'gerente' || (role === 'coordenador' && req.user._allAreasAccess)) {
-    // Admin/Gestor/Planejador/Gerente (ou coordenador com acesso a todas as áreas): vê todos os colaboradores
+  if (role === 'admin' || role === 'planejador' || role === 'gerente' || role === 'diretor' || (role === 'coordenador' && req.user._allAreasAccess)) {
+    // Admin/Gestor/Planejador/Gerente/Diretor (ou coordenador com acesso a todas as áreas): vê todos os colaboradores
     query = `
       SELECT u.id, u.name, u.avatar_initials, u.role,
              COALESCE(u.area, 'eletrica') AS area
       FROM users u
       WHERE u.active = true
-        AND u.role IN ('engenheiro','coordenador','gerente','planejador')
+        AND u.role IN ('engenheiro','coordenador','gerente','diretor','planejador')
         AND u.email <> ALL($${area ? 2 : 1}::text[])
         ${area ? "AND COALESCE(u.area, 'eletrica') = $1" : ''}
       ORDER BY u.name
@@ -88,7 +91,7 @@ router.get('/members', async (req, res) => {
     params = area ? [area, VACATIONS_EXCLUDED_EMAILS] : [VACATIONS_EXCLUDED_EMAILS];
   } else if (role === 'coordenador') {
     // Coordenador: o próprio coordenador, engenheiros ativos da sua área,
-    // todos os coordenadores ativos e todos os gerentes ativos
+    // todos os coordenadores ativos e todos os gerentes/diretores ativos
     // (a existência de períodos de férias não é condição para aparecer aqui).
     const userArea = req.user.area || 'eletrica';
     query = `
@@ -101,6 +104,7 @@ router.get('/members', async (req, res) => {
           (u.role = 'engenheiro' AND COALESCE(u.area, 'eletrica') = $1)
           OR u.role = 'coordenador'
           OR u.role = 'gerente'
+          OR u.role = 'diretor'
         )
       ORDER BY u.name
     `;
@@ -176,14 +180,14 @@ router.post('/', requirePageAccess('vacations', { write: true }), async (req, re
 
   let overlapQuery;
   let overlapParams;
-  if (['gerente', 'coordenador'].includes(uRole)) {
-    // Gerentes/coordenadores: verificar sobreposição com outros gerentes/coordenadores
+  if (['gerente', 'diretor', 'coordenador'].includes(uRole)) {
+    // Gerentes/diretores/coordenadores: verificar sobreposição com outros gerentes/diretores/coordenadores
     overlapQuery = `
       SELECT vp.user_id, u.name AS user_name
       FROM vacation_periods vp
       JOIN users u ON u.id = vp.user_id
       WHERE vp.user_id != $1
-        AND u.role IN ('gerente', 'coordenador')
+        AND u.role IN ('gerente', 'diretor', 'coordenador')
         AND vp.year = $2
         AND vp.start_date <= $3
         AND vp.end_date >= $4

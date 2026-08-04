@@ -810,7 +810,7 @@ export default function PMSPage() {
 
   const { widths: colWidths, handleResizeStart } = useColumnWidths(PMS_COL_WIDTHS);
 
-  const SUPERIOR_ROLES = ['admin','gerente','coordenador'];
+  const SUPERIOR_ROLES = ['admin','gerente','diretor','coordenador'];
   const isSuperior = SUPERIOR_ROLES.includes(user?.role);
 
   const isOwner = (doc) => {

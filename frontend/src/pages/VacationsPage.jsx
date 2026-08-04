@@ -139,7 +139,7 @@ function VacationTimeline({ periodsByUser, allMembers, year }) {
   for (const m of allMembers) {
     // Managers/coordinators go to 'coordenacao' group regardless of area field
     let key;
-    if (['gerente','gestor','coordenador','planejador'].includes(m.role)) {
+    if (['gerente','diretor','coordenador','planejador'].includes(m.role)) {
       key = 'coordenacao';
     } else {
       key = m.area || 'eletrica';
@@ -259,7 +259,7 @@ function PeriodModal({ period, userId, area, year, members, canEditOthers, onSav
   useEffect(() => {
     setOverlapWarn('');
     if (!form.start_date || !form.end_date || days <= 0) return;
-    const isManager = ['gerente','gestor','coordenador','planejador'].includes(currentUserRole);
+    const isManager = ['gerente','diretor','coordenador','planejador'].includes(currentUserRole);
     const targetUserId = form.user_id;
     const targetMember = members.find(m => m.id === targetUserId);
     const targetRole = targetMember?.role || 'engenheiro';
@@ -275,8 +275,8 @@ function PeriodModal({ period, userId, area, year, members, canEditOthers, onSav
       const pMember = members.find(m => m.id === p.user_id);
       const pRole = pMember?.role || 'engenheiro';
       const pArea = pMember?.area || '';
-      if (['gerente','gestor','coordenador','planejador'].includes(targetRole)) {
-        return ['gerente','gestor','coordenador','planejador'].includes(pRole);
+      if (['gerente','diretor','coordenador','planejador'].includes(targetRole)) {
+        return ['gerente','diretor','coordenador','planejador'].includes(pRole);
       }
       return pRole === 'engenheiro' && pArea === targetArea;
     });
@@ -399,7 +399,7 @@ export default function VacationsPage({ areaFilter: areaFilterProp = '', year: y
   const pageReadOnly = usePageAccess('vacations') === 'viewer';
   const role = user?.role;
   const viewRole = user?._managerAccessOverride ? role : (user?._originalRole || role);
-  const canEditOthers = !pageReadOnly && (viewRole === 'admin' || viewRole === 'gestor' || viewRole === 'coordenador' || viewRole === 'gerente');
+  const canEditOthers = !pageReadOnly && (viewRole === 'admin' || viewRole === 'coordenador' || viewRole === 'gerente' || viewRole === 'diretor');
 
   // year and area driven by App.jsx header props
   const year    = yearProp ?? new Date().getFullYear();
@@ -463,8 +463,8 @@ export default function VacationsPage({ areaFilter: areaFilterProp = '', year: y
   }
 
   // Separate managers/coordinators from engineers in allMembers
-  const mgmtMembers  = allMembers.filter(m => ['gerente','gestor','coordenador','planejador'].includes(m.role));
-  const areaMembers  = members.filter(m => m.area === area && !['gerente','gestor','coordenador','planejador'].includes(m.role));
+  const mgmtMembers  = allMembers.filter(m => ['gerente','diretor','coordenador','planejador'].includes(m.role));
+  const areaMembers  = members.filter(m => m.area === area && !['gerente','diretor','coordenador','planejador'].includes(m.role));
   const areaPeriods  = periods.filter(p => areaMembers.some(m => m.id === p.user_id));
   const withVacation = new Set(areaPeriods.map(p => p.user_id)).size;
   const adpOk        = areaPeriods.filter(p => p.adp_registered).length;
@@ -592,8 +592,8 @@ export default function VacationsPage({ areaFilter: areaFilterProp = '', year: y
                     const p2 = mp.find(p => p.period_number === 2);
                     const p3 = mp.find(p => p.period_number === 3);
                     const total = mp.reduce((s, p) => s + (p.days||0), 0);
-                    const canEdit = canEditOthers && !(role === 'coordenador' && ['gerente','gestor'].includes(member.role));
-                    const roleLabel = { gerente:'Gerente', gestor:'Gestor', coordenador:'Coord.', planejador:'Planejador' }[member.role] || member.role;
+                    const canEdit = canEditOthers && !(role === 'coordenador' && ['gerente','diretor'].includes(member.role));
+                    const roleLabel = { gerente:'Gerente', diretor:'Diretor', coordenador:'Coord.', planejador:'Planejador' }[member.role] || member.role;
                     return (
                       <tr key={member.id} style={{ background: i%2 ? '#F8FAFC' : 'var(--bg-card)', borderBottom: '1px solid #E2E8F0' }}>
                         <td style={{ padding: '7px 12px' }}>

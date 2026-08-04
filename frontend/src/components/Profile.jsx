@@ -12,6 +12,7 @@ const ROLE_LABELS = {
   coordenador: 'Coordenador',
   planejador:  'Planejador',
   gerente:     'Gerente',
+  diretor:     'Diretor',
 };
 
 export default function Profile() {
@@ -36,6 +37,7 @@ export default function Profile() {
     coordenador: '#0C5A9E',
     planejador:  '#5B21B6',
     gerente:     '#1E3A5F',
+    diretor:     '#9D174D',
   }[displayRole] || '#1E3A6E';
 
   const handleSaveProfile = async () => {

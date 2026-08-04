@@ -20,19 +20,19 @@ function canEditMeta(req, ownerId, ownerRole = '', ownerArea = '') {
   const { role, id: requesterId, area: requesterArea } = req.user;
   if (role === 'engenheiro') return ownerId === requesterId;
   if (role === 'coordenador') return ownerId === requesterId || (ownerRole === 'engenheiro' && ownerArea === (requesterArea || 'eletrica'));
-  return ['admin', 'gestor', 'planejador', 'gerente'].includes(role);
+  return ['admin', 'planejador', 'gerente', 'diretor'].includes(role);
 }
 
 function canEditGeneralMeta(req, assignedArea = '') {
   const { role, area } = req.user;
   if (role === 'coordenador') return (area || 'eletrica') === (assignedArea || 'eletrica');
-  return ['admin', 'gestor', 'planejador'].includes(role);
+  return ['admin', 'planejador'].includes(role);
 }
 
 function buildVisibilityWhere(req, baseParamCount = 1, tableAlias = 'm', userAlias = 'u') {
   const { id, area } = req.user;
   const role = req.user._managerAccessOverride ? req.user.role : (req.user._originalRole || req.user.role);
-  if (['admin', 'gestor', 'planejador', 'gerente'].includes(role)) {
+  if (['admin', 'planejador', 'gerente', 'diretor'].includes(role)) {
     return { sql: '', params: [] };
   }
   if (role === 'coordenador') {
@@ -126,9 +126,9 @@ router.get('/members', async (req, res) => {
   const { id: requesterId } = req.user;
 
   let query, params;
-  if (role === 'admin' || role === 'planejador' || role === 'gerente') {
+  if (role === 'admin' || role === 'planejador' || role === 'gerente' || role === 'diretor') {
     query = `SELECT u.id, u.name, u.avatar_initials, u.role, COALESCE(u.area,'eletrica') AS area
-              FROM users u WHERE u.active = true AND u.role IN ('engenheiro','coordenador','gerente','planejador')
+              FROM users u WHERE u.active = true AND u.role IN ('engenheiro','coordenador','gerente','diretor','planejador')
               ${area ? "AND COALESCE(u.area,'eletrica') = $1" : ''} ORDER BY u.name`;
     params = area ? [area] : [];
   } else if (role === 'coordenador') {

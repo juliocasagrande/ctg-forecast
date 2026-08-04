@@ -1571,7 +1571,7 @@ function CompactActionList({ title, items }) {
 }
 
 const AREA_ORDER = ['eletrica', 'mecanica', 'confiabilidade', 'modernizacao'];
-const MANAGEMENT_SCOPE_ROLES = ['gerente', 'admin', 'gestor', 'planejador'];
+const MANAGEMENT_SCOPE_ROLES = ['gerente', 'diretor', 'admin', 'planejador'];
 
 function scopeOptionsFor(viewRole, userArea) {
   if (viewRole === 'engenheiro') {
@@ -1882,9 +1882,11 @@ export default function HomePage({ year }) {
           <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.35rem', fontWeight: 800, marginTop: 3 }}>Bem-vindo, {user?.name?.split(' ')[0] || 'usuario'}</div>
         </div>
         <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 12, marginLeft: 'auto' }}>
-          <div style={{ background: 'rgba(255,255,255,0.38)', border: '1px solid rgba(255,255,255,0.56)', borderRadius: 8, padding: 6, boxShadow: '0 10px 24px rgba(0,31,91,0.16)' }}>
-            <AlertBell />
-          </div>
+          {user?.role !== 'diretor' && (
+            <div style={{ background: 'rgba(255,255,255,0.38)', border: '1px solid rgba(255,255,255,0.56)', borderRadius: 8, padding: 6, boxShadow: '0 10px 24px rgba(0,31,91,0.16)' }}>
+              <AlertBell />
+            </div>
+          )}
           {loading && <div className="spinner" />}
         </div>
       </section>

@@ -17,18 +17,30 @@ function safeError(res, err) {
 
 const TYPES = ['POL', 'IM', 'GM', 'MM'];
 const STATUSES = ['Em elaboração', 'Para aprovação', 'Publicado', 'Cancelado'];
-const SUPERIOR_ROLES = ['gerente', 'coordenador', 'admin'];
+const SUPERIOR_ROLES = ['gerente', 'diretor', 'coordenador', 'admin'];
 
-const VALIDADE_EXPR = `
-  CASE WHEN (date + INTERVAL '3 years') < CURRENT_DATE THEN 'Vencido'
-       WHEN (date + INTERVAL '3 years') <= CURRENT_DATE + INTERVAL '30 days' THEN 'Alerta'
-       ELSE 'Em dia' END
-`;
-const SELECT_COMPUTED = `
-  (date + INTERVAL '3 years')::date                     AS expiry_date,
-  ((date + INTERVAL '3 years')::date - CURRENT_DATE)     AS days_to_expire,
-  ${VALIDADE_EXPR}                                       AS validade_status
-`;
+// Nº de dias antes do vencimento (3 anos após `date`) em que um documento passa a
+// ser marcado 'Alerta'. Configurável via system_settings.pms_alert_days (ver getPmsAlertDays).
+function validadeExpr(days) {
+  const d = Number.isInteger(days) && days > 0 ? days : 30;
+  return `
+    CASE WHEN (date + INTERVAL '3 years') < CURRENT_DATE THEN 'Vencido'
+         WHEN (date + INTERVAL '3 years') <= CURRENT_DATE + INTERVAL '${d} days' THEN 'Alerta'
+         ELSE 'Em dia' END
+  `;
+}
+function selectComputed(days) {
+  return `
+    (date + INTERVAL '3 years')::date                     AS expiry_date,
+    ((date + INTERVAL '3 years')::date - CURRENT_DATE)     AS days_to_expire,
+    ${validadeExpr(days)}                                  AS validade_status
+  `;
+}
+async function getPmsAlertDays() {
+  const r = await pool.query("SELECT value FROM system_settings WHERE key='pms_alert_days'");
+  const d = parseInt(r.rows[0]?.value);
+  return !isNaN(d) && d > 0 ? d : 30;
+}
 
 // pms_documents.area é texto livre (ex: "Engenharia Elétrica"), enquanto users.area
 // é um slug fixo — comparamos por radical da palavra em português.
@@ -55,11 +67,12 @@ function canEdit(doc, userRole, userName) {
 router.get('/', async (req, res) => {
   try {
     const { type, plant, area } = req.query;
+    const alertDays = await getPmsAlertDays();
     let q = `
       SELECT d.*,
         u.name  AS created_by_name,
         u2.name AS updated_by_name,
-        ${SELECT_COMPUTED}
+        ${selectComputed(alertDays)}
       FROM pms_documents d
       LEFT JOIN users u  ON u.id  = d.created_by
       LEFT JOIN users u2 ON u2.id = d.updated_by
@@ -77,10 +90,11 @@ router.get('/', async (req, res) => {
 // ─── GET /stats ───────────────────────────────────────────────────────────────
 router.get('/stats', async (req, res) => {
   try {
+    const alertDays = await getPmsAlertDays();
     // Considera apenas a revisão mais recente de cada base_code (documento "ativo")
     const latestCte = `
       WITH latest AS (
-        SELECT DISTINCT ON (base_code) *, ${SELECT_COMPUTED}
+        SELECT DISTINCT ON (base_code) *, ${selectComputed(alertDays)}
         FROM pms_documents
         ORDER BY base_code, revision DESC NULLS LAST
       )
@@ -104,20 +118,28 @@ router.get('/stats', async (req, res) => {
 router.get('/alerts', async (req, res) => {
   try {
     const cfgRes = await pool.query(
-      "SELECT key, value FROM system_settings WHERE key IN ('pms_alert_enabled','pms_alert_days','pms_alert_roles')"
+      "SELECT key, value FROM system_settings WHERE key IN ('pms_alert_enabled','pms_alert_days','pms_alert_roles','pms_alert_role_days')"
     );
     const cfg = {};
     cfgRes.rows.forEach(r => { cfg[r.key] = r.value; });
     if (cfg.pms_alert_enabled === 'false') return res.json({ count: 0, docs: [] });
 
-    const alertRoles = (cfg.pms_alert_roles || 'coordenador,gerente,admin').split(',').map(r => r.trim()).filter(Boolean);
+    const alertDays = parseInt(cfg.pms_alert_days) > 0 ? parseInt(cfg.pms_alert_days) : 30;
+    const alertRoles = (cfg.pms_alert_roles || 'coordenador,gerente,diretor,admin').split(',').map(r => r.trim()).filter(Boolean);
     const role = req.user._managerAccessOverride ? req.user.role : (req.user._originalRole || req.user.role);
     const userName = req.user.name || '';
     const isPrivileged = alertRoles.includes(role);
 
+    // Cada cargo pode ter uma janela de antecedência própria (em dias até o vencimento)
+    // para só ser notificado quando estiver mais urgente — dá tempo ao responsável agir
+    // antes de escalar para coordenação/gestão. Sem override, usa o prazo global.
+    let roleDaysMap = {};
+    try { roleDaysMap = JSON.parse(cfg.pms_alert_role_days || '{}'); } catch { roleDaysMap = {}; }
+    const roleWindow = parseInt(roleDaysMap[role]) > 0 ? parseInt(roleDaysMap[role]) : alertDays;
+
     const r = await pool.query(`
       WITH latest AS (
-        SELECT DISTINCT ON (base_code) *, ${SELECT_COMPUTED}
+        SELECT DISTINCT ON (base_code) *, ${selectComputed(alertDays)}
         FROM pms_documents
         ORDER BY base_code, revision DESC NULLS LAST
       )
@@ -127,6 +149,7 @@ router.get('/alerts', async (req, res) => {
     `);
 
     const visible = r.rows.filter(d => {
+      if (d.days_to_expire > roleWindow) return false;
       if (isPrivileged && role === 'coordenador') return areaMatchesUser(d.area, req.user.area);
       return isPrivileged || d.responsible.trim().toLowerCase() === userName.trim().toLowerCase();
     });

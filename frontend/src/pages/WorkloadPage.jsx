@@ -11,7 +11,7 @@ const STATUS_META = {
 };
 
 const STATUS_OPTIONS = Object.keys(STATUS_META);
-const MGMT_ROLES = ['admin', 'gestor', 'planejador', 'gerente'];
+const MGMT_ROLES = ['admin', 'planejador', 'gerente', 'diretor'];
 const DAY = 86400000;
 const LEFT_WIDTH = 238;
 const MONTH_WIDTH = 760;
@@ -23,7 +23,7 @@ const asDate = value => value ? new Date(`${dateValue(value)}T12:00:00`) : null;
 const demandStart = demand => asDate(demand.start_date) || asDate(demand.created_at) || new Date();
 const demandEnd = demand => asDate(demand.due_date) || new Date(+demandStart(demand) + 30 * DAY);
 const loadTone = load => Number(load) >= 100 ? '#e6534d' : Number(load) >= 85 ? '#e6a532' : '#2f9e54';
-const roleLabel = role => ({ gerente: 'Gerente', gestor: 'Gestor', coordenador: 'Coordenador(a)', planejador: 'Planejador', engenheiro: 'Engenheiro(a)' })[role] || role;
+const roleLabel = role => ({ gerente: 'Gerente', diretor: 'Diretor', coordenador: 'Coordenador(a)', planejador: 'Planejador', engenheiro: 'Engenheiro(a)' })[role] || role;
 
 function formatDate(value) {
   const date = asDate(value);
@@ -39,6 +39,7 @@ function initials(member) {
 function Avatar({ member, size = 34 }) {
   const palette = {
     gerente: ['#e4eaf6', '#16335c'],
+    diretor: ['#f6e4ee', '#9d174d'],
     coordenador: ['#dcf0ea', '#15716c'],
     engenheiro: ['#dce8f8', '#2b5fa0'],
     planejador: ['#dcf0ea', '#15716c'],
@@ -392,7 +393,7 @@ export default function WorkloadPage() {
   const visibleDemands = demands.filter(demand => !statusFilter || demand.status === statusFilter);
   const byUser = visibleDemands.reduce((map, demand) => ({ ...map, [demand.user_id]: [...(map[demand.user_id] || []), demand] }), {});
   const personLoad = member => loadForMode(demands.filter(demand => demand.user_id === member.id), loadMode);
-  const roleGroups = [['gerente', 'Gerentes', '#16335c', '#edf2f9'], ['gestor', 'Gestores', '#16335c', '#edf2f9'], ['planejador', 'Planejadores', '#15716c', '#ebf7f3'], ['coordenador', 'Coordenador(a)s', '#15716c', '#ebf7f3'], ['engenheiro', 'Engenheiro(a)s', '#2b5fa0', '#edf3fc']].map(([key, label, color, tint]) => {
+  const roleGroups = [['gerente', 'Gerentes', '#16335c', '#edf2f9'], ['diretor', 'Diretores', '#9d174d', '#fbe9f1'], ['planejador', 'Planejadores', '#15716c', '#ebf7f3'], ['coordenador', 'Coordenador(a)s', '#15716c', '#ebf7f3'], ['engenheiro', 'Engenheiro(a)s', '#2b5fa0', '#edf3fc']].map(([key, label, color, tint]) => {
     const groupPeople = people.filter(person => person.role === key).map(member => {
       const personDemands = byUser[member.id] || [];
       return { member, demands: personDemands, totalLoad: personLoad(member) };

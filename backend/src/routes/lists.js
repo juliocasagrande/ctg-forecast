@@ -63,6 +63,20 @@ function safeError(res, err) {
   res.status(500).json({ error: err.message });
 }
 
+// Lê um mapa JSON {cargo: dias} de system_settings (chave `jsonKey`), com fallback
+// para o valor numérico global (`globalKey`) e por fim para `defaultDays`. Prazos
+// maiores para cargos de coordenação/gestão dão tempo ao engenheiro antes da escalada.
+function roleDaysResolver(settingsMap, jsonKey, globalKey, defaultDays) {
+  let map = {};
+  try { map = JSON.parse(settingsMap[jsonKey] || '{}'); } catch { map = {}; }
+  const globalDays = parseInt(settingsMap[globalKey]);
+  const fallback = !isNaN(globalDays) && globalDays > 0 ? globalDays : defaultDays;
+  return (role) => {
+    const v = parseInt(map[role]);
+    return !isNaN(v) && v > 0 ? v : fallback;
+  };
+}
+
 function areaVariants(area) {
   const key = String(area || '').toLowerCase();
   if (key === 'mecanica') return ['Mecânica', 'Mecanica', 'mecanica'];
@@ -445,7 +459,7 @@ router.get('/projects-tracking/stale-projects', async (req, res) => {
   try {
     const { user } = req;
     // Get alert interval from settings
-    const settings = await pool.query("SELECT key, value FROM system_settings WHERE key IN ('tracking_alert_interval_days', 'tracking_alert_enabled', 'tracking_alert_roles')");
+    const settings = await pool.query("SELECT key, value FROM system_settings WHERE key IN ('tracking_alert_interval_days', 'tracking_alert_role_days', 'tracking_alert_enabled', 'tracking_alert_roles')");
     const settingsMap = {};
     settings.rows.forEach(r => { settingsMap[r.key] = r.value; });
 
@@ -453,14 +467,15 @@ router.get('/projects-tracking/stale-projects', async (req, res) => {
       return res.json([]);
     }
 
-    const intervalDays = parseInt(settingsMap['tracking_alert_interval_days']) || 6;
     const alertRole = user._managerAccessOverride ? user.role : (user._originalRole || user.role);
-    const allowedRoles = (settingsMap['tracking_alert_roles'] || 'gerente,coordenador,engenheiro,admin').split(',').map(r => r.trim());
+    const allowedRoles = (settingsMap['tracking_alert_roles'] || 'gerente,diretor,coordenador,engenheiro,admin').split(',').map(r => r.trim());
 
     // Check if user's role is in the allowed roles
     if (!allowedRoles.includes(alertRole)) {
       return res.json([]);
     }
+
+    const intervalDays = roleDaysResolver(settingsMap, 'tracking_alert_role_days', 'tracking_alert_interval_days', 6)(alertRole);
 
     let query, params;
 
@@ -512,7 +527,7 @@ router.get('/iacs/stale-iacs', async (req, res) => {
     await ensureIacSchema();
     const { user } = req;
     // Get alert interval from settings
-    const settings = await pool.query("SELECT key, value FROM system_settings WHERE key IN ('iac_alert_interval_days', 'iac_alert_enabled', 'iac_alert_roles')");
+    const settings = await pool.query("SELECT key, value FROM system_settings WHERE key IN ('iac_alert_interval_days', 'iac_alert_role_days', 'iac_alert_enabled', 'iac_alert_roles')");
     const settingsMap = {};
     settings.rows.forEach(r => { settingsMap[r.key] = r.value; });
 
@@ -520,14 +535,15 @@ router.get('/iacs/stale-iacs', async (req, res) => {
       return res.json([]);
     }
 
-    const intervalDays = parseInt(settingsMap['iac_alert_interval_days']) || 6;
     const alertRole = user._managerAccessOverride ? user.role : (user._originalRole || user.role);
-    const allowedRoles = (settingsMap['iac_alert_roles'] || 'gerente,coordenador,engenheiro,admin').split(',').map(r => r.trim());
+    const allowedRoles = (settingsMap['iac_alert_roles'] || 'gerente,diretor,coordenador,engenheiro,admin').split(',').map(r => r.trim());
 
     // Check if user's role is in the allowed roles
     if (!allowedRoles.includes(alertRole)) {
       return res.json([]);
     }
+
+    const intervalDays = roleDaysResolver(settingsMap, 'iac_alert_role_days', 'iac_alert_interval_days', 6)(alertRole);
 
     let query, params;
 

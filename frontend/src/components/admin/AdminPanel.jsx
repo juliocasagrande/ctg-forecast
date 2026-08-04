@@ -5,6 +5,7 @@ import Modal from '../ui/Modal.jsx';
 import PasswordInput, { getPasswordStrength } from '../ui/PasswordInput.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PAGE_REGISTRY } from '../../config/pages.js';
+import { BUTTON_REGISTRY } from '../../config/buttons.js';
 
 const PAGE_ACCESS_OPTS = [
   { value: 'none',   icon: '—', label: '— Sem acesso',  title: 'Sem acesso' },
@@ -80,7 +81,8 @@ const ROLE_LABELS = {
   coordenador: 'Coordenador',
   engenheiro:  'Engenheiro',
   planejador:  'Planejador',
-  gerente:     'Gerente / Diretor',
+  gerente:     'Gerente',
+  diretor:     'Diretor',
 };
 const ROLE_COLORS = {
   admin:       '#001F5B',
@@ -88,6 +90,7 @@ const ROLE_COLORS = {
   engenheiro:  '#166534',
   planejador:  '#7C3AED',
   gerente:     '#B45309',
+  diretor:     '#9D174D',
 };
 
 const AREA_LABELS = {
@@ -150,6 +153,10 @@ export default function AdminPanel() {
   const [pageAccessLoading, setPageAccessLoading] = useState(false);
   const [pageAccessSavingCell, setPageAccessSavingCell] = useState(null);
   const [pageAccessLoaded, setPageAccessLoaded] = useState(false);
+  const [buttonAccessMatrix, setButtonAccessMatrix] = useState([]);
+  const [buttonAccessLoading, setButtonAccessLoading] = useState(false);
+  const [buttonAccessSavingCell, setButtonAccessSavingCell] = useState(null);
+  const [buttonAccessLoaded, setButtonAccessLoaded] = useState(false);
   const { toast, confirm } = useToast();
   const { user: currentUser, refreshUser } = useAuth();
 
@@ -170,6 +177,10 @@ export default function AdminPanel() {
   useEffect(() => {
     if (activeTab === 'pageAccess' && !pageAccessLoaded) loadPageAccessMatrix();
   }, [activeTab, pageAccessLoaded]);
+
+  useEffect(() => {
+    if (activeTab === 'buttonAccess' && !buttonAccessLoaded) loadButtonAccessMatrix();
+  }, [activeTab, buttonAccessLoaded]);
 
   const handleApprove = async (u) => {
     try {
@@ -230,6 +241,36 @@ export default function AdminPanel() {
     }
   };
 
+  const loadButtonAccessMatrix = async () => {
+    setButtonAccessLoading(true);
+    try {
+      const r = await api.get('/users/button-access');
+      setButtonAccessMatrix(r.data);
+      setButtonAccessLoaded(true);
+    } catch {
+      toast('Erro ao carregar permissões de botões', 'error');
+    } finally { setButtonAccessLoading(false); }
+  };
+
+  const handleButtonAccessCellChange = async (userId, pageKey, buttonKey, enabled) => {
+    const cellId = `${userId}:${pageKey}:${buttonKey}`;
+    setButtonAccessMatrix(prev => prev.map(u =>
+      u.id === userId
+        ? { ...u, buttons: { ...u.buttons, [pageKey]: { ...u.buttons[pageKey], [buttonKey]: enabled } } }
+        : u
+    ));
+    setButtonAccessSavingCell(cellId);
+    try {
+      await api.put(`/users/${userId}/button-access`, { buttons: [{ page_key: pageKey, button_key: buttonKey, enabled }] });
+      if (currentUser?.id === userId) refreshUser();
+    } catch {
+      toast('Erro ao salvar permissão de botão', 'error');
+      loadButtonAccessMatrix();
+    } finally {
+      setButtonAccessSavingCell(prev => prev === cellId ? null : prev);
+    }
+  };
+
   const handleSave = async () => {
     if (!form.name || !form.email) return toast('Preencha nome e email', 'error');
     if (!editingUser && !form.password) return toast('Senha obrigatória para novo usuário', 'error');
@@ -286,6 +327,7 @@ export default function AdminPanel() {
     engenheiros:  users.filter(u => u.role === 'engenheiro').length,
     planejadores: users.filter(u => u.role === 'planejador').length,
     gerentes:     users.filter(u => u.role === 'gerente').length,
+    diretores:    users.filter(u => u.role === 'diretor').length,
   };
 
   if (loading) return <div className="loading-spinner"><div className="spinner" /></div>;
@@ -301,7 +343,8 @@ export default function AdminPanel() {
           { label: 'Coordenadores',      value: stats.coordenadores, color: '#0070B8' },
           { label: 'Planejadores',       value: stats.planejadores,  color: '#7C3AED' },
           { label: 'Engenheiros',        value: stats.engenheiros,   color: '#166534' },
-          { label: 'Gerentes/Diretores', value: stats.gerentes,      color: '#B45309' },
+          { label: 'Gerentes',           value: stats.gerentes,      color: '#B45309' },
+          { label: 'Diretores',          value: stats.diretores,     color: '#9D174D' },
         ].map(s => (
           <div key={s.label} className="stat-card" style={{ '--accent': s.color }}>
             <div className="stat-label">{s.label}</div>
@@ -326,6 +369,9 @@ export default function AdminPanel() {
         </button>
         <button className={`tab-btn ${activeTab === 'pageAccess' ? 'active' : ''}`} onClick={() => setActiveTab('pageAccess')}>
           Acesso por Página
+        </button>
+        <button className={`tab-btn ${activeTab === 'buttonAccess' ? 'active' : ''}`} onClick={() => setActiveTab('buttonAccess')}>
+          Configurações de Funções
         </button>
       </div>
 
@@ -369,7 +415,8 @@ export default function AdminPanel() {
               <option value="coordenador">Coordenador</option>
               <option value="planejador">Planejador</option>
               <option value="engenheiro">Engenheiro</option>
-              <option value="gerente">Gerente / Diretor</option>
+              <option value="gerente">Gerente</option>
+              <option value="diretor">Diretor</option>
             </select>
             <button className="btn btn-primary" style={{ marginLeft: 'auto' }} onClick={openNew}>
               + Novo Usuário
@@ -502,6 +549,104 @@ export default function AdminPanel() {
         </div>
       )}
 
+      {/* Configurações de Funções (habilitar/desabilitar botões por usuário) */}
+      {activeTab === 'buttonAccess' && (
+        <div>
+          <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.6 }}>
+            Desabilite botões específicos (Novo/Importar/Exportar) para um usuário, independentemente do cargo dele.
+            Por padrão todos os botões ficam habilitados — use isto para exceções pontuais.
+          </p>
+          {buttonAccessLoading ? (
+            <div className="loading-spinner"><div className="spinner" /></div>
+          ) : (
+            <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th style={{
+                      position: 'sticky', left: 0, zIndex: 2,
+                      background: 'var(--ctg-navy)', borderBottom: '1px solid rgba(255,255,255,0.15)',
+                    }} />
+                    {BUTTON_REGISTRY.map(p => (
+                      <th key={p.page_key} colSpan={p.buttons.length} style={{
+                        background: 'rgba(11,92,171,0.14)', color: 'var(--ctg-navy)',
+                        padding: '5px 4px', textAlign: 'center', fontWeight: 700, fontSize: '0.62rem',
+                        textTransform: 'uppercase', letterSpacing: '0.05em',
+                        borderBottom: '1px solid var(--border)',
+                        borderLeft: '1px solid var(--bg-card)',
+                      }}>{p.page_label}</th>
+                    ))}
+                  </tr>
+                  <tr>
+                    <th style={{
+                      position: 'sticky', left: 0, zIndex: 2,
+                      background: 'var(--ctg-navy)', color: '#fff',
+                      padding: '9px 14px', textAlign: 'left', fontWeight: 600, fontSize: '0.75rem',
+                      minWidth: 200,
+                    }}>Usuário</th>
+                    {BUTTON_REGISTRY.flatMap(p => p.buttons.map(b => (
+                      <th key={`${p.page_key}:${b.key}`} style={{
+                        background: 'rgba(11,92,171,0.07)', color: 'var(--ctg-navy)',
+                        padding: '8px 4px', textAlign: 'left', fontWeight: 600, fontSize: '0.72rem',
+                        whiteSpace: 'nowrap', width: 36,
+                        writingMode: 'vertical-rl', transform: 'rotate(180deg)',
+                      }}>{b.label}</th>
+                    )))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {buttonAccessMatrix.map((u, i) => (
+                    <tr key={u.id} style={{ background: i % 2 ? 'var(--bg-app)' : 'var(--bg-card)', opacity: u.active ? 1 : 0.5 }}>
+                      <td style={{
+                        position: 'sticky', left: 0, zIndex: 1,
+                        background: i % 2 ? 'var(--bg-app)' : 'var(--bg-card)',
+                        padding: '8px 14px', fontSize: '0.82rem',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <Avatar initials={u.name.split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() || '').join('')} role={u.role} />
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</div>
+                            <RoleBadge role={u.role} />
+                          </div>
+                        </div>
+                      </td>
+                      {BUTTON_REGISTRY.flatMap(p => p.buttons.map(b => {
+                        const cellId = `${u.id}:${p.page_key}:${b.key}`;
+                        const enabled = u.buttons[p.page_key]?.[b.key] !== false;
+                        const savingCell = buttonAccessSavingCell === cellId;
+                        return (
+                          <td key={cellId} style={{ padding: '8px 10px', textAlign: 'center', background: 'rgba(11,92,171,0.03)' }}>
+                            <button
+                              type="button"
+                              disabled={savingCell}
+                              title={enabled ? 'Habilitado — clique para desabilitar' : 'Desabilitado — clique para habilitar'}
+                              onClick={() => handleButtonAccessCellChange(u.id, p.page_key, b.key, !enabled)}
+                              style={{
+                                width: 30, height: 20, borderRadius: 10, border: 'none',
+                                position: 'relative', cursor: savingCell ? 'wait' : 'pointer',
+                                background: enabled ? '#15803D' : '#E2E8F0',
+                                opacity: savingCell ? 0.5 : 1,
+                                transition: 'background 0.15s',
+                              }}
+                            >
+                              <span style={{
+                                position: 'absolute', top: 2, left: enabled ? 12 : 2,
+                                width: 16, height: 16, borderRadius: '50%', background: '#fff',
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transition: 'left 0.15s',
+                              }} />
+                            </button>
+                          </td>
+                        );
+                      }))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Create/Edit Modal */}
       <Modal open={modalOpen} onClose={() => setModalOpen(false)}
         onSave={saving || (!editingUser && !getPasswordStrength(form.password).allPassed) ? undefined : handleSave}
@@ -537,7 +682,8 @@ export default function AdminPanel() {
             <option value="coordenador">Coordenador</option>
             <option value="planejador">Planejador</option>
             <option value="engenheiro">Engenheiro</option>
-            <option value="gerente">Gerente / Diretor</option>
+            <option value="gerente">Gerente</option>
+            <option value="diretor">Diretor</option>
           </select>
         </div>
         {formNeedsArea && (

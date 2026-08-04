@@ -28,8 +28,8 @@ export default function AlertBell() {
   const btnRef = useRef(null);
   const [dropPos, setDropPos] = useState({ top: 0, right: 0 });
   const navigate = useNavigate();
-  const { isGestor, isPlanejador, isAdmin } = useRole();
-  const isManager = isGestor || isPlanejador || isAdmin;
+  const { isPlanejador, isAdmin } = useRole();
+  const isManager = isPlanejador || isAdmin;
 
   const fetchAlerts = useCallback(async () => {
     try {
@@ -60,7 +60,7 @@ export default function AlertBell() {
       setPmsAlerts(pmsDocs);
       const vacationCount = data.vacation_adp?.count || 0;
       const forecastTotal = SHOW_FORECAST_ALERTS ? (data.total || 0) : 0;
-      data.total = forecastTotal + delegations.length + (SHOW_FORECAST_ALERTS ? 0 : vacationCount) + (data.doc_unpublished?.count || 0) + staleProjects.length + staleIACs.length + lateDemands.length + pmsDocs.length;
+      data.total = forecastTotal + delegations.length + (SHOW_FORECAST_ALERTS ? 0 : vacationCount) + (data.doc_unpublished?.count || 0) + (data.drawing_unpublished?.count || 0) + staleProjects.length + staleIACs.length + lateDemands.length + pmsDocs.length;
       setAlerts(data);
       if ('setAppBadge' in navigator) {
         const count = data?.total ?? 0;
@@ -373,6 +373,27 @@ export default function AlertBell() {
                   </Section>
                 )}
 
+                {/* Desenhos não publicados */}
+                {alerts.drawing_unpublished?.count > 0 && (
+                  <Section
+                    icon={<DrawingIcon />} title="Desenhos não publicados" count={alerts.drawing_unpublished.count} color="#0891B2"
+                    onMarkAllSeen={() => dismissAll('drawing_unpublished', alerts.drawing_unpublished.drawings.map(d => ['drawing_unpublished', d.id]))}
+                    markingAll={markingAllSection === 'drawing_unpublished'}
+                  >
+                    {alerts.drawing_unpublished.drawings.map(d => (
+                      <AlertRow
+                        key={d.id}
+                        onClick={() => { navigate('/drawings'); setOpen(false); }}
+                        label={d.subject}
+                        sub={`${d.code} · ${d.status}`}
+                        accent="#0891B2"
+                        onDismiss={() => dismiss('drawing_unpublished', d.id)}
+                        dismissing={isDismissing('drawing_unpublished', d.id)}
+                      />
+                    ))}
+                  </Section>
+                )}
+
                 {/* Documentos PMS vencendo/vencidos */}
                 {pmsAlerts.length > 0 && (
                   <Section
@@ -579,3 +600,4 @@ const DelegIcon   = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="
 const DocIcon     = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd"/></svg>;
 const TrackIcon   = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 3a2 2 0 00-2 2v1a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v1a2 2 0 002 2h2a2 2 0 002-2v-1a2 2 0 00-2-2H5zM13 3a2 2 0 00-2 2v1a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2h-2zM13 11a2 2 0 00-2 2v1a2 2 0 002 2h2a2 2 0 002-2v-1a2 2 0 00-2-2h-2z" clipRule="evenodd"/></svg>;
 const IACIcon     = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/></svg>;
+const DrawingIcon = () => <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 3a1 1 0 00-1 1v12a1 1 0 001 1h12a1 1 0 001-1V4a1 1 0 00-1-1H4zm1 2h10v10H5V5zm2 2v2h2V7H7zm4 0v2h2V7h-2zM7 11v2h2v-2H7zm4 0v2h6v-2h-6z" clipRule="evenodd"/></svg>;

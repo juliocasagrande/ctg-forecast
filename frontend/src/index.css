@@ -1182,6 +1182,39 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
   line-height: 1.2;
 }
 
+/* Abas de configuração relacionadas (ex.: Documentos/PMS/Desenhos) agrupadas
+   visualmente com uma legenda fina acima e uma moldura sutil. */
+.settings-nav-group {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 3px 4px 4px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+.settings-nav-group-label {
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 4px;
+}
+.settings-nav-group-btns {
+  display: flex;
+  gap: 4px;
+}
+@media (max-width: 768px) {
+  .settings-nav-group-label { display: none; }
+  .settings-nav-group { border-style: none; padding: 0; gap: 0; }
+}
+
 /* ── Section card ── */
 .settings-section {
   background: var(--bg-card);

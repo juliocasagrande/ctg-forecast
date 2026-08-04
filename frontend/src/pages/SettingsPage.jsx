@@ -167,7 +167,9 @@ function FeedbackList({ toast }) {
 
 const SECTIONS = [
   { id: 'alerts',        label: '🔔 Alertas',             icon: '🔔' },
-  { id: 'documents',     label: '📄 Documentos',           icon: '📄' },
+  { id: 'documents',     label: '📄 Documentos',           icon: '📄', group: 'Alertas de Documentação' },
+  { id: 'pms',           label: '🗓️ PMS',                  icon: '🗓️', group: 'Alertas de Documentação' },
+  { id: 'drawings',      label: '📐 Desenhos',             icon: '📐', group: 'Alertas de Documentação' },
   { id: 'tracking',      label: '📋 Acompanhamento',       icon: '📋' },
   { id: 'colors',        label: '🎨 Cores',                icon: '🎨' },
   { id: 'period',        label: '📆 Período e Ano Fiscal', icon: '📆' },
@@ -180,19 +182,34 @@ const SECTIONS = [
 
 const DEFAULTS = {
   alert_stale_days:      '30',
-  forecast_permissions:  '{"planejador":{"Budget":"edit","Forecast":"edit","Actual":"edit","Pool":"edit","Meta":"edit"},"coordenador":{"Budget":"edit","Forecast":"edit","Actual":"edit","Pool":"edit","Meta":"edit"},"engenheiro":{"Budget":"none","Forecast":"edit","Actual":"edit","Pool":"none","Meta":"none"},"gerente":{"Budget":"none","Forecast":"none","Actual":"none","Pool":"none","Meta":"none"}}',
+  alert_stale_role_days: '{"engenheiro":30,"coordenador":35,"planejador":35,"gerente":40,"diretor":40,"admin":40}',
+  forecast_permissions:  '{"planejador":{"Budget":"edit","Forecast":"edit","Actual":"edit","Pool":"edit","Meta":"edit"},"coordenador":{"Budget":"edit","Forecast":"edit","Actual":"edit","Pool":"edit","Meta":"edit"},"engenheiro":{"Budget":"none","Forecast":"edit","Actual":"edit","Pool":"none","Meta":"none"},"gerente":{"Budget":"none","Forecast":"none","Actual":"none","Pool":"none","Meta":"none"},"diretor":{"Budget":"none","Forecast":"none","Actual":"none","Pool":"none","Meta":"none"}}',
   tracking_alert_enabled: 'true',
   tracking_alert_interval_days: '6',
-  tracking_alert_roles:     'gerente,coordenador,engenheiro,admin',
+  tracking_alert_role_days: '{"engenheiro":6,"coordenador":10,"gerente":14,"diretor":14,"admin":14}',
+  tracking_alert_roles:     'gerente,diretor,coordenador,engenheiro,admin',
   iac_alert_enabled:       'true',
   iac_alert_interval_days:  '6',
-  iac_alert_roles:          'gerente,coordenador,engenheiro,admin',
+  iac_alert_role_days:      '{"engenheiro":6,"coordenador":10,"gerente":14,"diretor":14,"admin":14}',
+  iac_alert_roles:          'gerente,diretor,coordenador,engenheiro,admin',
   doc_alert_enabled:         'true',
   doc_alert_interval_days:   '7',
+  doc_alert_role_days:       '{"engenheiro":7,"coordenador":14,"planejador":14,"gerente":21,"diretor":21,"admin":21}',
   doc_alert_exclude_cancelled:'true',
   doc_alert_exclude_published:'true',
   doc_alert_roles:           'engenheiro,coordenador,planejador',
   doc_alert_areas:           '',
+  drawing_alert_enabled:         'true',
+  drawing_alert_interval_days:   '7',
+  drawing_alert_role_days:       '{"engenheiro":7,"coordenador":14,"planejador":14,"gerente":21,"diretor":21,"admin":21}',
+  drawing_alert_exclude_cancelled:'true',
+  drawing_alert_exclude_published:'true',
+  drawing_alert_roles:           'engenheiro,coordenador,planejador',
+  drawing_alert_areas:           '',
+  pms_alert_enabled:      'true',
+  pms_alert_days:          '30',
+  pms_alert_role_days:     '{"engenheiro":30,"coordenador":15,"planejador":15,"gerente":15,"diretor":15,"admin":15}',
+  pms_alert_roles:         'coordenador,gerente,diretor,admin',
   alert_empty_forecast:  'true',
   alert_unread_messages: 'true',
   actual_deadline_business_day: '6',
@@ -321,10 +338,68 @@ function SelectInput({ label, description, value, onChange, options }) {
   );
 }
 
+const ALERT_ROLE_LABELS = {
+  engenheiro: 'Engenheiro', coordenador: 'Coordenador', planejador: 'Planejador',
+  gerente: 'Gerente', diretor: 'Diretor', admin: 'Admin',
+};
+
+// Editor de prazo (em dias) por cargo, usado nas abas de alertas. Cargos de
+// coordenação/gestão tipicamente recebem um prazo maior que o do engenheiro —
+// dando tempo para o responsável original agir antes do alerta escalar.
+function RoleDaysEditor({ value, onChange, roles, defaultDays = 7 }) {
+  let map = {};
+  try { map = JSON.parse(value || '{}'); } catch { map = {}; }
+
+  const setDay = (role, days) => {
+    const n = Math.max(1, Math.min(365, parseInt(days) || defaultDays));
+    onChange(JSON.stringify({ ...map, [role]: n }));
+  };
+
+  if (!roles.length) {
+    return (
+      <p className="settings-field-desc" style={{ marginTop: 8 }}>
+        Selecione ao menos um cargo acima para configurar os prazos individuais.
+      </p>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+      {roles.map(role => (
+        <div key={role} style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '7px 12px', background: 'var(--bg-app)', borderRadius: 8,
+        }}>
+          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+            {ALERT_ROLE_LABELS[role] || role}
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="number" min={1} max={365}
+              value={map[role] ?? defaultDays}
+              onChange={e => setDay(role, e.target.value)}
+              style={{
+                width: 60, padding: '5px 8px', border: '1.5px solid var(--border-strong)',
+                borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-body)',
+                fontSize: '0.85rem', textAlign: 'center', outline: 'none',
+                color: 'var(--text-primary)', background: 'var(--bg-card)',
+              }}
+            />
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>dias</span>
+          </div>
+        </div>
+      ))}
+      <p className="settings-field-desc" style={{ marginTop: 2 }}>
+        Cargos com prazo maior dão tempo para o cargo anterior agir antes do alerta escalar (ex.: coordenador só vê pendências depois de decorrido o prazo do engenheiro).
+      </p>
+    </div>
+  );
+}
+
 const PERM_TYPES = ['Budget', 'Forecast', 'Actual', 'Pool', 'Meta'];
 const PERM_TYPE_LABELS = { Budget: 'Budget', Forecast: 'Forecast', Actual: 'Realizado', Pool: 'Pool', Meta: 'Meta' };
-const PERM_ROLES = ['planejador', 'coordenador', 'engenheiro', 'gerente'];
-const PERM_ROLE_LABELS = { planejador: 'Planejador', coordenador: 'Coordenador', engenheiro: 'Engenheiro', gerente: 'Gerente' };
+const PERM_ROLES = ['planejador', 'coordenador', 'engenheiro', 'gerente', 'diretor'];
+const PERM_ROLE_LABELS = { planejador: 'Planejador', coordenador: 'Coordenador', engenheiro: 'Engenheiro', gerente: 'Gerente', diretor: 'Diretor' };
 
 const PERM_OPTS = [
   { value: 'none', label: '—',       title: 'Sem acesso' },
@@ -436,11 +511,11 @@ export default function SettingsPage() {
 
   const ALLOWED_SAP_EMAILS = ['julio.casagrande@ctgbr.com.br'];
   const canAccessSap = user && (
-    ['admin', 'gestor', 'planejador'].includes(user.role) ||
+    ['admin', 'planejador'].includes(user.role) ||
     ALLOWED_SAP_EMAILS.includes(user.email)
   );
   const canManageEquipamentos = user && (
-    ['admin', 'coordenador', 'planejador', 'gestor'].includes(user.role) ||
+    ['admin', 'coordenador', 'planejador'].includes(user.role) ||
     ALLOWED_SAP_EMAILS.includes(user.email)
   );
   const canEdit = user && (['admin', 'planejador'].includes(user.role) || ALLOWED_SAP_EMAILS.includes(user.email));
@@ -480,16 +555,32 @@ export default function SettingsPage() {
     <div className="settings-page">
       {/* Navigation tabs */}
       <div className="settings-nav">
-        {SECTIONS.filter(s => (s.id !== 'sap' || canAccessSap) && (s.id !== 'equipamentos' || canManageEquipamentos)).map(s => (
-          <button
-            key={s.id}
-            className={`settings-nav-btn ${activeSection === s.id ? 'active' : ''}`}
-            onClick={() => setActiveSection(s.id)}
-          >
-            <span className="settings-nav-icon">{s.icon}</span>
-            <span className="settings-nav-label">{s.label.split(' ').slice(1).join(' ')}</span>
-          </button>
-        ))}
+        {(() => {
+          const visible = SECTIONS.filter(s => (s.id !== 'sap' || canAccessSap) && (s.id !== 'equipamentos' || canManageEquipamentos));
+          // Agrupa itens contíguos com o mesmo `group` em blocos, mantendo os demais soltos.
+          const blocks = [];
+          visible.forEach(s => {
+            const last = blocks[blocks.length - 1];
+            if (s.group && last?.group === s.group) last.items.push(s);
+            else blocks.push({ group: s.group || null, items: [s] });
+          });
+          const navBtn = s => (
+            <button
+              key={s.id}
+              className={`settings-nav-btn ${activeSection === s.id ? 'active' : ''}`}
+              onClick={() => setActiveSection(s.id)}
+            >
+              <span className="settings-nav-icon">{s.icon}</span>
+              <span className="settings-nav-label">{s.label.split(' ').slice(1).join(' ')}</span>
+            </button>
+          );
+          return blocks.map((b, i) => b.group ? (
+            <div key={`group-${i}`} className="settings-nav-group" title={b.group}>
+              <span className="settings-nav-group-label">{b.group}</span>
+              <div className="settings-nav-group-btns">{b.items.map(navBtn)}</div>
+            </div>
+          ) : navBtn(b.items[0]));
+        })()}
       </div>
 
       {/* Content */}
@@ -500,15 +591,24 @@ export default function SettingsPage() {
           <>
             <SectionCard
               title="Tempo sem atualização"
-              description="Define após quantos dias sem atualização um projeto dispara alerta para os gestores."
+              description="Define após quantos dias sem atualização um projeto dispara alerta. Configure um prazo por cargo para dar tempo ao engenheiro antes de escalar para coordenação/gestão."
             >
               <NumberInput
-                label="Dias para alerta de desatualização"
-                description="Projetos sem atualização de Forecast há mais dias que esse valor serão marcados em vermelho."
+                label="Prazo padrão"
+                description="Usado para cargos sem prazo específico definido abaixo."
                 value={settings.alert_stale_days}
                 onChange={v => set('alert_stale_days', v)}
                 min={1} max={365} unit="dias"
               />
+              <div style={{ padding: '12px 0' }}>
+                <div className="settings-toggle-label">Prazo por cargo</div>
+                <RoleDaysEditor
+                  value={settings.alert_stale_role_days}
+                  onChange={v => set('alert_stale_role_days', v)}
+                  roles={['engenheiro', 'coordenador', 'planejador', 'gerente', 'diretor', 'admin']}
+                  defaultDays={parseInt(settings.alert_stale_days) || 30}
+                />
+              </div>
             </SectionCard>
 
             <SectionCard
@@ -558,8 +658,8 @@ export default function SettingsPage() {
                 onChange={v => set('tracking_alert_enabled', v)}
               />
               <NumberInput
-                label="Intervalo de alerta"
-                description="Após quantos dias sem atualização o projeto aparece no sino de notificações."
+                label="Intervalo de alerta (padrão)"
+                description="Usado para cargos sem prazo específico definido abaixo."
                 value={settings.tracking_alert_interval_days}
                 onChange={v => set('tracking_alert_interval_days', v)}
                 min={1} max={365} unit="dias"
@@ -570,7 +670,7 @@ export default function SettingsPage() {
                   Coordenadores veem apenas engenheiros da sua área. Gerentes veem todas as áreas. Engenheiros veem apenas os próprios.
                 </p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {['gerente', 'coordenador', 'engenheiro'].map(role => {
+                  {['gerente', 'diretor', 'coordenador', 'engenheiro'].map(role => {
                     const active = (settings.tracking_alert_roles || '').split(',').map(r => r.trim()).includes(role);
                     return (
                       <button key={role} type="button"
@@ -592,6 +692,15 @@ export default function SettingsPage() {
                   })}
                 </div>
               </div>
+              <div style={{ padding: '12px 0' }}>
+                <div className="settings-toggle-label">Prazo por cargo</div>
+                <RoleDaysEditor
+                  value={settings.tracking_alert_role_days}
+                  onChange={v => set('tracking_alert_role_days', v)}
+                  roles={(settings.tracking_alert_roles || '').split(',').map(r => r.trim()).filter(Boolean)}
+                  defaultDays={parseInt(settings.tracking_alert_interval_days) || 6}
+                />
+              </div>
             </SectionCard>
 
             <SectionCard
@@ -605,8 +714,8 @@ export default function SettingsPage() {
                 onChange={v => set('iac_alert_enabled', v)}
               />
               <NumberInput
-                label="Intervalo de alerta"
-                description="Após quantos dias sem atualização o IAC aparece no sino de notificações."
+                label="Intervalo de alerta (padrão)"
+                description="Usado para cargos sem prazo específico definido abaixo."
                 value={settings.iac_alert_interval_days}
                 onChange={v => set('iac_alert_interval_days', v)}
                 min={1} max={365} unit="dias"
@@ -617,7 +726,7 @@ export default function SettingsPage() {
                   Coordenadores veem apenas engenheiros da sua área. Gerentes veem todas as áreas. Engenheiros veem apenas os próprios.
                 </p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {['gerente', 'coordenador', 'engenheiro'].map(role => {
+                  {['gerente', 'diretor', 'coordenador', 'engenheiro'].map(role => {
                     const active = (settings.iac_alert_roles || '').split(',').map(r => r.trim()).includes(role);
                     return (
                       <button key={role} type="button"
@@ -639,6 +748,15 @@ export default function SettingsPage() {
                   })}
                 </div>
               </div>
+              <div style={{ padding: '12px 0' }}>
+                <div className="settings-toggle-label">Prazo por cargo</div>
+                <RoleDaysEditor
+                  value={settings.iac_alert_role_days}
+                  onChange={v => set('iac_alert_role_days', v)}
+                  roles={(settings.iac_alert_roles || '').split(',').map(r => r.trim()).filter(Boolean)}
+                  defaultDays={parseInt(settings.iac_alert_interval_days) || 6}
+                />
+              </div>
             </SectionCard>
           </>
         )}
@@ -657,8 +775,8 @@ export default function SettingsPage() {
                 onChange={v => set('doc_alert_enabled', v)}
               />
               <NumberInput
-                label="Intervalo de lembrete"
-                description="A cada quantos dias o alerta de documento não publicado é reexibido."
+                label="Intervalo de lembrete (padrão)"
+                description="Usado para cargos sem prazo específico definido abaixo."
                 value={settings.doc_alert_interval_days}
                 onChange={v => set('doc_alert_interval_days', v)}
                 min={1} max={90} unit="dias"
@@ -685,13 +803,13 @@ export default function SettingsPage() {
 
             <SectionCard
               title="Quem recebe os alertas"
-              description="Defina por cargo e área quem recebe os alertas de documentos não publicados. Deixe área em branco para todas."
+              description="Defina por cargo e área quem recebe os alertas de documentos não publicados. Cargos elevados (coordenador, planejador, gerente, diretor, admin) enxergam os documentos pendentes de toda a organização — não apenas os próprios — a partir do prazo configurado. Deixe área em branco para todas."
             >
               <div className="settings-field">
                 <label className="settings-field-label">Cargos que recebem alertas</label>
                 <p className="settings-field-desc">Selecione os cargos que devem ser notificados.</p>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:8 }}>
-                  {['engenheiro','coordenador','planejador','gestor','gerente','admin'].map(role => {
+                  {['engenheiro','coordenador','planejador','gerente','diretor','admin'].map(role => {
                     const active = (settings.doc_alert_roles||'').split(',').map(r=>r.trim()).filter(Boolean).includes(role);
                     return (
                       <button key={role} type="button"
@@ -712,6 +830,15 @@ export default function SettingsPage() {
                     );
                   })}
                 </div>
+              </div>
+              <div className="settings-field" style={{ marginTop:16 }}>
+                <label className="settings-field-label">Prazo por cargo</label>
+                <RoleDaysEditor
+                  value={settings.doc_alert_role_days}
+                  onChange={v => set('doc_alert_role_days', v)}
+                  roles={(settings.doc_alert_roles || '').split(',').map(r => r.trim()).filter(Boolean)}
+                  defaultDays={parseInt(settings.doc_alert_interval_days) || 7}
+                />
               </div>
               <div className="settings-field" style={{ marginTop:16 }}>
                 <label className="settings-field-label">Filtrar por área (opcional)</label>
@@ -738,6 +865,181 @@ export default function SettingsPage() {
                     );
                   })}
                 </div>
+              </div>
+            </SectionCard>
+          </>
+        )}
+
+        {/* ── DESENHOS ── */}
+        {activeSection === 'drawings' && (
+          <>
+            <SectionCard
+              title="Alerta de desenhos não publicados"
+              description="Notifica os responsáveis sobre desenhos criados há mais de X dias que ainda não foram publicados ou cancelados."
+            >
+              <Toggle
+                label="Habilitar alertas de desenhos"
+                description="Ativa o envio de lembretes para desenhos em elaboração ou para aprovação."
+                value={settings.drawing_alert_enabled === 'true'}
+                onChange={v => set('drawing_alert_enabled', v)}
+              />
+              <NumberInput
+                label="Intervalo de lembrete (padrão)"
+                description="Usado para cargos sem prazo específico definido abaixo."
+                value={settings.drawing_alert_interval_days}
+                onChange={v => set('drawing_alert_interval_days', v)}
+                min={1} max={90} unit="dias"
+              />
+            </SectionCard>
+
+            <SectionCard
+              title="Filtro de status"
+              description="Define quais desenhos entram no filtro de alertas."
+            >
+              <Toggle
+                label="Excluir desenhos Cancelados"
+                description="Desenhos com status Cancelado não geram alertas."
+                value={settings.drawing_alert_exclude_cancelled === 'true'}
+                onChange={v => set('drawing_alert_exclude_cancelled', v)}
+              />
+              <Toggle
+                label="Excluir desenhos Publicados"
+                description="Desenhos com status Publicado não geram alertas."
+                value={settings.drawing_alert_exclude_published === 'true'}
+                onChange={v => set('drawing_alert_exclude_published', v)}
+              />
+            </SectionCard>
+
+            <SectionCard
+              title="Quem recebe os alertas"
+              description="Defina por cargo e área quem recebe os alertas de desenhos não publicados. Cargos elevados (coordenador, planejador, gerente, diretor, admin) enxergam os desenhos pendentes de toda a organização — não apenas os próprios — a partir do prazo configurado. Deixe área em branco para todas."
+            >
+              <div className="settings-field">
+                <label className="settings-field-label">Cargos que recebem alertas</label>
+                <p className="settings-field-desc">Selecione os cargos que devem ser notificados.</p>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:8 }}>
+                  {['engenheiro','coordenador','planejador','gerente','diretor','admin'].map(role => {
+                    const active = (settings.drawing_alert_roles||'').split(',').map(r=>r.trim()).filter(Boolean).includes(role);
+                    return (
+                      <button key={role} type="button"
+                        onClick={() => {
+                          const cur = (settings.drawing_alert_roles||'').split(',').map(r=>r.trim()).filter(Boolean);
+                          const next = active ? cur.filter(r=>r!==role) : [...cur, role];
+                          set('drawing_alert_roles', next.join(','));
+                        }}
+                        style={{
+                          padding:'5px 14px', borderRadius:20, fontSize:'0.78rem', cursor:'pointer',
+                          border:`1.5px solid ${active?'#0066B3':'#E2E8F0'}`,
+                          background: active?'#EFF6FF':'#F8FAFC',
+                          color: active?'#0066B3':'#64748B',
+                          fontWeight: active?700:400,
+                        }}>
+                        {active?'✓ ':''}{role}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="settings-field" style={{ marginTop:16 }}>
+                <label className="settings-field-label">Prazo por cargo</label>
+                <RoleDaysEditor
+                  value={settings.drawing_alert_role_days}
+                  onChange={v => set('drawing_alert_role_days', v)}
+                  roles={(settings.drawing_alert_roles || '').split(',').map(r => r.trim()).filter(Boolean)}
+                  defaultDays={parseInt(settings.drawing_alert_interval_days) || 7}
+                />
+              </div>
+              <div className="settings-field" style={{ marginTop:16 }}>
+                <label className="settings-field-label">Filtrar por área (opcional)</label>
+                <p className="settings-field-desc">Deixe em branco para notificar todas as áreas.</p>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:8 }}>
+                  {['eletrica','mecanica','confiabilidade','coordenacao','modernizacao'].map(area => {
+                    const active = (settings.drawing_alert_areas||'').split(',').map(a=>a.trim()).filter(Boolean).includes(area);
+                    return (
+                      <button key={area} type="button"
+                        onClick={() => {
+                          const cur = (settings.drawing_alert_areas||'').split(',').map(a=>a.trim()).filter(Boolean);
+                          const next = active ? cur.filter(a=>a!==area) : [...cur, area];
+                          set('drawing_alert_areas', next.join(','));
+                        }}
+                        style={{
+                          padding:'5px 14px', borderRadius:20, fontSize:'0.78rem', cursor:'pointer',
+                          border:`1.5px solid ${active?'#7C3AED':'#E2E8F0'}`,
+                          background: active?'#F5F3FF':'#F8FAFC',
+                          color: active?'#7C3AED':'#64748B',
+                          fontWeight: active?700:400,
+                        }}>
+                        {active?'✓ ':''}{area}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </SectionCard>
+          </>
+        )}
+
+        {/* ── PMS ── */}
+        {activeSection === 'pms' && (
+          <>
+            <SectionCard
+              title="Alerta de documentos PMS vencendo"
+              description="Notifica sobre documentos técnicos (POL/IM/GM/MM) próximos do vencimento (3 anos após a data do documento) ou já vencidos."
+            >
+              <Toggle
+                label="Habilitar alertas de PMS"
+                description="Ativa o envio de lembretes para documentos PMS vencendo ou vencidos."
+                value={settings.pms_alert_enabled === 'true'}
+                onChange={v => set('pms_alert_enabled', v)}
+              />
+              <NumberInput
+                label="Antecedência do alerta (padrão)"
+                description="Quantos dias antes do vencimento o documento passa a ser marcado como 'Alerta'. Usado para cargos sem prazo específico definido abaixo."
+                value={settings.pms_alert_days}
+                onChange={v => set('pms_alert_days', v)}
+                min={1} max={180} unit="dias"
+              />
+            </SectionCard>
+
+            <SectionCard
+              title="Quem recebe os alertas"
+              description="Cargos selecionados enxergam os documentos PMS vencendo/vencidos de toda a organização (coordenador é limitado à própria área). O responsável pelo documento sempre vê os próprios, independentemente do cargo."
+            >
+              <div className="settings-field">
+                <label className="settings-field-label">Cargos privilegiados</label>
+                <p className="settings-field-desc">Selecione os cargos que veem os documentos PMS de todos (ou da área, para coordenador).</p>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:8 }}>
+                  {['coordenador','planejador','gerente','diretor','admin'].map(role => {
+                    const active = (settings.pms_alert_roles||'').split(',').map(r=>r.trim()).filter(Boolean).includes(role);
+                    return (
+                      <button key={role} type="button"
+                        onClick={() => {
+                          const cur = (settings.pms_alert_roles||'').split(',').map(r=>r.trim()).filter(Boolean);
+                          const next = active ? cur.filter(r=>r!==role) : [...cur, role];
+                          set('pms_alert_roles', next.join(','));
+                        }}
+                        style={{
+                          padding:'5px 14px', borderRadius:20, fontSize:'0.78rem', cursor:'pointer',
+                          border:`1.5px solid ${active?'#0066B3':'#E2E8F0'}`,
+                          background: active?'#EFF6FF':'#F8FAFC',
+                          color: active?'#0066B3':'#64748B',
+                          fontWeight: active?700:400,
+                        }}>
+                        {active?'✓ ':''}{role}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="settings-field" style={{ marginTop:16 }}>
+                <label className="settings-field-label">Antecedência por cargo</label>
+                <p className="settings-field-desc">Cada cargo só é notificado quando faltar este número de dias (ou menos) para o vencimento — um valor menor para cargos de gestão evita alertar antes do engenheiro responsável ter tido tempo de agir.</p>
+                <RoleDaysEditor
+                  value={settings.pms_alert_role_days}
+                  onChange={v => set('pms_alert_role_days', v)}
+                  roles={['engenheiro','coordenador','planejador','gerente','diretor','admin']}
+                  defaultDays={parseInt(settings.pms_alert_days) || 30}
+                />
               </div>
             </SectionCard>
           </>

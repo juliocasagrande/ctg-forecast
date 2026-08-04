@@ -30,7 +30,7 @@ export function getEmailAccessOverride(email = '') {
   return null;
 }
 
-const ROLE_RANK = { engenheiro: 1, coordenador: 2, planejador: 3, gerente: 3, gestor: 4, admin: 5 };
+const ROLE_RANK = { engenheiro: 1, coordenador: 2, planejador: 3, gerente: 3, diretor: 3, admin: 5 };
 
 export function signToken(payload) {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
@@ -113,13 +113,64 @@ export async function requireAuth(req, res, next) {
 
     // 3. Permissões de página configuradas individualmente (ver user_page_access).
     //    Página sem linha aqui é tratada como 'editor' (comportamento padrão).
+    //    Com delegação ativa, o delegado herda o MAIOR nível de acesso entre o
+    //    próprio e o(s) delegador(es) — a delegação nunca deve resultar em MENOS
+    //    acesso do que o usuário já tinha por conta própria.
+    const relevantUserIds = [decoded.id, ...delegatorIds];
     const pageAccessR = await pool.query(
-      'SELECT page_key, access FROM user_page_access WHERE user_id = $1',
-      [decoded.id]
+      'SELECT user_id, page_key, access FROM user_page_access WHERE user_id = ANY($1::int[])',
+      [relevantUserIds]
     );
+    const PAGE_ACCESS_RANK = { none: 0, viewer: 1, editor: 2 };
     const pageAccess = {};
-    for (const row of pageAccessR.rows) {
-      if (PAGE_KEYS.includes(row.page_key)) pageAccess[row.page_key] = row.access;
+    if (delegatorIds.length > 0) {
+      // Parte de 'editor' (nível máximo) para cada página e só rebaixa se TODOS os
+      // usuários relevantes (próprio + delegadores) tiverem override mais restritivo.
+      for (const pk of PAGE_KEYS) pageAccess[pk] = 'editor';
+      const byUser = {};
+      for (const row of pageAccessR.rows) (byUser[row.user_id] ??= {})[row.page_key] = row.access;
+      for (const pk of PAGE_KEYS) {
+        let best = -1;
+        for (const uid of relevantUserIds) {
+          const val = byUser[uid]?.[pk] || 'editor';
+          best = Math.max(best, PAGE_ACCESS_RANK[val] ?? 2);
+        }
+        pageAccess[pk] = Object.keys(PAGE_ACCESS_RANK).find(k => PAGE_ACCESS_RANK[k] === best) || 'editor';
+      }
+    } else {
+      for (const row of pageAccessR.rows) {
+        if (PAGE_KEYS.includes(row.page_key)) pageAccess[row.page_key] = row.access;
+      }
+    }
+
+    // 4. Botões de ação desabilitados individualmente (ver user_button_access).
+    //    Botão sem linha aqui é tratado como habilitado (comportamento padrão).
+    //    Mesma lógica de delegação: habilitado para o delegado se estiver habilitado
+    //    para ele OU para qualquer um dos delegadores.
+    const buttonAccessR = await pool.query(
+      'SELECT user_id, page_key, button_key, enabled FROM user_button_access WHERE user_id = ANY($1::int[]) AND enabled = false',
+      [relevantUserIds]
+    );
+    const buttonAccess = {};
+    if (delegatorIds.length > 0) {
+      const disabledByUser = {};
+      for (const row of buttonAccessR.rows) {
+        ((disabledByUser[row.user_id] ??= {})[row.page_key] ??= new Set()).add(row.button_key);
+      }
+      // Só marca como desabilitado se estiver desabilitado para TODOS os usuários relevantes.
+      const ownDisabled = disabledByUser[decoded.id] || {};
+      for (const [pageKey, buttons] of Object.entries(ownDisabled)) {
+        for (const buttonKey of buttons) {
+          const disabledForAll = relevantUserIds.every(uid =>
+            disabledByUser[uid]?.[pageKey]?.has(buttonKey)
+          );
+          if (disabledForAll) (buttonAccess[pageKey] ??= {})[buttonKey] = false;
+        }
+      }
+    } else {
+      for (const row of buttonAccessR.rows) {
+        (buttonAccess[row.page_key] ??= {})[row.button_key] = false;
+      }
     }
 
     req.user = {
@@ -132,6 +183,7 @@ export async function requireAuth(req, res, next) {
       _allAreasAccess: allAreasAccess,
       _delegatorIds: delegatorIds, // IDs dos delegadores — permite acesso aos projetos deles
       _pageAccess: pageAccess,
+      _buttonAccess: buttonAccess,
     };
   } catch (dbErr) {
     console.error('[AUTH] Falha ao revalidar usuário no banco:', dbErr.message);
@@ -174,15 +226,15 @@ export function requirePageAccess(pageKey, { write = false } = {}) {
  * Controle de acesso a projetos por role:
  * - admin, planejador: acesso total
  * - coordenador: projetos com engenheiros da sua área
- * - gerente: acesso de leitura
+ * - gerente, diretor: acesso de leitura
  * - engenheiro: projetos designados a ele ou via delegação ativa
  * - usuário com delegação: acesso aos projetos dos delegadores também
  */
 export async function requireProjectAccess(req, res, next) {
   const { role, id: userId, area: userArea, _delegatorIds = [] } = req.user;
 
-  // Admin, planejador, gerente: acesso total
-  if (['admin', 'planejador', 'gerente'].includes(role)) return next();
+  // Admin, planejador, gerente, diretor: acesso total
+  if (['admin', 'planejador', 'gerente', 'diretor'].includes(role)) return next();
 
   const { pool } = await import('../db/schema.js');
   const projectId = req.params.projectId || req.params.id;

@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import api from '../utils/api.js';
 
-const ROLE_LABELS = { admin:'Administrador', engenheiro:'Engenheiro', planejador:'Planejador', coordenador:'Coordenador', gerente:'Gerente' };
+const ROLE_LABELS = { admin:'Administrador', engenheiro:'Engenheiro', planejador:'Planejador', coordenador:'Coordenador', gerente:'Gerente', diretor:'Diretor' };
 
 export default function ActivityPanel({ projectId }) {
   const [activity, setActivity] = useState(null);
