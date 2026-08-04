@@ -3,6 +3,7 @@ import api from '../../utils/api.js';
 import { useToast } from '../ui/Toast.jsx';
 import Modal from '../ui/Modal.jsx';
 import PasswordInput, { getPasswordStrength } from '../ui/PasswordInput.jsx';
+import { useAuth } from '../../context/AuthContext.jsx';
 import { PAGE_REGISTRY } from '../../config/pages.js';
 
 const PAGE_ACCESS_OPTS = [
@@ -150,6 +151,7 @@ export default function AdminPanel() {
   const [pageAccessSavingCell, setPageAccessSavingCell] = useState(null);
   const [pageAccessLoaded, setPageAccessLoaded] = useState(false);
   const { toast, confirm } = useToast();
+  const { user: currentUser, refreshUser } = useAuth();
 
   const fetchUsers = async () => {
     try {
@@ -217,6 +219,9 @@ export default function AdminPanel() {
     setPageAccessSavingCell(cellId);
     try {
       await api.put(`/users/${userId}/page-access`, { pages: [{ page_key: pageKey, access: value }] });
+      // Se o admin está alterando as próprias permissões, atualiza a sessão local
+      // na hora — o menu/rotas reagem no mesmo instante, sem esperar a revalidação periódica.
+      if (currentUser?.id === userId) refreshUser();
     } catch {
       toast('Erro ao salvar permissão', 'error');
       loadPageAccessMatrix();

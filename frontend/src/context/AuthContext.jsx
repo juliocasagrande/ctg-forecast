@@ -4,9 +4,9 @@ import { msalInstance, msalInitialized, loginRequest } from '../utils/msalConfig
 
 const AuthContext = createContext(null);
 
-// Revalida o role do usuário a cada 5 minutos para capturar
-// início/fim de delegações sem exigir novo login
-const REVALIDATE_INTERVAL = 5 * 60 * 1000;
+// Revalida o role/permissões do usuário periodicamente para capturar início/fim de
+// delegações e mudanças de acesso por página (ver AdminPanel) sem exigir novo login.
+const REVALIDATE_INTERVAL = 30 * 1000;
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -69,7 +69,7 @@ export function AuthProvider({ children }) {
   const updateUser = useCallback((data) => setUser(u => ({ ...u, ...data })), []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, loginWithAzure, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithAzure, logout, updateUser, refreshUser: fetchMe }}>
       {children}
     </AuthContext.Provider>
   );
