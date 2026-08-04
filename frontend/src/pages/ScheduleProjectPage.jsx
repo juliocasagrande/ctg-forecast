@@ -8,6 +8,8 @@ import AppSelect from '../components/ui/AppSelect.jsx';
 import { formatBRL, formatBRLShort } from '../utils/format.js';
 import ScheduleSCurveChart, { SCurveComposedChart, SCURVE_ALL_VISIBLE, SCURVE_LEGEND } from '../components/ScheduleSCurveChart.jsx';
 import useModalHotkeys from '../hooks/useModalHotkeys.js';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 
 const SETTINGS_KEY = 'ctg_schedule_settings_v1';
 const DAY_MS = 86400000;
@@ -670,8 +672,18 @@ function buildSCurveSeries(tasks, settings, range) {
     }));
   const totalDuration = leafTasks.reduce((sum, task) => sum + taskDuration(task, settings), 0) || 1;
 
+  // Payment events land on the curve 30 days after their own due/paid date (see
+  // paymentSCurveDate above), which can push them past the schedule's own date range — extend
+  // the sampled window so a payment settling near the project's end still gets drawn instead of
+  // silently falling off the right edge.
+  const paymentDates = paymentTasks
+    .flatMap(task => [task._sCurveDate, task._sCurveActualDate])
+    .filter(Boolean)
+    .map(parseDate);
+  const rangeEnd = paymentDates.length ? new Date(Math.max(range.end, ...paymentDates)) : range.end;
+
   const days = [];
-  for (let cursor = new Date(range.start); cursor <= range.end; cursor = addDays(cursor, 1)) days.push(new Date(cursor));
+  for (let cursor = new Date(range.start); cursor <= rangeEnd; cursor = addDays(cursor, 1)) days.push(new Date(cursor));
   const totalDays = Math.max(1, days.length);
   const step = totalDays > 180 ? 7 : 1;
 
@@ -709,12 +721,17 @@ function buildSCurveSeries(tasks, settings, range) {
   // the current progress% as of today if still open). Falls back to the old approximation
   // — ramping the *planned* window by progress% — for tasks that don't have real dates yet,
   // so existing projects without them filled in still show a sensible curve.
+  // Only the two branches with no hard "Término real" fact get capped at today (we're
+  // guessing how far along an open task is, so we can't project that guess into the future).
+  // Once both Início real and Término real are recorded, that's a hard fact — plotted at face
+  // value regardless of where "today" falls, exactly like a payment's realizado date already is.
   const realizedFraction = (task, date) => {
     const actualStart = parseDate(task.actualStart);
     if (!actualStart) {
+      const cappedDate = date > TODAY ? TODAY : date;
       const plannedStart = parseDate(task.start);
-      if (!plannedStart || date < plannedStart) return 0;
-      return fraction(task, date) * ((Number(task.progress) || 0) / 100);
+      if (!plannedStart || cappedDate < plannedStart) return 0;
+      return fraction(task, cappedDate) * ((Number(task.progress) || 0) / 100);
     }
     if (date < actualStart) return 0;
     const actualEnd = parseDate(task.actualEnd);
@@ -722,13 +739,13 @@ function buildSCurveSeries(tasks, settings, range) {
       const span = Math.max(1, daysBetween(actualStart, actualEnd) + 1);
       return clamp01((daysBetween(actualStart, date) + 1) / span);
     }
+    const cappedDate = date > TODAY ? TODAY : date;
     const span = Math.max(1, daysBetween(actualStart, TODAY) + 1);
-    return clamp01((daysBetween(actualStart, date) + 1) / span) * ((Number(task.progress) || 0) / 100);
+    return clamp01((daysBetween(actualStart, cappedDate) + 1) / span) * ((Number(task.progress) || 0) / 100);
   };
 
   const points = sampledDays.map(day => {
     const dayIso = iso(day);
-    const cappedDay = day > TODAY ? TODAY : day;
     const beyondRealized = day > realizedCutoff;
     let plannedFisico = 0;
     let realizadoFisico = 0;
@@ -736,7 +753,7 @@ function buildSCurveSeries(tasks, settings, range) {
       const duration = taskDuration(task, settings);
       const start = parseDate(task.start);
       if (day >= start) plannedFisico += duration * fraction(task, day);
-      realizadoFisico += duration * realizedFraction(task, cappedDay);
+      realizadoFisico += duration * realizedFraction(task, day);
     });
     let planejadoFinanceiro = 0;
     let realizadoFinanceiro = 0;
@@ -852,6 +869,16 @@ function cascadeLinkedTasks(tasks, oldTask, newTask, settings = DEFAULT_SETTINGS
     linked.get(task.predecessorId).add(task.id);
   });
 
+  // A phase's own start/end is never a real stored value — it's only ever derived from its
+  // children at render time (derivePhaseValues) — so a raw byId lookup for a phase predecessor
+  // returns stale/empty dates. Recompute it live from the current (possibly already-cascaded)
+  // state whenever the predecessor being resolved is a phase.
+  const effectivePredecessor = (id) => {
+    const task = byId.get(id);
+    if (!task || task.type !== 'phase') return task;
+    return derivePhaseValues(Array.from(byId.values()), settings).find(item => item.id === id) || task;
+  };
+
   if (!linkChanged && oldStart.getTime() !== newStart.getTime()) {
     const offset = workdayOffset(oldStart, newStart, settings);
     const connectedIds = new Set();
@@ -871,7 +898,7 @@ function cascadeLinkedTasks(tasks, oldTask, newTask, settings = DEFAULT_SETTINGS
   }
 
   if (linkChanged && newTask.predecessorId && byId.has(newTask.predecessorId)) {
-    byId.set(newTask.id, placeFromPredecessor(byId.get(newTask.id), byId.get(newTask.predecessorId), settings));
+    byId.set(newTask.id, placeFromPredecessor(byId.get(newTask.id), effectivePredecessor(newTask.predecessorId), settings));
   }
 
   const visited = new Set([oldTask.id]);
@@ -879,7 +906,7 @@ function cascadeLinkedTasks(tasks, oldTask, newTask, settings = DEFAULT_SETTINGS
     (successorsOf.get(predecessorId) || []).forEach(successor => {
       if (visited.has(successor.id)) return;
       visited.add(successor.id);
-      const predecessor = byId.get(predecessorId);
+      const predecessor = effectivePredecessor(predecessorId);
       const original = byId.get(successor.id);
       byId.set(successor.id, placeFromPredecessor(original, predecessor, settings));
       rescheduleSuccessors(successor.id);
@@ -1575,7 +1602,7 @@ function PaymentMarker({ task, plannedLeft, actualLeft, status, linkedName, comp
 
 export default function ScheduleProjectPage() {
   const { user } = useAuth();
-  const { confirm, warning, success } = useToast();
+  const { confirm, warning, success, error } = useToast();
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState('');
   const [selectedId, setSelectedId] = useState('');
@@ -1595,7 +1622,7 @@ export default function ScheduleProjectPage() {
   const [shareOpen, setShareOpen] = useState(false);
   const [curveExpanded, setCurveExpanded] = useState(false);
   const [printIncludeCurve, setPrintIncludeCurve] = useState(false);
-  const [printTrigger, setPrintTrigger] = useState(0);
+  const [printing, setPrinting] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [loadingError, setLoadingError] = useState('');
   const [saveState, setSaveState] = useState('idle');
@@ -1658,12 +1685,16 @@ export default function ScheduleProjectPage() {
     return () => clearTimeout(timer);
   }, [loaded, project]);
 
-  // Printing goes through a chooser first: does the S-curve get its own extra page at the end
-  // of the PDF? The extra page only exists in the DOM once printIncludeCurve is set, so the
-  // actual window.print() call is deferred to the effect below, which fires once that page
-  // (or its absence) has committed — a plain requestAnimationFrame after setState is not
-  // guaranteed to run after React's commit, so we key off printTrigger instead.
+  // window.print()/@media print turned out to be unreliable on some machines — verified some
+  // browsers silently ignore print media altogether, no matter what the CSS says, even for a
+  // bare page with nothing else on it. So the PDF is generated entirely client-side instead:
+  // .schedule-print-pages is laid out off-screen (via the .pdf-export-mode class — see
+  // index.css, a plain-class mirror of the old @media print rules), each .schedule-print-page
+  // is rasterized with html2canvas, and the images are assembled into a PDF with jsPDF. This
+  // never depends on the browser's print pipeline at all.
+  const nextFrame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   const requestPrint = async () => {
+    if (printing) return;
     const includeCurve = await confirm({
       title: 'Imprimir cronograma',
       message: 'Deseja incluir a Curva S (previsto x realizado) como uma página adicional ao final do PDF?',
@@ -1672,14 +1703,42 @@ export default function ScheduleProjectPage() {
       variant: 'info',
     });
     setPrintIncludeCurve(includeCurve);
-    setPrintTrigger(prev => prev + 1);
-  };
+    setPrinting(true);
+    try {
+      await nextFrame(); // let the extra curve page (if chosen) mount
+      document.body.classList.add('pdf-export-mode');
+      await nextFrame(); // let the off-screen print layout settle before capturing it
 
-  useEffect(() => {
-    if (!printTrigger) return;
-    const raf = requestAnimationFrame(() => window.print());
-    return () => cancelAnimationFrame(raf);
-  }, [printTrigger]);
+      const pageEls = Array.from(document.querySelectorAll('.schedule-print-page'));
+      if (!pageEls.length) throw new Error('no print pages');
+
+      // A4 landscape is 297x210mm — inset by a small margin so content isn't flush against the
+      // page edges, and fit each capture inside that box keeping its own aspect ratio (rather
+      // than stretching it to exactly fill the margined box, which would distort it slightly).
+      const PDF_MARGIN_MM = 6;
+      const maxW = 297 - PDF_MARGIN_MM * 2;
+      const maxH = 210 - PDF_MARGIN_MM * 2;
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      for (let i = 0; i < pageEls.length; i++) {
+        // A higher scale means more source pixels per printed mm, so the PDF stays sharp even
+        // when zoomed in — 3x is a good balance between crispness and file size/render time.
+        const canvas = await html2canvas(pageEls[i], { scale: 3, backgroundColor: '#ffffff', useCORS: true });
+        const ratio = Math.min(maxW / canvas.width, maxH / canvas.height);
+        const w = canvas.width * ratio;
+        const h = canvas.height * ratio;
+        const x = (297 - w) / 2;
+        const y = (210 - h) / 2;
+        if (i > 0) pdf.addPage('a4', 'landscape');
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.97), 'JPEG', x, y, w, h, undefined, 'FAST');
+      }
+      pdf.save(`${(project?.name || 'Cronograma').replace(/[\\/:*?"<>|]+/g, '_')}.pdf`);
+    } catch {
+      error('Não foi possível gerar o PDF. Tente novamente.');
+    } finally {
+      document.body.classList.remove('pdf-export-mode');
+      setPrinting(false);
+    }
+  };
 
 
   useEffect(() => {
@@ -2782,6 +2841,7 @@ export default function ScheduleProjectPage() {
                 <SCurveComposedChart
                   points={sCurve.points}
                   visibleSeries={SCURVE_ALL_VISIBLE}
+                  totals={sCurve.totals}
                   width={PRINT_PAGE_WIDTH}
                   height={PRINT_CURVE_BODY_H}
                   interactive={false}

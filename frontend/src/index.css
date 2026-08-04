@@ -129,7 +129,7 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
 .schedule-scurve-expand-btn:hover{background:rgba(255,255,255,.26);}
 .schedule-scurve-expand-hint{font-size:.66rem;font-weight:600;color:rgba(255,255,255,.56);cursor:pointer;user-select:none;white-space:nowrap;}
 .schedule-scurve-expand-hint:hover{color:rgba(255,255,255,.82);text-decoration:underline;}
-.schedule-scurve-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:10px 16px 0;flex-shrink:0;}
+.schedule-scurve-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:10px 16px 14px;flex-shrink:0;}
 @media(max-width:768px){.schedule-scurve-kpis{grid-template-columns:1fr 1fr;}}
 .schedule-scurve-body{flex:1;min-height:0;padding:6px 8px 8px;}
 .schedule-legend span{width:9px;height:9px;border-radius:2px;display:inline-flex;margin-left:7px;}
@@ -330,6 +330,53 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
   .schedule-dependency-layer{display:none;}
   .schedule-print-workspace .schedule-dependency-layer{display:block;}
 }
+
+/* ─── PDF EXPORT (class-toggled, not @media print) ───
+   window.print()/@media print turned out to be unreliable on some machines — some browsers
+   silently ignore print media entirely, no matter what CSS says (verified: even a bare,
+   app-free @media print rule failed on affected setups). The PDF export instead renders
+   .schedule-print-pages off-screen with this class toggled on, captures each page with
+   html2canvas, and assembles the images into a PDF with jsPDF — a path that only depends on
+   the browser laying out normal CSS, never on print-media support. Mirrors the @media print
+   block above 1:1 (kept as a fallback for browsers where native print does work). */
+.pdf-export-mode .sidebar,.pdf-export-mode .page-header,.pdf-export-mode .mobile-bottom-nav,.pdf-export-mode .no-print{display:none!important;}
+.pdf-export-mode .schedule-page{display:block;}
+.pdf-export-mode .schedule-page > .schedule-print-header{display:none!important;}
+.pdf-export-mode .schedule-print-pages{display:block;position:fixed;top:0;left:-20000px;background:#fff;z-index:-1;}
+.pdf-export-mode .schedule-print-page{break-after:page;height:204mm;max-height:204mm;width:291mm;overflow:hidden;display:flex;flex-direction:column;font-size:9px;background:#fff;}
+.pdf-export-mode .schedule-print-page .schedule-print-header{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #0070B8;padding-bottom:4mm;margin-bottom:4mm;}
+.pdf-export-mode .schedule-print-header h1{font-family:Arial,sans-serif;font-size:14pt;color:#001F5B;margin:0;}
+.pdf-export-mode .schedule-print-header p,.pdf-export-mode .schedule-print-header span{display:block;font-size:7pt;color:#64748B;text-align:right;}
+.pdf-export-mode .schedule-print-header p{text-align:left;}
+.pdf-export-mode .schedule-print-footer{display:flex;align-items:center;justify-content:space-between;margin-top:auto;height:8mm;padding:0 4mm;background:#001F5B;color:#fff;font-size:7pt;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+.pdf-export-mode .schedule-print-brand{display:flex;align-items:center;gap:4mm;line-height:1;min-width:0;}
+.pdf-export-mode .schedule-print-brand strong{font-family:Georgia,'Times New Roman',serif;font-size:10pt;font-weight:900;color:#fff;letter-spacing:-.02em;}
+.pdf-export-mode .schedule-print-brand small{font-size:6.2pt;font-weight:800;letter-spacing:.04em;color:rgba(255,255,255,.74);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pdf-export-mode .schedule-print-page-number{display:inline-flex;align-items:center;justify-content:center;min-width:25mm;height:5mm;padding:0 3mm;border:1px solid rgba(255,255,255,.48);border-radius:999px;background:rgba(255,255,255,.12);font-weight:900;color:#fff;}
+.pdf-export-mode .schedule-print-curve-body{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+.pdf-export-mode .schedule-print-curve-legend{display:flex;gap:14px;flex-wrap:wrap;align-items:center;padding:2px 0 8px;font-size:7pt;color:#374151;flex-shrink:0;}
+.pdf-export-mode .schedule-print-curve-legend span{display:inline-flex;align-items:center;gap:4px;font-weight:700;}
+.pdf-export-mode .schedule-print-curve-legend i{width:9px;height:9px;border-radius:2px;display:inline-block;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+.pdf-export-mode .schedule-print-workspace{display:grid!important;width:100%;border:1px solid #CBD5E1;border-radius:0;box-shadow:none;min-height:0;overflow:hidden;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+.pdf-export-mode .schedule-print-workspace .schedule-task-pane{border-right:2px solid var(--border);}
+.pdf-export-mode .schedule-print-workspace .schedule-task-rows,.pdf-export-mode .schedule-print-workspace .schedule-gantt-scroll{overflow:hidden;}
+.pdf-export-mode .schedule-print-workspace .schedule-print-grid{grid-template-columns:34px minmax(0,1fr) 56px 56px 40px 46px;}
+.pdf-export-mode .schedule-print-workspace .schedule-header-row{height:28px;font-size:.48rem;}
+.pdf-export-mode .schedule-print-workspace .schedule-task-row{font-size:.5rem;}
+.pdf-export-mode .schedule-print-workspace .schedule-header-row span,.pdf-export-mode .schedule-print-workspace .schedule-task-row span{padding:0 5px;}
+.pdf-export-mode .schedule-print-workspace .schedule-progress{min-width:28px;padding:1px 4px;font-size:.46rem;line-height:1.25;}
+.pdf-export-mode .schedule-print-workspace .schedule-task-name{white-space:normal;line-height:1.15;}
+.pdf-export-mode .schedule-print-workspace .schedule-gantt-months,.pdf-export-mode .schedule-print-workspace .schedule-gantt-days{position:static;}
+.pdf-export-mode .schedule-print-workspace .schedule-gantt-months{height:14px;}
+.pdf-export-mode .schedule-print-workspace .schedule-gantt-days{height:14px;}
+.pdf-export-mode .schedule-print-workspace .schedule-gantt-months div{font-size:.44rem;}
+.pdf-export-mode .schedule-print-workspace .schedule-gantt-days div{font-size:.44rem;}
+.pdf-export-mode .schedule-print-workspace .schedule-bar{top:3px;height:13px;}
+.pdf-export-mode .schedule-print-workspace .schedule-bar.phase{top:5px;height:13px;}
+.pdf-export-mode .schedule-print-workspace .schedule-bar.summary{top:5px;height:13px;}
+.pdf-export-mode .schedule-print-workspace .schedule-bar em{font-size:.44rem;line-height:12px;}
+.pdf-export-mode .schedule-dependency-layer{display:none;}
+.pdf-export-mode .schedule-print-workspace .schedule-dependency-layer{display:block;}
 
 /* ─── STATS ─── */
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px;}
