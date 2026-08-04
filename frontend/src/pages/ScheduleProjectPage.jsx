@@ -266,14 +266,25 @@ function derivePhaseValues(tasks, settings) {
       child.type === 'phase' ? leafDescendants(child.id, visited) : child.type === 'payment' ? [] : [child]
     ));
   };
+  // Same traversal but keeps payment events too, so a phase's own date range reflects every
+  // dated item beneath it (tasks and payment milestones alike) — payments are still excluded
+  // from the duration/progress weighting above since they aren't real work spans.
+  const dateDescendants = (id, visited = new Set()) => {
+    if (visited.has(id)) return [];
+    visited.add(id);
+    return (byParent.get(id) || []).flatMap(child => (
+      child.type === 'phase' ? dateDescendants(child.id, visited) : [child]
+    ));
+  };
 
   return withWbs.map(task => {
     const depth = getTaskDepth(task.id, taskMapById);
     if (task.type !== 'phase') return { ...task, _depth: depth };
     const children = leafDescendants(task.id).filter(item => parseDate(item.start) && parseDate(item.end));
-    if (!children.length) return { ...task, _depth: depth };
-    const start = new Date(Math.min(...children.map(item => parseDate(item.start))));
-    const end = new Date(Math.max(...children.map(item => parseDate(item.end))));
+    const dateChildren = dateDescendants(task.id).filter(item => parseDate(item.start) && parseDate(item.end));
+    if (!dateChildren.length) return { ...task, _depth: depth };
+    const start = new Date(Math.min(...dateChildren.map(item => parseDate(item.start))));
+    const end = new Date(Math.max(...dateChildren.map(item => parseDate(item.end))));
     const totalDuration = children.reduce((sum, item) => sum + taskDuration(item, settings), 0);
     const weightedProgress = children.reduce((sum, item) => sum + (Number(item.progress) || 0) * taskDuration(item, settings), 0);
     return {
@@ -1695,6 +1706,13 @@ export default function ScheduleProjectPage() {
 
   const days = Math.max(1, daysBetween(range.start, range.end) + 1);
   const dayList = Array.from({ length: days }, (_, index) => addDays(range.start, index));
+
+  // The Gantt should always open framed on the activities' own period, not wherever the
+  // scrollbar happened to be left from a previous project/revision — realign it to the
+  // auto-fitted range start every time that range changes.
+  useEffect(() => {
+    if (ganttScrollRef.current) ganttScrollRef.current.scrollLeft = 0;
+  }, [project?.id, activeRevision?.id, range.start.getTime(), range.end.getTime()]);
   const totalWidth = days * colWidth;
   const summary = useMemo(() => {
     const datedTasks = tasks.filter(task => parseDate(task.start) && parseDate(task.end));
