@@ -896,7 +896,8 @@ function PlantColumnChart({ items }) {
           const utilizationPct = hasValue ? Math.min(100, (contratoUtilizado / contratoTotal) * 100) : 0;
           const barColor = utilizationPct >= 100 ? '#EF4444' : utilizationPct >= 80 ? '#F59E0B' : '#10B981';
           const sigla = item.sigla || PROJECT_PLANT_SIGLAS[item.label] || PROJECT_PLANT_SIGLAS[compactLabel(item.label)] || compactLabel(item.label).slice(0, 3).toUpperCase();
-          const waveTop = 100 - utilizationPct;
+          const saldoPct = hasValue ? 100 - utilizationPct : 0;
+          const waveTop = 100 - saldoPct;
           return (
             <div
               key={item.label}
@@ -906,7 +907,7 @@ function PlantColumnChart({ items }) {
             >
               <div style={{ color: hasValue ? 'var(--ctg-navy)' : '#94A3B8', fontSize: '0.58rem', fontWeight: 900, whiteSpace: 'nowrap' }}>{hasValue ? moneyAxis(contratoTotal) : '-'}</div>
               <div style={{ width: '100%', maxWidth: 34, height: '100%', borderRadius: 4, background: '#E2E8F0', position: 'relative', overflow: 'hidden' }}>
-                {hasValue && utilizationPct > 0 && (
+                {hasValue && saldoPct > 0 && (
                   <svg viewBox="0 0 34 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-hidden="true">
                     <g>
                       <animateTransform attributeName="transform" type="translate" from="0 0" to="34 0" dur="3.6s" repeatCount="indefinite" />
