@@ -31,6 +31,10 @@ export async function query(sql, params = []) {
 export async function cleanAllTestData() {
   await getPool().query(`
     TRUNCATE TABLE
+      app_client_errors,
+      app_api_events,
+      app_page_views,
+      app_sessions,
       forecast_entries,
       year_consolidated,
       actual_consolidated,

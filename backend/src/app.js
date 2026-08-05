@@ -38,6 +38,8 @@ import equipamentosRouter   from './routes/equipamentos.js';
 import scheduleProjectsRouter from './routes/schedule-projects.js';
 import workloadRouter       from './routes/workload.js';
 import pmsRouter            from './routes/pms.js';
+import telemetryRouter      from './routes/telemetry.js';
+import { apiTelemetry }     from './middleware/telemetry.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -89,6 +91,10 @@ export function createApp({ disableRateLimit = false } = {}) {
     app.use('/api', apiLimiter);
   }
 
+  // Observa o resultado das APIs autenticadas sem registrar payloads sensíveis.
+  // O app de testes desativa a coleta para manter isolamento entre TRUNCATEs.
+  if (!disableRateLimit) app.use(apiTelemetry);
+
   /* â”€â”€ ROTAS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   app.use('/api/auth',     authRouter);
   app.use('/api/users',    usersRouter);
@@ -109,6 +115,7 @@ export function createApp({ disableRateLimit = false } = {}) {
    app.use('/api/lists',       listsRouter);
   app.use('/api/equipamentos', equipamentosRouter);
   app.use('/api/schedule-projects', scheduleProjectsRouter);
+  app.use('/api/telemetry', telemetryRouter);
 
   if (disableRateLimit) {
     app.use('/api/export',         exportRouter);

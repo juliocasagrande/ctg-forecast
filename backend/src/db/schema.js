@@ -346,6 +346,71 @@ await client.query(`
       ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS detail TEXT;
     `);
 
+    /* ───────── OBSERVABILIDADE DA APLICAÇÃO ───────── */
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS app_sessions (
+        id             BIGSERIAL PRIMARY KEY,
+        session_key    UUID NOT NULL UNIQUE,
+        user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        started_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_seen_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        active_seconds INTEGER NOT NULL DEFAULT 0 CHECK (active_seconds >= 0),
+        page_views     INTEGER NOT NULL DEFAULT 0 CHECK (page_views >= 0),
+        last_page      TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS app_page_views (
+        id          BIGSERIAL PRIMARY KEY,
+        session_key UUID NOT NULL REFERENCES app_sessions(session_key) ON DELETE CASCADE,
+        user_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        page_path   TEXT NOT NULL,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS app_api_events (
+        id           BIGSERIAL PRIMARY KEY,
+        user_id      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        session_key  UUID,
+        page_path    TEXT,
+        endpoint     TEXT NOT NULL,
+        method       VARCHAR(8) NOT NULL,
+        operation    VARCHAR(10) NOT NULL CHECK (operation IN ('read','write','other')),
+        status_code  SMALLINT NOT NULL,
+        duration_ms  INTEGER NOT NULL DEFAULT 0 CHECK (duration_ms >= 0),
+        success      BOOLEAN NOT NULL,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS app_client_errors (
+        id          BIGSERIAL PRIMARY KEY,
+        user_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        session_key UUID,
+        page_path   TEXT,
+        source      VARCHAR(20) NOT NULL,
+        message     TEXT NOT NULL,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_app_sessions_started_user
+        ON app_sessions(started_at DESC, user_id);
+      CREATE INDEX IF NOT EXISTS idx_app_page_views_created_page
+        ON app_page_views(created_at DESC, page_path);
+      CREATE INDEX IF NOT EXISTS idx_app_page_views_user_created
+        ON app_page_views(user_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_app_api_events_created_operation
+        ON app_api_events(created_at DESC, operation);
+      CREATE INDEX IF NOT EXISTS idx_app_api_events_errors_created
+        ON app_api_events(created_at DESC) WHERE status_code >= 400;
+      CREATE INDEX IF NOT EXISTS idx_app_client_errors_created
+        ON app_client_errors(created_at DESC);
+
+      -- Retenção suficiente para comparativos anuais sem crescimento ilimitado.
+      DELETE FROM app_page_views WHERE created_at < NOW() - INTERVAL '365 days';
+      DELETE FROM app_api_events WHERE created_at < NOW() - INTERVAL '365 days';
+      DELETE FROM app_client_errors WHERE created_at < NOW() - INTERVAL '365 days';
+      DELETE FROM app_sessions WHERE started_at < NOW() - INTERVAL '365 days';
+    `);
+
     /* ───────── DELEGATIONS / ALERTS ───────── */
     await client.query(`
       CREATE TABLE IF NOT EXISTS access_delegations (

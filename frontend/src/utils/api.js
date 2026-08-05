@@ -1,5 +1,7 @@
 ﻿import axios from 'axios';
 
+import { getTelemetrySessionId } from './telemetry.js';
+
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
   headers: { 'Content-Type': 'application/json' },
@@ -10,6 +12,11 @@ const api = axios.create({
 try { localStorage.removeItem('ctg_token'); } catch { /* ignore */ }
 
 api.interceptors.request.use(config => {
+  const sessionId = getTelemetrySessionId();
+  if (sessionId && !String(config.url || '').includes('/telemetry/')) {
+    config.headers['X-Session-Id'] = sessionId;
+    config.headers['X-App-Page'] = window.location.pathname;
+  }
   if (config.data instanceof FormData) {
     if (typeof config.headers?.delete === 'function') {
       config.headers.delete('Content-Type');

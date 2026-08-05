@@ -11,6 +11,7 @@ import ProjectForm from './components/ProjectForm.jsx';
 import AlertBell from './components/ui/AlertBell.jsx';
 import api from './utils/api.js';
 import useModalHotkeys from './hooks/useModalHotkeys.js';
+import AppTelemetry from './components/AppTelemetry.jsx';
 
 // Route-level code splitting — these pages aren't needed for the initial load
 const HomePage                = lazy(() => import('./pages/HomePage.jsx'));
@@ -36,12 +37,20 @@ const ScheduleProjectPage     = lazy(() => import('./pages/ScheduleProjectPage.j
 const EquipamentosPage        = lazy(() => import('./pages/EquipamentosPage.jsx'));
 const EquipamentosAdminPage   = lazy(() => import('./pages/EquipamentosAdminPage.jsx'));
 const AdminPanel              = lazy(() => import('./components/admin/AdminPanel.jsx'));
+const AppHealthPage           = lazy(() => import('./pages/AppHealthPage.jsx'));
 
 // ── Error Boundary ──────────────────────────────────────────────────
 class ErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { hasError: false, error: null }; }
   static getDerivedStateFromError(error) { return { hasError: true, error }; }
-  componentDidCatch(error, info) { console.error('ErrorBoundary caught:', error, info); }
+  componentDidCatch(error, info) {
+    console.error('ErrorBoundary caught:', error, info);
+    api.post('/telemetry/client-errors', {
+      page_path: window.location.pathname,
+      source: 'render',
+      message: error?.message || 'Falha de renderização',
+    }).catch(() => {});
+  }
   render() {
     if (this.state.hasError) {
       return (
@@ -733,6 +742,7 @@ function getPageMeta(pathname) {
   if (pathname === '/') return { title: 'Início', sub: 'Resumo operacional' };
   if (pathname === '/projects') return { title: 'Projetos', sub: null };
   if (pathname === '/admin') return { title: 'Administração', sub: 'Gestão de Usuários' };
+  if (pathname === '/admin/health') return { title: 'Saúde da Aplicação', sub: 'Uso, sanidade e observabilidade' };
   if (pathname === '/profile') return { title: 'Meu Perfil', sub: null };
   if (pathname === '/settings') return { title: 'Configurações', sub: null };
   if (pathname === '/polos') return { title: 'Visão Geral Consolidada — CTG Brasil', sub: null };
@@ -847,6 +857,8 @@ export default function App() {
 
   return (
     <ErrorBoundary>
+    <>
+    <AppTelemetry user={user} />
     <div className="app-layout">
       <ToastProvider />
 
@@ -1433,6 +1445,11 @@ export default function App() {
             } />
 
             <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
+            <Route path="/admin/health" element={
+              <RequireAuth>
+                <RequireRole roles={['admin']}><AppHealthPage /></RequireRole>
+              </RequireAuth>
+            } />
             <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
             <Route path="/polos" element={<RequireAuth><RequirePageAccess pageKey="polos"><PolosPage period={period} plantFilter={plantFilter} /></RequirePageAccess></RequireAuth>} />
             <Route path="/report" element={<RequireAuth><RequirePageAccess pageKey="report"><ReportPage /></RequirePageAccess></RequireAuth>} />
@@ -1479,11 +1496,7 @@ export default function App() {
         />
       )}
     </div>
+    </>
     </ErrorBoundary>
   );
 }
-
-
-
-
-
