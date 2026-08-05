@@ -53,12 +53,14 @@ router.get('/', async (req, res) => {
     WHERE vp.year = $1
       AND u.active = true
       AND u.email <> ALL($${area ? 4 : 2}::text[])
-      ${area ? 'AND (vp.area = $2 OR vp.user_id = $3)' : ''}
+      ${area ? "AND (vp.area = $2 OR vp.user_id = $3 OR u.role IN ('gerente','diretor','coordenador','planejador'))" : ''}
     ORDER BY u.name, vp.period_number
   `, area ? [year, area, req.user.id, VACATIONS_EXCLUDED_EMAILS] : [year, VACATIONS_EXCLUDED_EMAILS]);
   // Nota: mesmo com filtro de área (coordenador), o próprio usuário sempre vê seus
   // períodos — evita que um período registrado antes de uma mudança de área do
   // usuário (vp.area desatualizado) fique invisível para o dono do período.
+  // Gerentes/diretores/coordenadores também aparecem sempre, pois o frontend
+  // exibe esse grupo (Coordenação & Gerência) independente da área filtrada.
 
   res.json(rows);
 });

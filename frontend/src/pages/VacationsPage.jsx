@@ -10,6 +10,7 @@ const AREAS = [
   { value: 'eletrica',       label: 'Elétrica' },
   { value: 'mecanica',       label: 'Mecânica' },
   { value: 'confiabilidade', label: 'Confiabilidade' },
+  { value: 'modernizacao',   label: 'Modernização' },
 ];
 
 // Paleta pastel por área — header sólido claro, fundo de membros super transparente
