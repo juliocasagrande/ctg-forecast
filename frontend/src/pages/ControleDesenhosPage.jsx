@@ -1708,7 +1708,7 @@ function DocDetail({ doc, isAuthor }) {
   return (
     <div style={{ display:'flex', gap:20, flexWrap:'wrap' }}>
       <div style={{ flex:1, minWidth:200 }}>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))', gap:'10px 24px' }}>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:'10px 24px' }}>
           {doc.plant?.length > 0 && <InfoItem label="Usina"    value={plantsLabel(doc.plant)}/>}
           <InfoItem label="Tipo" value={`${doc.type} — ${TYPE_META[doc.type]?.label||''}`}/>
           <InfoItem label="Área" value={`${doc.area} — ${AREAS.find(a=>a.value===doc.area)?.label||doc.area}`}/>
@@ -1771,9 +1771,9 @@ function ActionBtn({ color, onClick, children, tooltip }) {
 }
 function InfoItem({ label, value, full }) {
   return (
-    <div style={{ gridColumn: full?'1 / -1':undefined }}>
+    <div style={{ flex: full ? '1 1 100%' : '1 1 180px', minWidth: full ? '100%' : 180, maxWidth: full ? '100%' : 320 }}>
       <div style={{ fontSize:'0.62rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', color:'#94A3B8', marginBottom:2 }}>{label}</div>
-      <div style={{ fontSize:'0.82rem', color:'#1E293B', fontWeight:500 }}>{value}</div>
+      <div style={{ fontSize:'0.82rem', color:'#1E293B', fontWeight:500, whiteSpace:'normal', wordBreak:'break-word', overflowWrap:'anywhere' }}>{value}</div>
     </div>
   );
 }
