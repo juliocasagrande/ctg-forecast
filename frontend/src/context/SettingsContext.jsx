@@ -31,7 +31,7 @@ export function SettingsProvider({ children }) {
     api.get('/settings')
       .then(r => setSettings({ ...DEFAULTS, ...r.data }))
       .catch(() => {});
-  }, [user]);
+  }, [user?.id]);
 
   return (
     <SettingsContext.Provider value={settings}>

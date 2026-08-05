@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../utils/api.js';
-import { useRole } from '../../context/AuthContext.jsx';
+import { usePageAccess, useRole } from '../../context/AuthContext.jsx';
 
 const POLL_INTERVAL = 60_000;
 
@@ -29,6 +29,7 @@ export default function AlertBell() {
   const [dropPos, setDropPos] = useState({ top: 0, right: 0 });
   const navigate = useNavigate();
   const { isPlanejador, isAdmin } = useRole();
+  const pmsAccess = usePageAccess('pms');
   const isManager = isPlanejador || isAdmin;
 
   const fetchAlerts = useCallback(async () => {
@@ -39,7 +40,9 @@ export default function AlertBell() {
         api.get('/lists/projects-tracking/stale-projects').catch(() => ({ data: [] })),
         api.get('/lists/iacs/stale-iacs').catch(() => ({ data: [] })),
         api.get('/workload/alerts/late').catch(() => ({ data: { demands: [] } })),
-        api.get('/pms/alerts').catch(() => ({ data: { count: 0, docs: [] } })),
+        pmsAccess === 'none'
+          ? Promise.resolve({ data: { count: 0, docs: [] } })
+          : api.get('/pms/alerts').catch(() => ({ data: { count: 0, docs: [] } })),
       ]);
       const data = alertsR.data;
       // Inject delegation_received into alerts object
@@ -68,7 +71,7 @@ export default function AlertBell() {
         else navigator.clearAppBadge().catch(() => {});
       }
     } catch {}
-  }, []);
+  }, [pmsAccess]);
 
   useEffect(() => {
     fetchAlerts();

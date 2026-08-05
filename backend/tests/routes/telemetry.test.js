@@ -54,6 +54,9 @@ describe('telemetria de uso', () => {
     expect(response.body.days).toBe(30);
     expect(response.body.summary.active_users).toBeGreaterThanOrEqual(1);
     expect(Number(response.body.summary.avg_session_seconds)).toBeGreaterThanOrEqual(125);
+    expect(response.body.active_users).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: expect.any(String), page_path: '/projects/:id' }),
+    ]));
     expect(response.body.pages[0]).toMatchObject({ page_path: '/projects/:id' });
     expect(response.body.errors.some(error => error.message === 'Falha controlada')).toBe(true);
   });

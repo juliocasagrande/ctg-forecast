@@ -8,6 +8,23 @@ const AuthContext = createContext(null);
 // delegações e mudanças de acesso por página (ver AdminPanel) sem exigir novo login.
 const REVALIDATE_INTERVAL = 30 * 1000;
 
+function canonicalize(value) {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === 'object') {
+    return Object.keys(value).sort().reduce((result, key) => {
+      result[key] = canonicalize(value[key]);
+      return result;
+    }, {});
+  }
+  return value;
+}
+
+function sameUserState(current, incoming) {
+  if (current === incoming) return true;
+  if (!current || !incoming) return false;
+  return JSON.stringify(canonicalize(current)) === JSON.stringify(canonicalize(incoming));
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -15,9 +32,13 @@ export function AuthProvider({ children }) {
   const fetchMe = useCallback(async () => {
     try {
       const r = await api.get('/auth/me');
-      setUser(r.data);
-    } catch {
-      setUser(null);
+      // Mantém a mesma referência quando role/permissões/dados não mudaram. Isso
+      // evita que toda a aplicação refaça buscas e mostre loaders a cada 30s.
+      setUser(current => sameUserState(current, r.data) ? current : r.data);
+    } catch (err) {
+      // Só encerra a sessão quando o servidor confirmou que ela não é mais válida.
+      // Falhas transitórias de rede/servidor não devem desmontar a tela do usuário.
+      if ([401, 403, 404].includes(err.response?.status)) setUser(null);
     }
   }, []);
 

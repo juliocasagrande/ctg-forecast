@@ -810,7 +810,7 @@ export default function App() {
     try { setProjects((await api.get('/projects')).data); } catch {}
   };
 
-  useEffect(() => { if (user) fetchProjects(); }, [user]);
+  useEffect(() => { if (user) fetchProjects(); }, [user?.id, user?.role, user?._originalRole]);
 
   useEffect(() => {
     const handler = (e) => setEquipamentosStats(e.detail);

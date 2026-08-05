@@ -7,8 +7,8 @@
  * - Permite ao usuário atualizar imediatamente ou dispensar temporariamente
  * - Funciona tanto no navegador (web) quanto no modo PWA instalado
  * - Verifica atualizações a cada 60 segundos automaticamente
- * - Apenas o admin do sistema (ver ADMIN_BANNER_EMAIL) vê o banner; os demais
- *   usuários recebem a atualização silenciosamente, sem countdown/reload visível
+ * - Apenas o admin do sistema (ver ADMIN_BANNER_EMAIL) vê o banner; para os demais,
+ *   a nova versão aguarda o fechamento natural da aplicação, sem recarregar a tela
  *
  * Configuração relacionada:
  * - vite.config.js: registerType 'prompt' permite controle manual
@@ -20,8 +20,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { useAuth } from '../../context/AuthContext.jsx';
 
-// Único usuário que deve ver o banner de atualização; os demais são atualizados
-// automaticamente em segundo plano assim que uma nova versão é detectada.
+// Único usuário que deve ver o banner de atualização. Para os demais, o service
+// worker permanece aguardando e assume no próximo fechamento/reabertura natural.
 const ADMIN_BANNER_EMAIL = 'julio.casagrande@ctgbr.com.br';
 
 export function PWAUpdatePrompt() {
@@ -56,12 +56,6 @@ export function PWAUpdatePrompt() {
       setIsUpdating(false);
     }
   }, [updateServiceWorker]);
-
-  // Usuários comuns: atualiza e recarrega silenciosamente, sem exibir o banner/countdown.
-  useEffect(() => {
-    if (!needRefresh || showBanner) return;
-    updateServiceWorker(true).catch(err => console.error('Erro ao atualizar:', err));
-  }, [needRefresh, showBanner, updateServiceWorker]);
 
   // Admin: auto-atualiza após 30 segundos mesmo sem interação, com countdown visível
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import api from '../utils/api.js';
 import HealthActivity from '../components/admin/HealthActivity.jsx';
 import HealthTables from '../components/admin/HealthTables.jsx';
@@ -26,13 +26,83 @@ function fmtDuration(value) {
   return hours ? `${hours}h ${minutes}min` : `${minutes}min`;
 }
 
-function MetricCard({ label, value, helper, color, icon }) {
-  return <div className="health-metric-card" style={{ '--metric-color': color }}>
+function MetricCard({ label, value, helper, color, icon, children, cardProps={} }) {
+  return <div {...cardProps} className={`health-metric-card ${cardProps.className || ''}`} style={{ '--metric-color': color }}>
     <div className="health-metric-icon">{icon}</div><div>
       <div className="health-metric-label">{label}</div><div className="health-metric-value">{value}</div>
       <div className="health-metric-helper">{helper}</div>
-    </div>
+    </div>{children}
   </div>;
+}
+
+function ActiveUsersMetricCard({ users=[], sessions=0 }) {
+  const [hovered, setHovered] = useState(false);
+  const [tipPos, setTipPos] = useState({ x: 0, y: 0 });
+  const [tooltipStyle, setTooltipStyle] = useState({ left: 0, top: 0 });
+  const tooltipRef = useRef(null);
+
+  const showTooltip = event => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setTipPos({
+      x: event.clientX || rect.right,
+      y: event.clientY || rect.top + rect.height / 2,
+    });
+    setHovered(true);
+  };
+
+  useLayoutEffect(() => {
+    if (!hovered || !tooltipRef.current) return;
+    const rect = tooltipRef.current.getBoundingClientRect();
+    const margin = 8;
+    let left = tipPos.x + 16;
+    let top = tipPos.y - 10;
+    if (left + rect.width + margin > window.innerWidth) left = tipPos.x - rect.width - 16;
+    if (left < margin) left = margin;
+    if (top + rect.height + margin > window.innerHeight) top = window.innerHeight - rect.height - margin;
+    if (top < margin) top = margin;
+    setTooltipStyle({ left, top });
+  }, [hovered, tipPos]);
+
+  return <MetricCard
+    label="Usuários ativos"
+    value={fmtNum(users.length)}
+    helper={`${fmtNum(sessions)} ${num(sessions) === 1 ? 'sessão' : 'sessões'} agora`}
+    color="#0070B8"
+    icon="●"
+    cardProps={{
+      className: 'health-metric-card--interactive',
+      tabIndex: 0,
+      'aria-describedby': hovered ? 'health-active-users-tooltip' : undefined,
+      onMouseEnter: showTooltip,
+      onMouseMove: event => setTipPos({ x: event.clientX, y: event.clientY }),
+      onMouseLeave: () => setHovered(false),
+      onFocus: showTooltip,
+      onBlur: () => setHovered(false),
+    }}
+  >
+    {hovered && <div
+      ref={tooltipRef}
+      id="health-active-users-tooltip"
+      role="tooltip"
+      className="health-active-users-tooltip"
+      style={{ left: tooltipStyle.left, top: tooltipStyle.top }}
+    >
+      <div className="health-active-tooltip-header">
+        <div><strong>Usuários na aplicação</strong><span>Atividade nos últimos 2 minutos</span></div>
+        <b>{users.length}</b>
+      </div>
+      {!users.length ? <div className="health-active-tooltip-empty">Nenhum usuário ativo neste momento.</div>
+        : <div className="health-active-tooltip-list">{users.map(user => {
+          const initials = String(user.name || '?').trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+          return <div className="health-active-tooltip-row" key={user.id}>
+            <span className="health-active-avatar">{initials}</span>
+            <div><strong>{user.name}</strong><span>{pageLabel(user.page_path)}</span></div>
+            <i title={`${user.session_count} sessão(ões) ativa(s)`}>{user.session_count}</i>
+          </div>;
+        })}</div>}
+      <div className="health-active-tooltip-footer"><span/> Presença atualizada a cada 30 segundos</div>
+    </div>}
+  </MetricCard>;
 }
 function Panel({ title, subtitle, children, className='' }) {
   return <section className={`health-panel ${className}`}><div className="health-panel-header"><div>
@@ -83,7 +153,7 @@ export default function AppHealthPage() {
       <span className="health-updated">Atualizado {data?.generated_at ? new Date(data.generated_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : 'agora'}</span>
     </div>
     <div className="health-metrics-grid">
-      <MetricCard label="Usuários ativos" value={fmtNum(summary.active_users)} helper={`${fmtNum(summary.sessions)} sessões`} color="#0070B8" icon="●"/>
+      <ActiveUsersMetricCard users={data?.active_users} sessions={summary.sessions}/>
       <MetricCard label="Tempo médio ativo" value={fmtDuration(summary.avg_session_seconds)} helper="por sessão, sem tempo ocioso" color="#7C3AED" icon="◷"/>
       <MetricCard label="Visualizações" value={fmtNum(summary.page_views)} helper="aberturas de páginas" color="#0891B2" icon="◉"/>
       <MetricCard label="Criações" value={fmtNum(summary.creations)} helper={`${fmtNum(summary.updates)} atualizações`} color="#16A34A" icon="＋"/>

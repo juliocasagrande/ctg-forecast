@@ -1102,7 +1102,7 @@ export default function IACsPage() {
       window.removeEventListener('new-iac', handleNew);
       window.removeEventListener('import-iacs', handleImport);
     };
-  }, [user]);
+  }, [user?.role, user?.email]);
 
   const handleExport = async () => {
     try {

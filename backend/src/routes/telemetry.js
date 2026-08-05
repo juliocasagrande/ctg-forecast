@@ -113,11 +113,15 @@ router.get('/overview', requireRole('admin'), async (req, res) => {
 
   try {
     const params = [days];
-    const [summaryR, dailyR, pagesR, operationsR, usersR, errorsR] = await Promise.all([
+    const [summaryR, dailyR, pagesR, operationsR, usersR, errorsR, activeUsersR] = await Promise.all([
       pool.query(`
         WITH s AS (
           SELECT COUNT(*)::int sessions,
-                 COUNT(DISTINCT user_id)::int active_users,
+                 COUNT(DISTINCT user_id)::int active_users
+            FROM app_sessions
+           WHERE last_seen_at >= NOW() - INTERVAL '2 minutes'
+        ), h AS (
+          SELECT
                  COALESCE(AVG(active_seconds), 0)::numeric avg_session_seconds
             FROM app_sessions
            WHERE started_at >= NOW() - make_interval(days => $1)
@@ -141,10 +145,10 @@ router.get('/overview', requireRole('admin'), async (req, res) => {
           SELECT COUNT(*)::int client_errors FROM app_client_errors
            WHERE created_at >= NOW() - make_interval(days => $1)
         )
-        SELECT s.*, a.*, p.page_views, c.client_errors,
+        SELECT s.*, h.avg_session_seconds, a.*, p.page_views, c.client_errors,
                CASE WHEN a.requests = 0 THEN 100
                     ELSE ROUND((a.requests - a.errors) * 100.0 / a.requests, 2) END success_rate
-          FROM s CROSS JOIN a CROSS JOIN p CROSS JOIN c`, params),
+          FROM s CROSS JOIN h CROSS JOIN a CROSS JOIN p CROSS JOIN c`, params),
       pool.query(`
         WITH dates AS (
           SELECT generate_series(
@@ -214,6 +218,20 @@ router.get('/overview', requireRole('admin'), async (req, res) => {
             FROM app_client_errors ce LEFT JOIN users u ON u.id=ce.user_id
            WHERE ce.created_at >= NOW() - make_interval(days => $1)
         ) errors ORDER BY created_at DESC LIMIT 30`, params),
+      pool.query(`
+        WITH ranked AS (
+          SELECT u.id, u.name, u.role, s.last_page AS page_path, s.last_seen_at,
+                 (COUNT(*) OVER (PARTITION BY s.user_id))::int AS session_count,
+                 ROW_NUMBER() OVER (PARTITION BY s.user_id ORDER BY s.last_seen_at DESC) AS position
+            FROM app_sessions s
+            JOIN users u ON u.id = s.user_id
+           WHERE u.active = true
+             AND s.last_seen_at >= NOW() - INTERVAL '2 minutes'
+        )
+        SELECT id, name, role, page_path, last_seen_at, session_count
+          FROM ranked
+         WHERE position = 1
+         ORDER BY name ASC`),
     ]);
 
     res.json({
@@ -225,6 +243,7 @@ router.get('/overview', requireRole('admin'), async (req, res) => {
       operations: operationsR.rows,
       users: usersR.rows,
       errors: errorsR.rows,
+      active_users: activeUsersR.rows,
     });
   } catch (err) {
     console.error('[TELEMETRY] Falha ao consultar painel:', err.message);
