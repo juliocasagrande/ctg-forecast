@@ -266,4 +266,128 @@ router.get('/overview', requireRole('admin'), async (req, res) => {
   }
 });
 
+// ─── GET /data-engineering — performance, qualidade de dados, catálogo e ────
+// saúde do pipeline de telemetria. Tudo calculado sobre dados reais do banco
+// (sem métricas sintéticas): checks de integridade que o schema não garante
+// via FK/CHECK, metadados de pg_stat_user_tables e detecção simples de
+// anomalia de volume (z-score) sobre app_api_events.
+router.get('/data-engineering', requireRole('admin'), async (req, res) => {
+  const requestedDays = Number.parseInt(req.query.days, 10);
+  const days = [7, 30, 90].includes(requestedDays) ? requestedDays : 30;
+
+  try {
+    const [performanceR, qualityR, catalogR, freshnessR, volumeR] = await Promise.all([
+      pool.query(`
+        SELECT endpoint, method,
+               COUNT(*)::int AS requests,
+               ROUND(percentile_cont(0.5)  WITHIN GROUP (ORDER BY duration_ms)::numeric, 1) AS p50_ms,
+               ROUND(percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms)::numeric, 1) AS p95_ms,
+               ROUND(100.0 * COUNT(*) FILTER (WHERE status_code >= 400 AND status_code NOT IN (401, 403))
+                     / COUNT(*), 2) AS error_rate
+          FROM app_api_events
+         WHERE created_at >= NOW() - make_interval(days => $1)
+         GROUP BY endpoint, method
+        HAVING COUNT(*) >= 5
+         ORDER BY p95_ms DESC
+         LIMIT 15
+      `, [days]),
+      pool.query(`
+        SELECT * FROM (
+          SELECT 'documents' AS table_name, 'responsible' AS column_name,
+                 'Responsável sem usuário cadastrado correspondente' AS description,
+                 COUNT(*)::int AS count,
+                 (array_agg(DISTINCT d.responsible ORDER BY d.responsible))[1:5] AS samples
+            FROM documents d
+           WHERE d.responsible IS NOT NULL
+             AND NOT EXISTS (SELECT 1 FROM users u WHERE lower(trim(u.name)) = lower(trim(d.responsible)))
+          UNION ALL
+          SELECT 'drawings', 'responsible',
+                 'Responsável sem usuário cadastrado correspondente',
+                 COUNT(*)::int,
+                 (array_agg(DISTINCT d.responsible ORDER BY d.responsible))[1:5]
+            FROM drawings d
+           WHERE d.responsible IS NOT NULL
+             AND NOT EXISTS (SELECT 1 FROM users u WHERE lower(trim(u.name)) = lower(trim(d.responsible)))
+          UNION ALL
+          SELECT 'pms_documents', 'responsible',
+                 'Responsável sem usuário cadastrado correspondente',
+                 COUNT(*)::int,
+                 (array_agg(DISTINCT d.responsible ORDER BY d.responsible))[1:5]
+            FROM pms_documents d
+           WHERE d.responsible IS NOT NULL
+             AND NOT EXISTS (SELECT 1 FROM users u WHERE lower(trim(u.name)) = lower(trim(d.responsible)))
+          UNION ALL
+          SELECT 'project_assignments', 'user_id',
+                 'Projeto atribuído a usuário inativo',
+                 COUNT(*)::int,
+                 (array_agg(DISTINCT u.name ORDER BY u.name))[1:5]
+            FROM project_assignments pa JOIN users u ON u.id = pa.user_id
+           WHERE u.active = false
+          UNION ALL
+          SELECT 'metas', 'assigned_user_ids',
+                 'Meta com colaborador atribuído que não existe mais',
+                 COUNT(DISTINCT m.id)::int,
+                 (array_agg(DISTINCT m.id::text ORDER BY m.id::text))[1:5]
+            FROM metas m, unnest(m.assigned_user_ids) AS uid
+           WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = uid)
+          UNION ALL
+          SELECT 'lists_iacs', 'team_leader',
+                 'Líder de equipe informado sem vínculo com usuário cadastrado',
+                 COUNT(*)::int,
+                 (array_agg(DISTINCT team_leader ORDER BY team_leader))[1:5]
+            FROM lists_iacs
+           WHERE team_leader IS NOT NULL AND team_leader_user_id IS NULL
+          UNION ALL
+          SELECT 'lists_projects_tracking', 'gestor',
+                 'Gestor informado sem vínculo com usuário cadastrado',
+                 COUNT(*)::int,
+                 (array_agg(DISTINCT gestor ORDER BY gestor))[1:5]
+            FROM lists_projects_tracking
+           WHERE gestor IS NOT NULL AND gestor_user_id IS NULL
+        ) checks
+         ORDER BY count DESC, table_name
+      `),
+      pool.query(`
+        SELECT relname AS table_name,
+               n_live_tup::bigint AS row_estimate,
+               pg_size_pretty(pg_total_relation_size(relid)) AS total_size,
+               pg_total_relation_size(relid)::bigint AS size_bytes,
+               GREATEST(last_autoanalyze, last_analyze) AS last_analyzed
+          FROM pg_stat_user_tables
+         ORDER BY pg_total_relation_size(relid) DESC
+         LIMIT 20
+      `),
+      pool.query(`SELECT MAX(created_at) AS last_event_at FROM app_api_events`),
+      pool.query(`
+        WITH daily AS (
+          SELECT date_trunc('day', created_at)::date AS day, COUNT(*)::int AS events
+            FROM app_api_events
+           WHERE created_at >= NOW() - INTERVAL '21 days'
+           GROUP BY 1
+        )
+        SELECT day, events,
+               ROUND(AVG(events)   OVER (ORDER BY day ROWS BETWEEN 7 PRECEDING AND 1 PRECEDING)::numeric, 1) AS avg_prev7,
+               ROUND(STDDEV_POP(events) OVER (ORDER BY day ROWS BETWEEN 7 PRECEDING AND 1 PRECEDING)::numeric, 1) AS stddev_prev7
+          FROM daily
+         ORDER BY day
+      `),
+    ]);
+
+    res.json({
+      generated_at: new Date().toISOString(),
+      days,
+      endpoint_performance: performanceR.rows,
+      data_quality: qualityR.rows,
+      catalog: catalogR.rows,
+      pipeline: {
+        last_event_at: freshnessR.rows[0]?.last_event_at || null,
+        daily: volumeR.rows,
+      },
+    });
+  } catch (err) {
+    console.error('[TELEMETRY] Falha ao consultar engenharia de dados:', err.message);
+    res.status(500).json({ error: 'Falha ao carregar métricas de engenharia de dados' });
+  }
+});
+
 export default router;

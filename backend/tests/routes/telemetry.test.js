@@ -222,4 +222,26 @@ describe('telemetria de uso', () => {
     expect(response.status).toBe(200);
     expect(response.body.changes.some(item => item.user_name === 'Autor antigo')).toBe(false);
   });
+
+  it('bloqueia o painel de engenharia de dados para quem não é administrador', async () => {
+    const response = await request(app).get('/api/telemetry/data-engineering?days=30')
+      .set('Cookie', cookieHeader(userCookies));
+    expect(response.status).toBe(403);
+  });
+
+  it('entrega performance, qualidade de dados, catálogo e saúde do pipeline ao administrador', async () => {
+    const response = await request(app).get('/api/telemetry/data-engineering?days=30')
+      .set('Cookie', cookieHeader(adminCookies));
+
+    expect(response.status).toBe(200);
+    expect(response.body.days).toBe(30);
+    expect(Array.isArray(response.body.endpoint_performance)).toBe(true);
+    expect(Array.isArray(response.body.data_quality)).toBe(true);
+    expect(Array.isArray(response.body.catalog)).toBe(true);
+    expect(response.body.catalog.some(row => row.table_name === 'users')).toBe(true);
+    expect(response.body.pipeline).toEqual(expect.objectContaining({
+      last_event_at: expect.any(String),
+      daily: expect.any(Array),
+    }));
+  });
 });

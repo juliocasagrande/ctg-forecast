@@ -2,7 +2,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import api from '../utils/api.js';
 import HealthActivity from '../components/admin/HealthActivity.jsx';
 import HealthTables from '../components/admin/HealthTables.jsx';
+import DataEngineeringPanel from '../components/admin/DataEngineeringPanel.jsx';
 import './AppHealthPage.css';
+
+const TABS = [{ value: 'uso', label: 'Uso' }, { value: 'engenharia', label: 'Engenharia de Dados' }];
 
 const PERIODS = [{ value: 7, label: '7 dias' }, { value: 30, label: '30 dias' }, { value: 90, label: '90 dias' }];
 const ROLE_LABELS = { admin:'Administrador', coordenador:'Coordenador', engenheiro:'Engenheiro', planejador:'Planejador', gerente:'Gerente', diretor:'Diretor' };
@@ -112,6 +115,7 @@ function Panel({ title, subtitle, children, className='' }) {
 const Empty = ({ children='Ainda não há dados neste período.' }) => <div className="health-empty">{children}</div>;
 
 export default function AppHealthPage() {
+  const [tab, setTab] = useState('uso');
   const [days, setDays] = useState(30);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -146,21 +150,25 @@ export default function AppHealthPage() {
         <button className="health-refresh" onClick={() => load(true)} disabled={refreshing}><span className={refreshing?'spinning':''}>↻</span> Atualizar</button>
       </div>
     </div>
+    <div className="health-tabs">{TABS.map(t =>
+      <button key={t.value} className={tab===t.value?'active':''} onClick={() => setTab(t.value)}>{t.label}</button>)}</div>
     {error && <div className="health-error">{error}</div>}
-    <div className="health-status-strip" style={{'--status-color':health.color,'--status-bg':health.bg}}>
-      <span className="health-status-dot"/><strong>Estado geral: {health.label}</strong>
-      <span>{successRate.toLocaleString('pt-BR',{maximumFractionDigits:2})}% das operações concluídas com sucesso</span>
-      <span className="health-updated">Atualizado {data?.generated_at ? new Date(data.generated_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : 'agora'}</span>
-    </div>
-    <div className="health-metrics-grid">
-      <ActiveUsersMetricCard users={data?.active_users} sessions={summary.sessions}/>
-      <MetricCard label="Tempo médio ativo" value={fmtDuration(summary.avg_session_seconds)} helper="por sessão, sem tempo ocioso" color="#7C3AED" icon="◷"/>
-      <MetricCard label="Visualizações" value={fmtNum(summary.page_views)} helper="aberturas de páginas" color="#0891B2" icon="◉"/>
-      <MetricCard label="Criações" value={fmtNum(summary.creations)} helper={`${fmtNum(summary.updates)} atualizações`} color="#16A34A" icon="＋"/>
-      <MetricCard label="Erros de leitura" value={fmtNum(summary.read_errors)} helper={`de ${fmtNum(summary.reads)} leituras`} color="#D97706" icon="↓"/>
-      <MetricCard label="Erros de gravação" value={fmtNum(summary.write_errors)} helper={`de ${fmtNum(summary.writes)} gravações`} color="#DC2626" icon="↑"/>
-    </div>
-    <HealthActivity daily={daily} pages={data?.pages}/>
-    <HealthTables operations={data?.operations} users={data?.users} errors={data?.errors} changes={data?.changes}/>
+    {tab === 'uso' ? <>
+      <div className="health-status-strip" style={{'--status-color':health.color,'--status-bg':health.bg}}>
+        <span className="health-status-dot"/><strong>Estado geral: {health.label}</strong>
+        <span>{successRate.toLocaleString('pt-BR',{maximumFractionDigits:2})}% das operações concluídas com sucesso</span>
+        <span className="health-updated">Atualizado {data?.generated_at ? new Date(data.generated_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : 'agora'}</span>
+      </div>
+      <div className="health-metrics-grid">
+        <ActiveUsersMetricCard users={data?.active_users} sessions={summary.sessions}/>
+        <MetricCard label="Tempo médio ativo" value={fmtDuration(summary.avg_session_seconds)} helper="por sessão, sem tempo ocioso" color="#7C3AED" icon="◷"/>
+        <MetricCard label="Visualizações" value={fmtNum(summary.page_views)} helper="aberturas de páginas" color="#0891B2" icon="◉"/>
+        <MetricCard label="Criações" value={fmtNum(summary.creations)} helper={`${fmtNum(summary.updates)} atualizações`} color="#16A34A" icon="＋"/>
+        <MetricCard label="Erros de leitura" value={fmtNum(summary.read_errors)} helper={`de ${fmtNum(summary.reads)} leituras`} color="#D97706" icon="↓"/>
+        <MetricCard label="Erros de gravação" value={fmtNum(summary.write_errors)} helper={`de ${fmtNum(summary.writes)} gravações`} color="#DC2626" icon="↑"/>
+      </div>
+      <HealthActivity daily={daily} pages={data?.pages}/>
+      <HealthTables operations={data?.operations} users={data?.users} errors={data?.errors} changes={data?.changes}/>
+    </> : <DataEngineeringPanel days={days}/>}
   </div>;
 }
