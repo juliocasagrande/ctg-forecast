@@ -1790,8 +1790,12 @@ export default function HomePage({ year }) {
     const buildPriorityGoalBucket = (rows, allRows, quantityField) => {
       const pendingRows = rows.filter(r => r.status_current === '0 - Not started yet');
       const cancelRows = rows.filter(r => r.status_current === '10 - Cancelado');
-      const draftRows = rows.filter(r => r.status_current === '8 - Draft Contract');
-      const signedRows = rows.filter(r => r.status_current === '9 - Contract signed');
+      // Um IAC pode ter quantidades Priority e Non Priority ao mesmo tempo.
+      // Para Draft/Signed, a tabela e definida pelo campo quantitativo, nao pelo
+      // seletor `priority` do cadastro, portanto ambos os campos devem considerar
+      // todos os IACs no respectivo status.
+      const draftRows = allRows.filter(r => r.status_current === '8 - Draft Contract');
+      const signedRows = allRows.filter(r => r.status_current === '9 - Contract signed');
       const hiringRows = rows.filter(r => !IAC_NAMED_STATUSES.has(r.status_current));
       const sumQty = list => list.reduce((sum, r) => sum + (Number(r[quantityField]) || 0), 0);
       const total = allRows.reduce((sum, r) => sum + (Number(r[quantityField]) || 0), 0);
