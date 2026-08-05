@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db/schema.js';
 import { requireAuth, requirePageAccess } from '../middleware/auth.js';
+import { setTelemetryChange } from '../utils/changeAudit.js';
 import multer from 'multer';
 import ExcelJS from 'exceljs';
 
@@ -61,6 +62,82 @@ function safeError(res, err) {
   if (process.env.NODE_ENV === 'production')
     return res.status(500).json({ error: 'Erro interno do servidor' });
   res.status(500).json({ error: err.message });
+}
+
+const TRACKING_AUDIT_FIELDS = [
+  ['pp_contrato', 'PP / Contrato'],
+  ['projeto_atividade', 'Projeto / Atividade'],
+  ['projeto', 'Projeto'],
+  ['status', 'Status'],
+  ['area', 'Área'],
+  ['uhe', 'UHE'],
+  ['gestor', 'Gestor'],
+  ['resumo', 'Resumo'],
+  ['empresa', 'Empresa'],
+  ['fornecedor', 'Fornecedor'],
+  ['natureza', 'Natureza'],
+  ['vencimento', 'Vencimento'],
+  ['vencimento_txt', 'Texto do vencimento'],
+  ['cronograma', 'Cronograma'],
+  ['aditivos', 'Aditivos'],
+  ['reajustes', 'Reajustes'],
+  ['aditivo_em_andamento', 'Aditivo em andamento'],
+  ['valor_contrato', 'Valor do contrato'],
+  ['realizado_contrato', 'Realizado do contrato'],
+  ['saldo_contrato', 'Saldo do contrato'],
+  ['valor_si', 'Valor da SI'],
+  ['realizado_si', 'Realizado da SI'],
+  ['saldo_si', 'Saldo da SI'],
+  ['valor_contrato_breakdown', 'Detalhamento do valor do contrato'],
+  ['realizado_contrato_breakdown', 'Detalhamento do realizado do contrato'],
+  ['valor_si_breakdown', 'Detalhamento do valor da SI'],
+  ['realizado_si_breakdown', 'Detalhamento do realizado da SI'],
+  ['caminho_projeto', 'Caminho do projeto'],
+];
+
+const IAC_AUDIT_FIELDS = [
+  ['iac_code', 'Código do IAC'],
+  ['project', 'Projeto'],
+  ['status_current', 'Status atual'],
+  ['priority', 'Prioridade'],
+  ['type_line', 'Tipo'],
+  ['area', 'Área'],
+  ['qty_pp_line_26_priority', 'Quantidade PP prioritária'],
+  ['qty_pp_line_26_no_priority', 'Quantidade PP não prioritária'],
+  ['opening_date', 'Data de abertura'],
+  ['when_open', 'Previsão de abertura'],
+  ['acceptance_letter_signed', 'Carta de aceite assinada'],
+  ['comments', 'Comentários'],
+  ['requester', 'Solicitante'],
+  ['team_leader', 'Líder da equipe'],
+  ['chinese_work_staff', 'Equipe de trabalho chinesa'],
+  ['apresentado_work_team', 'Apresentado à equipe'],
+  ['organizer', 'Organizador'],
+  ['supervisor', 'Supervisor'],
+  ['evaluation_team', 'Equipe de avaliação'],
+  ['validity', 'Validade'],
+  ['continuidade', 'Continuidade'],
+  ['link_path', 'Link / Caminho'],
+];
+
+function setTrackingTelemetry(res, before, after) {
+  const reference = after || before || {};
+  setTelemetryChange(res, {
+    fields: TRACKING_AUDIT_FIELDS,
+    before,
+    after,
+    recordLabel: reference.pp_contrato || reference.projeto || reference.projeto_atividade || `Registro #${reference.id}`,
+  });
+}
+
+function setIacTelemetry(res, before, after) {
+  const reference = after || before || {};
+  setTelemetryChange(res, {
+    fields: IAC_AUDIT_FIELDS,
+    before,
+    after,
+    recordLabel: reference.iac_code || reference.project || `IAC #${reference.id}`,
+  });
 }
 
 // Lê um mapa JSON {cargo: dias} de system_settings (chave `jsonKey`), com fallback
@@ -153,6 +230,7 @@ router.post('/iacs', requirePageAccess('iacs', { write: true }), async (req, res
       organizer || null, supervisor || null, evaluation_team || null,
       priority || 'Non Priority', validity || 'Dez/2027', continuidade || 'Sim', link_path || null,
     ]);
+    setIacTelemetry(res, null, r.rows[0]);
     res.status(201).json(r.rows[0]);
   } catch (err) { safeError(res, err); }
 });
@@ -162,6 +240,7 @@ router.put('/iacs/:id', requirePageAccess('iacs', { write: true }), async (req, 
   try {
     await ensureIacSchema();
     const { id } = req.params;
+    const previous = await pool.query('SELECT * FROM lists_iacs WHERE id=$1', [id]);
     const {
       iac_code, type_line, area,
       qty_pp_line_26_priority, qty_pp_line_26_no_priority,
@@ -197,6 +276,7 @@ router.put('/iacs/:id', requirePageAccess('iacs', { write: true }), async (req, 
     ]);
 
     if (!r.rows.length) return res.status(404).json({ error: 'IAC não encontrado' });
+    setIacTelemetry(res, previous.rows[0], r.rows[0]);
     res.json(r.rows[0]);
   } catch (err) { safeError(res, err); }
 });
@@ -204,7 +284,8 @@ router.put('/iacs/:id', requirePageAccess('iacs', { write: true }), async (req, 
 // DELETE /api/lists/iacs/:id
 router.delete('/iacs/:id', requirePageAccess('iacs', { write: true }), async (req, res) => {
   try {
-    await pool.query('DELETE FROM lists_iacs WHERE id=$1', [req.params.id]);
+    const deleted = await pool.query('DELETE FROM lists_iacs WHERE id=$1 RETURNING *', [req.params.id]);
+    if (deleted.rows[0]) setIacTelemetry(res, deleted.rows[0], null);
     res.json({ ok: true });
   } catch (err) { safeError(res, err); }
 });
@@ -327,6 +408,7 @@ router.post('/projects-tracking', requirePageAccess('projects_tracking', { write
       realizado_si_breakdown ? JSON.stringify(realizado_si_breakdown) : null,
       fornecedor || null, natureza || 'OPEX', aditivo_em_andamento || 'NÃO',
     ]);
+    setTrackingTelemetry(res, null, r.rows[0]);
     res.status(201).json(r.rows[0]);
   } catch (err) { safeError(res, err); }
 });
@@ -336,6 +418,7 @@ router.put('/projects-tracking/:id', requirePageAccess('projects_tracking', { wr
   try {
     await ensureTrackingSchema();
     const { id } = req.params;
+    const previous = await pool.query('SELECT * FROM lists_projects_tracking WHERE id=$1', [id]);
     const {
       area, uhe, pp_contrato, projeto_atividade, projeto, caminho_projeto,
         status, gestor, gestor_user_id, resumo, empresa, vencimento, vencimento_txt,
@@ -380,6 +463,7 @@ router.put('/projects-tracking/:id', requirePageAccess('projects_tracking', { wr
     ]);
 
     if (!r.rows.length) return res.status(404).json({ error: 'Projeto não encontrado' });
+    setTrackingTelemetry(res, previous.rows[0], r.rows[0]);
     res.json(r.rows[0]);
   } catch (err) { safeError(res, err); }
 });
@@ -399,7 +483,8 @@ router.delete('/projects-tracking/clear', requirePageAccess('projects_tracking',
 // DELETE /api/lists/projects-tracking/:id
 router.delete('/projects-tracking/:id', requirePageAccess('projects_tracking', { write: true }), async (req, res) => {
   try {
-    await pool.query('DELETE FROM lists_projects_tracking WHERE id=$1', [req.params.id]);
+    const deleted = await pool.query('DELETE FROM lists_projects_tracking WHERE id=$1 RETURNING *', [req.params.id]);
+    if (deleted.rows[0]) setTrackingTelemetry(res, deleted.rows[0], null);
     res.json({ ok: true });
   } catch (err) { safeError(res, err); }
 });

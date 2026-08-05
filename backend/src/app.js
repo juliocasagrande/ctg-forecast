@@ -46,8 +46,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /**
  * @param {Object}  opts
  * @param {boolean} opts.disableRateLimit  â€” desativa apiLimiter/heavyOpLimiter (Ãºtil em testes)
+ * @param {boolean} opts.disableTelemetry — desativa a persistência de telemetria
  */
-export function createApp({ disableRateLimit = false } = {}) {
+export function createApp({ disableRateLimit = false, disableTelemetry = disableRateLimit } = {}) {
   const app = express();
   const IS_PROD = process.env.NODE_ENV === 'production';
 
@@ -92,8 +93,8 @@ export function createApp({ disableRateLimit = false } = {}) {
   }
 
   // Observa o resultado das APIs autenticadas sem registrar payloads sensíveis.
-  // O app de testes desativa a coleta para manter isolamento entre TRUNCATEs.
-  if (!disableRateLimit) app.use(apiTelemetry);
+  // O app de testes desativa a coleta por padrão para manter isolamento entre TRUNCATEs.
+  if (!disableTelemetry) app.use(apiTelemetry);
 
   /* â”€â”€ ROTAS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   app.use('/api/auth',     authRouter);

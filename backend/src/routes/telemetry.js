@@ -234,12 +234,15 @@ router.get('/overview', requireRole('admin'), async (req, res) => {
          ORDER BY name ASC`),
       pool.query(`
         SELECT ae.id, ae.created_at, ae.page_path, ae.endpoint, ae.method,
-               u.name AS user_name, u.role AS user_role
+               ae.record_label, ae.change_details, ae.action_label, ae.change_description,
+               COALESCE(ae.actor_name, u.name) AS user_name,
+               COALESCE(ae.actor_role, u.role) AS user_role
           FROM app_api_events ae
           LEFT JOIN users u ON u.id = ae.user_id
-         WHERE ae.created_at >= NOW() - make_interval(days => $1)
+         WHERE ae.created_at >= NOW() - make_interval(days => LEAST($1, 30))
            AND ae.operation = 'write'
            AND ae.success = true
+           AND ae.audit_visible = true
          ORDER BY ae.created_at DESC
          LIMIT 100`, params),
     ]);

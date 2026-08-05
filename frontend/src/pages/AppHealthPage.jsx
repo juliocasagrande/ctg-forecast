@@ -140,7 +140,7 @@ export default function AppHealthPage() {
 
   return <div className="health-page">
     <div className="health-toolbar"><div><div className="health-eyebrow">Observabilidade</div>
-      <h2>Uso, sanidade e saúde</h2><p>Telemetria operacional sem captura do conteúdo dos usuários.</p></div>
+      <h2>Uso, sanidade e saúde</h2><p>Telemetria operacional e trilha de alterações para auditoria.</p></div>
       <div className="health-toolbar-actions"><div className="health-periods">{PERIODS.map(p =>
         <button key={p.value} className={days===p.value?'active':''} onClick={() => setDays(p.value)}>{p.label}</button>)}</div>
         <button className="health-refresh" onClick={() => load(true)} disabled={refreshing}><span className={refreshing?'spinning':''}>↻</span> Atualizar</button>

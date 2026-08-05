@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db/schema.js';
 import { requireAuth, requirePageAccess } from '../middleware/auth.js';
+import { setTelemetryChange } from '../utils/changeAudit.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -8,6 +9,29 @@ router.use(requirePageAccess('vacations'));
 
 // Usuários que não devem aparecer na página de Férias
 const VACATIONS_EXCLUDED_EMAILS = ['renato.castilho@ctgbr.com.br'];
+
+const VACATION_AUDIT_FIELDS = [
+  ['period_number', 'Período'],
+  ['start_date', 'Data inicial'],
+  ['end_date', 'Data final'],
+  ['days', 'Quantidade de dias'],
+  ['year', 'Ano'],
+  ['area', 'Área'],
+  ['adp_registered', 'Registrado no ADP'],
+  ['notes', 'Observações'],
+];
+
+function setVacationTelemetry(res, before, after) {
+  const reference = after || before || {};
+  const owner = reference.user_name || `Usuário #${reference.user_id}`;
+  const period = reference.period_number ? `${reference.period_number}º período` : 'Período';
+  setTelemetryChange(res, {
+    fields: VACATION_AUDIT_FIELDS,
+    before,
+    after,
+    recordLabel: `${owner} · ${period}${reference.year ? `/${reference.year}` : ''}`,
+  });
+}
 
 function sameArea(left, right) {
   return String(left || 'eletrica').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
@@ -18,8 +42,9 @@ async function canManageVacationUser(user, targetUserId) {
   if (['admin', 'planejador', 'gerente', 'diretor'].includes(user.role) || user._allAreasAccess) return true;
   if (user.role === 'engenheiro') return Number(targetUserId) === Number(user.id);
   if (user.role !== 'coordenador') return false;
-  const target = await pool.query("SELECT COALESCE(area, 'eletrica') AS area FROM users WHERE id=$1", [targetUserId]);
-  return !!target.rows[0] && sameArea(target.rows[0].area, user.area);
+  if (Number(targetUserId) === Number(user.id)) return true;
+  const target = await pool.query("SELECT role, COALESCE(area, 'eletrica') AS area FROM users WHERE id=$1", [targetUserId]);
+  return target.rows[0]?.role === 'engenheiro' && sameArea(target.rows[0].area, user.area);
 }
 
 /* ────────────────────────────────────────────────
@@ -176,7 +201,7 @@ router.post('/', requirePageAccess('vacations', { write: true }), async (req, re
 
   // Verifica sobreposição com colegas da mesma área/grupo e notifica
   // Determina grupo do usuário solicitante
-  const userInfo = await pool.query('SELECT role, area FROM users WHERE id=$1', [user_id]);
+  const userInfo = await pool.query('SELECT role, area, name AS user_name FROM users WHERE id=$1', [user_id]);
   const uRole = userInfo.rows[0]?.role || 'engenheiro';
   const uArea = userInfo.rows[0]?.area || 'eletrica';
 
@@ -221,6 +246,7 @@ router.post('/', requirePageAccess('vacations', { write: true }), async (req, re
   `, [user_id, area, period_number, start_date, end_date, days, adp_registered ?? false, year, notes ? String(notes).slice(0, 1000) : null, requesterId]);
 
   const newPeriod = rows[0];
+  setVacationTelemetry(res, null, { ...newPeriod, user_name: userInfo.rows[0]?.user_name });
 
   // Se houver sobreposição, criar notificação para os colegas afetados
   if (overlappingColleagues.length > 0) {
@@ -254,7 +280,12 @@ router.put('/:id', requirePageAccess('vacations', { write: true }), async (req, 
   const { id } = req.params;
 
   // Busca o registro para verificar ownership
-  const existing = await pool.query('SELECT user_id FROM vacation_periods WHERE id = $1', [id]);
+  const existing = await pool.query(`
+    SELECT vp.*, u.name AS user_name
+    FROM vacation_periods vp
+    LEFT JOIN users u ON u.id = vp.user_id
+    WHERE vp.id = $1
+  `, [id]);
   if (!existing.rows.length) return res.status(404).json({ error: 'Período não encontrado' });
 
   const owner = existing.rows[0].user_id;
@@ -278,6 +309,7 @@ router.put('/:id', requirePageAccess('vacations', { write: true }), async (req, 
     RETURNING *
   `, [area, period_number, start_date, end_date, days, adp_registered ?? false, year, notes || null, id]);
 
+  setVacationTelemetry(res, existing.rows[0], { ...rows[0], user_name: existing.rows[0].user_name });
   res.json(rows[0]);
 });
 
@@ -288,7 +320,12 @@ router.put('/:id', requirePageAccess('vacations', { write: true }), async (req, 
 router.delete('/:id', requirePageAccess('vacations', { write: true }), async (req, res) => {
   const { id } = req.params;
 
-  const existing = await pool.query('SELECT user_id FROM vacation_periods WHERE id = $1', [id]);
+  const existing = await pool.query(`
+    SELECT vp.*, u.name AS user_name
+    FROM vacation_periods vp
+    LEFT JOIN users u ON u.id = vp.user_id
+    WHERE vp.id = $1
+  `, [id]);
   if (!existing.rows.length) return res.status(404).json({ error: 'Período não encontrado' });
 
   const owner = existing.rows[0].user_id;
@@ -296,6 +333,7 @@ router.delete('/:id', requirePageAccess('vacations', { write: true }), async (re
     return res.status(403).json({ error: 'Sem permissao' });
 
   await pool.query('DELETE FROM vacation_periods WHERE id = $1', [id]);
+  setVacationTelemetry(res, existing.rows[0], null);
   res.json({ ok: true });
 });
 

@@ -378,8 +378,23 @@ await client.query(`
         status_code  SMALLINT NOT NULL,
         duration_ms  INTEGER NOT NULL DEFAULT 0 CHECK (duration_ms >= 0),
         success      BOOLEAN NOT NULL,
+        actor_name   TEXT,
+        actor_role   VARCHAR(30),
+        record_label TEXT,
+        change_details JSONB,
+        action_label VARCHAR(40),
+        change_description TEXT,
+        audit_visible BOOLEAN NOT NULL DEFAULT true,
         created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+      ALTER TABLE app_api_events ADD COLUMN IF NOT EXISTS actor_name TEXT;
+      ALTER TABLE app_api_events ADD COLUMN IF NOT EXISTS actor_role VARCHAR(30);
+      ALTER TABLE app_api_events ADD COLUMN IF NOT EXISTS record_label TEXT;
+      ALTER TABLE app_api_events ADD COLUMN IF NOT EXISTS change_details JSONB;
+      ALTER TABLE app_api_events ADD COLUMN IF NOT EXISTS action_label VARCHAR(40);
+      ALTER TABLE app_api_events ADD COLUMN IF NOT EXISTS change_description TEXT;
+      ALTER TABLE app_api_events ADD COLUMN IF NOT EXISTS audit_visible BOOLEAN NOT NULL DEFAULT true;
 
       CREATE TABLE IF NOT EXISTS app_client_errors (
         id          BIGSERIAL PRIMARY KEY,
@@ -406,6 +421,12 @@ await client.query(`
 
       -- Retenção suficiente para comparativos anuais sem crescimento ilimitado.
       DELETE FROM app_page_views WHERE created_at < NOW() - INTERVAL '365 days';
+      UPDATE app_api_events
+         SET actor_name = NULL, actor_role = NULL, record_label = NULL,
+             change_details = NULL, action_label = NULL, change_description = NULL,
+             audit_visible = false
+       WHERE created_at < NOW() - INTERVAL '30 days'
+         AND (change_details IS NOT NULL OR record_label IS NOT NULL OR audit_visible = true);
       DELETE FROM app_api_events WHERE created_at < NOW() - INTERVAL '365 days';
       DELETE FROM app_client_errors WHERE created_at < NOW() - INTERVAL '365 days';
       DELETE FROM app_sessions WHERE started_at < NOW() - INTERVAL '365 days';

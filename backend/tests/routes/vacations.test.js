@@ -4,10 +4,12 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { getTestApp } from '../setup/testApp.js';
+import { createApp } from '../../src/app.js';
 import { createTestUser, loginAs, cookieHeader } from '../helpers/auth.js';
-import { cleanTables } from '../helpers/db.js';
+import { cleanTables, query } from '../helpers/db.js';
 
 const app    = getTestApp();
+const telemetryApp = createApp({ disableRateLimit: true, disableTelemetry: false });
 const PREFIX = 'vac';
 
 let adminCookies, engCookies, eng2Cookies, coordCookies, gerenteCookies, coordMecCookies;
@@ -15,7 +17,7 @@ let adminUser, engUser, eng2User, coordUser, gerenteUser, coordMecUser, engMecNo
 let createdVacId;
 
 beforeAll(async () => {
-  await cleanTables('vacation_periods', 'users');
+  await cleanTables('app_api_events', 'vacation_periods', 'users');
 
   adminUser  = await createTestUser({ email: `${PREFIX}.admin@ctg-test.internal`,  role: 'admin' });
   engUser    = await createTestUser({ email: `${PREFIX}.eng@ctg-test.internal`,    role: 'engenheiro', area: 'eletrica' });
@@ -34,7 +36,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await cleanTables('vacation_periods', 'users');
+  await cleanTables('app_api_events', 'vacation_periods', 'users');
 });
 
 // ──────────────────────────────────────────────────────────────
@@ -296,12 +298,31 @@ describe('DELETE /api/vacations/:id', () => {
   it('admin deleta período de férias', async () => {
     if (!createdVacId) return;
 
-    const res = await request(app)
+    const res = await request(telemetryApp)
       .delete(`/api/vacations/${createdVacId}`)
-      .set('Cookie', cookieHeader(adminCookies));
+      .set('Cookie', cookieHeader(adminCookies))
+      .set('x-app-page', '/vacations');
 
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
+
+    let event;
+    for (let attempt = 0; attempt < 20 && !event; attempt += 1) {
+      const result = await query(`
+        SELECT record_label, change_details
+        FROM app_api_events
+        WHERE endpoint = '/api/vacations/:id' AND method = 'DELETE'
+        ORDER BY id DESC LIMIT 1
+      `);
+      event = result.rows[0];
+      if (!event) await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    expect(event.record_label).toContain('1º período/2025');
+    expect(event.change_details).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: 'period_number', old_value: '1', new_value: null }),
+      expect.objectContaining({ field: 'start_date', old_value: '2025-07-05', new_value: null }),
+      expect.objectContaining({ field: 'end_date', old_value: '2025-07-20', new_value: null }),
+    ]));
   });
 
   it('engenheiro pode deletar suas próprias férias', async () => {
