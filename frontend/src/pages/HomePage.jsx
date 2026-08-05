@@ -903,9 +903,9 @@ function PlantColumnChart({ items }) {
               key={item.label}
               onMouseEnter={() => setHovered(item)}
               onFocus={() => setHovered(item)}
-              style={{ display: 'grid', gridTemplateRows: '12px 1fr 20px', gap: 2, justifyItems: 'center', minWidth: 0, cursor: 'default' }}
+              style={{ display: 'grid', gridTemplateRows: '15px 1fr 22px', gap: 2, justifyItems: 'center', minWidth: 0, cursor: 'default' }}
             >
-              <div style={{ color: hasValue ? 'var(--ctg-navy)' : '#94A3B8', fontSize: '0.58rem', fontWeight: 900, whiteSpace: 'nowrap' }}>{hasValue ? moneyAxis(contratoTotal) : '-'}</div>
+              <div style={{ color: hasValue ? 'var(--ctg-navy)' : '#94A3B8', fontSize: '0.72rem', fontWeight: 900, whiteSpace: 'nowrap' }}>{hasValue ? moneyAxis(contratoTotal) : '-'}</div>
               <div style={{ width: '100%', maxWidth: 34, height: '100%', borderRadius: 4, background: '#E2E8F0', position: 'relative', overflow: 'hidden' }}>
                 {hasValue && saldoPct > 0 && (
                   <svg viewBox="0 0 34 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-hidden="true">
@@ -920,7 +920,7 @@ function PlantColumnChart({ items }) {
                   </svg>
                 )}
               </div>
-              <div style={{ color: 'var(--ctg-navy)', fontSize: '0.58rem', lineHeight: 1, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', alignSelf: 'start', paddingTop: 1 }}>{sigla || item.label}</div>
+              <div style={{ color: 'var(--ctg-navy)', fontSize: '0.72rem', lineHeight: 1, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', alignSelf: 'start', paddingTop: 1 }}>{sigla || item.label}</div>
             </div>
           );
         })}
