@@ -113,7 +113,7 @@ router.get('/overview', requireRole('admin'), async (req, res) => {
 
   try {
     const params = [days];
-    const [summaryR, dailyR, pagesR, operationsR, usersR, errorsR, activeUsersR] = await Promise.all([
+    const [summaryR, dailyR, pagesR, operationsR, usersR, errorsR, activeUsersR, changesR] = await Promise.all([
       pool.query(`
         WITH s AS (
           SELECT COUNT(*)::int sessions,
@@ -232,6 +232,16 @@ router.get('/overview', requireRole('admin'), async (req, res) => {
           FROM ranked
          WHERE position = 1
          ORDER BY name ASC`),
+      pool.query(`
+        SELECT ae.id, ae.created_at, ae.page_path, ae.endpoint, ae.method,
+               u.name AS user_name, u.role AS user_role
+          FROM app_api_events ae
+          LEFT JOIN users u ON u.id = ae.user_id
+         WHERE ae.created_at >= NOW() - make_interval(days => $1)
+           AND ae.operation = 'write'
+           AND ae.success = true
+         ORDER BY ae.created_at DESC
+         LIMIT 100`, params),
     ]);
 
     res.json({
@@ -244,6 +254,7 @@ router.get('/overview', requireRole('admin'), async (req, res) => {
       users: usersR.rows,
       errors: errorsR.rows,
       active_users: activeUsersR.rows,
+      changes: changesR.rows,
     });
   } catch (err) {
     console.error('[TELEMETRY] Falha ao consultar painel:', err.message);

@@ -161,6 +161,6 @@ export default function AppHealthPage() {
       <MetricCard label="Erros de gravação" value={fmtNum(summary.write_errors)} helper={`de ${fmtNum(summary.writes)} gravações`} color="#DC2626" icon="↑"/>
     </div>
     <HealthActivity daily={daily} pages={data?.pages}/>
-    <HealthTables operations={data?.operations} users={data?.users} errors={data?.errors}/>
+    <HealthTables operations={data?.operations} users={data?.users} errors={data?.errors} changes={data?.changes}/>
   </div>;
 }
