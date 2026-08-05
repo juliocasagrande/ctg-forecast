@@ -7,7 +7,9 @@
  * - Permite ao usuário atualizar imediatamente ou dispensar temporariamente
  * - Funciona tanto no navegador (web) quanto no modo PWA instalado
  * - Verifica atualizações a cada 60 segundos automaticamente
- * 
+ * - Apenas o admin do sistema (ver ADMIN_BANNER_EMAIL) vê o banner; os demais
+ *   usuários recebem a atualização silenciosamente, sem countdown/reload visível
+ *
  * Configuração relacionada:
  * - vite.config.js: registerType 'prompt' permite controle manual
  * - workbox.skipWaiting: false (espera interação do usuário)
@@ -16,8 +18,14 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
+import { useAuth } from '../../context/AuthContext.jsx';
+
+// Único usuário que deve ver o banner de atualização; os demais são atualizados
+// automaticamente em segundo plano assim que uma nova versão é detectada.
+const ADMIN_BANNER_EMAIL = 'julio.casagrande@ctgbr.com.br';
 
 export function PWAUpdatePrompt() {
+  const { user } = useAuth();
   const {
     needRefresh: [needRefresh],
     updateServiceWorker,
@@ -28,30 +36,11 @@ export function PWAUpdatePrompt() {
     },
   });
 
+  const showBanner = user?.email?.toLowerCase() === ADMIN_BANNER_EMAIL;
+
   const [countdown, setCountdown] = useState(30);
   const [isUpdating, setIsUpdating] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-
-  // Auto-atualiza após 30 segundos mesmo sem interação do usuário
-  useEffect(() => {
-    if (!needRefresh) {
-      setCountdown(30);
-      return;
-    }
-    
-    setCountdown(30);
-    const interval = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          handleUpdate();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [needRefresh]);
 
   const handleUpdate = useCallback(async () => {
     setIsUpdating(true);
@@ -68,12 +57,39 @@ export function PWAUpdatePrompt() {
     }
   }, [updateServiceWorker]);
 
+  // Usuários comuns: atualiza e recarrega silenciosamente, sem exibir o banner/countdown.
+  useEffect(() => {
+    if (!needRefresh || showBanner) return;
+    updateServiceWorker(true).catch(err => console.error('Erro ao atualizar:', err));
+  }, [needRefresh, showBanner, updateServiceWorker]);
+
+  // Admin: auto-atualiza após 30 segundos mesmo sem interação, com countdown visível
+  useEffect(() => {
+    if (!needRefresh || !showBanner) {
+      setCountdown(30);
+      return;
+    }
+
+    setCountdown(30);
+    const interval = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          handleUpdate();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [needRefresh, showBanner, handleUpdate]);
+
   const handleDismiss = () => {
     // Usuário optou por não atualizar agora, mas será notificado novamente
     setCountdown(0);
   };
 
-  if (!needRefresh) return null;
+  if (!needRefresh || !showBanner) return null;
 
   return (
     <>
