@@ -232,7 +232,7 @@ export default function Sidebar({ open, onClose, onNewProject, projects }) {
             <div style={{ margin: '6px 8px 4px', borderTop: '1px solid rgba(255,255,255,0.10)' }} />
             <div className="nav-section-label">Administração</div>
             {navItem('/admin', IC.users, 'Gerenciar Usuários')}
-            {navItem('/admin/health', IC.dashboard, 'Saúde da Aplicação')}
+            {navItem('/admin/health', IC.dashboard, 'Monitoramento de Uso')}
           </>}
 
           {/* Projects listed only on Projects page */}

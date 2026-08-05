@@ -131,9 +131,9 @@ router.get('/overview', requireRole('admin'), async (req, res) => {
                  COUNT(*) FILTER (WHERE operation='write')::int writes,
                  COUNT(*) FILTER (WHERE method='POST' AND success)::int creations,
                  COUNT(*) FILTER (WHERE method IN ('PUT','PATCH') AND success)::int updates,
-                 COUNT(*) FILTER (WHERE status_code >= 400)::int errors,
-                 COUNT(*) FILTER (WHERE operation='read' AND status_code >= 400)::int read_errors,
-                 COUNT(*) FILTER (WHERE operation='write' AND status_code >= 400)::int write_errors,
+                 COUNT(*) FILTER (WHERE status_code >= 400 AND status_code NOT IN (401, 403))::int errors,
+                 COUNT(*) FILTER (WHERE operation='read' AND status_code >= 400 AND status_code NOT IN (401, 403))::int read_errors,
+                 COUNT(*) FILTER (WHERE operation='write' AND status_code >= 400 AND status_code NOT IN (401, 403))::int write_errors,
                  COUNT(*) FILTER (WHERE status_code >= 500)::int server_errors,
                  COALESCE(AVG(duration_ms), 0)::numeric avg_response_ms
             FROM app_api_events
@@ -168,7 +168,7 @@ router.get('/overview', requireRole('admin'), async (req, res) => {
         ), api AS (
           SELECT (created_at AT TIME ZONE 'America/Sao_Paulo')::date AS day,
                  COUNT(*) FILTER (WHERE operation='write' AND success)::int writes,
-                 COUNT(*) FILTER (WHERE status_code >= 400)::int errors
+                 COUNT(*) FILTER (WHERE status_code >= 400 AND status_code NOT IN (401, 403))::int errors
             FROM app_api_events
            WHERE created_at >= NOW() - make_interval(days => $1)
            GROUP BY 1
@@ -188,7 +188,7 @@ router.get('/overview', requireRole('admin'), async (req, res) => {
                COUNT(*) FILTER (WHERE method='POST' AND success)::int creations,
                COUNT(*) FILTER (WHERE method IN ('PUT','PATCH') AND success)::int updates,
                COUNT(*) FILTER (WHERE method='DELETE' AND success)::int deletions,
-               COUNT(*) FILTER (WHERE status_code >= 400)::int errors
+               COUNT(*) FILTER (WHERE status_code >= 400 AND status_code NOT IN (401, 403))::int errors
           FROM app_api_events
          WHERE created_at >= NOW() - make_interval(days => $1) AND operation='write'
          GROUP BY COALESCE(page_path, endpoint) ORDER BY (COUNT(*) FILTER (WHERE success)) DESC LIMIT 12`, params),
@@ -211,7 +211,8 @@ router.get('/overview', requireRole('admin'), async (req, res) => {
           SELECT ae.created_at, u.name user_name, ae.page_path, ae.endpoint,
                  ae.operation source, ae.status_code, NULL::text message
             FROM app_api_events ae LEFT JOIN users u ON u.id=ae.user_id
-           WHERE ae.created_at >= NOW() - make_interval(days => $1) AND ae.status_code >= 400
+           WHERE ae.created_at >= NOW() - make_interval(days => $1)
+             AND ae.status_code >= 400 AND ae.status_code NOT IN (401, 403)
           UNION ALL
           SELECT ce.created_at, u.name user_name, ce.page_path, NULL endpoint,
                  ce.source, NULL::smallint status_code, ce.message
