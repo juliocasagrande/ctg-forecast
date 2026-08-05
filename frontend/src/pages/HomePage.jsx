@@ -1490,7 +1490,7 @@ function IacStatusHorizontalChart({ items }) {
       onMouseLeave={() => setHovered(null)}
     >
       <div style={{ background: `linear-gradient(135deg, ${IAC_STAGE_CHART_ACCENT}26, ${IAC_STAGE_CHART_ACCENT}0d)`, padding: '5px 8px', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>
-        <span style={{ color: IAC_STAGE_CHART_ACCENT, fontSize: IAC_CARD_TITLE_FONT, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Contratos por etapa</span>
+        <span style={{ color: IAC_STAGE_CHART_ACCENT, fontSize: IAC_CARD_TITLE_FONT, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.04em' }}>IAC por etapa</span>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gridAutoRows: 'minmax(0, 1fr)', gap: 3, flex: 1, minHeight: 0, padding: '6px 8px', overflow: 'hidden' }}>
         {rows.map(item => (
@@ -1501,11 +1501,11 @@ function IacStatusHorizontalChart({ items }) {
             tabIndex={0}
             style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, .76fr) minmax(80px, 1fr) 26px', alignItems: 'center', gap: 8, minWidth: 0, cursor: 'default' }}
           >
-            <span style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', fontWeight: 850, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', fontWeight: 850, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
             <div style={{ height: 7, borderRadius: 999, background: '#E2E8F0', overflow: 'hidden' }}>
               <div style={{ width: `${(item.count / max) * 100}%`, height: '100%', borderRadius: 999, background: item.color, opacity: item.count ? 1 : 0.22 }} />
             </div>
-            <strong style={{ color: item.text, fontSize: '0.74rem', textAlign: 'right' }}>{item.count}</strong>
+            <strong style={{ color: item.text, fontSize: '0.84rem', textAlign: 'right' }}>{item.count}</strong>
           </div>
         ))}
       </div>
