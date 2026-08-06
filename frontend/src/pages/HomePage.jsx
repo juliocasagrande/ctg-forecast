@@ -1787,31 +1787,30 @@ export default function HomePage({ year }) {
       count: iacRows.filter(i => i.status_current === option.value).length,
     }));
     const IAC_NAMED_STATUSES = new Set(['0 - Not started yet', '10 - Cancelado', '8 - Draft Contract', '9 - Contract signed']);
-    const buildPriorityGoalBucket = (rows, allRows, quantityField) => {
-      const pendingRows = rows.filter(r => r.status_current === '0 - Not started yet');
-      const cancelRows = rows.filter(r => r.status_current === '10 - Cancelado');
-      // Um IAC pode ter quantidades Priority e Non Priority ao mesmo tempo.
-      // Para Draft/Signed, a tabela e definida pelo campo quantitativo, nao pelo
-      // seletor `priority` do cadastro, portanto ambos os campos devem considerar
-      // todos os IACs no respectivo status.
+    // O campo quantitativo (qty_pp_line_26_priority / qty_pp_line_26_no_priority),
+    // e nao o seletor `priority` do cadastro, e que define quanto cada IAC
+    // contribui para cada tabela. Por isso todas as colunas somam por status
+    // sobre TODOS os IACs, sem filtrar pelo campo `priority`.
+    const buildPriorityGoalBucket = (allRows, quantityField) => {
+      const pendingRows = allRows.filter(r => r.status_current === '0 - Not started yet');
+      const cancelRows = allRows.filter(r => r.status_current === '10 - Cancelado');
       const draftRows = allRows.filter(r => r.status_current === '8 - Draft Contract');
       const signedRows = allRows.filter(r => r.status_current === '9 - Contract signed');
-      const hiringRows = rows.filter(r => !IAC_NAMED_STATUSES.has(r.status_current));
+      const hiringRows = allRows.filter(r => !IAC_NAMED_STATUSES.has(r.status_current));
       const sumQty = list => list.reduce((sum, r) => sum + (Number(r[quantityField]) || 0), 0);
-      const total = allRows.reduce((sum, r) => sum + (Number(r[quantityField]) || 0), 0);
       return {
-        total, pending: sumQty(pendingRows), cancel: sumQty(cancelRows),
+        total: sumQty(allRows), pending: sumQty(pendingRows), cancel: sumQty(cancelRows),
         hiring: sumQty(hiringRows), draft: sumQty(draftRows), signed: sumQty(signedRows),
         goalValue: sumQty(draftRows) + sumQty(signedRows),
         rowsByColumn: {
-          total: rows, pending: pendingRows, cancel: cancelRows,
+          total: allRows, pending: pendingRows, cancel: cancelRows,
           hiring: hiringRows, draft: draftRows, signed: signedRows,
         },
       };
     };
     const iacPriorityGoalData = {
-      Priority: buildPriorityGoalBucket(data.allIacs.filter(r => r.priority === 'Priority'), data.allIacs, 'qty_pp_line_26_priority'),
-      'Non Priority': buildPriorityGoalBucket(data.allIacs.filter(r => r.priority === 'Non Priority'), data.allIacs, 'qty_pp_line_26_no_priority'),
+      Priority: buildPriorityGoalBucket(data.allIacs, 'qty_pp_line_26_priority'),
+      'Non Priority': buildPriorityGoalBucket(data.allIacs, 'qty_pp_line_26_no_priority'),
     };
     const iac2026 = iacRows.filter(i => isIacOpenedInYear(i, 2026));
     const iacMonths = iac2026.map(i => iacElapsedMonthsProjected(i)).filter(v => v !== null);
