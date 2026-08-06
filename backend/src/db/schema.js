@@ -1076,6 +1076,7 @@ await client.query(`
       CREATE INDEX IF NOT EXISTS idx_forecast_entries_project        ON forecast_entries(project_id);
       CREATE INDEX IF NOT EXISTS idx_forecast_entries_project_year   ON forecast_entries(project_id, year);
       CREATE INDEX IF NOT EXISTS idx_pt_area_status                  ON lists_projects_tracking(area, status);
+      CREATE INDEX IF NOT EXISTS idx_metas_year_area                 ON metas(year, area);
     `);
 
     console.log('✅ Migrations OK');

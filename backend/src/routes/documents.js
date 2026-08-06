@@ -26,6 +26,15 @@ function invalidateStatsCache() {
   statsCache.clear();
 }
 
+// Mesmo padrão para GET / (lista de documentos): não é filtrada por usuário,
+// só por `year`, então o resultado pode ser compartilhado entre requisições.
+const documentsListCache = new Map(); // key: year ?? 'all' -> { data, expires }
+const DOCUMENTS_CACHE_TTL_MS = 30_000;
+
+function invalidateDocumentsListCache() {
+  documentsListCache.clear();
+}
+
 // Verifica se o usuário é autor do documento
 async function isDocAuthor(docId, userId) {
   const r = await pool.query(
@@ -100,6 +109,12 @@ function normalizePlants(val) {
 router.get('/', async (req, res) => {
   try {
     const { year } = req.query;
+    const cacheKey = year || 'all';
+    const cached = documentsListCache.get(cacheKey);
+    if (cached && cached.expires > Date.now()) {
+      return res.json(cached.data);
+    }
+
     let q = `
       SELECT d.*,
         u.name  AS created_by_name,
@@ -117,7 +132,9 @@ router.get('/', async (req, res) => {
     const params = [];
     if (year) { q += ' WHERE d.year = $1'; params.push(parseInt(year)); }
     q += ' GROUP BY d.id, u.name, u2.name ORDER BY d.year ASC, d.sequence_number ASC, d.base_code ASC NULLS LAST, d.revision ASC NULLS FIRST';
-    res.json((await pool.query(q, params)).rows);
+    const data = (await pool.query(q, params)).rows;
+    documentsListCache.set(cacheKey, { data, expires: Date.now() + DOCUMENTS_CACHE_TTL_MS });
+    res.json(data);
   } catch (err) { safeError(res, err); }
 });
 
@@ -204,6 +221,7 @@ router.post('/', requirePageAccess('documents', { write: true }), async (req, re
 
     await client.query('COMMIT');
     invalidateStatsCache();
+    invalidateDocumentsListCache();
     const authors = await getAuthors(docId);
     res.status(201).json({ ...r.rows[0], authors });
   } catch (err) {
@@ -268,6 +286,7 @@ router.post('/:id/revision', requirePageAccess('documents', { write: true }), as
 
     await client.query('COMMIT');
     invalidateStatsCache();
+    invalidateDocumentsListCache();
     const authors = await getAuthors(newId);
     res.status(201).json({ ...r.rows[0], authors });
   } catch (err) {
@@ -313,6 +332,7 @@ router.put('/:id', requirePageAccess('documents', { write: true }), async (req, 
 
     await client.query('COMMIT');
     invalidateStatsCache();
+    invalidateDocumentsListCache();
     const authors = await getAuthors(id);
     res.json({ ...r.rows[0], authors });
   } catch (err) {
@@ -341,6 +361,7 @@ router.patch('/:id/status', requirePageAccess('documents', { write: true }), asy
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Documento não encontrado' });
     invalidateStatsCache();
+    invalidateDocumentsListCache();
     res.json(r.rows[0]);
   } catch (err) { safeError(res, err); }
 });
@@ -395,6 +416,7 @@ router.post('/import-bulk', requirePageAccess('documents', { write: true }), asy
     }
     await client.query('COMMIT');
     invalidateStatsCache();
+    invalidateDocumentsListCache();
     res.json(result);
   } catch (err) {
     await client.query('ROLLBACK');
