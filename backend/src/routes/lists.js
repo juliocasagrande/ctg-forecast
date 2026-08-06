@@ -12,6 +12,25 @@ router.use('/projects-tracking', requirePageAccess('projects_tracking'));
 
 let iacSchemaReady;
 
+// Cache de GET /iacs: resultado é igual para todos os usuários (sem filtro
+// por usuário/permissão na query), então pode ser compartilhado com segurança.
+// TTL curto como rede de segurança + invalidação explícita em toda escrita.
+let iacsListCache = null; // { data, expires }
+const IACS_CACHE_TTL_MS = 30_000;
+
+function invalidateIacsListCache() {
+  iacsListCache = null;
+}
+
+// Mesmo padrão para GET /projects-tracking: sem filtro por usuário na query,
+// então o resultado pode ser compartilhado com segurança entre requisições.
+let trackingListCache = null; // { data, expires }
+const TRACKING_CACHE_TTL_MS = 30_000;
+
+function invalidateTrackingListCache() {
+  trackingListCache = null;
+}
+
 async function ensureIacSchema() {
   if (!iacSchemaReady) {
     iacSchemaReady = pool.query(`
@@ -169,6 +188,9 @@ function areaVariants(area) {
 // GET /api/lists/iacs
 router.get('/iacs', async (req, res) => {
   try {
+    if (iacsListCache && iacsListCache.expires > Date.now()) {
+      return res.json(iacsListCache.data);
+    }
     await ensureIacSchema();
     const r = await pool.query(`
       SELECT * FROM lists_iacs
@@ -191,6 +213,7 @@ router.get('/iacs', async (req, res) => {
         area ASC,
         iac_code ASC
     `);
+    iacsListCache = { data: r.rows, expires: Date.now() + IACS_CACHE_TTL_MS };
     res.json(r.rows);
   } catch (err) { safeError(res, err); }
 });
@@ -230,6 +253,7 @@ router.post('/iacs', requirePageAccess('iacs', { write: true }), async (req, res
       organizer || null, supervisor || null, evaluation_team || null,
       priority || 'Non Priority', validity || 'Dez/2027', continuidade || 'Sim', link_path || null,
     ]);
+    invalidateIacsListCache();
     setIacTelemetry(res, null, r.rows[0]);
     res.status(201).json(r.rows[0]);
   } catch (err) { safeError(res, err); }
@@ -276,6 +300,7 @@ router.put('/iacs/:id', requirePageAccess('iacs', { write: true }), async (req, 
     ]);
 
     if (!r.rows.length) return res.status(404).json({ error: 'IAC não encontrado' });
+    invalidateIacsListCache();
     setIacTelemetry(res, previous.rows[0], r.rows[0]);
     res.json(r.rows[0]);
   } catch (err) { safeError(res, err); }
@@ -285,6 +310,7 @@ router.put('/iacs/:id', requirePageAccess('iacs', { write: true }), async (req, 
 router.delete('/iacs/:id', requirePageAccess('iacs', { write: true }), async (req, res) => {
   try {
     const deleted = await pool.query('DELETE FROM lists_iacs WHERE id=$1 RETURNING *', [req.params.id]);
+    invalidateIacsListCache();
     if (deleted.rows[0]) setIacTelemetry(res, deleted.rows[0], null);
     res.json({ ok: true });
   } catch (err) { safeError(res, err); }
@@ -348,6 +374,9 @@ router.get('/iacs/:id/alert-info', async (req, res) => {
 // GET /api/lists/projects-tracking
 router.get('/projects-tracking', async (req, res) => {
   try {
+    if (trackingListCache && trackingListCache.expires > Date.now()) {
+      return res.json(trackingListCache.data);
+    }
     const r = await pool.query(`
       SELECT * FROM lists_projects_tracking
       ORDER BY
@@ -361,6 +390,7 @@ router.get('/projects-tracking', async (req, res) => {
         END,
         pp_contrato ASC
     `);
+    trackingListCache = { data: r.rows, expires: Date.now() + TRACKING_CACHE_TTL_MS };
     res.json(r.rows);
   } catch (err) { safeError(res, err); }
 });
@@ -408,6 +438,7 @@ router.post('/projects-tracking', requirePageAccess('projects_tracking', { write
       realizado_si_breakdown ? JSON.stringify(realizado_si_breakdown) : null,
       fornecedor || null, natureza || 'OPEX', aditivo_em_andamento || 'NÃO',
     ]);
+    invalidateTrackingListCache();
     setTrackingTelemetry(res, null, r.rows[0]);
     res.status(201).json(r.rows[0]);
   } catch (err) { safeError(res, err); }
@@ -463,6 +494,7 @@ router.put('/projects-tracking/:id', requirePageAccess('projects_tracking', { wr
     ]);
 
     if (!r.rows.length) return res.status(404).json({ error: 'Projeto não encontrado' });
+    invalidateTrackingListCache();
     setTrackingTelemetry(res, previous.rows[0], r.rows[0]);
     res.json(r.rows[0]);
   } catch (err) { safeError(res, err); }
@@ -476,6 +508,7 @@ router.delete('/projects-tracking/clear', requirePageAccess('projects_tracking',
       return res.status(403).json({ error: 'Apenas administradores podem limpar a tabela' });
     }
     const result = await pool.query('DELETE FROM lists_projects_tracking');
+    invalidateTrackingListCache();
     res.json({ ok: true, deleted: result.rowCount });
   } catch (err) { safeError(res, err); }
 });
@@ -484,6 +517,7 @@ router.delete('/projects-tracking/clear', requirePageAccess('projects_tracking',
 router.delete('/projects-tracking/:id', requirePageAccess('projects_tracking', { write: true }), async (req, res) => {
   try {
     const deleted = await pool.query('DELETE FROM lists_projects_tracking WHERE id=$1 RETURNING *', [req.params.id]);
+    invalidateTrackingListCache();
     if (deleted.rows[0]) setTrackingTelemetry(res, deleted.rows[0], null);
     res.json({ ok: true });
   } catch (err) { safeError(res, err); }
@@ -858,6 +892,7 @@ router.post('/projects-tracking/import', requirePageAccess('projects_tracking', 
     }
 
     await client.query('COMMIT');
+    invalidateTrackingListCache();
     res.json({ ok: true, inserted, updated, skipped });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -1183,6 +1218,7 @@ router.post('/iacs/import', requirePageAccess('iacs', { write: true }), upload.s
     }
 
     await client.query('COMMIT');
+    invalidateIacsListCache();
     res.json({ ok: true, inserted, updated, skipped });
   } catch (err) {
     await client.query('ROLLBACK');

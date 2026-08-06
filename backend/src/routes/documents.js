@@ -15,6 +15,17 @@ function safeError(res, err) {
 
 const SUPERIOR_ROLES = ['planejador', 'coordenador', 'admin'];
 
+// Cache de /stats: TTL curto como rede de segurança + invalidação explícita em
+// toda escrita (create/update/status/import), então na prática o cache nunca
+// fica desatualizado após uma ação do próprio usuário — só reduz o custo de
+// recalcular os agregados quando ninguém alterou nada.
+const statsCache = new Map(); // key: year ?? 'all' -> { data, expires }
+const STATS_CACHE_TTL_MS = 30_000;
+
+function invalidateStatsCache() {
+  statsCache.clear();
+}
+
 // Verifica se o usuário é autor do documento
 async function isDocAuthor(docId, userId) {
   const r = await pool.query(
@@ -114,6 +125,12 @@ router.get('/', async (req, res) => {
 router.get('/stats', async (req, res) => {
   try {
     const { year } = req.query;
+    const cacheKey = year || 'all';
+    const cached = statsCache.get(cacheKey);
+    if (cached && cached.expires > Date.now()) {
+      return res.json(cached.data);
+    }
+
     const params = year ? [parseInt(year)] : [];
     const yearFilter = year ? 'WHERE year = $1' : '';
 
@@ -123,11 +140,13 @@ router.get('/stats', async (req, res) => {
       pool.query(`SELECT COUNT(*) AS count FROM documents ${yearFilter ? yearFilter + ' AND' : 'WHERE'} status = 'Publicado' AND (document_link IS NULL OR document_link = '')`, year ? [parseInt(year)] : []),
     ]);
 
-    res.json({
+    const data = {
       by_type: byType.rows,
       by_status: byStatus.rows,
       published_without_link: parseInt(pubNoLink.rows[0]?.count || 0),
-    });
+    };
+    statsCache.set(cacheKey, { data, expires: Date.now() + STATS_CACHE_TTL_MS });
+    res.json(data);
   } catch (err) { safeError(res, err); }
 });
 
@@ -184,6 +203,7 @@ router.post('/', requirePageAccess('documents', { write: true }), async (req, re
     }
 
     await client.query('COMMIT');
+    invalidateStatsCache();
     const authors = await getAuthors(docId);
     res.status(201).json({ ...r.rows[0], authors });
   } catch (err) {
@@ -247,6 +267,7 @@ router.post('/:id/revision', requirePageAccess('documents', { write: true }), as
     }
 
     await client.query('COMMIT');
+    invalidateStatsCache();
     const authors = await getAuthors(newId);
     res.status(201).json({ ...r.rows[0], authors });
   } catch (err) {
@@ -291,6 +312,7 @@ router.put('/:id', requirePageAccess('documents', { write: true }), async (req, 
     }
 
     await client.query('COMMIT');
+    invalidateStatsCache();
     const authors = await getAuthors(id);
     res.json({ ...r.rows[0], authors });
   } catch (err) {
@@ -318,6 +340,7 @@ router.patch('/:id/status', requirePageAccess('documents', { write: true }), asy
       [status, document_link || null, userId, id]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Documento não encontrado' });
+    invalidateStatsCache();
     res.json(r.rows[0]);
   } catch (err) { safeError(res, err); }
 });
@@ -371,6 +394,7 @@ router.post('/import-bulk', requirePageAccess('documents', { write: true }), asy
       }
     }
     await client.query('COMMIT');
+    invalidateStatsCache();
     res.json(result);
   } catch (err) {
     await client.query('ROLLBACK');

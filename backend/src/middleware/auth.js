@@ -69,26 +69,28 @@ export async function requireAuth(req, res, next) {
   try {
     const { pool } = await import('../db/schema.js');
 
-    // 1. Revalida usuário no banco
-    const userR = await pool.query(
-      'SELECT id, role, area, active FROM users WHERE id = $1',
-      [decoded.id]
-    );
+    // 1. Revalida usuário no banco + 2. delegações ativas PARA este usuário.
+    //    As duas consultas são independentes entre si (nenhuma usa o resultado
+    //    da outra), então rodam em paralelo em vez de em sequência.
+    const [userR, delegR] = await Promise.all([
+      pool.query(
+        'SELECT id, role, area, active FROM users WHERE id = $1',
+        [decoded.id]
+      ),
+      pool.query(`
+        SELECT u.id AS delegator_id, u.role AS delegator_role, u.area AS delegator_area
+        FROM access_delegations ad
+        JOIN users u ON u.id = ad.delegator_id
+        WHERE ad.delegate_id = $1
+          AND ad.active = true
+          AND CURRENT_DATE BETWEEN ad.start_date AND ad.end_date
+      `, [decoded.id])
+    ]);
     const user = userR.rows[0];
     if (!user || !user.active) {
       clearAuthCookie(res);
       return res.status(401).json({ error: 'Conta inativa ou não encontrada' });
     }
-
-    // 2. Verifica delegações ativas PARA este usuário e eleva o role se aplicável
-    const delegR = await pool.query(`
-      SELECT u.id AS delegator_id, u.role AS delegator_role, u.area AS delegator_area
-      FROM access_delegations ad
-      JOIN users u ON u.id = ad.delegator_id
-      WHERE ad.delegate_id = $1
-        AND ad.active = true
-        AND CURRENT_DATE BETWEEN ad.start_date AND ad.end_date
-    `, [decoded.id]);
 
     let effectiveRole = user.role;
     let effectiveArea = user.area;
@@ -117,10 +119,19 @@ export async function requireAuth(req, res, next) {
     //    próprio e o(s) delegador(es) — a delegação nunca deve resultar em MENOS
     //    acesso do que o usuário já tinha por conta própria.
     const relevantUserIds = [decoded.id, ...delegatorIds];
-    const pageAccessR = await pool.query(
-      'SELECT user_id, page_key, access FROM user_page_access WHERE user_id = ANY($1::int[])',
-      [relevantUserIds]
-    );
+
+    // 3 e 4. Permissões de página e de botões — ambas dependem de relevantUserIds,
+    //        mas não uma da outra, então também rodam em paralelo.
+    const [pageAccessR, buttonAccessR] = await Promise.all([
+      pool.query(
+        'SELECT user_id, page_key, access FROM user_page_access WHERE user_id = ANY($1::int[])',
+        [relevantUserIds]
+      ),
+      pool.query(
+        'SELECT user_id, page_key, button_key, enabled FROM user_button_access WHERE user_id = ANY($1::int[]) AND enabled = false',
+        [relevantUserIds]
+      )
+    ]);
     const PAGE_ACCESS_RANK = { none: 0, viewer: 1, editor: 2 };
     const pageAccess = {};
     if (delegatorIds.length > 0) {
@@ -147,10 +158,6 @@ export async function requireAuth(req, res, next) {
     //    Botão sem linha aqui é tratado como habilitado (comportamento padrão).
     //    Mesma lógica de delegação: habilitado para o delegado se estiver habilitado
     //    para ele OU para qualquer um dos delegadores.
-    const buttonAccessR = await pool.query(
-      'SELECT user_id, page_key, button_key, enabled FROM user_button_access WHERE user_id = ANY($1::int[]) AND enabled = false',
-      [relevantUserIds]
-    );
     const buttonAccess = {};
     if (delegatorIds.length > 0) {
       const disabledByUser = {};
