@@ -10,7 +10,7 @@ export const pool = new Pool({
   ssl: process.env.NODE_ENV === 'production'
     ? { rejectUnauthorized: process.env.PG_REJECT_UNAUTHORIZED !== 'false' }
     : false,
-  max: 20,
+  max: 33,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 10_000
 });
@@ -1075,6 +1075,7 @@ await client.query(`
       CREATE INDEX IF NOT EXISTS idx_metas_user_year                 ON metas(user_id, year);
       CREATE INDEX IF NOT EXISTS idx_forecast_entries_project        ON forecast_entries(project_id);
       CREATE INDEX IF NOT EXISTS idx_forecast_entries_project_year   ON forecast_entries(project_id, year);
+      CREATE INDEX IF NOT EXISTS idx_pt_area_status                  ON lists_projects_tracking(area, status);
     `);
 
     console.log('✅ Migrations OK');
