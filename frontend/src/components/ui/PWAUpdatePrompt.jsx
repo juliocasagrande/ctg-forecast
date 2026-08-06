@@ -56,16 +56,18 @@ export function PWAUpdatePrompt() {
 
   const handleUpdate = useCallback(async () => {
     setIsUpdating(true);
+    setShowSuccess(true);
     try {
+      // updateServiceWorker(true) já recarrega a página sozinho, mas só depois que o
+      // novo service worker efetivamente assume o controle (evento controllerchange).
+      // Um reload manual em paralelo pode disparar antes dessa troca terminar — a
+      // página recarregada volta a ser servida pela versão antiga, que ainda reporta
+      // a mesma atualização pendente, criando um loop onde o banner nunca some.
       await updateServiceWorker(true);
-      // Mostra feedback visual antes de recarregar
-      setShowSuccess(true);
-      setTimeout(() => {
-        window.location.reload();
-      }, 800);
     } catch (error) {
       console.error('Erro ao atualizar:', error);
       setIsUpdating(false);
+      setShowSuccess(false);
     }
   }, [updateServiceWorker]);
 
