@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { pool } from '../db/schema.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, invalidateAuthCache } from '../middleware/auth.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -95,6 +95,7 @@ router.post('/', async (req, res) => {
       RETURNING *
     `, [delegatorId, delegate_id, start_date, end_date, safeReason]);
 
+    invalidateAuthCache(parseInt(delegate_id));
     res.status(201).json(r.rows[0]);
   } catch (err) { safeError(res, err); }
 });
@@ -133,6 +134,7 @@ router.delete('/:id', async (req, res) => {
     );
     if (!r.rows.length)
       return res.status(404).json({ error: 'Delegação não encontrada ou sem permissão' });
+    invalidateAuthCache(r.rows[0].delegate_id);
     res.json({ success: true });
   } catch (err) { safeError(res, err); }
 });

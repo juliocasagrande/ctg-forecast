@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { pool } from '../db/schema.js';
-import { requireAuth, requireRole } from '../middleware/auth.js';
+import { requireAuth, requireRole, invalidateAuthCache } from '../middleware/auth.js';
 import { validatePassword } from '../middleware/validation.js';
 import { logAuthEvent, getClientIP } from '../middleware/audit.js';
 import { PAGE_REGISTRY, PAGE_KEYS } from '../config/pages.js';
@@ -12,6 +12,20 @@ router.use(requireAuth);
 
 function initials(name) {
   return name.split(' ').slice(0, 2).map(w => w[0].toUpperCase()).join('');
+}
+
+// Acesso de página é fail-closed por padrão (ver middleware/auth.js): sem linha em
+// user_page_access, o usuário não vê/acessa nenhuma página. Para não travar quem
+// acabou de ser criado numa sidebar vazia, concedemos 'editor' em todas as páginas
+// no momento da criação/aprovação — igual ao comportamento implícito de antes desta
+// mudança. O admin pode restringir depois pela matriz de Page Access.
+async function grantDefaultPageAccess(userId) {
+  await pool.query(
+    `INSERT INTO user_page_access (user_id, page_key, access, updated_at)
+     SELECT $1, key, 'editor', NOW() FROM unnest($2::text[]) AS key
+     ON CONFLICT (user_id, page_key) DO NOTHING`,
+    [userId, PAGE_KEYS]
+  );
 }
 
 // Safe error helper
@@ -52,6 +66,7 @@ router.post('/:id/approve', requireRole('admin'), async (req, res) => {
       `UPDATE users SET pending_approval = false, active = true, updated_at = NOW() WHERE id = $1`,
       [req.params.id]
     );
+    await grantDefaultPageAccess(parseInt(req.params.id));
     res.json({ success: true });
   } catch (err) { safeError(res, err); }
 });
@@ -140,6 +155,7 @@ router.post('/', requireRole('admin'), async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, role, area, avatar_initials`,
       [name, email.toLowerCase(), hash, userRole, userArea, av]
     );
+    await grantDefaultPageAccess(r.rows[0].id);
     res.status(201).json(r.rows[0]);
   } catch (err) {
     safeError(res, err);
@@ -177,6 +193,7 @@ router.put('/:id', async (req, res) => {
       `UPDATE users SET ${fields.join(',')} WHERE id=$${vals.length} RETURNING id, name, email, role, area, active, avatar_initials`,
       vals
     );
+    invalidateAuthCache(targetId);
     res.json(r.rows[0]);
   } catch (err) {
     if (err.code === '23505') return res.status(400).json({ error: 'Email já cadastrado' });
@@ -188,6 +205,7 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', requireRole('admin'), async (req, res) => {
   try {
     await pool.query('UPDATE users SET active=false, updated_at=NOW() WHERE id=$1', [req.params.id]);
+    invalidateAuthCache(parseInt(req.params.id));
     res.json({ success: true });
   } catch (err) { safeError(res, err); }
 });
@@ -233,7 +251,7 @@ router.get('/page-access', requireRole('admin'), async (req, res) => {
       role: u.role,
       active: u.active,
       pages: Object.fromEntries(
-        PAGE_REGISTRY.map(p => [p.key, overridesByUser[u.id]?.[p.key] || 'editor'])
+        PAGE_REGISTRY.map(p => [p.key, overridesByUser[u.id]?.[p.key] || 'none'])
       ),
     }));
 
@@ -252,7 +270,7 @@ router.get('/:id/page-access', requireRole('admin'), async (req, res) => {
     const pages = PAGE_REGISTRY.map(p => ({
       page_key: p.key,
       label: p.label,
-      access: overrides[p.key] || 'editor',
+      access: overrides[p.key] || 'none',
     }));
     res.json(pages);
   } catch (err) { safeError(res, err); }
@@ -270,8 +288,8 @@ router.put('/:id/page-access', requireRole('admin'), async (req, res) => {
       for (const { page_key, access } of entries) {
         if (!PAGE_KEYS.includes(page_key)) continue;
         if (!['none', 'viewer', 'editor'].includes(access)) continue;
-        if (access === 'editor') {
-          // 'editor' é o default — remove o override para manter a tabela enxuta
+        if (access === 'none') {
+          // 'none' é o default (fail-closed) — remove o override para manter a tabela enxuta
           await client.query(
             'DELETE FROM user_page_access WHERE user_id=$1 AND page_key=$2',
             [targetId, page_key]
@@ -293,6 +311,7 @@ router.put('/:id/page-access', requireRole('admin'), async (req, res) => {
       client.release();
     }
 
+    invalidateAuthCache(targetId);
     res.json({ success: true });
   } catch (err) { safeError(res, err); }
 });
@@ -386,6 +405,7 @@ router.put('/:id/button-access', requireRole('admin'), async (req, res) => {
       client.release();
     }
 
+    invalidateAuthCache(targetId);
     res.json({ success: true });
   } catch (err) { safeError(res, err); }
 });

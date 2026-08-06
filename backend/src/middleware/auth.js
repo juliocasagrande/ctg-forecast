@@ -32,6 +32,23 @@ export function getEmailAccessOverride(email = '') {
 
 const ROLE_RANK = { engenheiro: 1, coordenador: 2, planejador: 3, gerente: 3, diretor: 3, admin: 5 };
 
+// ── Cache de permissões (requireAuth) ───────────────────────────────────────
+// requireAuth roda em toda requisição autenticada e faz 4 queries (usuário,
+// delegações, page access, button access). A maioria das requisições de uma
+// mesma sessão chega em rajadas (uma página dispara várias chamadas quase
+// simultâneas), então cacheamos o resultado calculado por usuário por um TTL
+// curto — reduz drasticamente as idas ao banco sem introduzir uma janela de
+// desatualização perceptível. Mudanças de permissão feitas pelo admin invalidam
+// a entrada na hora (ver invalidateAuthCache), então o TTL é só uma rede de
+// segurança para o caso de algo não chamar a invalidação.
+const AUTH_CACHE_TTL_MS = 15_000;
+const authCache = new Map(); // userId -> { data, expiresAt }
+
+export function invalidateAuthCache(userId) {
+  if (userId != null) authCache.delete(userId);
+  else authCache.clear();
+}
+
 export function signToken(payload) {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 }
@@ -64,6 +81,12 @@ export async function requireAuth(req, res, next) {
   } catch {
     clearAuthCookie(res);
     return res.status(401).json({ error: 'Token inválido ou expirado' });
+  }
+
+  const cached = authCache.get(decoded.id);
+  if (cached && cached.expiresAt > Date.now()) {
+    req.user = { ...decoded, ...cached.data };
+    return next();
   }
 
   try {
@@ -114,7 +137,8 @@ export async function requireAuth(req, res, next) {
     const allAreasAccess = emailOverride === 'gerente';
 
     // 3. Permissões de página configuradas individualmente (ver user_page_access).
-    //    Página sem linha aqui é tratada como 'editor' (comportamento padrão).
+    //    Página sem linha aqui é tratada como 'none' (fail-closed — acesso precisa
+    //    ser concedido explicitamente pelo admin).
     //    Com delegação ativa, o delegado herda o MAIOR nível de acesso entre o
     //    próprio e o(s) delegador(es) — a delegação nunca deve resultar em MENOS
     //    acesso do que o usuário já tinha por conta própria.
@@ -135,18 +159,17 @@ export async function requireAuth(req, res, next) {
     const PAGE_ACCESS_RANK = { none: 0, viewer: 1, editor: 2 };
     const pageAccess = {};
     if (delegatorIds.length > 0) {
-      // Parte de 'editor' (nível máximo) para cada página e só rebaixa se TODOS os
-      // usuários relevantes (próprio + delegadores) tiverem override mais restritivo.
-      for (const pk of PAGE_KEYS) pageAccess[pk] = 'editor';
+      // O delegado herda o MAIOR nível de acesso entre o próprio e o(s) delegador(es);
+      // sem override explícito para um usuário/página, esse usuário contribui 'none'.
       const byUser = {};
       for (const row of pageAccessR.rows) (byUser[row.user_id] ??= {})[row.page_key] = row.access;
       for (const pk of PAGE_KEYS) {
-        let best = -1;
+        let best = 0; // 'none'
         for (const uid of relevantUserIds) {
-          const val = byUser[uid]?.[pk] || 'editor';
-          best = Math.max(best, PAGE_ACCESS_RANK[val] ?? 2);
+          const val = byUser[uid]?.[pk] || 'none';
+          best = Math.max(best, PAGE_ACCESS_RANK[val] ?? 0);
         }
-        pageAccess[pk] = Object.keys(PAGE_ACCESS_RANK).find(k => PAGE_ACCESS_RANK[k] === best) || 'editor';
+        pageAccess[pk] = Object.keys(PAGE_ACCESS_RANK).find(k => PAGE_ACCESS_RANK[k] === best) || 'none';
       }
     } else {
       for (const row of pageAccessR.rows) {
@@ -180,8 +203,7 @@ export async function requireAuth(req, res, next) {
       }
     }
 
-    req.user = {
-      ...decoded,
+    const computed = {
       role: effectiveRole,
       area: effectiveArea,
       _originalRole: user.role,
@@ -192,6 +214,8 @@ export async function requireAuth(req, res, next) {
       _pageAccess: pageAccess,
       _buttonAccess: buttonAccess,
     };
+    authCache.set(decoded.id, { data: computed, expiresAt: Date.now() + AUTH_CACHE_TTL_MS });
+    req.user = { ...decoded, ...computed };
   } catch (dbErr) {
     console.error('[AUTH] Falha ao revalidar usuário no banco:', dbErr.message);
     clearAuthCookie(res);
@@ -213,12 +237,12 @@ export function requireRole(...roles) {
 /**
  * Restringe uma rota conforme a permissão de página configurada para o usuário
  * (ver user_page_access / AdminPanel). Admin sempre tem acesso total.
- * Sem override configurado, o acesso padrão é 'editor' (comportamento atual).
+ * Sem override configurado, o acesso padrão é 'none' (fail-closed).
  */
 export function requirePageAccess(pageKey, { write = false } = {}) {
   return (req, res, next) => {
     if (req.user?.role === 'admin') return next();
-    const access = req.user?._pageAccess?.[pageKey] || 'editor';
+    const access = req.user?._pageAccess?.[pageKey] || 'none';
     if (access === 'none') {
       return res.status(403).json({ error: 'Sem acesso a esta página' });
     }

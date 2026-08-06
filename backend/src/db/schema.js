@@ -1,6 +1,7 @@
 import pg from 'pg';
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
+import { PAGE_KEYS } from '../config/pages.js';
 dotenv.config();
 
 const { Pool } = pg;
@@ -13,6 +14,12 @@ export const pool = new Pool({
   max: 33,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 10_000
+});
+
+// Sem esse handler, um cliente ocioso derrubado pelo proxy (ex: Railway) emite
+// um 'error' não tratado no Pool e derruba o processo inteiro do Node.
+pool.on('error', (err) => {
+  console.error('[DB POOL] Erro em cliente ocioso:', err.message);
 });
 
 /* ─────────────────────────────────────────────
@@ -52,6 +59,51 @@ async function ensureAdminUser(client) {
     console.log(existing.rows.length > 0 ? '✅ Admin resetado' : '✅ Admin criado');
   } catch (err) {
     console.warn('⚠️ Erro ao criar admin:', err.message);
+  }
+}
+
+/* ─────────────────────────────────────────────
+ * PAGE ACCESS BACKFILL (roda uma única vez)
+ * ─────────────────────────────────────────────
+ * O acesso por página passou de 'editor' implícito (sem linha em
+ * user_page_access) para 'none' fail-closed. Para não revogar da noite pro
+ * dia o acesso de quem já usava o sistema, gravamos 'editor' explícito para
+ * todo (usuário, página) que hoje não tem override — preservando o acesso
+ * atual. Guardado por uma marca em system_settings para rodar só uma vez;
+ * usuários criados depois disso já nascem sem acesso (fail-closed de verdade).
+ */
+async function backfillPageAccessDefaults(client) {
+  try {
+    const marker = await client.query(
+      `SELECT 1 FROM system_settings WHERE key = 'page_access_backfilled'`
+    );
+    if (marker.rows.length > 0) return;
+
+    const { rows: users } = await client.query('SELECT id FROM users');
+    const { rows: existing } = await client.query('SELECT user_id, page_key FROM user_page_access');
+    const existingSet = new Set(existing.map(r => `${r.user_id}:${r.page_key}`));
+
+    let inserted = 0;
+    for (const u of users) {
+      for (const pk of PAGE_KEYS) {
+        if (existingSet.has(`${u.id}:${pk}`)) continue;
+        await client.query(
+          `INSERT INTO user_page_access (user_id, page_key, access, updated_at)
+           VALUES ($1, $2, 'editor', NOW())
+           ON CONFLICT (user_id, page_key) DO NOTHING`,
+          [u.id, pk]
+        );
+        inserted++;
+      }
+    }
+
+    await client.query(
+      `INSERT INTO system_settings (key, value) VALUES ('page_access_backfilled', 'true')
+       ON CONFLICT (key) DO NOTHING`
+    );
+    console.log(`✅ Backfill page-access: ${inserted} linha(s) 'editor' preservada(s) (${users.length} usuário(s) × ${PAGE_KEYS.length} página(s))`);
+  } catch (err) {
+    console.warn('⚠️ Erro no backfill de page-access:', err.message);
   }
 }
 
@@ -444,6 +496,9 @@ await client.query(`
       );
 
       ALTER TABLE access_delegations ADD COLUMN IF NOT EXISTS reason TEXT;
+
+      CREATE INDEX IF NOT EXISTS idx_access_delegations_delegate_active
+        ON access_delegations(delegate_id, active);
 
       CREATE TABLE IF NOT EXISTS alert_dismissals (
         id SERIAL PRIMARY KEY,
@@ -1082,6 +1137,7 @@ await client.query(`
     console.log('✅ Migrations OK');
 
     await ensureAdminUser(client);
+    await backfillPageAccessDefaults(client);
 
   } catch (err) {
     console.error('❌ ERRO NO DB:', err);
