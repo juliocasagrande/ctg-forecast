@@ -91,9 +91,9 @@ function CardHeader({ color, children }) {
 
 const CARD_COLORS = {
   group:   'var(--ctg-navy)',
-  members: '#0F766E', // teal
-  pages:   '#0369A1', // sky-700
-  buttons: '#7C3AED', // violet
+  members: 'var(--ctg-navy)',
+  pages:   'var(--ctg-navy)',
+  buttons: 'var(--ctg-navy)',
 };
 
 const ROLE_LABELS = {
@@ -586,7 +586,7 @@ export default function AdminPanel() {
                       {u.permission_groups?.length ? (
                         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                           {u.permission_groups.map(g => (
-                            <span key={g.id} style={{ fontSize: '0.65rem', fontWeight: 600, padding: '1px 7px', borderRadius: 10, background: 'rgba(15,118,110,0.12)', color: CARD_COLORS.members }}>
+                            <span key={g.id} style={{ fontSize: '0.65rem', fontWeight: 600, padding: '1px 7px', borderRadius: 10, background: 'rgba(15,118,110,0.12)', color: '#0F766E' }}>
                               {g.name}
                             </span>
                           ))}
