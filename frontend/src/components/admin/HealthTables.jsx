@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Empty, Panel, pageLabel } from './HealthActivity.jsx';
+import { useToast } from '../ui/Toast.jsx';
 
 const ROLE_LABELS = { admin:'Administrador', coordenador:'Coordenador', engenheiro:'Engenheiro', planejador:'Planejador', gerente:'Gerente', diretor:'Diretor' };
 const num = value => Number(value) || 0;
@@ -94,8 +95,30 @@ function duration(value) {
   return hours ? `${hours}h ${minutes}min` : `${minutes}min`;
 }
 
-function RecentErrors({ errors }) {
-  return <Panel title="Erros recentes" subtitle="Falhas de leitura, gravação e interface para investigação">
+async function downloadExport(url, filename, addToast) {
+  try {
+    const base = import.meta.env.VITE_API_URL || '/api';
+    const res = await fetch(`${base}${url}`, { credentials: 'include' });
+    if (!res.ok) throw new Error();
+    const blob = await res.blob();
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    addToast?.('Exportação realizada!', 'success');
+  } catch { addToast?.('Erro ao exportar', 'error'); }
+}
+
+function ExportButton({ onClick, disabled, label='Exportar' }) {
+  return <button type="button" className="health-export-btn" onClick={onClick} disabled={disabled}><span>⬇</span> {label}</button>;
+}
+
+function RecentErrors({ errors, days=30 }) {
+  const { toast: addToast } = useToast();
+  const exportErrors = () => downloadExport(`/export/usage-errors?days=${days}`, `CTG_Erros_Recentes_${days}dias.xlsx`, addToast);
+  return <Panel title="Erros recentes" subtitle="Falhas de leitura, gravação e interface para investigação"
+    actions={<ExportButton onClick={exportErrors} disabled={!errors.length}/>}>
     {!errors.length ? <div className="health-no-errors"><span>✓</span><strong>Nenhum erro registrado no período.</strong></div>
       : <div className="health-error-list">{errors.map((item,index) => <div className="health-error-row" key={`${item.created_at}-${index}`}>
         <span className="health-error-badge">{item.status_code||'JS'}</span><div className="health-error-main">
@@ -105,7 +128,8 @@ function RecentErrors({ errors }) {
   </Panel>;
 }
 
-export default function HealthTables({ operations=[], users=[], errors=[], changes=[] }) {
+export default function HealthTables({ operations=[], users=[], errors=[], changes=[], days=30 }) {
+  const { toast: addToast } = useToast();
   const [changeFilters, setChangeFilters] = useState({ dateFrom:'', dateTo:'', page:'', user:'' });
   const changePages = useMemo(() => Array.from(new Map(changes.map(item => {
     const value = item.page_path || '__unidentified__';
@@ -124,6 +148,14 @@ export default function HealthTables({ operations=[], users=[], errors=[], chang
   }), [changes, changeFilters]);
   const hasChangeFilters = Object.values(changeFilters).some(Boolean);
   const setChangeFilter = (key, value) => setChangeFilters(current => ({ ...current, [key]:value }));
+  const exportChanges = () => {
+    const params = new URLSearchParams();
+    if (changeFilters.dateFrom) params.set('dateFrom', changeFilters.dateFrom);
+    if (changeFilters.dateTo) params.set('dateTo', changeFilters.dateTo);
+    if (changeFilters.page) params.set('page', changeFilters.page);
+    if (changeFilters.user) params.set('user', changeFilters.user);
+    downloadExport(`/export/usage-changes?${params}`, 'CTG_Log_Alteracoes.xlsx', addToast);
+  };
 
   return <>
     <div className="health-bottom-grid">
@@ -142,7 +174,8 @@ export default function HealthTables({ operations=[], users=[], errors=[], chang
         </table></div>}
       </Panel>
     </div>
-    <Panel title="Log de alterações" subtitle="Campos, valores e responsáveis pelas alterações dos últimos 30 dias">
+    <Panel title="Log de alterações" subtitle="Campos, valores e responsáveis pelas alterações dos últimos 30 dias"
+      actions={<ExportButton onClick={exportChanges} disabled={!filteredChanges.length}/>}>
       <div className="health-change-filters">
         <label><span>Data inicial</span><input type="date" value={changeFilters.dateFrom} max={changeFilters.dateTo || undefined} disabled={!changes.length} onChange={event => setChangeFilter('dateFrom', event.target.value)}/></label>
         <label><span>Data final</span><input type="date" value={changeFilters.dateTo} min={changeFilters.dateFrom || undefined} disabled={!changes.length} onChange={event => setChangeFilter('dateTo', event.target.value)}/></label>
@@ -173,6 +206,6 @@ export default function HealthTables({ operations=[], users=[], errors=[], chang
           })}</tbody>
         </table></div>}
     </Panel>
-    <RecentErrors errors={errors}/>
+    <RecentErrors errors={errors} days={days}/>
   </>;
 }

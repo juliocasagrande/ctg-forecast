@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import ExcelJS from 'exceljs';
 import { pool } from '../db/schema.js';
-import { requireAuth, requireProjectAccess, requirePageAccess } from '../middleware/auth.js';
+import { requireAuth, requireProjectAccess, requirePageAccess, requireRole } from '../middleware/auth.js';
 import { buildLegacyWorkbook } from '../utils/pmsExcelFormat.js';
 
 const router = Router();
@@ -1370,6 +1370,223 @@ router.get('/iacs', requireAuth, requirePageAccess('iacs'), async (req, res) => 
     res.end();
   } catch (err) {
     console.error('IACs export error:', err);
+    safeError(res, err);
+  }
+});
+
+/* ══════════════════════════════════════════════════════
+ * USAGE MONITORING EXPORTS (Log de alterações / Erros recentes)
+ * ══════════════════════════════════════════════════════ */
+const USAGE_PAGE_LABELS = {
+  '/':'Início', '/admin':'Gerenciar usuários', '/admin/health':'Saúde da aplicação', '/forecast':'Forecast',
+  '/projects':'Projetos', '/projects/:id':'Detalhe do projeto', '/polos':'Polos', '/report':'Relatórios',
+  '/vacations':'Férias', '/metas':'Metas', '/workload':'Controle de carga', '/documents':'Documentos',
+  '/drawings':'Desenhos', '/pms':'PMS', '/lists/iacs':'IACs',
+  '/lists/projects-tracking':'Acompanhamento de projetos', '/lists/schedule-project':'Cronograma Project',
+  '/engineering/equipamentos':'Mapa de equipamentos', '/engineering/equipamentos-admin':'Gestão de equipamentos',
+  '/profile':'Perfil', '/settings':'Configurações', '/tutorial':'Tutorial', '/feedback':'Sugestões',
+};
+const USAGE_ROLE_LABELS = { admin:'Administrador', coordenador:'Coordenador', engenheiro:'Engenheiro', planejador:'Planejador', gerente:'Gerente', diretor:'Diretor' };
+const USAGE_CHANGE_ACTIONS = {
+  POST:   { label:'Criação', verb:'Criou' },
+  PUT:    { label:'Alteração', verb:'Alterou' },
+  PATCH:  { label:'Alteração', verb:'Alterou' },
+  DELETE: { label:'Exclusão', verb:'Excluiu' },
+};
+const USAGE_CHANGE_ENTITIES = [
+  ['/api/lists/projects-tracking', 'um acompanhamento de projeto'],
+  ['/api/lists/iacs', 'um IAC'],
+  ['/api/schedule-projects', 'um cronograma'],
+  ['/api/equipamentos', 'um equipamento'],
+  ['/api/documents', 'um documento'],
+  ['/api/drawings', 'um desenho'],
+  ['/api/pms', 'um documento PMS'],
+  ['/api/projects', 'um projeto'],
+  ['/api/forecast', 'um registro do Forecast'],
+  ['/api/metas', 'uma meta'],
+  ['/api/workload', 'um registro de carga'],
+  ['/api/vacations', 'um registro de férias'],
+  ['/api/delegations', 'uma delegação'],
+  ['/api/settings', 'uma configuração'],
+  ['/api/users', 'um usuário'],
+  ['/api/feedback', 'uma sugestão'],
+];
+const usagePageLabel = path => USAGE_PAGE_LABELS[path] || path || 'Página não identificada';
+function usageChangeDetails(item) {
+  if (Array.isArray(item.change_details)) return item.change_details;
+  if (typeof item.change_details !== 'string') return [];
+  try {
+    const parsed = JSON.parse(item.change_details);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+function usageAuditValue(value) {
+  if (value === null || value === undefined || value === '') return 'sem valor';
+  const text = String(value);
+  if (text === 'true') return 'Sim';
+  if (text === 'false') return 'Não';
+  const date = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/);
+  return date ? `${date[3]}/${date[2]}/${date[1]}` : text;
+}
+function usageDescribeChange(item) {
+  const defaultAction = USAGE_CHANGE_ACTIONS[item.method] || { label:item.method, verb:'Executou uma ação em' };
+  const action = item.action_label ? { ...defaultAction, label:item.action_label } : defaultAction;
+  const entity = USAGE_CHANGE_ENTITIES.find(([prefix]) => String(item.endpoint || '').startsWith(prefix))?.[1] || 'um registro';
+  const details = usageChangeDetails(item);
+  const field = details.length === 1 ? details[0].label : null;
+  const description = item.change_description || (field && ['PUT', 'PATCH'].includes(item.method)
+    ? `${action.verb} o campo ${field} em ${entity}`
+    : `${action.verb} ${entity}`);
+  return { ...action, description };
+}
+function usageChangeDetailsText(item) {
+  const details = usageChangeDetails(item);
+  if (!details.length) return '';
+  return details.map(detail => {
+    if (item.method === 'POST') return `${detail.label}: criado com ${usageAuditValue(detail.new_value)}`;
+    if (item.method === 'DELETE') return `${detail.label}: valor excluído (${usageAuditValue(detail.old_value)})`;
+    return `${detail.label}: de ${usageAuditValue(detail.old_value)} para ${usageAuditValue(detail.new_value)}`;
+  }).join('; ');
+}
+function usageHeaderRow(ws, headers) {
+  ws.getRow(1).height = 22;
+  headers.forEach((h, i) => {
+    const cell = ws.getCell(1, i + 1);
+    cell.value = h;
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '001F5B' } };
+    cell.font = { color: { argb: 'FFFFFF' }, bold: true, size: 10 };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    cell.border = {
+      top: { style: 'thin', color: { argb: 'D1D5DB' } }, bottom: { style: 'thin', color: { argb: 'D1D5DB' } },
+      left: { style: 'thin', color: { argb: 'D1D5DB' } }, right: { style: 'thin', color: { argb: 'D1D5DB' } },
+    };
+  });
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers.length } };
+  ws.views = [{ state: 'frozen', ySplit: 1 }];
+}
+function usageDataCell(ws, row, col, value, { bandFill='FFFFFF' } = {}) {
+  const cell = ws.getCell(row, col);
+  cell.value = value === '' || value === null || value === undefined ? null : value;
+  cell.alignment = { vertical: 'middle', wrapText: true };
+  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bandFill } };
+  cell.border = {
+    top: { style: 'thin', color: { argb: 'E2E8F0' } }, bottom: { style: 'thin', color: { argb: 'E2E8F0' } },
+    left: { style: 'thin', color: { argb: 'E2E8F0' } }, right: { style: 'thin', color: { argb: 'E2E8F0' } },
+  };
+  return cell;
+}
+
+// GET /export/usage-changes — "Log de alterações" (Monitoramento de Uso)
+router.get('/usage-changes', requireRole('admin'), async (req, res) => {
+  try {
+    const { dateFrom, dateTo, page, user } = req.query;
+    const conditions = [
+      `ae.created_at >= NOW() - INTERVAL '30 days'`,
+      `ae.operation = 'write'`, `ae.success = true`, `ae.audit_visible = true`,
+    ];
+    const params = [];
+    if (dateFrom) { params.push(dateFrom); conditions.push(`ae.created_at >= $${params.length}::date`); }
+    if (dateTo) { params.push(dateTo); conditions.push(`ae.created_at < ($${params.length}::date + INTERVAL '1 day')`); }
+    if (page) { params.push(page); conditions.push(`COALESCE(ae.page_path, '__unidentified__') = $${params.length}`); }
+    if (user) { params.push(user); conditions.push(`COALESCE(ae.actor_name, u.name, '__removed__') = $${params.length}`); }
+
+    const r = await pool.query(`
+      SELECT ae.id, ae.created_at, ae.page_path, ae.endpoint, ae.method,
+             ae.record_label, ae.change_details, ae.action_label, ae.change_description,
+             COALESCE(ae.actor_name, u.name) AS user_name,
+             COALESCE(ae.actor_role, u.role) AS user_role
+        FROM app_api_events ae
+        LEFT JOIN users u ON u.id = ae.user_id
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY ae.created_at DESC
+       LIMIT 20000
+    `, params);
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'CTG Brasil';
+    wb.created = new Date();
+    const ws = wb.addWorksheet('Log de alterações');
+    usageHeaderRow(ws, ['Quando', 'Tipo', 'O que foi feito', 'Registro', 'Endpoint', 'Página', 'Usuário', 'Cargo', 'Campos alterados']);
+
+    r.rows.forEach((item, idx) => {
+      const row = idx + 2;
+      const bandFill = idx % 2 === 1 ? 'F8FAFC' : 'FFFFFF';
+      const change = usageDescribeChange(item);
+      usageDataCell(ws, row, 1, new Date(item.created_at).toLocaleString('pt-BR'), { bandFill });
+      usageDataCell(ws, row, 2, change.label, { bandFill });
+      usageDataCell(ws, row, 3, change.description, { bandFill });
+      usageDataCell(ws, row, 4, item.record_label || '', { bandFill });
+      usageDataCell(ws, row, 5, item.endpoint || '', { bandFill });
+      usageDataCell(ws, row, 6, usagePageLabel(item.page_path), { bandFill });
+      usageDataCell(ws, row, 7, item.user_name || 'Usuário removido', { bandFill });
+      usageDataCell(ws, row, 8, USAGE_ROLE_LABELS[item.user_role] || item.user_role || '—', { bandFill });
+      usageDataCell(ws, row, 9, usageChangeDetailsText(item), { bandFill });
+    });
+
+    const widths = [18, 12, 45, 24, 32, 24, 20, 16, 60];
+    widths.forEach((w, i) => ws.getColumn(i + 1).width = w);
+
+    const filename = `CTG_Log_Alteracoes_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('Usage changes export error:', err);
+    safeError(res, err);
+  }
+});
+
+// GET /export/usage-errors — "Erros recentes" (Monitoramento de Uso)
+router.get('/usage-errors', requireRole('admin'), async (req, res) => {
+  try {
+    const requestedDays = Number.parseInt(req.query.days, 10);
+    const days = [7, 30, 90].includes(requestedDays) ? requestedDays : 30;
+
+    const r = await pool.query(`
+      SELECT * FROM (
+        SELECT ae.created_at, u.name user_name, ae.page_path, ae.endpoint,
+               ae.operation source, ae.status_code, NULL::text message
+          FROM app_api_events ae LEFT JOIN users u ON u.id=ae.user_id
+         WHERE ae.created_at >= NOW() - make_interval(days => $1)
+           AND ae.status_code >= 400 AND ae.status_code NOT IN (401, 403)
+        UNION ALL
+        SELECT ce.created_at, u.name user_name, ce.page_path, NULL endpoint,
+               ce.source, NULL::smallint status_code, ce.message
+          FROM app_client_errors ce LEFT JOIN users u ON u.id=ce.user_id
+         WHERE ce.created_at >= NOW() - make_interval(days => $1)
+      ) errors ORDER BY created_at DESC LIMIT 20000
+    `, [days]);
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'CTG Brasil';
+    wb.created = new Date();
+    const ws = wb.addWorksheet('Erros recentes');
+    usageHeaderRow(ws, ['Quando', 'Código', 'Mensagem', 'Página', 'Endpoint', 'Origem', 'Usuário']);
+
+    r.rows.forEach((item, idx) => {
+      const row = idx + 2;
+      const bandFill = idx % 2 === 1 ? 'F8FAFC' : 'FFFFFF';
+      const message = item.message || `${item.source === 'write' ? 'Falha de gravação' : 'Falha de leitura'} em ${item.endpoint || ''}`;
+      usageDataCell(ws, row, 1, new Date(item.created_at).toLocaleString('pt-BR'), { bandFill });
+      usageDataCell(ws, row, 2, item.status_code || 'JS', { bandFill });
+      usageDataCell(ws, row, 3, message, { bandFill });
+      usageDataCell(ws, row, 4, usagePageLabel(item.page_path), { bandFill });
+      usageDataCell(ws, row, 5, item.endpoint || '', { bandFill });
+      usageDataCell(ws, row, 6, item.source || '', { bandFill });
+      usageDataCell(ws, row, 7, item.user_name || 'Usuário removido', { bandFill });
+    });
+
+    const widths = [18, 10, 50, 24, 32, 12, 20];
+    widths.forEach((w, i) => ws.getColumn(i + 1).width = w);
+
+    const filename = `CTG_Erros_Recentes_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('Usage errors export error:', err);
     safeError(res, err);
   }
 });

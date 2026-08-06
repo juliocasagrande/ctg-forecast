@@ -12,10 +12,10 @@ const PAGE_LABELS = {
 export const pageLabel = path => PAGE_LABELS[path] || path || 'Página não identificada';
 const num = value => Number(value) || 0;
 
-export function Panel({ title, subtitle, children, className='' }) {
+export function Panel({ title, subtitle, children, className='', actions=null }) {
   return <section className={`health-panel ${className}`}><div className="health-panel-header"><div>
     <h2>{title}</h2>{subtitle && <p>{subtitle}</p>}
-  </div></div>{children}</section>;
+  </div>{actions}</div>{children}</section>;
 }
 export const Empty = ({ children='Ainda não há dados neste período.' }) => <div className="health-empty">{children}</div>;
 
