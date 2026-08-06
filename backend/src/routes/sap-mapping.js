@@ -81,20 +81,23 @@ router.put('/sap-mapping', requireRoleOrEmail(ALLOWED_EMAILS, 'admin', 'planejad
 
   try {
     await ensureTable();
-    await pool.query('BEGIN');
-    await pool.query('DELETE FROM sap_cost_mapping');
-    for (const m of mapping) {
-      if (!m.descr || !m.category) continue;
-      await pool.query(
-        'INSERT INTO sap_cost_mapping (descr, category) VALUES ($1, $2)',
-        [String(m.descr).trim(), String(m.category).trim()]
-      );
-    }
-    await pool.query('COMMIT');
-    const { rows } = await pool.query('SELECT id, descr, category FROM sap_cost_mapping ORDER BY category, descr');
-    res.json(rows);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('DELETE FROM sap_cost_mapping');
+      for (const m of mapping) {
+        if (!m.descr || !m.category) continue;
+        await client.query(
+          'INSERT INTO sap_cost_mapping (descr, category) VALUES ($1, $2)',
+          [String(m.descr).trim(), String(m.category).trim()]
+        );
+      }
+      await client.query('COMMIT');
+      const { rows } = await client.query('SELECT id, descr, category FROM sap_cost_mapping ORDER BY category, descr');
+      res.json(rows);
+    } catch (err) { await client.query('ROLLBACK'); throw err; }
+    finally { client.release(); }
   } catch (err) {
-    await pool.query('ROLLBACK').catch(() => {});
     console.error('[sap-mapping PUT]', err);
     res.status(500).json({ error: 'Erro ao salvar mapeamentos.' });
   }
@@ -150,24 +153,27 @@ router.put('/sap-keywords', requireRoleOrEmail(ALLOWED_EMAILS, 'admin', 'planeja
   }
   try {
     await ensureKeywordsTable();
-    await pool.query('BEGIN');
-    for (const [cat, kws] of Object.entries(keywords)) {
-      if (!['Dispensado', 'Viagens'].includes(cat)) continue;
-      const arr = Array.isArray(kws) ? kws.map(k => String(k).trim().toLowerCase()).filter(Boolean) : [];
-      await pool.query(
-        `INSERT INTO sap_keyword_rules (category, keywords, updated_at)
-         VALUES ($1, $2, NOW())
-         ON CONFLICT (category) DO UPDATE SET keywords = $2, updated_at = NOW()`,
-        [cat, JSON.stringify(arr)]
-      );
-    }
-    await pool.query('COMMIT');
-    const { rows } = await pool.query('SELECT category, keywords FROM sap_keyword_rules ORDER BY category');
-    const result = { ...DEFAULT_KEYWORDS };
-    rows.forEach(r => { result[r.category] = r.keywords; });
-    res.json(result);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const [cat, kws] of Object.entries(keywords)) {
+        if (!['Dispensado', 'Viagens'].includes(cat)) continue;
+        const arr = Array.isArray(kws) ? kws.map(k => String(k).trim().toLowerCase()).filter(Boolean) : [];
+        await client.query(
+          `INSERT INTO sap_keyword_rules (category, keywords, updated_at)
+           VALUES ($1, $2, NOW())
+           ON CONFLICT (category) DO UPDATE SET keywords = $2, updated_at = NOW()`,
+          [cat, JSON.stringify(arr)]
+        );
+      }
+      await client.query('COMMIT');
+      const { rows } = await client.query('SELECT category, keywords FROM sap_keyword_rules ORDER BY category');
+      const result = { ...DEFAULT_KEYWORDS };
+      rows.forEach(r => { result[r.category] = r.keywords; });
+      res.json(result);
+    } catch (err) { await client.query('ROLLBACK'); throw err; }
+    finally { client.release(); }
   } catch (err) {
-    await pool.query('ROLLBACK').catch(() => {});
     console.error('[sap-keywords PUT]', err);
     res.status(500).json({ error: 'Erro ao salvar palavras-chave.' });
   }

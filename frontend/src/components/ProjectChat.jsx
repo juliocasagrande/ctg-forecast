@@ -35,7 +35,19 @@ export default function ProjectChat({ projectId }) {
   const fetchMessages = async (silent = false) => {
     try {
       const r = await api.get(`/projects/${projectId}/messages`);
-      setMessages(r.data);
+      setMessages(prev => {
+        // Merge em vez de substituir integralmente: se esta requisição de poll foi
+        // disparada antes de um envio otimista (handleSend), sua resposta pode não
+        // conter a mensagem recém-enviada. Une por id, preservando qualquer mensagem
+        // local ainda não presente na resposta do servidor, em vez de descartá-la.
+        const byId = new Map(r.data.map(m => [m.id, m]));
+        const merged = [...r.data];
+        for (const m of prev) {
+          if (!byId.has(m.id)) merged.push(m);
+        }
+        merged.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        return merged;
+      });
       if (!silent) setLoading(false);
     } catch { if (!silent) setLoading(false); }
   };

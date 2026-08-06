@@ -412,7 +412,7 @@ export function startMonthlyBackupSchedule({ runIfDueOnStartup = true } = {}) {
     return null;
   }
 
-  if (runIfDueOnStartup && new Date().getDate() === 1) {
+  if (runIfDueOnStartup) {
     runScheduledBackup();
   }
 

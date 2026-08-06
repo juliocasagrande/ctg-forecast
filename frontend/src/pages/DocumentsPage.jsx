@@ -1280,7 +1280,7 @@ export default function DocumentsPage() {
         return d.responsible.trim().toLowerCase() === user.name.trim().toLowerCase();
       });
     }
-    if (skip !== 'status' && statusFilter && data.some(d => d.status === statusFilter)) {
+    if (skip !== 'status' && statusFilter) {
       data = data.filter(d => d.status === statusFilter);
     }
     if (skip !== 'type' && typeFilter) {

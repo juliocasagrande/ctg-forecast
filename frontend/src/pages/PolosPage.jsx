@@ -55,6 +55,15 @@ function sumRows(rows, key) {
   return rows.reduce((s, r) => s + getVal(r, key), 0);
 }
 
+// Dedupe a list of projects by id — a project can legitimately belong to
+// multiple plants (even within the same polo), and naive flatMap+filter
+// over plants would otherwise include it once per matching plant, inflating sums.
+function dedupeById(list) {
+  const seen = new Map();
+  for (const p of list) if (!seen.has(p.id)) seen.set(p.id, p);
+  return [...seen.values()];
+}
+
 // ── Table cell ────────────────────────────────────────────────────────────────
 function TCell({ value, colorKey, C, bold, rowBg }) {
   const isVar = colorKey === null;
@@ -78,7 +87,9 @@ function TCell({ value, colorKey, C, bold, rowBg }) {
 
 // ── Row components ─────────────────────────────────────────────────────────────
 function PoloRow({ polo, projects, open, onToggle, C }) {
-  const rows = POLOS.find(p=>p.id===polo.id)?.plants.flatMap(pl => projects.filter(p=>(p.plants||[]).includes(pl))) || [];
+  // `projects` (poloProjects, computed by the caller) is already deduped by id — use it directly
+  // instead of re-flattening over polo.plants, which would reintroduce per-plant duplicates.
+  const rows = projects;
   return (
     <tr style={{ background:'#0F2D6B', cursor:'pointer' }} onClick={onToggle}>
       <td style={{ padding:'10px 16px', color:'#fff', fontWeight:700, fontSize:'0.88rem', whiteSpace:'nowrap',
@@ -200,8 +211,10 @@ export default function PolosPage({ period: externalPeriod, plantFilter = [] }) 
     ? projects.filter(p => plantFilter.some(f => (p.plants||[]).includes(f)))
     : projects;
 
-  const allProjects = POLOS.flatMap(polo =>
-    polo.plants.flatMap(pl => filteredProjects.filter(p => (p.plants||[]).includes(pl)))
+  // Dedupe by project id across the whole projects list — a project spanning multiple
+  // plants (same or different polos) must still count only once in the grand total.
+  const allProjects = dedupeById(
+    POLOS.flatMap(polo => polo.plants.flatMap(pl => filteredProjects.filter(p => (p.plants||[]).includes(pl))))
   );
 
   return (
@@ -255,7 +268,8 @@ export default function PolosPage({ period: externalPeriod, plantFilter = [] }) 
 
               <tbody>
                 {POLOS.map(polo => {
-                  const poloProjects = polo.plants.flatMap(pl => filteredProjects.filter(p => (p.plants||[]).includes(pl)));
+                  // Dedupe by project id — a project may belong to more than one plant within this polo.
+                  const poloProjects = dedupeById(polo.plants.flatMap(pl => filteredProjects.filter(p => (p.plants||[]).includes(pl))));
                   if (poloProjects.length === 0) return null;
                   const isPoloOpen = !!poloOpen[polo.id];
 

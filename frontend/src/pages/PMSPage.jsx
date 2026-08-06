@@ -50,7 +50,10 @@ function externalLink(path) {
   if (!value) return '';
   if (/^[A-Za-z]:[\\/]/.test(value)) return `file:///${value.replace(/\\/g, '/')}`;
   if (value.startsWith('\\')) return `file:${value.replace(/\\/g, '/')}`;
-  if (/^[a-z][a-z\d+.-]*:/i.test(value)) return value;
+  // Only allow known-safe URL schemes; reject javascript:, data:, vbscript:, etc.
+  if (/^[a-z][a-z\d+.-]*:/i.test(value)) {
+    return /^(https?|mailto):/i.test(value) ? value : '';
+  }
   if (/^(?:www\.)?[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(?:[/?#]|$)/i.test(value)) return `https://${value}`;
   return value;
 }

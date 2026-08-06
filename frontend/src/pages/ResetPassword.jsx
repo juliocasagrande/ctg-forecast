@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../utils/api.js';
 import PasswordInput, { getPasswordStrength } from '../components/ui/PasswordInput.jsx';
@@ -13,6 +13,15 @@ export default function ResetPassword() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const redirectTimeoutRef = useRef(null);
+
+  // Limpa o timeout de redirecionamento automático se o componente desmontar (ex.:
+  // usuário navega manualmente) dentro da janela de 3s, evitando um navigate() órfão.
+  useEffect(() => {
+    return () => {
+      if (redirectTimeoutRef.current) clearTimeout(redirectTimeoutRef.current);
+    };
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -41,7 +50,7 @@ export default function ResetPassword() {
         new_password: password,
       });
       setSuccess(true);
-      setTimeout(() => navigate('/login'), 3000);
+      redirectTimeoutRef.current = setTimeout(() => navigate('/login'), 3000);
     } catch (err) {
       setError(err.response?.data?.error || 'Erro ao redefinir senha. Tente novamente.');
     } finally {

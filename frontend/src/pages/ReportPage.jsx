@@ -5,6 +5,20 @@ import { useTypeColors, useSettings } from '../context/SettingsContext.jsx';
 import { useToast } from '../components/ui/Toast.jsx';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+// Escapes HTML-significant characters so user/DB-controlled text (project
+// names, notes, titles, etc.) can never be interpreted as markup when
+// concatenated into the generated report HTML string.
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[c]));
+}
+
 function fmtBRL(v) {
   if (!v || v === 0) return 'R$ 0,00';
   const abs = Math.abs(parseFloat(v));
@@ -115,7 +129,7 @@ function buildHTML(data, config, C) {
       const pf  = poloProjs.reduce(function(s,p){return s+parseFloat(p.forecast||0);},0);
       const paf = poloProjs.reduce(function(s,p){return s+(p.act_forecast||0);},0);
       totBudget+=pb; totPool+=pp; totActual+=pa; totForecast+=pf; totActFcst+=paf;
-      html+='<tr class="row-polo"><td colspan="2"><span class="expand-btn" onclick="toggleGroup(\'polo_'+polo.id+'\')">▼</span> '+polo.name+'</td>'
+      html+='<tr class="row-polo"><td colspan="2"><span class="expand-btn" onclick="toggleGroup(\'polo_'+polo.id+'\')">▼</span> '+escapeHtml(polo.name)+'</td>'
         +'<td class="num c-budget">'+fmtBRL(pb)+'</td>'
         +'<td class="num" style="color:#EF4444">'+fmtBRL(pp)+'</td>'
         +'<td class="num c-actual">'+fmtBRL(pa)+'</td>'
@@ -131,7 +145,7 @@ function buildHTML(data, config, C) {
         const uaf = plantProjs.reduce(function(s,p){return s+(p.act_forecast||0);},0);
         const plantKey='plant_'+plant.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
         html+='<tr class="row-plant group-polo_'+polo.id+'"><td></td>'
-          +'<td><span class="expand-btn" onclick="toggleGroup(\''+plantKey+'\')">▼</span> '+plant+'</td>'
+          +'<td><span class="expand-btn" onclick="toggleGroup(\''+plantKey+'\')">▼</span> '+escapeHtml(plant)+'</td>'
           +'<td class="num c-budget">'+fmtBRL(ub)+'</td>'
           +'<td class="num" style="color:#EF4444">'+fmtBRL(up)+'</td>'
           +'<td class="num c-actual">'+fmtBRL(ua)+'</td>'
@@ -142,7 +156,7 @@ function buildHTML(data, config, C) {
           const projB=parseFloat(p.budget||0), projA=parseFloat(p.actual||0), projAF=p.act_forecast||0;
           if (projB===0 && projA===0 && projAF===0) return;
           html+='<tr class="row-proj group-'+plantKey+'" style="display:none">'
-            +'<td class="proj-code">'+p.code+'</td><td>'+p.name+'</td>'
+            +'<td class="proj-code">'+escapeHtml(p.code)+'</td><td>'+escapeHtml(p.name)+'</td>'
             +'<td class="num c-budget">'+fmtBRL(p.budget)+'</td>'
             +'<td class="num" style="color:#EF4444">'+fmtBRL(p.pool)+'</td>'
             +'<td class="num c-actual">'+fmtBRL(p.actual)+'</td>'
@@ -167,8 +181,8 @@ function buildHTML(data, config, C) {
     if (!p.notes || !p.notes.length) return '';
     const items = p.notes.map(function(n){
       return '<div class="note-item">'
-        +'<div class="note-meta">'+(n.user_name||'—')+' · '+(n.note_date?new Date(n.note_date).toLocaleDateString('pt-BR'):'')+' </div>'
-        +'<div class="note-content">'+n.content+'</div>'
+        +'<div class="note-meta">'+escapeHtml(n.user_name||'—')+' · '+(n.note_date?new Date(n.note_date).toLocaleDateString('pt-BR'):'')+' </div>'
+        +'<div class="note-content">'+escapeHtml(n.content)+'</div>'
         +'</div>';
     }).join('');
     return '<div class="proj-notes-block">'
@@ -252,8 +266,8 @@ function buildHTML(data, config, C) {
 
         // Cabeçalho da usina
         html += '<div class="hier-plant-header">'
-          +'<span class="hier-plant-name">'+plant+'</span>'
-          +'<span class="hier-polo-badge">'+polo.name+'</span>'
+          +'<span class="hier-plant-name">'+escapeHtml(plant)+'</span>'
+          +'<span class="hier-polo-badge">'+escapeHtml(polo.name)+'</span>'
           +'</div>';
 
         // KPIs da usina
@@ -261,7 +275,7 @@ function buildHTML(data, config, C) {
 
         // S-Curve da usina
         html += '<div class="charts-grid charts-grid-1" style="margin-top:16px">'
-          +scurve('scurve_'+plant,'S-Curve — '+plant+' — '+periodLabel,pjs,80)
+          +scurve('scurve_'+plant,'S-Curve — '+escapeHtml(plant)+' — '+periodLabel,pjs,80)
           +'</div>';
 
         // Por projeto (apenas se showProjects)
@@ -279,17 +293,17 @@ function buildHTML(data, config, C) {
 
             // Separador do projeto
             html += '<div class="proj-separator">'
-              +'<span class="proj-sep-code">'+p.code+'</span>'
-              +'<span class="proj-sep-name">'+p.name+'</span>'
+              +'<span class="proj-sep-code">'+escapeHtml(p.code)+'</span>'
+              +'<span class="proj-sep-name">'+escapeHtml(p.name)+'</span>'
               +'</div>';
 
             // KPIs do projeto
-            html += '<div class="section-label-sm" style="font-size:9px;margin-top:8px">KPIs — '+p.code+'</div>'
+            html += '<div class="section-label-sm" style="font-size:9px;margin-top:8px">KPIs — '+escapeHtml(p.code)+'</div>'
               +kpiRow([p],'sm');
 
             // S-Curve do projeto
             html += '<div class="charts-grid charts-grid-1" style="margin-top:12px">'
-              +scurve('scurve_proj_'+p.id,p.code+' — '+p.name,[p],65)
+              +scurve('scurve_proj_'+p.id,escapeHtml(p.code)+' — '+escapeHtml(p.name),[p],65)
               +'</div>';
 
             // Notas do projeto logo abaixo da S-Curve
@@ -311,7 +325,7 @@ function buildHTML(data, config, C) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${title || 'Relatório CTG Brasil'}</title>
+<title>${escapeHtml(title) || 'Relatório CTG Brasil'}</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"><\/script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -389,8 +403,8 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#F8FAFC;color:#1E293B;fo
 <body>
 <div class="report-header">
   <div class="report-logo">CTG<span>.</span>Forecast</div>
-  <div class="report-title">${title || 'Relatório de Forecast'}</div>
-  ${subtitle ? `<div class="report-subtitle">${subtitle}</div>` : ''}
+  <div class="report-title">${escapeHtml(title) || 'Relatório de Forecast'}</div>
+  ${subtitle ? `<div class="report-subtitle">${escapeHtml(subtitle)}</div>` : ''}
   <div class="report-meta">
     <span>Período: ${periodLabel}</span>
     <span>${projects.length} projetos</span>

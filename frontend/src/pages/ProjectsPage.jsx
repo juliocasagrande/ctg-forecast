@@ -81,7 +81,7 @@ export default function ProjectsPage({ projects, period, plantFilter = [], onEdi
       'Previsão':  pjs.reduce((s, p) => s + parseFloat(p.act_forecast ?? p.total_forecast ?? 0), 0),
       Realizado: pjs.reduce((s, p) => s + parseFloat(p.total_actual   || 0), 0),
     };
-  }).filter(d => d.Budget > 0 || d.Forecast > 0);
+  }).filter(d => d.Budget > 0 || d['Previsão'] > 0 || d.Realizado > 0);
 
   // ── Engineers view data ──
   const engineerMap = {};
@@ -105,7 +105,7 @@ export default function ProjectsPage({ projects, period, plantFilter = [], onEdi
     Budget:    e.projects.reduce((s, p) => s + parseFloat(p.total_budget   || 0), 0),
     'Previsão':  e.projects.reduce((s, p) => s + parseFloat(p.act_forecast ?? p.total_forecast ?? 0), 0),
     Realizado: e.projects.reduce((s, p) => s + parseFloat(p.total_actual   || 0), 0),
-  })).filter(d => d.Budget > 0 || d.Forecast > 0);
+  })).filter(d => d.Budget > 0 || d['Previsão'] > 0 || d.Realizado > 0);
 
   // ── Final list filter ──
   let finalProjects = headerFiltered;

@@ -16,7 +16,7 @@
  * - workbox.clientsClaim: false (não toma controle imediatamente)
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { useAuth } from '../../context/AuthContext.jsx';
 
@@ -26,15 +26,27 @@ const ADMIN_BANNER_EMAIL = 'julio.casagrande@ctgbr.com.br';
 
 export function PWAUpdatePrompt() {
   const { user } = useAuth();
+  const updateCheckIntervalRef = useRef(null);
   const {
     needRefresh: [needRefresh],
     updateServiceWorker,
   } = useRegisterSW({
     onRegistered(r) {
-      // Verifica atualizações a cada 60 segundos enquanto o app estiver aberto
-      if (r) setInterval(() => r.update(), 60_000);
+      // Verifica atualizações a cada 60 segundos enquanto o app estiver aberto.
+      // Limpa qualquer intervalo anterior antes de criar um novo, caso onRegistered
+      // seja chamado mais de uma vez (ex.: re-registro do service worker).
+      if (updateCheckIntervalRef.current) clearInterval(updateCheckIntervalRef.current);
+      if (r) updateCheckIntervalRef.current = setInterval(() => r.update(), 60_000);
     },
   });
+
+  // Garante que o intervalo de verificação de atualização seja limpo quando o
+  // componente for desmontado, evitando timers órfãos rodando indefinidamente.
+  useEffect(() => {
+    return () => {
+      if (updateCheckIntervalRef.current) clearInterval(updateCheckIntervalRef.current);
+    };
+  }, []);
 
   const showBanner = user?.email?.toLowerCase() === ADMIN_BANNER_EMAIL;
 

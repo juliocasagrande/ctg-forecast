@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import api from '../utils/api.js';
 import { msalInstance, msalInitialized, loginRequest } from '../utils/msalConfig.js';
 
@@ -29,13 +29,22 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Guarda de sequenciamento: incrementado a cada fetchMe/login/logout. Uma resposta
+  // de fetchMe só é aplicada se ainda for a mais recente no momento em que chega —
+  // evita que uma requisição antiga (ex.: em voo durante um logout) reviva um usuário
+  // deslogado, ou que um fetchMe pendente de antes do login derrube um login recente.
+  const requestIdRef = useRef(0);
+
   const fetchMe = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     try {
       const r = await api.get('/auth/me');
+      if (requestIdRef.current !== requestId) return; // resposta obsoleta, descarta
       // Mantém a mesma referência quando role/permissões/dados não mudaram. Isso
       // evita que toda a aplicação refaça buscas e mostre loaders a cada 30s.
       setUser(current => sameUserState(current, r.data) ? current : r.data);
     } catch (err) {
+      if (requestIdRef.current !== requestId) return; // resposta obsoleta, descarta
       // Só encerra a sessão quando o servidor confirmou que ela não é mais válida.
       // Falhas transitórias de rede/servidor não devem desmontar a tela do usuário.
       if ([401, 403, 404].includes(err.response?.status)) setUser(null);
@@ -51,6 +60,7 @@ export function AuthProvider({ children }) {
   }, [fetchMe]);
 
   const login = useCallback(async (email, password) => {
+    requestIdRef.current++; // invalida qualquer fetchMe pendente anterior ao login
     const r = await api.post('/auth/login', { email, password });
     const { user } = r.data;
     setUser(user);
@@ -63,6 +73,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const loginWithAzure = useCallback(async () => {
+    requestIdRef.current++; // invalida qualquer fetchMe pendente anterior ao login
     await msalInitialized;
     let result;
     try {
@@ -83,6 +94,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(async () => {
+    requestIdRef.current++; // invalida qualquer fetchMe pendente anterior ao logout
     try { await api.post('/auth/logout'); } catch { /* ignore */ }
     setUser(null);
   }, []);

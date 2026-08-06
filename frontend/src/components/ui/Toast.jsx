@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 
 let _add = null;
 let _confirm = null;
@@ -46,6 +46,10 @@ export function useToast() {
 export function ToastProvider() {
   const [toasts, setToasts] = useState([]);
   const [dialog, setDialog] = useState(null);
+  // Fila FIFO de diálogos pendentes: se confirm()/alert() forem chamados enquanto um
+  // diálogo já está sendo exibido, os pedidos extras aguardam aqui em vez de
+  // sobrescrever (e vazar a promise de) o diálogo atual.
+  const dialogQueueRef = useRef([]);
 
   useEffect(() => {
     _add = (message, type = 'success', duration = 3000) => {
@@ -55,7 +59,7 @@ export function ToastProvider() {
     };
 
     _confirm = (options) => new Promise(resolve => {
-      setDialog({
+      const request = {
         title: 'Confirmar acao',
         message: '',
         confirmLabel: 'Confirmar',
@@ -63,6 +67,13 @@ export function ToastProvider() {
         variant: 'danger',
         ...options,
         resolve,
+      };
+      setDialog(current => {
+        if (current) {
+          dialogQueueRef.current.push(request);
+          return current;
+        }
+        return request;
       });
     });
 
@@ -89,7 +100,8 @@ export function ToastProvider() {
   const closeDialog = (result) => {
     setDialog(current => {
       current?.resolve?.(result);
-      return null;
+      const next = dialogQueueRef.current.shift();
+      return next || null;
     });
   };
 

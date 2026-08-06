@@ -61,6 +61,7 @@ const SIMPLE_TARGETS = [
   { pattern: /^\/api\/feedback$/, table: 'feedback', key: 'id', entity: 'sugestão', labels: ['subject'] },
   { pattern: /^\/api\/delegations(?:\/(\d+))?$/, table: 'access_delegations', key: 'id', entity: 'delegação', labels: ['delegate_id', 'start_date'] },
   { pattern: /^\/api\/users(?:\/(\d+))?$/, table: 'users', key: 'id', entity: 'usuário', labels: ['name', 'email'] },
+  { pattern: /^\/api\/permission-groups(?:\/(\d+))?$/, table: 'permission_groups', key: 'id', entity: 'grupo de permissão', labels: ['name'] },
   { pattern: /^\/api\/schedule-projects(?:\/([^/]+))?$/, table: 'schedule_projects', key: 'client_uid', entity: 'cronograma', labels: ['name', 'plant'] },
   { pattern: /^\/api\/forecast\/notes\/(\d+)$/, table: 'project_notes', key: 'id', entity: 'anotação do Forecast', labels: ['note_date', 'content'] },
 ];
@@ -70,7 +71,8 @@ const ENTITY_PREFIXES = [
   ['/api/lists/projects-tracking', 'acompanhamentos de projeto'], ['/api/vacations', 'férias'],
   ['/api/schedule-projects', 'cronogramas'], ['/api/documents', 'documentos'], ['/api/drawings', 'desenhos'],
   ['/api/pms', 'documentos PMS'], ['/api/metas', 'metas'], ['/api/workload', 'controle de carga'],
-  ['/api/equipamentos', 'equipamentos'], ['/api/users', 'usuários'], ['/api/settings', 'configurações'],
+  ['/api/equipamentos', 'equipamentos'], ['/api/users', 'usuários'], ['/api/permission-groups', 'grupos de permissão'],
+  ['/api/settings', 'configurações'],
   ['/api/delegations', 'delegações'], ['/api/feedback', 'sugestões'], ['/api/messages', 'mensagens'],
   ['/api/auth', 'conta do usuário'],
 ];
@@ -86,8 +88,6 @@ const SEMANTIC_ACTIONS = [
   [/\/approve$/, 'Aprovação', 'Aprovou o cadastro de'],
   [/\/reject$/, 'Rejeição', 'Rejeitou o cadastro de'],
   [/\/change-password$/, 'Senha', 'Alterou a senha da'],
-  [/\/page-access$/, 'Permissões', 'Atualizou permissões de páginas em'],
-  [/\/button-access$/, 'Permissões', 'Atualizou permissões de botões em'],
   [/\/actual-consolidated$/, 'Consolidação', 'Atualizou o realizado consolidado em'],
   [/\/year-consolidated(?:\/bulk)?$/, 'Consolidação', 'Atualizou valores anuais consolidados em'],
   [/\/close-year$/, 'Fechamento', 'Realizou o fechamento anual em'],
@@ -208,25 +208,42 @@ async function loadSettingsBefore(req, pool) {
   return null;
 }
 
-async function loadUserAccessBefore(req, pool) {
-  const pageAccess = req.path.match(/^\/api\/users\/(\d+)\/page-access$/);
+async function loadPermissionGroupBefore(req, pool) {
+  const pageAccess = req.path.match(/^\/api\/permission-groups\/(\d+)\/page-access$/);
   if (pageAccess && req.method === 'PUT') {
     const keys = (req.body?.pages || []).map(item => item.page_key).filter(Boolean);
-    const [access, user] = await Promise.all([
-      pool.query('SELECT page_key, access FROM user_page_access WHERE user_id=$1 AND page_key = ANY($2::text[])', [pageAccess[1], keys]),
-      pool.query('SELECT name, email FROM users WHERE id=$1', [pageAccess[1]]),
+    const [access, group] = await Promise.all([
+      pool.query('SELECT page_key, access FROM group_page_access WHERE group_id=$1 AND page_key = ANY($2::text[])', [pageAccess[1], keys]),
+      pool.query('SELECT name FROM permission_groups WHERE id=$1', [pageAccess[1]]),
     ]);
     const overrides = Object.fromEntries(access.rows.map(row => [row.page_key, row.access]));
-    return { kind: 'user-page-access', before: overrides, user: user.rows[0], entity: 'permissões de páginas' };
+    return { kind: 'group-page-access', before: overrides, group: group.rows[0], entity: 'permissões de páginas do grupo' };
   }
-  const buttonAccess = req.path.match(/^\/api\/users\/(\d+)\/button-access$/);
+  const buttonAccess = req.path.match(/^\/api\/permission-groups\/(\d+)\/button-access$/);
   if (buttonAccess && req.method === 'PUT') {
-    const [access, user] = await Promise.all([
-      pool.query('SELECT page_key, button_key, enabled FROM user_button_access WHERE user_id=$1', [buttonAccess[1]]),
-      pool.query('SELECT name, email FROM users WHERE id=$1', [buttonAccess[1]]),
+    const [access, group] = await Promise.all([
+      pool.query('SELECT page_key, button_key FROM group_button_access WHERE group_id=$1', [buttonAccess[1]]),
+      pool.query('SELECT name FROM permission_groups WHERE id=$1', [buttonAccess[1]]),
     ]);
-    const overrides = Object.fromEntries(access.rows.map(row => [`${row.page_key}:${row.button_key}`, row.enabled]));
-    return { kind: 'user-button-access', before: overrides, user: user.rows[0], entity: 'permissões de botões' };
+    // Linha presente em group_button_access sempre significa "desabilitado" (ver permissionGroups.js) —
+    // sem linha, o botão está habilitado (default).
+    const overrides = Object.fromEntries(access.rows.map(row => [`${row.page_key}:${row.button_key}`, false]));
+    return { kind: 'group-button-access', before: overrides, group: group.rows[0], entity: 'permissões de botões do grupo' };
+  }
+  const members = req.path.match(/^\/api\/permission-groups\/(\d+)\/members$/);
+  if (members && req.method === 'PUT') {
+    const requestedIds = Array.isArray(req.body?.user_ids) ? req.body.user_ids.map(Number).filter(Number.isInteger) : [];
+    const [current, group] = await Promise.all([
+      pool.query('SELECT user_id FROM user_permission_groups WHERE group_id=$1', [members[1]]),
+      pool.query('SELECT name FROM permission_groups WHERE id=$1', [members[1]]),
+    ]);
+    const beforeIds = current.rows.map(row => row.user_id);
+    const unionIds = [...new Set([...beforeIds, ...requestedIds])];
+    const names = unionIds.length
+      ? await pool.query('SELECT id, name FROM users WHERE id = ANY($1::int[])', [unionIds])
+      : { rows: [] };
+    const nameById = Object.fromEntries(names.rows.map(u => [u.id, u.name]));
+    return { kind: 'group-members', beforeIds, nameById, group: group.rows[0], entity: 'membros do grupo' };
   }
   return null;
 }
@@ -269,8 +286,8 @@ export async function prepareAutomaticAudit(req, pool) {
   if (forecast) return { auditable: true, ...forecast };
   const settings = await loadSettingsBefore(req, pool);
   if (settings) return { auditable: true, ...settings };
-  const userAccess = await loadUserAccessBefore(req, pool);
-  if (userAccess) return { auditable: true, ...userAccess };
+  const groupAccess = await loadPermissionGroupBefore(req, pool);
+  if (groupAccess) return { auditable: true, ...groupAccess };
   const equipment = await loadEquipmentBefore(req, pool);
   if (equipment) return { auditable: true, ...equipment };
 
@@ -365,25 +382,48 @@ function settingsChange(req, context, responseBody) {
   };
 }
 
-function userAccessChange(req, context) {
-  const isPage = context.kind === 'user-page-access';
+function groupAccessChange(req, context) {
+  const isPage = context.kind === 'group-page-access';
   const changes = [];
   for (const entry of isPage ? req.body?.pages || [] : req.body?.buttons || []) {
     const key = isPage ? entry.page_key : `${entry.page_key}:${entry.button_key}`;
     const pageLabel = PAGE_REGISTRY.find(page => page.key === entry.page_key)?.label || humanizeField(entry.page_key);
     const buttonLabel = BUTTON_REGISTRY[entry.page_key]?.find(button => button.key === entry.button_key)?.label;
     const label = isPage ? `Página: ${pageLabel}` : `${pageLabel} · Botão: ${buttonLabel || humanizeField(entry.button_key)}`;
-    const oldValue = context.before[key] ?? (isPage ? 'editor' : true);
+    // Default do grupo é fail-closed ('none') para página e habilitado (true) para botão.
+    const oldValue = context.before[key] ?? (isPage ? 'none' : true);
     const newValue = isPage ? entry.access : entry.enabled;
     const detail = buildChangeDetails([[key, label]], { [key]: oldValue }, { [key]: newValue })[0];
     if (detail) changes.push(detail);
   }
-  const user = context.user ? `${context.user.name} · ${context.user.email}` : 'usuário';
+  const group = context.group?.name || 'grupo';
   return {
     actionLabel: 'Permissões',
-    description: `Alterou ${changes.length} ${changes.length === 1 ? 'permissão' : 'permissões'} de ${user}`,
-    recordLabel: user,
+    description: `Alterou ${changes.length} ${changes.length === 1 ? 'permissão' : 'permissões'} do grupo ${group}`,
+    recordLabel: group,
     changes: changes.slice(0, 50),
+  };
+}
+
+function groupMembersChange(req, context) {
+  const beforeIds = new Set(context.beforeIds || []);
+  const afterIds = new Set((req.body?.user_ids || []).map(Number));
+  const added = [...afterIds].filter(id => !beforeIds.has(id));
+  const removed = [...beforeIds].filter(id => !afterIds.has(id));
+  const nameById = context.nameById || {};
+  const group = context.group?.name || 'grupo';
+  const changes = [];
+  if (added.length) {
+    changes.push({ field: 'members_added', label: 'Membros adicionados', old_value: null, new_value: added.map(id => nameById[id] || `Usuário #${id}`).sort().join(', ') });
+  }
+  if (removed.length) {
+    changes.push({ field: 'members_removed', label: 'Membros removidos', old_value: removed.map(id => nameById[id] || `Usuário #${id}`).sort().join(', '), new_value: null });
+  }
+  return {
+    actionLabel: 'Membros',
+    description: `Atualizou os membros do grupo ${group}`,
+    recordLabel: group,
+    changes,
   };
 }
 
@@ -464,7 +504,8 @@ export function buildAutomaticAudit(req, context, responseBody) {
     };
   }
   if (context.kind?.startsWith('settings')) return settingsChange(req, context, responseBody);
-  if (context.kind === 'user-page-access' || context.kind === 'user-button-access') return userAccessChange(req, context);
+  if (context.kind === 'group-page-access' || context.kind === 'group-button-access') return groupAccessChange(req, context);
+  if (context.kind === 'group-members') return groupMembersChange(req, context);
   if (context.kind === 'equipment-access') return equipmentAccessChange(req, context);
   if (context.kind === 'equipment-table') return equipmentTableChange(req, responseBody);
 

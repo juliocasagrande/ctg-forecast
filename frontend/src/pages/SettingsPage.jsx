@@ -242,20 +242,22 @@ function SectionCard({ title, description, children }) {
   );
 }
 
-function Toggle({ label, description, value, onChange }) {
+function Toggle({ label, description, value, onChange, disabled = false }) {
   return (
-    <label className="settings-toggle">
+    <label className="settings-toggle" style={disabled ? { opacity: 0.55, cursor: 'not-allowed' } : undefined}>
       <div className="settings-toggle-text">
         <span className="settings-toggle-label">{label}</span>
         {description && <span className="settings-toggle-desc">{description}</span>}
       </div>
       <div
         className={`settings-toggle-switch ${value ? 'on' : ''}`}
-        onClick={() => onChange(!value)}
+        onClick={() => !disabled && onChange(!value)}
         role="switch"
         aria-checked={value}
-        tabIndex={0}
-        onKeyDown={e => e.key === ' ' && onChange(!value)}
+        aria-disabled={disabled}
+        tabIndex={disabled ? -1 : 0}
+        onKeyDown={e => !disabled && e.key === ' ' && onChange(!value)}
+        style={disabled ? { cursor: 'not-allowed', pointerEvents: 'none' } : undefined}
       >
         <div className="settings-toggle-thumb" />
       </div>
@@ -263,9 +265,9 @@ function Toggle({ label, description, value, onChange }) {
   );
 }
 
-function ColorPicker({ label, description, value, onChange }) {
+function ColorPicker({ label, description, value, onChange, disabled = false }) {
   return (
-    <div className="settings-color-row">
+    <div className="settings-color-row" style={disabled ? { opacity: 0.55 } : undefined}>
       <div style={{ flex: 1 }}>
         <div className="settings-toggle-label">{label}</div>
         {description && <div className="settings-toggle-desc">{description}</div>}
@@ -279,8 +281,9 @@ function ColorPicker({ label, description, value, onChange }) {
         <input
           type="color"
           value={value}
+          disabled={disabled}
           onChange={e => onChange(e.target.value)}
-          style={{ width: 42, height: 36, padding: 2, border: '1.5px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', background: 'none' }}
+          style={{ width: 42, height: 36, padding: 2, border: '1.5px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', cursor: disabled ? 'not-allowed' : 'pointer', background: 'none' }}
         />
         <span style={{ fontSize: '0.78rem', fontFamily: 'monospace', color: 'var(--text-secondary)', minWidth: 64 }}>
           {value.toUpperCase()}
@@ -290,9 +293,9 @@ function ColorPicker({ label, description, value, onChange }) {
   );
 }
 
-function NumberInput({ label, description, value, onChange, min = 1, max = 365, unit }) {
+function NumberInput({ label, description, value, onChange, min = 1, max = 365, unit, disabled = false }) {
   return (
-    <div className="settings-color-row">
+    <div className="settings-color-row" style={disabled ? { opacity: 0.55 } : undefined}>
       <div style={{ flex: 1 }}>
         <div className="settings-toggle-label">{label}</div>
         {description && <div className="settings-toggle-desc">{description}</div>}
@@ -303,12 +306,14 @@ function NumberInput({ label, description, value, onChange, min = 1, max = 365, 
           value={value}
           min={min}
           max={max}
+          disabled={disabled}
           onChange={e => onChange(String(Math.max(min, Math.min(max, parseInt(e.target.value) || min))))}
           style={{
             width: 70, padding: '7px 10px', border: '1.5px solid var(--border-strong)',
             borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-body)',
             fontSize: '0.9rem', textAlign: 'center', outline: 'none',
             color: 'var(--text-primary)', background: 'var(--bg-card)',
+            cursor: disabled ? 'not-allowed' : 'text',
           }}
         />
         {unit && <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{unit}</span>}
@@ -346,7 +351,7 @@ const ALERT_ROLE_LABELS = {
 // Editor de prazo (em dias) por cargo, usado nas abas de alertas. Cargos de
 // coordenação/gestão tipicamente recebem um prazo maior que o do engenheiro —
 // dando tempo para o responsável original agir antes do alerta escalar.
-function RoleDaysEditor({ value, onChange, roles, defaultDays = 7 }) {
+function RoleDaysEditor({ value, onChange, roles, defaultDays = 7, disabled = false }) {
   let map = {};
   try { map = JSON.parse(value || '{}'); } catch { map = {}; }
 
@@ -377,12 +382,14 @@ function RoleDaysEditor({ value, onChange, roles, defaultDays = 7 }) {
             <input
               type="number" min={1} max={365}
               value={map[role] ?? defaultDays}
+              disabled={disabled}
               onChange={e => setDay(role, e.target.value)}
               style={{
                 width: 60, padding: '5px 8px', border: '1.5px solid var(--border-strong)',
                 borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-body)',
                 fontSize: '0.85rem', textAlign: 'center', outline: 'none',
                 color: 'var(--text-primary)', background: 'var(--bg-card)',
+                cursor: disabled ? 'not-allowed' : 'text',
               }}
             />
             <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>dias</span>
@@ -407,9 +414,9 @@ const PERM_OPTS = [
   { value: 'edit', label: '✏ Editar', title: 'Visualizar e editar' },
 ];
 
-function PermCell({ current, onChange }) {
+function PermCell({ current, onChange, disabled = false }) {
   return (
-    <div style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1.5px solid var(--border-strong)' }}>
+    <div style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1.5px solid var(--border-strong)', opacity: disabled ? 0.55 : 1 }}>
       {PERM_OPTS.map(opt => {
         const active = current === opt.value;
         const colors = {
@@ -422,12 +429,13 @@ function PermCell({ current, onChange }) {
             key={opt.value}
             type="button"
             title={opt.title}
+            disabled={disabled}
             onClick={() => onChange(opt.value)}
             style={{
               padding: '5px 10px',
               border: 'none',
               borderRight: opt.value !== 'edit' ? '1px solid var(--border)' : 'none',
-              cursor: 'pointer',
+              cursor: disabled ? 'not-allowed' : 'pointer',
               background: active ? colors.activeBg : 'var(--bg-card)',
               color: active ? colors.activeColor : 'var(--text-muted)',
               fontWeight: active ? 700 : 400,
@@ -445,7 +453,7 @@ function PermCell({ current, onChange }) {
   );
 }
 
-function PermissionsMatrix({ value, onChange }) {
+function PermissionsMatrix({ value, onChange, disabled = false }) {
   let perms = {};
   try { perms = JSON.parse(value || '{}'); } catch {}
 
@@ -478,7 +486,7 @@ function PermissionsMatrix({ value, onChange }) {
                 const cur = (perms[role] || {})[type] || 'none';
                 return (
                   <td key={type} style={tdStyle}>
-                    <PermCell current={cur} onChange={v => setVal(role, type, v)} />
+                    <PermCell current={cur} onChange={v => setVal(role, type, v)} disabled={disabled} />
                   </td>
                 );
               })}
@@ -594,6 +602,7 @@ export default function SettingsPage() {
               description="Define após quantos dias sem atualização um projeto dispara alerta. Configure um prazo por cargo para dar tempo ao engenheiro antes de escalar para coordenação/gestão."
             >
               <NumberInput
+                disabled={!canEdit}
                 label="Prazo padrão"
                 description="Usado para cargos sem prazo específico definido abaixo."
                 value={settings.alert_stale_days}
@@ -603,6 +612,7 @@ export default function SettingsPage() {
               <div style={{ padding: '12px 0' }}>
                 <div className="settings-toggle-label">Prazo por cargo</div>
                 <RoleDaysEditor
+                  disabled={!canEdit}
                   value={settings.alert_stale_role_days}
                   onChange={v => set('alert_stale_role_days', v)}
                   roles={['engenheiro', 'coordenador', 'planejador', 'gerente', 'diretor', 'admin']}
@@ -616,6 +626,7 @@ export default function SettingsPage() {
               description="Define até qual dia útil do mês o engenheiro deve ter atualizado o Realizado do mês anterior."
             >
               <NumberInput
+                disabled={!canEdit}
                 label="Dia útil limite"
                 description="Após esse dia útil do mês, projetos sem Realizado do mês anterior dispararão alerta ao engenheiro."
                 value={settings.actual_deadline_business_day}
@@ -629,12 +640,14 @@ export default function SettingsPage() {
               description="Controle quais tipos de alertas aparecem no sino de notificações."
             >
               <Toggle
+                disabled={!canEdit}
                 label="Forecast não preenchido"
                 description="Alerta quando um projeto não tem nenhum valor de Forecast no ano corrente."
                 value={settings.alert_empty_forecast === 'true'}
                 onChange={v => set('alert_empty_forecast', v)}
               />
               <Toggle
+                disabled={!canEdit}
                 label="Mensagens não lidas"
                 description="Alerta quando há mensagens de chat não lidas nos projetos."
                 value={settings.alert_unread_messages === 'true'}
@@ -652,12 +665,14 @@ export default function SettingsPage() {
               description="Notifica quando projetos de acompanhamento não são atualizados há um período definido."
             >
               <Toggle
+                disabled={!canEdit}
                 label="Habilitar alertas de acompanhamento"
                 description="Ativa o envio de lembretes para projetos sem atualização recente."
                 value={settings.tracking_alert_enabled === 'true'}
                 onChange={v => set('tracking_alert_enabled', v)}
               />
               <NumberInput
+                disabled={!canEdit}
                 label="Intervalo de alerta (padrão)"
                 description="Usado para cargos sem prazo específico definido abaixo."
                 value={settings.tracking_alert_interval_days}
@@ -695,6 +710,7 @@ export default function SettingsPage() {
               <div style={{ padding: '12px 0' }}>
                 <div className="settings-toggle-label">Prazo por cargo</div>
                 <RoleDaysEditor
+                  disabled={!canEdit}
                   value={settings.tracking_alert_role_days}
                   onChange={v => set('tracking_alert_role_days', v)}
                   roles={(settings.tracking_alert_roles || '').split(',').map(r => r.trim()).filter(Boolean)}
@@ -708,12 +724,14 @@ export default function SettingsPage() {
               description="Notifica quando IACs não são atualizados pelo Team Leader há um período definido."
             >
               <Toggle
+                disabled={!canEdit}
                 label="Habilitar alertas de IACs"
                 description="Ativa o envio de lembretes para IACs sem atualização recente."
                 value={settings.iac_alert_enabled === 'true'}
                 onChange={v => set('iac_alert_enabled', v)}
               />
               <NumberInput
+                disabled={!canEdit}
                 label="Intervalo de alerta (padrão)"
                 description="Usado para cargos sem prazo específico definido abaixo."
                 value={settings.iac_alert_interval_days}
@@ -751,6 +769,7 @@ export default function SettingsPage() {
               <div style={{ padding: '12px 0' }}>
                 <div className="settings-toggle-label">Prazo por cargo</div>
                 <RoleDaysEditor
+                  disabled={!canEdit}
                   value={settings.iac_alert_role_days}
                   onChange={v => set('iac_alert_role_days', v)}
                   roles={(settings.iac_alert_roles || '').split(',').map(r => r.trim()).filter(Boolean)}
@@ -769,12 +788,14 @@ export default function SettingsPage() {
               description="Notifica os responsáveis sobre documentos criados há mais de X dias que ainda não foram publicados ou cancelados."
             >
               <Toggle
+                disabled={!canEdit}
                 label="Habilitar alertas de documentos"
                 description="Ativa o envio de lembretes para documentos em elaboração ou para aprovação."
                 value={settings.doc_alert_enabled === 'true'}
                 onChange={v => set('doc_alert_enabled', v)}
               />
               <NumberInput
+                disabled={!canEdit}
                 label="Intervalo de lembrete (padrão)"
                 description="Usado para cargos sem prazo específico definido abaixo."
                 value={settings.doc_alert_interval_days}
@@ -788,12 +809,14 @@ export default function SettingsPage() {
               description="Define quais documentos entram no filtro de alertas."
             >
               <Toggle
+                disabled={!canEdit}
                 label="Excluir documentos Cancelados"
                 description="Documentos com status Cancelado não geram alertas."
                 value={settings.doc_alert_exclude_cancelled === 'true'}
                 onChange={v => set('doc_alert_exclude_cancelled', v)}
               />
               <Toggle
+                disabled={!canEdit}
                 label="Excluir documentos Publicados"
                 description="Documentos com status Publicado não geram alertas."
                 value={settings.doc_alert_exclude_published === 'true'}
@@ -834,6 +857,7 @@ export default function SettingsPage() {
               <div className="settings-field" style={{ marginTop:16 }}>
                 <label className="settings-field-label">Prazo por cargo</label>
                 <RoleDaysEditor
+                  disabled={!canEdit}
                   value={settings.doc_alert_role_days}
                   onChange={v => set('doc_alert_role_days', v)}
                   roles={(settings.doc_alert_roles || '').split(',').map(r => r.trim()).filter(Boolean)}
@@ -878,12 +902,14 @@ export default function SettingsPage() {
               description="Notifica os responsáveis sobre desenhos criados há mais de X dias que ainda não foram publicados ou cancelados."
             >
               <Toggle
+                disabled={!canEdit}
                 label="Habilitar alertas de desenhos"
                 description="Ativa o envio de lembretes para desenhos em elaboração ou para aprovação."
                 value={settings.drawing_alert_enabled === 'true'}
                 onChange={v => set('drawing_alert_enabled', v)}
               />
               <NumberInput
+                disabled={!canEdit}
                 label="Intervalo de lembrete (padrão)"
                 description="Usado para cargos sem prazo específico definido abaixo."
                 value={settings.drawing_alert_interval_days}
@@ -897,12 +923,14 @@ export default function SettingsPage() {
               description="Define quais desenhos entram no filtro de alertas."
             >
               <Toggle
+                disabled={!canEdit}
                 label="Excluir desenhos Cancelados"
                 description="Desenhos com status Cancelado não geram alertas."
                 value={settings.drawing_alert_exclude_cancelled === 'true'}
                 onChange={v => set('drawing_alert_exclude_cancelled', v)}
               />
               <Toggle
+                disabled={!canEdit}
                 label="Excluir desenhos Publicados"
                 description="Desenhos com status Publicado não geram alertas."
                 value={settings.drawing_alert_exclude_published === 'true'}
@@ -943,6 +971,7 @@ export default function SettingsPage() {
               <div className="settings-field" style={{ marginTop:16 }}>
                 <label className="settings-field-label">Prazo por cargo</label>
                 <RoleDaysEditor
+                  disabled={!canEdit}
                   value={settings.drawing_alert_role_days}
                   onChange={v => set('drawing_alert_role_days', v)}
                   roles={(settings.drawing_alert_roles || '').split(',').map(r => r.trim()).filter(Boolean)}
@@ -987,12 +1016,14 @@ export default function SettingsPage() {
               description="Notifica sobre documentos técnicos (POL/IM/GM/MM) próximos do vencimento (3 anos após a data do documento) ou já vencidos."
             >
               <Toggle
+                disabled={!canEdit}
                 label="Habilitar alertas de PMS"
                 description="Ativa o envio de lembretes para documentos PMS vencendo ou vencidos."
                 value={settings.pms_alert_enabled === 'true'}
                 onChange={v => set('pms_alert_enabled', v)}
               />
               <NumberInput
+                disabled={!canEdit}
                 label="Antecedência do alerta (padrão)"
                 description="Quantos dias antes do vencimento o documento passa a ser marcado como 'Alerta'. Usado para cargos sem prazo específico definido abaixo."
                 value={settings.pms_alert_days}
@@ -1035,6 +1066,7 @@ export default function SettingsPage() {
                 <label className="settings-field-label">Antecedência por cargo</label>
                 <p className="settings-field-desc">Cada cargo só é notificado quando faltar este número de dias (ou menos) para o vencimento — um valor menor para cargos de gestão evita alertar antes do engenheiro responsável ter tido tempo de agir.</p>
                 <RoleDaysEditor
+                  disabled={!canEdit}
                   value={settings.pms_alert_role_days}
                   onChange={v => set('pms_alert_role_days', v)}
                   roles={['engenheiro','coordenador','planejador','gerente','diretor','admin']}
@@ -1052,11 +1084,11 @@ export default function SettingsPage() {
               title="Cores dos tipos de dados"
               description="Personalize as cores usadas nos gráficos e tabelas para cada tipo de dado."
             >
-              <ColorPicker label="Budget"    description="Orçamento aprovado"           value={settings.color_budget}   onChange={v => set('color_budget', v)} />
-              <ColorPicker label="Forecast"  description="Previsão atualizada"          value={settings.color_forecast} onChange={v => set('color_forecast', v)} />
-              <ColorPicker label="Realizado" description="Valores efetivamente pagos"   value={settings.color_actual}   onChange={v => set('color_actual', v)} />
-              <ColorPicker label="Meta"      description="Meta definida pelo planejador" value={settings.color_meta}    onChange={v => set('color_meta', v)} />
-              <ColorPicker label="Pool"      description="Valores disponíveis no pool"  value={settings.color_pool}    onChange={v => set('color_pool', v)} />
+              <ColorPicker label="Budget"    description="Orçamento aprovado"           value={settings.color_budget}   onChange={v => set('color_budget', v)} disabled={!canEdit} />
+              <ColorPicker label="Forecast"  description="Previsão atualizada"          value={settings.color_forecast} onChange={v => set('color_forecast', v)} disabled={!canEdit} />
+              <ColorPicker label="Realizado" description="Valores efetivamente pagos"   value={settings.color_actual}   onChange={v => set('color_actual', v)} disabled={!canEdit} />
+              <ColorPicker label="Meta"      description="Meta definida pelo planejador" value={settings.color_meta}    onChange={v => set('color_meta', v)} disabled={!canEdit} />
+              <ColorPicker label="Pool"      description="Valores disponíveis no pool"  value={settings.color_pool}    onChange={v => set('color_pool', v)} disabled={!canEdit} />
             </SectionCard>
 
             <SectionCard title="Pré-visualização" description="Como as cores ficarão nos gráficos.">
@@ -1098,6 +1130,7 @@ export default function SettingsPage() {
               description="Define o intervalo de anos que aparecem no Wizard de Forecast com detalhamento mês a mês. Anos fora desse intervalo são tratados como consolidados (valor único por categoria/tipo)."
             >
               <NumberInput
+                disabled={!canEdit}
                 label="Ano inicial"
                 description="Primeiro ano disponível no Wizard para preenchimento mensal."
                 value={settings.active_year_start}
@@ -1105,6 +1138,7 @@ export default function SettingsPage() {
                 min={2020} max={2040}
               />
               <NumberInput
+                disabled={!canEdit}
                 label="Ano final"
                 description="Último ano disponível no Wizard para preenchimento mensal."
                 value={settings.active_year_end}
@@ -1147,12 +1181,14 @@ export default function SettingsPage() {
             description="Defina quais tipos de dados são incluídos nos relatórios exportados."
           >
             <Toggle
+              disabled={!canEdit}
               label="Incluir Meta nos exports"
               description="Adiciona a linha de Meta no Excel exportado de projetos e relatório do planejador."
               value={settings.export_include_meta === 'true'}
               onChange={v => set('export_include_meta', v)}
             />
             <Toggle
+              disabled={!canEdit}
               label="Incluir Pool nos exports"
               description="Adiciona a linha de Pool no Excel exportado de projetos e relatório do planejador."
               value={settings.export_include_pool === 'true'}
@@ -1168,6 +1204,7 @@ export default function SettingsPage() {
             description="Define quais tipos de dados cada cargo pode visualizar e editar no ForecastWizard de cada projeto."
           >
             <PermissionsMatrix
+              disabled={!canEdit}
               value={settings.forecast_permissions}
               onChange={v => set('forecast_permissions', v)}
             />

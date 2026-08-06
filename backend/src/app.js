@@ -19,6 +19,7 @@ import {
 
 import authRouter        from './routes/auth.js';
 import usersRouter       from './routes/users.js';
+import permissionGroupsRouter from './routes/permissionGroups.js';
 import projectsRouter    from './routes/projects.js';
 import forecastRouter    from './routes/forecast.js';
 import messagesRouter    from './routes/messages.js';
@@ -99,6 +100,7 @@ export function createApp({ disableRateLimit = false, disableTelemetry = disable
   /* â”€â”€ ROTAS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   app.use('/api/auth',     authRouter);
   app.use('/api/users',    usersRouter);
+  app.use('/api/permission-groups', permissionGroupsRouter);
   app.use('/api/projects', projectsRouter);
   app.use('/api/projects/:projectId/messages', messagesRouter);
   app.use('/api/forecast', forecastRouter);

@@ -75,7 +75,7 @@ router.post('/', requireProjectAccess, async (req, res) => {
 });
 
 // GET unread count per project for current user
-router.get('/unread-count', async (req, res) => {
+router.get('/unread-count', requireProjectAccess, async (req, res) => {
   try {
     const { projectId } = req.params;
     const r = await pool.query(`

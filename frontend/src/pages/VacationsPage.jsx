@@ -593,7 +593,7 @@ export default function VacationsPage({ areaFilter: areaFilterProp = '', year: y
                     const p2 = mp.find(p => p.period_number === 2);
                     const p3 = mp.find(p => p.period_number === 3);
                     const total = mp.reduce((s, p) => s + (p.days||0), 0);
-                    const canEdit = canEditOthers && !(role === 'coordenador' && ['gerente','diretor'].includes(member.role));
+                    const canEdit = canEditOthers && !(viewRole === 'coordenador' && ['gerente','diretor'].includes(member.role));
                     const roleLabel = { gerente:'Gerente', diretor:'Diretor', coordenador:'Coord.', planejador:'Planejador' }[member.role] || member.role;
                     return (
                       <tr key={member.id} style={{ background: i%2 ? '#F8FAFC' : 'var(--bg-card)', borderBottom: '1px solid #E2E8F0' }}>

@@ -385,26 +385,29 @@ export default function ProjectDetail({ onEdit }) {
       .filter(e => (e.type === 'Actual') && parseFloat(e.value||0) > 0)
       .reduce((s,e) => s + parseFloat(e.value||0), 0);
 
-    // 2. For each active year WITHOUT consolidated, compute: Actual up to last month + Forecast after
+    // 2. For each active year WITHOUT consolidated, compute PER CATEGORY: Actual up to last month + Forecast after
     const activeYears = [...new Set(entries.map(e => parseInt(e.year)))].filter(y => !consYearsActual.has(y)).sort();
     let yearTotal = 0;
 
     for (const yr of activeYears) {
       const yearEntries = entries.filter(e => parseInt(e.year) === yr);
-      const actualMonths = yearEntries
-        .filter(e => e.type === 'Actual' && parseFloat(e.value || 0) > 0)
-        .map(e => parseInt(e.month));
-      const lastActualMonth = actualMonths.length > 0 ? Math.max(...actualMonths) : 0;
+      for (const cat of CATEGORIES) {
+        const catEntries = yearEntries.filter(e => e.category === cat);
+        const actualMonths = catEntries
+          .filter(e => e.type === 'Actual' && parseFloat(e.value || 0) > 0)
+          .map(e => parseInt(e.month));
+        const lastActualMonth = actualMonths.length > 0 ? Math.max(...actualMonths) : 0;
 
-      const actualSum = yearEntries
-        .filter(e => e.type === 'Actual' && parseInt(e.month) <= lastActualMonth)
-        .reduce((s, e) => s + parseFloat(e.value || 0), 0);
+        const actualSum = catEntries
+          .filter(e => e.type === 'Actual' && parseInt(e.month) <= lastActualMonth)
+          .reduce((s, e) => s + parseFloat(e.value || 0), 0);
 
-      const forecastSum = yearEntries
-        .filter(e => e.type === 'Forecast' && parseInt(e.month) > lastActualMonth)
-        .reduce((s, e) => s + parseFloat(e.value || 0), 0);
+        const forecastSum = catEntries
+          .filter(e => e.type === 'Forecast' && parseInt(e.month) > lastActualMonth)
+          .reduce((s, e) => s + parseFloat(e.value || 0), 0);
 
-      yearTotal += actualSum + forecastSum;
+        yearTotal += actualSum + forecastSum;
+      }
     }
 
     return consActual + yearTotal;
@@ -459,20 +462,25 @@ export default function ProjectDetail({ onEdit }) {
 
       const blended = activeYears.reduce((total, yr) => {
         const yearEntries = entries.filter(e => parseInt(e.year) === yr);
-        const actualMonths = yearEntries
-          .filter(e => e.type === 'Actual' && parseFloat(e.value||0) > 0)
-          .map(e => parseInt(e.month));
-        const lastActM = actualMonths.length > 0 ? Math.max(...actualMonths) : 0;
+        let yearSum = 0;
+        for (const cat of CATEGORIES) {
+          const catEntries = yearEntries.filter(e => e.category === cat);
+          const actualMonths = catEntries
+            .filter(e => e.type === 'Actual' && parseFloat(e.value||0) > 0)
+            .map(e => parseInt(e.month));
+          const lastActM = actualMonths.length > 0 ? Math.max(...actualMonths) : 0;
 
-        const actualSum = yearEntries
-          .filter(e => e.type === 'Actual' && parseInt(e.month) <= lastActM)
-          .reduce((s, e) => s + parseFloat(e.value||0), 0);
+          const actualSum = catEntries
+            .filter(e => e.type === 'Actual' && parseInt(e.month) <= lastActM)
+            .reduce((s, e) => s + parseFloat(e.value||0), 0);
 
-        const forecastSum = yearEntries
-          .filter(e => e.type === 'Forecast' && parseInt(e.month) > lastActM)
-          .reduce((s, e) => s + parseFloat(e.value||0), 0);
+          const forecastSum = catEntries
+            .filter(e => e.type === 'Forecast' && parseInt(e.month) > lastActM)
+            .reduce((s, e) => s + parseFloat(e.value||0), 0);
 
-        return total + actualSum + forecastSum;
+          yearSum += actualSum + forecastSum;
+        }
+        return total + yearSum;
       }, 0);
 
       // Anos consolidados com Actual substituem o Forecast
@@ -512,18 +520,26 @@ export default function ProjectDetail({ onEdit }) {
   };
 
   const chartData = useMemo(() => {
-    // Encontra o último mês com Actual > 0 para o ano selecionado
-    const actualEntries = entries.filter(e => parseInt(e.year) === selectedYear && e.type === 'Actual' && parseFloat(e.value || 0) > 0);
-    const lastActM = actualEntries.length > 0 ? Math.max(...actualEntries.map(e => parseInt(e.month))) : 0;
     const nowYear = new Date().getFullYear(), nowMonth = new Date().getMonth() + 1;
+    // Encontra o último mês com Actual > 0 para o ano selecionado, POR CATEGORIA
+    const lastActMByCat = {};
+    for (const cat of CATEGORIES) {
+      const catActualEntries = entries.filter(e => parseInt(e.year) === selectedYear && e.type === 'Actual' && e.category === cat && parseFloat(e.value || 0) > 0);
+      lastActMByCat[cat] = catActualEntries.length > 0 ? Math.max(...catActualEntries.map(e => parseInt(e.month))) : 0;
+    }
 
     return MONTHS_PT.map((m, i) => {
       const month = i + 1;
       const get = type => entries.filter(e => parseInt(e.year) === selectedYear && parseInt(e.month) === month && e.type === type).reduce((s, e) => s + parseFloat(e.value || 0), 0);
-      const actual = get('Actual'), forecast = get('Forecast');
-      // Previsão: Actual nos meses realizados, Forecast nos meses futuros
+      const getCat = (type, cat) => entries.filter(e => parseInt(e.year) === selectedYear && parseInt(e.month) === month && e.type === type && e.category === cat).reduce((s, e) => s + parseFloat(e.value || 0), 0);
       const isAfterNow = selectedYear > nowYear || (selectedYear === nowYear && month > nowMonth);
-      const previsao = isAfterNow ? forecast : (lastActM > 0 && month <= lastActM ? actual : forecast);
+      // Previsão: por categoria, Actual nos meses realizados (daquela categoria), Forecast nos demais — depois soma
+      const previsao = CATEGORIES.reduce((sum, cat) => {
+        const lastActM = lastActMByCat[cat];
+        const actualVal = getCat('Actual', cat);
+        const forecastVal = getCat('Forecast', cat);
+        return sum + (isAfterNow ? forecastVal : (lastActM > 0 && month <= lastActM ? actualVal : forecastVal));
+      }, 0);
       return { month: m, Budget: get('Budget'), 'Previsão': previsao, Meta: get('Meta'), Pool: get('Pool') };
     });
   }, [entries, selectedYear]);

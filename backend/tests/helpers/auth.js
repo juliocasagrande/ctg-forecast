@@ -4,7 +4,6 @@
 import request from 'supertest';
 import bcrypt   from 'bcryptjs';
 import { query } from './db.js';
-import { PAGE_KEYS } from '../../src/config/pages.js';
 
 const DEFAULT_PASSWORD = 'Teste@Seguro123';
 
@@ -38,14 +37,16 @@ export async function createTestUser({
     [name, email.toLowerCase(), hash, role, active, pending_approval, area, initials]
   );
 
-  // Acesso de página é fail-closed por padrão (ver middleware/auth.js) — espelha
-  // aqui o que a API faz de verdade ao criar/aprovar um usuário (grantDefaultPageAccess
-  // em routes/users.js), senão todo teste com usuário não-admin apanharia 403.
+  // Acesso de página é fail-closed por padrão e vem dos grupos de permissão do
+  // usuário (ver middleware/auth.js) — espelha aqui o que a API faz de verdade ao
+  // criar/aprovar um usuário (assignDefaultGroupForRole em routes/users.js): entra
+  // no grupo padrão do cargo, seedado uma vez em schema.js (seedPermissionGroups)
+  // com 'editor' em tudo. Sem isso, todo teste com usuário não-admin apanharia 403.
   await query(
-    `INSERT INTO user_page_access (user_id, page_key, access, updated_at)
-     SELECT $1, key, 'editor', NOW() FROM unnest($2::text[]) AS key
-     ON CONFLICT (user_id, page_key) DO NOTHING`,
-    [r.rows[0].id, PAGE_KEYS]
+    `INSERT INTO user_permission_groups (user_id, group_id)
+     SELECT $1, id FROM permission_groups WHERE default_for_role = $2
+     ON CONFLICT DO NOTHING`,
+    [r.rows[0].id, role]
   );
 
   return { ...r.rows[0], password };

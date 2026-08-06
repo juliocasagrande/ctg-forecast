@@ -5,7 +5,6 @@ import Modal from '../ui/Modal.jsx';
 import PasswordInput, { getPasswordStrength } from '../ui/PasswordInput.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PAGE_REGISTRY } from '../../config/pages.js';
-import { BUTTON_REGISTRY } from '../../config/buttons.js';
 
 const PAGE_ACCESS_OPTS = [
   { value: 'none',   icon: '—', label: '— Sem acesso',  title: 'Sem acesso' },
@@ -75,6 +74,27 @@ function PageAccessCell({ current, onChange, disabled }) {
     </div>
   );
 }
+
+// Cabeçalho colorido de card — usado na aba "Grupos de Permissão" para diferenciar
+// visualmente os blocos (Grupo, Membros, Páginas, Botões) de relance.
+function CardHeader({ color, children }) {
+  return (
+    <div style={{
+      background: color, color: '#fff', padding: '9px 14px',
+      borderRadius: 'var(--radius-md, 10px) var(--radius-md, 10px) 0 0',
+      fontWeight: 700, fontSize: '0.82rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+    }}>
+      {children}
+    </div>
+  );
+}
+
+const CARD_COLORS = {
+  group:   'var(--ctg-navy)',
+  members: '#0F766E', // teal
+  pages:   '#0369A1', // sky-700
+  buttons: '#7C3AED', // violet
+};
 
 const ROLE_LABELS = {
   admin:       'Administrador',
@@ -149,14 +169,25 @@ export default function AdminPanel() {
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
   const [filterRole, setFilterRole] = useState('');
-  const [pageAccessMatrix, setPageAccessMatrix] = useState([]);
-  const [pageAccessLoading, setPageAccessLoading] = useState(false);
-  const [pageAccessSavingCell, setPageAccessSavingCell] = useState(null);
-  const [pageAccessLoaded, setPageAccessLoaded] = useState(false);
-  const [buttonAccessMatrix, setButtonAccessMatrix] = useState([]);
-  const [buttonAccessLoading, setButtonAccessLoading] = useState(false);
-  const [buttonAccessSavingCell, setButtonAccessSavingCell] = useState(null);
-  const [buttonAccessLoaded, setButtonAccessLoaded] = useState(false);
+  const [groups, setGroups] = useState([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [groupsLoaded, setGroupsLoaded] = useState(false);
+  const [selectedGroupId, setSelectedGroupId] = useState(null);
+  const [groupModalOpen, setGroupModalOpen] = useState(false);
+  const [editingGroup, setEditingGroup] = useState(null);
+  const [groupForm, setGroupForm] = useState({ name: '', description: '' });
+  const [groupSaving, setGroupSaving] = useState(false);
+  const [groupPages, setGroupPages] = useState([]);
+  const [groupPagesLoading, setGroupPagesLoading] = useState(false);
+  const [groupPagesSavingCell, setGroupPagesSavingCell] = useState(null);
+  const [groupButtons, setGroupButtons] = useState([]);
+  const [groupButtonsLoading, setGroupButtonsLoading] = useState(false);
+  const [groupButtonsSavingCell, setGroupButtonsSavingCell] = useState(null);
+  const [selectedMemberIds, setSelectedMemberIds] = useState(new Set());
+  const [savedMemberIds, setSavedMemberIds] = useState(new Set());
+  const [groupMembersLoading, setGroupMembersLoading] = useState(false);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [membersSaving, setMembersSaving] = useState(false);
   const { toast, confirm } = useToast();
   const { user: currentUser, refreshUser } = useAuth();
 
@@ -175,12 +206,16 @@ export default function AdminPanel() {
   useEffect(() => { fetchUsers(); }, []);
 
   useEffect(() => {
-    if (activeTab === 'pageAccess' && !pageAccessLoaded) loadPageAccessMatrix();
-  }, [activeTab, pageAccessLoaded]);
+    if (activeTab === 'groups' && !groupsLoaded) loadGroups();
+  }, [activeTab, groupsLoaded]);
 
   useEffect(() => {
-    if (activeTab === 'buttonAccess' && !buttonAccessLoaded) loadButtonAccessMatrix();
-  }, [activeTab, buttonAccessLoaded]);
+    if (selectedGroupId != null) {
+      loadGroupPages(selectedGroupId);
+      loadGroupButtons(selectedGroupId);
+      loadGroupMembers(selectedGroupId);
+    }
+  }, [selectedGroupId]);
 
   const handleApprove = async (u) => {
     try {
@@ -211,64 +246,165 @@ export default function AdminPanel() {
     setModalOpen(true);
   };
 
-  const loadPageAccessMatrix = async () => {
-    setPageAccessLoading(true);
+  const loadGroups = async () => {
+    setGroupsLoading(true);
     try {
-      const r = await api.get('/users/page-access');
-      setPageAccessMatrix(r.data);
-      setPageAccessLoaded(true);
+      const r = await api.get('/permission-groups');
+      setGroups(r.data);
+      setGroupsLoaded(true);
+      if (selectedGroupId == null && r.data.length) setSelectedGroupId(r.data[0].id);
+      return r.data;
     } catch {
-      toast('Erro ao carregar permissões', 'error');
-    } finally { setPageAccessLoading(false); }
+      toast('Erro ao carregar grupos de permissão', 'error');
+      return null;
+    } finally { setGroupsLoading(false); }
   };
 
-  const handlePageAccessCellChange = async (userId, pageKey, value) => {
-    const cellId = `${userId}:${pageKey}`;
-    setPageAccessMatrix(prev => prev.map(u =>
-      u.id === userId ? { ...u, pages: { ...u.pages, [pageKey]: value } } : u
-    ));
-    setPageAccessSavingCell(cellId);
+  const openNewGroup = () => { setEditingGroup(null); setGroupForm({ name: '', description: '' }); setGroupModalOpen(true); };
+  const openEditGroup = (g) => { setEditingGroup(g); setGroupForm({ name: g.name, description: g.description || '' }); setGroupModalOpen(true); };
+
+  const handleGroupSave = async () => {
+    if (!groupForm.name.trim()) return toast('Nome do grupo é obrigatório', 'error');
+    setGroupSaving(true);
     try {
-      await api.put(`/users/${userId}/page-access`, { pages: [{ page_key: pageKey, access: value }] });
-      // Se o admin está alterando as próprias permissões, atualiza a sessão local
-      // na hora — o menu/rotas reagem no mesmo instante, sem esperar a revalidação periódica.
-      if (currentUser?.id === userId) refreshUser();
+      let groupId = editingGroup?.id;
+      if (editingGroup) {
+        await api.put(`/permission-groups/${editingGroup.id}`, groupForm);
+        toast('Grupo atualizado', 'success');
+      } else {
+        const r = await api.post('/permission-groups', groupForm);
+        groupId = r.data.id;
+        toast('Grupo criado', 'success');
+      }
+      setGroupModalOpen(false);
+      await loadGroups();
+      if (!editingGroup) setSelectedGroupId(groupId);
+    } catch (err) {
+      toast(err.response?.data?.error || 'Erro ao salvar grupo', 'error');
+    } finally { setGroupSaving(false); }
+  };
+
+  const handleGroupDelete = async (g) => {
+    const defaultWarning = g.default_for_role
+      ? ` Este é o grupo padrão de "${ROLE_LABELS[g.default_for_role] || g.default_for_role}" — usuários desse cargo criados ou aprovados depois da exclusão NÃO receberão nenhum grupo automaticamente (ficarão sem acesso até serem atribuídos manualmente).`
+      : '';
+    if (!await confirm({
+      title: 'Excluir grupo',
+      message: `Excluir "${g.name}"? Os ${g.member_count} usuário(s) desse grupo perdem esse acesso (a menos que estejam em outro grupo).${defaultWarning}`,
+      confirmLabel: 'Excluir',
+    })) return;
+    const wasSelected = selectedGroupId === g.id;
+    try {
+      await api.delete(`/permission-groups/${g.id}`);
+      if (wasSelected) setSelectedGroupId(null);
+      toast('Grupo excluído', 'success');
+      const freshGroups = await loadGroups();
+      // loadGroups() checa selectedGroupId ainda com o valor obsoleto (closure desta
+      // render), então reseleciona explicitamente aqui usando a lista recém-buscada.
+      if (wasSelected && freshGroups) {
+        setSelectedGroupId(freshGroups.length ? freshGroups[0].id : null);
+      }
+      fetchUsers();
+    } catch { toast('Erro ao excluir grupo', 'error'); }
+  };
+
+  const loadGroupPages = async (groupId) => {
+    setGroupPagesLoading(true);
+    try {
+      const r = await api.get(`/permission-groups/${groupId}/page-access`);
+      setGroupPages(r.data);
     } catch {
-      toast('Erro ao salvar permissão', 'error');
-      loadPageAccessMatrix();
+      toast('Erro ao carregar páginas do grupo', 'error');
+    } finally { setGroupPagesLoading(false); }
+  };
+
+  const handleGroupPageChange = async (groupId, pageKey, value) => {
+    const cellId = `${pageKey}`;
+    setGroupPagesSavingCell(cellId);
+    try {
+      await api.put(`/permission-groups/${groupId}/page-access`, { pages: [{ page_key: pageKey, access: value }] });
+      await loadGroupPages(groupId);
+      refreshUser(); // se o admin estiver nesse grupo, reflete na hora
+    } catch {
+      toast('Erro ao salvar permissão do grupo', 'error');
     } finally {
-      setPageAccessSavingCell(prev => prev === cellId ? null : prev);
+      setGroupPagesSavingCell(prev => prev === cellId ? null : prev);
     }
   };
 
-  const loadButtonAccessMatrix = async () => {
-    setButtonAccessLoading(true);
+  const loadGroupButtons = async (groupId) => {
+    setGroupButtonsLoading(true);
     try {
-      const r = await api.get('/users/button-access');
-      setButtonAccessMatrix(r.data);
-      setButtonAccessLoaded(true);
+      const r = await api.get(`/permission-groups/${groupId}/button-access`);
+      setGroupButtons(r.data);
     } catch {
-      toast('Erro ao carregar permissões de botões', 'error');
-    } finally { setButtonAccessLoading(false); }
+      toast('Erro ao carregar botões do grupo', 'error');
+    } finally { setGroupButtonsLoading(false); }
   };
 
-  const handleButtonAccessCellChange = async (userId, pageKey, buttonKey, enabled) => {
-    const cellId = `${userId}:${pageKey}:${buttonKey}`;
-    setButtonAccessMatrix(prev => prev.map(u =>
-      u.id === userId
-        ? { ...u, buttons: { ...u.buttons, [pageKey]: { ...u.buttons[pageKey], [buttonKey]: enabled } } }
-        : u
-    ));
-    setButtonAccessSavingCell(cellId);
+  const handleGroupButtonChange = async (groupId, pageKey, buttonKey, enabled) => {
+    const cellId = `${pageKey}:${buttonKey}`;
+    setGroupButtonsSavingCell(cellId);
     try {
-      await api.put(`/users/${userId}/button-access`, { buttons: [{ page_key: pageKey, button_key: buttonKey, enabled }] });
-      if (currentUser?.id === userId) refreshUser();
+      await api.put(`/permission-groups/${groupId}/button-access`, { buttons: [{ page_key: pageKey, button_key: buttonKey, enabled }] });
+      await loadGroupButtons(groupId);
+      refreshUser();
     } catch {
-      toast('Erro ao salvar permissão de botão', 'error');
-      loadButtonAccessMatrix();
+      toast('Erro ao salvar botão do grupo', 'error');
     } finally {
-      setButtonAccessSavingCell(prev => prev === cellId ? null : prev);
+      setGroupButtonsSavingCell(prev => prev === cellId ? null : prev);
     }
+  };
+
+  const loadGroupMembers = async (groupId) => {
+    setGroupMembersLoading(true);
+    try {
+      const r = await api.get(`/permission-groups/${groupId}/members`);
+      const ids = new Set(r.data.map(u => u.id));
+      setSelectedMemberIds(ids);
+      setSavedMemberIds(ids);
+    } catch {
+      toast('Erro ao carregar membros do grupo', 'error');
+    } finally { setGroupMembersLoading(false); }
+  };
+
+  const membersDirty = selectedMemberIds.size !== savedMemberIds.size
+    || [...selectedMemberIds].some(id => !savedMemberIds.has(id));
+
+  // Troca de grupo selecionado na barra lateral. Se houver alterações não salvas na
+  // seleção de membros do grupo atual, confirma com o usuário antes de descartá-las.
+  const handleSelectGroup = async (groupId) => {
+    if (groupId === selectedGroupId) return;
+    if (membersDirty) {
+      if (!await confirm({
+        title: 'Alterações não salvas',
+        message: 'Você tem alterações não salvas na seleção de membros deste grupo. Trocar de grupo agora vai descartá-las. Deseja continuar?',
+        confirmLabel: 'Descartar e trocar',
+      })) return;
+    }
+    setSelectedGroupId(groupId);
+  };
+
+  const toggleMember = (userId) => {
+    setSelectedMemberIds(prev => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId); else next.add(userId);
+      return next;
+    });
+  };
+
+  const handleMembersSave = async (groupId) => {
+    setMembersSaving(true);
+    try {
+      await api.put(`/permission-groups/${groupId}/members`, { user_ids: [...selectedMemberIds] });
+      setSavedMemberIds(new Set(selectedMemberIds));
+      toast('Membros do grupo atualizados', 'success');
+      await loadGroups();
+      await fetchUsers();
+      if (currentUser && selectedMemberIds.has(currentUser.id)) refreshUser();
+    } catch {
+      toast('Erro ao salvar membros', 'error');
+    } finally { setMembersSaving(false); }
   };
 
   const handleSave = async () => {
@@ -284,8 +420,8 @@ export default function AdminPanel() {
         toast('Usuário atualizado', 'success');
       } else {
         const r = await api.post('/users', payload);
-        setUsers(prev => [...prev, { ...r.data, project_count: 0 }]);
-        toast('Usuário criado com sucesso', 'success');
+        setUsers(prev => [...prev, { ...r.data, project_count: 0, permission_groups: [] }]);
+        toast('Usuário criado com sucesso — grupo padrão do cargo atribuído automaticamente', 'success');
       }
       setModalOpen(false);
     } catch (err) {
@@ -333,6 +469,9 @@ export default function AdminPanel() {
   if (loading) return <div className="loading-spinner"><div className="spinner" /></div>;
 
   const formNeedsArea = NEEDS_AREA.includes(form.role);
+  const memberCandidates = users.filter(u =>
+    !memberSearch || u.name.toLowerCase().includes(memberSearch.toLowerCase()) || u.email.toLowerCase().includes(memberSearch.toLowerCase())
+  );
 
   return (
     <div>
@@ -367,11 +506,8 @@ export default function AdminPanel() {
             </span>
           )}
         </button>
-        <button className={`tab-btn ${activeTab === 'pageAccess' ? 'active' : ''}`} onClick={() => setActiveTab('pageAccess')}>
-          Acesso por Página
-        </button>
-        <button className={`tab-btn ${activeTab === 'buttonAccess' ? 'active' : ''}`} onClick={() => setActiveTab('buttonAccess')}>
-          Configurações de Funções
+        <button className={`tab-btn ${activeTab === 'groups' ? 'active' : ''}`} onClick={() => setActiveTab('groups')}>
+          Grupos de Permissão
         </button>
       </div>
 
@@ -427,7 +563,7 @@ export default function AdminPanel() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
               <thead>
                 <tr>
-                  {['Usuário', 'E-mail', 'Perfil / Área', 'Projetos', 'Status', ''].map(h => (
+                  {['Usuário', 'E-mail', 'Perfil / Área', 'Grupos', 'Projetos', 'Status', ''].map(h => (
                     <th key={h} style={{ background: 'var(--ctg-navy)', color: '#fff', padding: '9px 14px', textAlign: h === '' ? 'center' : 'left', fontWeight: 600, fontSize: '0.75rem' }}>{h}</th>
                   ))}
                 </tr>
@@ -445,6 +581,19 @@ export default function AdminPanel() {
                     <td style={{ padding: '10px 14px' }}>
                       <RoleBadge role={u.role} />
                       {u.area && <AreaBadge area={u.area} />}
+                    </td>
+                    <td style={{ padding: '10px 14px' }}>
+                      {u.permission_groups?.length ? (
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          {u.permission_groups.map(g => (
+                            <span key={g.id} style={{ fontSize: '0.65rem', fontWeight: 600, padding: '1px 7px', borderRadius: 10, background: 'rgba(15,118,110,0.12)', color: CARD_COLORS.members }}>
+                              {g.name}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span title="Sem grupo — sem acesso a nenhuma página" style={{ fontSize: '0.65rem', fontWeight: 700, color: '#DC2626' }}>sem grupo</span>
+                      )}
                     </td>
                     <td style={{ padding: '10px 14px', textAlign: 'center', color: 'var(--text-secondary)' }}>{u.project_count}</td>
                     <td style={{ padding: '10px 14px' }}>
@@ -467,181 +616,160 @@ export default function AdminPanel() {
         </div>
       )}
 
-      {/* Page access tab */}
-      {activeTab === 'pageAccess' && (
+      {/* Groups tab */}
+      {activeTab === 'groups' && (
         <div>
-          {pageAccessLoading ? (
+          {groupsLoading && !groups.length ? (
             <div className="loading-spinner"><div className="spinner" /></div>
           ) : (
-            <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
-              <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-                <thead>
-                  <tr>
-                    <th style={{
-                      position: 'sticky', left: 0, zIndex: 2,
-                      background: 'var(--ctg-navy)', borderBottom: '1px solid rgba(255,255,255,0.15)',
-                    }} />
-                    {PAGE_SECTIONS.map(g => (
-                      <th key={g.section} colSpan={g.count} style={{
-                        background: sectionRgba(g.section, 0.5), color: 'var(--ctg-navy)',
-                        padding: '5px 4px', textAlign: 'center', fontWeight: 700, fontSize: '0.62rem',
-                        textTransform: 'uppercase', letterSpacing: '0.05em',
-                        borderBottom: '1px solid var(--border)',
-                        borderLeft: '1px solid var(--bg-card)',
-                      }}>{g.section}</th>
-                    ))}
-                  </tr>
-                  <tr>
-                    <th style={{
-                      position: 'sticky', left: 0, zIndex: 2,
-                      background: 'var(--ctg-navy)', color: '#fff',
-                      padding: '9px 14px', textAlign: 'left', fontWeight: 600, fontSize: '0.75rem',
-                      minWidth: 200,
-                    }}>Usuário</th>
-                    {PAGE_REGISTRY.map(p => (
-                      <th key={p.key} style={{
-                        background: sectionRgba(p.section, 0.25), color: 'var(--ctg-navy)',
-                        padding: '8px 4px', textAlign: 'left', fontWeight: 600, fontSize: '0.72rem',
-                        whiteSpace: 'nowrap', width: 36,
-                        writingMode: 'vertical-rl', transform: 'rotate(180deg)',
-                      }}>{p.label}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {pageAccessMatrix.map((u, i) => (
-                    <tr key={u.id} style={{ background: i % 2 ? 'var(--bg-app)' : 'var(--bg-card)', opacity: u.active ? 1 : 0.5 }}>
-                      <td style={{
-                        position: 'sticky', left: 0, zIndex: 1,
-                        background: i % 2 ? 'var(--bg-app)' : 'var(--bg-card)',
-                        padding: '8px 14px', fontSize: '0.82rem',
+            <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 16, alignItems: 'start' }}>
+              {/* Lista de grupos */}
+              <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                <CardHeader color={CARD_COLORS.group}>Grupos</CardHeader>
+                <div style={{ padding: 8 }}>
+                  <button className="btn btn-primary btn-sm" style={{ width: '100%', marginBottom: 8 }} onClick={openNewGroup}>
+                    + Novo Grupo
+                  </button>
+                  {groups.map(g => (
+                    <div key={g.id}
+                      onClick={() => handleSelectGroup(g.id)}
+                      style={{
+                        padding: '8px 10px', borderRadius: 8, cursor: 'pointer', marginBottom: 4,
+                        background: selectedGroupId === g.id ? 'var(--ctg-navy)' : 'transparent',
+                        color: selectedGroupId === g.id ? '#fff' : 'var(--text-primary)',
                       }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <Avatar initials={u.name.split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() || '').join('')} role={u.role} />
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</div>
-                            <RoleBadge role={u.role} />
-                          </div>
-                        </div>
-                      </td>
-                      {PAGE_REGISTRY.map(p => (
-                        <td key={p.key} style={{ padding: '8px 10px', textAlign: 'center', background: sectionRgba(p.section, 0.08) }}>
-                          <PageAccessCell
-                            current={u.pages[p.key]}
-                            onChange={val => handlePageAccessCellChange(u.id, p.key, val)}
-                            disabled={pageAccessSavingCell === `${u.id}:${p.key}`}
-                          />
-                        </td>
-                      ))}
-                    </tr>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontWeight: 600, fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.name}</span>
+                        <span style={{
+                          fontSize: '0.62rem', fontWeight: 700, padding: '1px 6px', borderRadius: 10,
+                          background: selectedGroupId === g.id ? 'rgba(255,255,255,0.15)' : 'rgba(0,31,91,0.08)',
+                        }}>{g.member_count}</span>
+                      </div>
+                      {g.default_for_role && (
+                        <div style={{ fontSize: '0.65rem', opacity: 0.75, marginTop: 2 }}>padrão de {ROLE_LABELS[g.default_for_role] || g.default_for_role}</div>
+                      )}
+                    </div>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: 16, marginTop: 12, flexWrap: 'wrap' }}>
-            {PAGE_ACCESS_OPTS.map(opt => (
-              <span key={opt.value} style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                <strong>{opt.label}</strong> — {opt.title}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
+                  {!groups.length && <div className="empty-state" style={{ padding: 12 }}><p style={{ fontSize: '0.8rem' }}>Nenhum grupo criado ainda.</p></div>}
+                </div>
+              </div>
 
-      {/* Configurações de Funções (habilitar/desabilitar botões por usuário) */}
-      {activeTab === 'buttonAccess' && (
-        <div>
-          <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.6 }}>
-            Desabilite botões específicos (Novo/Importar/Exportar) para um usuário, independentemente do cargo dele.
-            Por padrão todos os botões ficam habilitados — use isto para exceções pontuais.
-          </p>
-          {buttonAccessLoading ? (
-            <div className="loading-spinner"><div className="spinner" /></div>
-          ) : (
-            <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
-              <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-                <thead>
-                  <tr>
-                    <th style={{
-                      position: 'sticky', left: 0, zIndex: 2,
-                      background: 'var(--ctg-navy)', borderBottom: '1px solid rgba(255,255,255,0.15)',
-                    }} />
-                    {BUTTON_REGISTRY.map(p => (
-                      <th key={p.page_key} colSpan={p.buttons.length} style={{
-                        background: 'rgba(11,92,171,0.14)', color: 'var(--ctg-navy)',
-                        padding: '5px 4px', textAlign: 'center', fontWeight: 700, fontSize: '0.62rem',
-                        textTransform: 'uppercase', letterSpacing: '0.05em',
-                        borderBottom: '1px solid var(--border)',
-                        borderLeft: '1px solid var(--bg-card)',
-                      }}>{p.page_label}</th>
-                    ))}
-                  </tr>
-                  <tr>
-                    <th style={{
-                      position: 'sticky', left: 0, zIndex: 2,
-                      background: 'var(--ctg-navy)', color: '#fff',
-                      padding: '9px 14px', textAlign: 'left', fontWeight: 600, fontSize: '0.75rem',
-                      minWidth: 200,
-                    }}>Usuário</th>
-                    {BUTTON_REGISTRY.flatMap(p => p.buttons.map(b => (
-                      <th key={`${p.page_key}:${b.key}`} style={{
-                        background: 'rgba(11,92,171,0.07)', color: 'var(--ctg-navy)',
-                        padding: '8px 4px', textAlign: 'left', fontWeight: 600, fontSize: '0.72rem',
-                        whiteSpace: 'nowrap', width: 36,
-                        writingMode: 'vertical-rl', transform: 'rotate(180deg)',
-                      }}>{b.label}</th>
-                    )))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {buttonAccessMatrix.map((u, i) => (
-                    <tr key={u.id} style={{ background: i % 2 ? 'var(--bg-app)' : 'var(--bg-card)', opacity: u.active ? 1 : 0.5 }}>
-                      <td style={{
-                        position: 'sticky', left: 0, zIndex: 1,
-                        background: i % 2 ? 'var(--bg-app)' : 'var(--bg-card)',
-                        padding: '8px 14px', fontSize: '0.82rem',
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <Avatar initials={u.name.split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() || '').join('')} role={u.role} />
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</div>
-                            <RoleBadge role={u.role} />
-                          </div>
+              {/* Painel do grupo selecionado */}
+              {selectedGroupId == null ? (
+                <div className="empty-state"><p>Selecione ou crie um grupo para configurar.</p></div>
+              ) : (() => {
+                const g = groups.find(x => x.id === selectedGroupId);
+                if (!g) return null;
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                      <CardHeader color={CARD_COLORS.group}>
+                        <span>{g.name}</span>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button className="btn btn-ghost btn-sm" style={{ color: '#fff' }} onClick={() => openEditGroup(g)}>✎ Editar</button>
+                          <button className="btn btn-danger btn-sm" onClick={() => handleGroupDelete(g)}>Excluir</button>
                         </div>
-                      </td>
-                      {BUTTON_REGISTRY.flatMap(p => p.buttons.map(b => {
-                        const cellId = `${u.id}:${p.page_key}:${b.key}`;
-                        const enabled = u.buttons[p.page_key]?.[b.key] !== false;
-                        const savingCell = buttonAccessSavingCell === cellId;
-                        return (
-                          <td key={cellId} style={{ padding: '8px 10px', textAlign: 'center', background: 'rgba(11,92,171,0.03)' }}>
-                            <button
-                              type="button"
-                              disabled={savingCell}
-                              title={enabled ? 'Habilitado — clique para desabilitar' : 'Desabilitado — clique para habilitar'}
-                              onClick={() => handleButtonAccessCellChange(u.id, p.page_key, b.key, !enabled)}
-                              style={{
-                                width: 30, height: 20, borderRadius: 10, border: 'none',
-                                position: 'relative', cursor: savingCell ? 'wait' : 'pointer',
-                                background: enabled ? '#15803D' : '#E2E8F0',
-                                opacity: savingCell ? 0.5 : 1,
-                                transition: 'background 0.15s',
-                              }}
-                            >
-                              <span style={{
-                                position: 'absolute', top: 2, left: enabled ? 12 : 2,
-                                width: 16, height: 16, borderRadius: '50%', background: '#fff',
-                                boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transition: 'left 0.15s',
-                              }} />
-                            </button>
-                          </td>
-                        );
-                      }))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </CardHeader>
+                      <div style={{ padding: 14 }}>
+                        {g.description && <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{g.description}</div>}
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4 }}>{g.member_count} usuário(s) neste grupo</div>
+                      </div>
+                    </div>
+
+                    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                      <CardHeader color={CARD_COLORS.members}>
+                        <span>Membros</span>
+                        <button className={`btn btn-sm ${membersDirty ? 'btn-success' : 'btn-primary'}`} disabled={membersSaving || groupMembersLoading} onClick={() => handleMembersSave(selectedGroupId)}>
+                          {membersSaving ? 'Salvando...' : membersDirty ? 'Salvar alterações' : 'Salvar membros'}
+                        </button>
+                      </CardHeader>
+                      <div style={{ padding: 14 }}>
+                        <input className="form-input" placeholder="Buscar usuário..." value={memberSearch}
+                          onChange={e => setMemberSearch(e.target.value)} style={{ marginBottom: 10 }} />
+                        {groupMembersLoading ? <div className="loading-spinner"><div className="spinner" /></div> : (
+                          <div style={{ maxHeight: 260, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            {memberCandidates.map(u => (
+                              <label key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 6px', borderRadius: 6, cursor: 'pointer', fontSize: '0.82rem' }}>
+                                <input type="checkbox" checked={selectedMemberIds.has(u.id)} onChange={() => toggleMember(u.id)} />
+                                <Avatar initials={u.avatar_initials} role={u.role} />
+                                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</span>
+                                <RoleBadge role={u.role} />
+                              </label>
+                            ))}
+                            {!memberCandidates.length && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', padding: 8 }}>Nenhum usuário encontrado.</div>}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                      <CardHeader color={CARD_COLORS.pages}>Páginas</CardHeader>
+                      <div style={{ padding: 14 }}>
+                        {groupPagesLoading ? <div className="loading-spinner"><div className="spinner" /></div> : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {PAGE_SECTIONS.map(sec => {
+                              const pages = groupPages.filter(p => PAGE_REGISTRY.find(r => r.key === p.page_key)?.section === sec.section);
+                              return (
+                                <div key={sec.section}>
+                                  <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '6px 0 4px' }}>{sec.section}</div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                    {pages.map(p => (
+                                      <div key={p.page_key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 6px' }}>
+                                        <span style={{ fontSize: '0.82rem' }}>{p.label}</span>
+                                        <PageAccessCell
+                                          current={p.access}
+                                          onChange={val => handleGroupPageChange(selectedGroupId, p.page_key, val)}
+                                          disabled={groupPagesSavingCell === p.page_key}
+                                        />
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                      <CardHeader color={CARD_COLORS.buttons}>Botões</CardHeader>
+                      <div style={{ padding: 14 }}>
+                        {groupButtonsLoading ? <div className="loading-spinner"><div className="spinner" /></div> : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            {groupButtons.map(p => (
+                              <div key={p.page_key}>
+                                <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+                                  {PAGE_REGISTRY.find(r => r.key === p.page_key)?.label || p.page_key}
+                                </div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                                  {p.buttons.map(b => {
+                                    const cellId = `${p.page_key}:${b.button_key}`;
+                                    const saving = groupButtonsSavingCell === cellId;
+                                    return (
+                                      <label key={b.button_key} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', opacity: saving ? 0.5 : 1, cursor: saving ? 'wait' : 'pointer' }}>
+                                        <button type="button" disabled={saving}
+                                          onClick={() => handleGroupButtonChange(selectedGroupId, p.page_key, b.button_key, !b.enabled)}
+                                          style={{
+                                            width: 30, height: 20, borderRadius: 10, border: 'none', position: 'relative',
+                                            cursor: saving ? 'wait' : 'pointer', background: b.enabled ? '#15803D' : '#E2E8F0',
+                                          }}>
+                                          <span style={{ position: 'absolute', top: 2, left: b.enabled ? 12 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transition: 'left 0.15s' }} />
+                                        </button>
+                                        {b.label}
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>
@@ -696,7 +824,32 @@ export default function AdminPanel() {
             </select>
           </div>
         )}
+        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: 6 }}>
+          {editingUser
+            ? 'Os grupos de permissão deste usuário são gerenciados na aba "Grupos de Permissão".'
+            : 'O grupo de permissão padrão do cargo será atribuído automaticamente. Ajuste em "Grupos de Permissão" depois.'}
+        </div>
 
+      </Modal>
+
+      {/* Create/Edit Group Modal */}
+      <Modal open={groupModalOpen} onClose={() => setGroupModalOpen(false)}
+        onSave={groupSaving ? undefined : handleGroupSave}
+        title={editingGroup ? 'Editar Grupo' : 'Novo Grupo'}
+        footer={<>
+          <button className="btn btn-secondary" onClick={() => setGroupModalOpen(false)}>Cancelar</button>
+          <button className="btn btn-primary" onClick={handleGroupSave} disabled={groupSaving}>
+            {groupSaving ? 'Salvando...' : 'Salvar'}
+          </button>
+        </>}>
+        <div className="form-group">
+          <label className="form-label">Nome *</label>
+          <input className="form-input" value={groupForm.name} onChange={e => setGroupForm(f => ({ ...f, name: e.target.value }))} placeholder="Ex: Engenheiro Elétrica Sênior" />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Descrição</label>
+          <input className="form-input" value={groupForm.description} onChange={e => setGroupForm(f => ({ ...f, description: e.target.value }))} placeholder="Opcional" />
+        </div>
       </Modal>
 
       {/* Reset Password Modal */}

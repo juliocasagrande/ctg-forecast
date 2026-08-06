@@ -12,6 +12,7 @@ import useColumnWidths from '../hooks/useColumnWidths.js';
 import useModalHotkeys from '../hooks/useModalHotkeys.js';
 import AppSelect from '../components/ui/AppSelect.jsx';
 import { formatActivityLine, formatRemainingTime, getCheckinRemainingMs } from '../utils/listActivity.js';
+import { getAlertRole, resolveRoleDays } from '../utils/roleDays.js';
 
 const PROJECTS_COL_WIDTHS = [40, 46, 130, 110, 280, 180, 160, 170, 220, 100, 120, 110, 110, 100, 100, 100, 150, 100, 90];
 
@@ -963,7 +964,10 @@ function projectFolderHref(path) {
   const value = String(path || '').trim();
   if (/^[A-Za-z]:[\\/]/.test(value)) return `file:///${value.replace(/\\/g, '/')}`;
   if (value.startsWith('\\\\')) return `file:${value.replace(/\\/g, '/')}`;
-  if (/^[a-z][a-z\d+.-]*:/i.test(value)) return value;
+  // Only allow known-safe URL schemes; reject javascript:, data:, vbscript:, etc.
+  if (/^[a-z][a-z\d+.-]*:/i.test(value)) {
+    return /^(https?|mailto):/i.test(value) ? value : '';
+  }
   if (/^(?:www\.)?[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(?:[/?#]|$)/i.test(value)) return `https://${value}`;
   return value;
 }
@@ -1839,6 +1843,7 @@ export default function ProjectsTrackingPage() {
   const { toast: addToast, confirm } = useToast();
   const { user } = useAuth();
   const [items, setItems]             = useState([]);
+  const [alertSettings, setAlertSettings] = useState(null);
   const [allUsers, setAllUsers]       = useState([]);
   const [loading, setLoading]         = useState(true);
   const [search, setSearch]           = useState('');
@@ -1884,6 +1889,8 @@ export default function ProjectsTrackingPage() {
     fetchItems();
     // Fetch all users for gestor dropdown (exclude admins)
     api.get('/users/for-delegation').then(r => setAllUsers(r.data.filter(u => u.role !== 'admin'))).catch(() => setAllUsers([]));
+    // Prazo por cargo para a bolinha de status, sincronizado com o alerta de acompanhamento configurado em Configurações
+    api.get('/settings').then(r => setAlertSettings(r.data)).catch(() => setAlertSettings(null));
 
     const handleNew = () => { setIsNew(true); setSelected(EMPTY_PROJECT); };
     window.addEventListener('new-project', handleNew);
@@ -2020,6 +2027,11 @@ export default function ProjectsTrackingPage() {
     }
     return data;
   }, [items, search, filterStatus, filterNatureza, filterUHE, activeTab, showMyContracts, user]);
+
+  const statusDotThresholdDays = useMemo(
+    () => resolveRoleDays(alertSettings, 'tracking_alert_role_days', 'tracking_alert_interval_days', 6, getAlertRole(user)),
+    [alertSettings, user]
+  );
 
   // Unique values for column filters — only show values that exist in current data
   const colFilterUHEValues = useMemo(() => {
@@ -2649,7 +2661,7 @@ export default function ProjectsTrackingPage() {
                         onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? '#fff' : '#FAFAFA'}
                       >
                         <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                          <StatusDot updatedAt={item.updated_at} />
+                          <StatusDot updatedAt={item.updated_at} thresholdDays={statusDotThresholdDays} />
                         </td>
                         <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                           {item.caminho_projeto && (

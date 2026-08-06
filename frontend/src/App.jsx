@@ -784,6 +784,7 @@ export default function App() {
   const btnIacNew    = useButtonAccess('iacs', 'new');
   const btnIacImport = useButtonAccess('iacs', 'import');
   const btnIacExport = useButtonAccess('iacs', 'export');
+  const btnMetaNew         = useButtonAccess('metas', 'new');
   const btnTrackNew        = useButtonAccess('projects_tracking', 'new');
   const btnTrackImport     = useButtonAccess('projects_tracking', 'import');
   const btnTrackExport     = useButtonAccess('projects_tracking', 'export');
@@ -888,8 +889,6 @@ export default function App() {
 
               {/* ── Botões da página de acompanhamento ── */}
               {location.pathname === '/lists/projects-tracking' && (() => {
-                const canImport = ['coordenador', 'planejador', 'admin'].includes(user?.role) ||
-                  user?.email === 'julio.casagrande@ctgbr.com.br';
                 return (
                   <>
                     {btnTrackNew && (
@@ -909,7 +908,7 @@ export default function App() {
                       Novo Projeto
                     </button>
                     )}
-                    {canImport && btnTrackImport && (
+                    {btnTrackImport && (
                       <button onClick={() => {
                         window.dispatchEvent(new CustomEvent('import-projects'));
                       }} style={{
@@ -941,7 +940,7 @@ export default function App() {
                       Exportar
                     </button>
                     )}
-                    {canImport && btnTrackExportHtml && (
+                    {btnTrackExportHtml && (
                       <button onClick={() => {
                         window.dispatchEvent(new CustomEvent('generate-html-report'));
                       }} style={{
@@ -962,7 +961,7 @@ export default function App() {
               })()}
 
               {/* ── Botões da página de IACs ── */}
-              {location.pathname === '/metas' && (
+              {location.pathname === '/metas' && btnMetaNew && (
                 <button onClick={() => {
                   window.dispatchEvent(new CustomEvent('new-meta'));
                 }} style={{
@@ -981,8 +980,6 @@ export default function App() {
               )}
 
               {location.pathname === '/lists/iacs' && (() => {
-                const canImport = ['coordenador', 'planejador', 'admin'].includes(user?.role) ||
-                  user?.email === 'julio.casagrande@ctgbr.com.br';
                 const isEngenheiro = user?.role === 'engenheiro' && user?.email !== 'julio.casagrande@ctgbr.com.br';
                 return (
                   <>
@@ -1003,7 +1000,7 @@ export default function App() {
                         Novo IAC
                       </button>
                     )}
-                    {canImport && !isEngenheiro && btnIacImport && (
+                    {!isEngenheiro && btnIacImport && (
                       <button onClick={() => {
                         window.dispatchEvent(new CustomEvent('import-iacs'));
                       }} style={{
@@ -1041,11 +1038,9 @@ export default function App() {
 
               {/* ── Botões da página de Documentos ── */}
               {location.pathname === '/documents' && (() => {
-                const canManage = ['admin', 'coordenador', 'planejador'].includes(user?.role) ||
-                  user?.email === 'julio.casagrande@ctgbr.com.br';
                 return (
                   <>
-                    {canManage && btnDocImport && (
+                    {btnDocImport && (
                       <button onClick={() => {
                         window.dispatchEvent(new CustomEvent('import-documents-docx'));
                       }} style={{
@@ -1099,11 +1094,9 @@ export default function App() {
 
               {/* ── Botões da página de Controle de Desenhos ── */}
               {location.pathname === '/drawings' && (() => {
-                const canManage = ['admin', 'coordenador', 'planejador'].includes(user?.role) ||
-                  user?.email === 'julio.casagrande@ctgbr.com.br';
                 return (
                   <>
-                    {canManage && btnDrawImport && (
+                    {btnDrawImport && (
                       <button onClick={() => {
                         window.dispatchEvent(new CustomEvent('import-drawings-docx'));
                       }} style={{
@@ -1157,10 +1150,9 @@ export default function App() {
 
               {/* ── Botões da página PMS ── */}
               {location.pathname === '/pms' && (() => {
-                const canManage = ['admin', 'coordenador', 'planejador', 'gerente', 'diretor'].includes(user?.role);
                 return (
                   <>
-                    {canManage && btnPmsImport && (
+                    {btnPmsImport && (
                       <button onClick={() => {
                         window.dispatchEvent(new CustomEvent('import-pms-excel'));
                       }} style={{

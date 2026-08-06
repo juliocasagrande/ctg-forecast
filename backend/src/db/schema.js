@@ -108,6 +108,117 @@ async function backfillPageAccessDefaults(client) {
 }
 
 /* ─────────────────────────────────────────────
+ * GRUPOS DE PERMISSÃO (roda uma única vez)
+ * ─────────────────────────────────────────────
+ * Cria um grupo padrão por cargo (com 'editor' em todas as páginas — reproduz o
+ * acesso amplo que todo mundo já tinha) e atribui cada usuário existente ao grupo
+ * do seu cargo. Depois remove os overrides por usuário que ficaram redundantes
+ * com o grupo recém-atribuído (o backfill acima tinha gravado 'editor' linha a
+ * linha para todo mundo; sem essa limpeza, cada usuário ficaria com 15 exceções
+ * inúteis). Dali em diante, o admin configura o padrão pelo grupo — overrides
+ * individuais viram exceção de verdade.
+ */
+const DEFAULT_ROLE_GROUPS = [
+  { role: 'engenheiro',  name: 'Engenheiro (padrão)' },
+  { role: 'coordenador', name: 'Coordenador (padrão)' },
+  { role: 'planejador',  name: 'Planejador (padrão)' },
+  { role: 'gerente',     name: 'Gerente (padrão)' },
+  { role: 'diretor',     name: 'Diretor (padrão)' },
+];
+
+// Usuário pode pertencer a VÁRIOS grupos ao mesmo tempo (ver user_permission_groups);
+// o acesso efetivo é o MAIOR nível entre todos os grupos dele — nunca o menor. Assim,
+// colocar um engenheiro também num grupo mais permissivo só eleva o acesso dele, sem
+// tirar nada do que o grupo padrão do cargo já dava.
+async function migrateGroupColumnToJoinTable(client) {
+  try {
+    const marker = await client.query(
+      `SELECT 1 FROM system_settings WHERE key = 'user_permission_groups_migrated'`
+    );
+    if (marker.rows.length > 0) return;
+
+    const colExists = await client.query(`
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name='users' AND column_name='permission_group_id'
+    `);
+    if (colExists.rows.length > 0) {
+      await client.query(`
+        INSERT INTO user_permission_groups (user_id, group_id)
+        SELECT id, permission_group_id FROM users WHERE permission_group_id IS NOT NULL
+        ON CONFLICT DO NOTHING
+      `);
+      await client.query(`ALTER TABLE users DROP COLUMN permission_group_id`);
+      console.log('✅ Migrado permission_group_id (coluna única) para user_permission_groups (N:N)');
+    }
+
+    await client.query(
+      `INSERT INTO system_settings (key, value) VALUES ('user_permission_groups_migrated', 'true')
+       ON CONFLICT (key) DO NOTHING`
+    );
+  } catch (err) {
+    console.warn('⚠️ Erro ao migrar permission_group_id para tabela N:N:', err.message);
+  }
+}
+
+async function seedPermissionGroups(client) {
+  try {
+    const marker = await client.query(
+      `SELECT 1 FROM system_settings WHERE key = 'permission_groups_seeded'`
+    );
+    if (marker.rows.length > 0) return;
+
+    const groupIdByRole = {};
+    for (const { role, name } of DEFAULT_ROLE_GROUPS) {
+      const r = await client.query(
+        `INSERT INTO permission_groups (name, description, default_for_role)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (default_for_role) DO UPDATE SET name = permission_groups.name
+         RETURNING id`,
+        [name, `Grupo padrão atribuído automaticamente a usuários com cargo '${role}'.`, role]
+      );
+      const groupId = r.rows[0].id;
+      groupIdByRole[role] = groupId;
+      for (const pk of PAGE_KEYS) {
+        await client.query(
+          `INSERT INTO group_page_access (group_id, page_key, access)
+           VALUES ($1, $2, 'editor')
+           ON CONFLICT (group_id, page_key) DO NOTHING`,
+          [groupId, pk]
+        );
+      }
+    }
+
+    const { rows: users } = await client.query(
+      `SELECT id, role FROM users WHERE id NOT IN (SELECT user_id FROM user_permission_groups)`
+    );
+    let assigned = 0;
+    for (const u of users) {
+      const groupId = groupIdByRole[u.role];
+      if (!groupId) continue; // admin não usa grupo — bypass próprio em requirePageAccess
+      await client.query(
+        `INSERT INTO user_permission_groups (user_id, group_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+        [u.id, groupId]
+      );
+      assigned++;
+    }
+
+    // Remove os overrides de user_page_access que o backfill acima tinha gravado
+    // linha a linha para todo mundo — agora redundantes com o grupo recém-atribuído.
+    const { rowCount: cleaned } = await client.query(
+      `DELETE FROM user_page_access WHERE user_id IN (SELECT user_id FROM user_permission_groups)`
+    );
+
+    await client.query(
+      `INSERT INTO system_settings (key, value) VALUES ('permission_groups_seeded', 'true')
+       ON CONFLICT (key) DO NOTHING`
+    );
+    console.log(`✅ Grupos de permissão: ${DEFAULT_ROLE_GROUPS.length} grupo(s) padrão criado(s), ${assigned} usuário(s) atribuído(s), ${cleaned} override(s) de user_page_access removido(s)`);
+  } catch (err) {
+    console.warn('⚠️ Erro ao semear grupos de permissão:', err.message);
+  }
+}
+
+/* ─────────────────────────────────────────────
  * INIT DB (SAFE AZURE)
  * ───────────────────────────────────────────── */
 export async function initDB() {
@@ -172,6 +283,49 @@ await client.query(`
         updated_at TIMESTAMPTZ DEFAULT NOW(),
         PRIMARY KEY (user_id, page_key, button_key)
       );
+    `);
+
+    /* ───────── PERMISSION GROUPS ─────────
+     * Fonte do acesso PADRÃO de página/botão. Um usuário pode pertencer a vários
+     * grupos (user_permission_groups); o acesso efetivo é o MAIOR nível entre todos
+     * os grupos dele. Sem nenhum grupo, o padrão é 'none' (fail-closed). */
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS permission_groups (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(80) NOT NULL UNIQUE,
+        description TEXT,
+        default_for_role VARCHAR(20) UNIQUE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS group_page_access (
+        group_id INTEGER NOT NULL REFERENCES permission_groups(id) ON DELETE CASCADE,
+        page_key VARCHAR(50) NOT NULL,
+        access VARCHAR(10) NOT NULL DEFAULT 'none' CHECK (access IN ('none','viewer','editor')),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (group_id, page_key)
+      );
+
+      CREATE TABLE IF NOT EXISTS group_button_access (
+        group_id INTEGER NOT NULL REFERENCES permission_groups(id) ON DELETE CASCADE,
+        page_key VARCHAR(50) NOT NULL,
+        button_key VARCHAR(50) NOT NULL,
+        enabled BOOLEAN NOT NULL DEFAULT false,
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (group_id, page_key, button_key)
+      );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_permission_groups (
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        group_id INTEGER NOT NULL REFERENCES permission_groups(id) ON DELETE CASCADE,
+        PRIMARY KEY (user_id, group_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_user_permission_groups_group ON user_permission_groups(group_id);
     `);
 
     /* ───────── PROJECTS ───────── */
@@ -1138,6 +1292,8 @@ await client.query(`
 
     await ensureAdminUser(client);
     await backfillPageAccessDefaults(client);
+    await migrateGroupColumnToJoinTable(client);
+    await seedPermissionGroups(client);
 
   } catch (err) {
     console.error('❌ ERRO NO DB:', err);

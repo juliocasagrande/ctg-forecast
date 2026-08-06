@@ -241,11 +241,15 @@ export default function ForecastWizard({
 
   useEffect(() => { setLocalData(buildAll(entries, year)); setStep(0); setSaved(false); }, [entries, year]);
 
-  // Last month with Actual data in current year — all months <= this are locked for Forecast
-  let lastActualMonth = 0;
-  for (const e of entries) {
-    if (e.type !== 'Actual' || parseInt(e.year) !== parseInt(year)) continue;
-    if (parseFloat(e.value) > 0 && parseInt(e.month) > lastActualMonth) lastActualMonth = parseInt(e.month);
+  // Last month with Actual data in current year, PER CATEGORY — all months <= this are locked for Forecast
+  const lastActualMonthByCategory = {};
+  for (const cat of CATEGORIES) {
+    let last = 0;
+    for (const e of entries) {
+      if (e.type !== 'Actual' || parseInt(e.year) !== parseInt(year) || e.category !== cat) continue;
+      if (parseFloat(e.value) > 0 && parseInt(e.month) > last) last = parseInt(e.month);
+    }
+    lastActualMonthByCategory[cat] = last;
   }
 
 
@@ -374,6 +378,7 @@ export default function ForecastWizard({
   const getActForecastTotal = () => {
     if (activeType !== 'Forecast') return getTypeTotal(activeType);
     return CATEGORIES.reduce((sum, cat) => {
+      const lastActualMonth = lastActualMonthByCategory[cat] || 0;
       return sum + Array.from({length:12},(_,i)=>i+1).reduce((s, m) => {
         const actualVal   = getValue('Actual', cat, m);
         const forecastVal = getValue('Forecast', cat, m);
@@ -643,7 +648,7 @@ export default function ForecastWizard({
               refValue={getRef(activeType,cat,month)} refLabel={`Ref. ${TYPE_THEME[REF_TYPE[activeType]]?.label||''}`}
               theme={theme} onChange={(m,v,c)=>handleChange(activeType,cat,m,v,c)}
               otherComments={getOtherComments(activeType,cat,month)}
-              lockedByActual={lastActualMonth > 0 && month <= lastActualMonth}
+              lockedByActual={(lastActualMonthByCategory[cat] || 0) > 0 && month <= (lastActualMonthByCategory[cat] || 0)}
               activeType={activeType}
               viewOnly={isActiveReadOnly}
             />

@@ -41,6 +41,12 @@ const ROLE_RANK = { engenheiro: 1, coordenador: 2, planejador: 3, gerente: 3, di
 // desatualização perceptível. Mudanças de permissão feitas pelo admin invalidam
 // a entrada na hora (ver invalidateAuthCache), então o TTL é só uma rede de
 // segurança para o caso de algo não chamar a invalidação.
+// ATENÇÃO: este cache é em memória (por processo). Ele só é seguro enquanto o
+// backend rodar em uma única instância — com múltiplas réplicas, invalidateAuthCache
+// só limpa a instância que atendeu a requisição do admin, deixando as demais
+// servirem permissões desatualizadas por até AUTH_CACHE_TTL_MS. Se o deploy passar
+// a rodar mais de uma instância, isso precisa de invalidação entre processos
+// (pub/sub, ou consulta ao banco) antes de confiar neste cache.
 const AUTH_CACHE_TTL_MS = 15_000;
 const authCache = new Map(); // userId -> { data, expiresAt }
 
@@ -136,71 +142,83 @@ export async function requireAuth(req, res, next) {
     }
     const allAreasAccess = emailOverride === 'gerente';
 
-    // 3. Permissões de página configuradas individualmente (ver user_page_access).
-    //    Página sem linha aqui é tratada como 'none' (fail-closed — acesso precisa
-    //    ser concedido explicitamente pelo admin).
+    // 3. Acesso de página/botão: um usuário pode pertencer a VÁRIOS grupos de
+    //    permissão ao mesmo tempo (user_permission_groups) — o efetivo é o MAIOR
+    //    nível entre todos eles. Sem nenhum grupo, o padrão é 'none' (fail-closed).
     //    Com delegação ativa, o delegado herda o MAIOR nível de acesso entre o
-    //    próprio e o(s) delegador(es) — a delegação nunca deve resultar em MENOS
-    //    acesso do que o usuário já tinha por conta própria.
+    //    próprio (já resolvido pelos seus grupos) e o(s) delegador(es) — nunca
+    //    resulta em MENOS acesso do que o usuário já tinha por conta própria.
     const relevantUserIds = [decoded.id, ...delegatorIds];
 
-    // 3 e 4. Permissões de página e de botões — ambas dependem de relevantUserIds,
-    //        mas não uma da outra, então também rodam em paralelo.
-    const [pageAccessR, buttonAccessR] = await Promise.all([
+    const membershipR = await pool.query(
+      'SELECT user_id, group_id FROM user_permission_groups WHERE user_id = ANY($1::int[])',
+      [relevantUserIds]
+    );
+    const groupIdsByUser = {};
+    for (const row of membershipR.rows) (groupIdsByUser[row.user_id] ??= []).push(row.group_id);
+    const relevantGroupIds = [...new Set(membershipR.rows.map(r => r.group_id))];
+
+    const [groupPageAccessR, groupButtonAccessR] = await Promise.all([
       pool.query(
-        'SELECT user_id, page_key, access FROM user_page_access WHERE user_id = ANY($1::int[])',
-        [relevantUserIds]
+        'SELECT group_id, page_key, access FROM group_page_access WHERE group_id = ANY($1::int[])',
+        [relevantGroupIds]
       ),
       pool.query(
-        'SELECT user_id, page_key, button_key, enabled FROM user_button_access WHERE user_id = ANY($1::int[]) AND enabled = false',
-        [relevantUserIds]
+        'SELECT group_id, page_key, button_key FROM group_button_access WHERE group_id = ANY($1::int[]) AND enabled = false',
+        [relevantGroupIds]
       )
     ]);
+
+    const groupPageByGroup = {};
+    for (const row of groupPageAccessR.rows) (groupPageByGroup[row.group_id] ??= {})[row.page_key] = row.access;
+
     const PAGE_ACCESS_RANK = { none: 0, viewer: 1, editor: 2 };
+    // Maior nível entre TODOS os grupos de um usuário (cada usuário relevante
+    // resolve os próprios grupos antes de entrar na disputa "próprio x delegador(es)").
+    function ownPageAccess(uid, pk) {
+      let best = 0;
+      for (const gid of groupIdsByUser[uid] || []) {
+        best = Math.max(best, PAGE_ACCESS_RANK[groupPageByGroup[gid]?.[pk] || 'none'] ?? 0);
+      }
+      return Object.keys(PAGE_ACCESS_RANK).find(k => PAGE_ACCESS_RANK[k] === best) || 'none';
+    }
     const pageAccess = {};
-    if (delegatorIds.length > 0) {
-      // O delegado herda o MAIOR nível de acesso entre o próprio e o(s) delegador(es);
-      // sem override explícito para um usuário/página, esse usuário contribui 'none'.
-      const byUser = {};
-      for (const row of pageAccessR.rows) (byUser[row.user_id] ??= {})[row.page_key] = row.access;
-      for (const pk of PAGE_KEYS) {
-        let best = 0; // 'none'
-        for (const uid of relevantUserIds) {
-          const val = byUser[uid]?.[pk] || 'none';
-          best = Math.max(best, PAGE_ACCESS_RANK[val] ?? 0);
-        }
-        pageAccess[pk] = Object.keys(PAGE_ACCESS_RANK).find(k => PAGE_ACCESS_RANK[k] === best) || 'none';
+    for (const pk of PAGE_KEYS) {
+      let best = 0; // 'none'
+      for (const uid of relevantUserIds) {
+        best = Math.max(best, PAGE_ACCESS_RANK[ownPageAccess(uid, pk)] ?? 0);
       }
-    } else {
-      for (const row of pageAccessR.rows) {
-        if (PAGE_KEYS.includes(row.page_key)) pageAccess[row.page_key] = row.access;
-      }
+      pageAccess[pk] = Object.keys(PAGE_ACCESS_RANK).find(k => PAGE_ACCESS_RANK[k] === best) || 'none';
     }
 
-    // 4. Botões de ação desabilitados individualmente (ver user_button_access).
-    //    Botão sem linha aqui é tratado como habilitado (comportamento padrão).
-    //    Mesma lógica de delegação: habilitado para o delegado se estiver habilitado
-    //    para ele OU para qualquer um dos delegadores.
-    const buttonAccess = {};
-    if (delegatorIds.length > 0) {
-      const disabledByUser = {};
-      for (const row of buttonAccessR.rows) {
-        ((disabledByUser[row.user_id] ??= {})[row.page_key] ??= new Set()).add(row.button_key);
-      }
-      // Só marca como desabilitado se estiver desabilitado para TODOS os usuários relevantes.
-      const ownDisabled = disabledByUser[decoded.id] || {};
-      for (const [pageKey, buttons] of Object.entries(ownDisabled)) {
-        for (const buttonKey of buttons) {
-          const disabledForAll = relevantUserIds.every(uid =>
-            disabledByUser[uid]?.[pageKey]?.has(buttonKey)
-          );
-          if (disabledForAll) (buttonAccess[pageKey] ??= {})[buttonKey] = false;
+    // 4. Botões de ação: linha em group_button_access sempre significa "desabilitado"
+    //    (padrão é habilitado). Desabilitado para um usuário só se TODOS os grupos
+    //    dele desabilitarem; no resultado final, só se desabilitado para TODOS os
+    //    usuários relevantes (próprio + delegador(es)).
+    const groupDisabledByGroup = {};
+    for (const row of groupButtonAccessR.rows) {
+      ((groupDisabledByGroup[row.group_id] ??= {})[row.page_key] ??= new Set()).add(row.button_key);
+    }
+
+    function isButtonDisabledForUser(uid, pageKey, buttonKey) {
+      const groupIds = groupIdsByUser[uid] || [];
+      if (!groupIds.length) return false;
+      return groupIds.every(gid => groupDisabledByGroup[gid]?.[pageKey]?.has(buttonKey));
+    }
+
+    const candidatePairs = new Set();
+    for (const uid of relevantUserIds) {
+      for (const gid of groupIdsByUser[uid] || []) {
+        for (const [pk, set] of Object.entries(groupDisabledByGroup[gid] || {})) {
+          for (const bk of set) candidatePairs.add(`${pk} ${bk}`);
         }
       }
-    } else {
-      for (const row of buttonAccessR.rows) {
-        (buttonAccess[row.page_key] ??= {})[row.button_key] = false;
-      }
+    }
+    const buttonAccess = {};
+    for (const pair of candidatePairs) {
+      const [pageKey, buttonKey] = pair.split(' ');
+      const disabledForAll = relevantUserIds.every(uid => isButtonDisabledForUser(uid, pageKey, buttonKey));
+      if (disabledForAll) (buttonAccess[pageKey] ??= {})[buttonKey] = false;
     }
 
     const computed = {
@@ -211,6 +229,7 @@ export async function requireAuth(req, res, next) {
       _managerAccessOverride: allAreasAccess,
       _allAreasAccess: allAreasAccess,
       _delegatorIds: delegatorIds, // IDs dos delegadores — permite acesso aos projetos deles
+      _permissionGroupIds: groupIdsByUser[decoded.id] || [],
       _pageAccess: pageAccess,
       _buttonAccess: buttonAccess,
     };

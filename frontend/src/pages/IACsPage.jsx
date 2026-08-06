@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../utils/api.js';
 import { useToast } from '../components/ui/Toast.jsx';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useAuth, usePageAccess } from '../context/AuthContext.jsx';
 import AlertBell from '../components/ui/AlertBell.jsx';
 import ColumnFilterDropdown from '../components/ui/ColumnFilterDropdown.jsx';
 import ColumnResizeHandle from '../components/ui/ColumnResizeHandle.jsx';
@@ -16,6 +16,7 @@ import AppCombobox from '../components/ui/AppCombobox.jsx';
 import { isIacOpenedInYear } from '../utils/iacDates.js';
 import { formatActivityLine, formatRemainingTime, getCheckinRemainingMs } from '../utils/listActivity.js';
 import useColumnWidths from '../hooks/useColumnWidths.js';
+import { getAlertRole, resolveRoleDays } from '../utils/roleDays.js';
 
 const IACS_COL_WIDTHS = [40, 40, 140, 90, 110, 90, 105, 60, 90, 220, 180, 130, 130, 110, 80, 110, 100, 120, 130, 140, 100];
 
@@ -644,7 +645,7 @@ function fmtDateBR(val) {
 }
 
 /* ─── IAC Modal ──────────────────────────────────────────────────────────────── */
-function IACModal({ item, onClose, onSave, onDelete, onDuplicate, onCheckinSaved, isNew, saving, deleting, allUsers, allRequesters, allChineseStaff, allOrganizers, allSupervisors }) {
+function IACModal({ item, onClose, onSave, onDelete, onDuplicate, onCheckinSaved, isNew, saving, deleting, allUsers, allRequesters, allChineseStaff, allOrganizers, allSupervisors, pageReadOnly }) {
   const initForm = (src) => src
     ? { ...src, opening_date: toDateInput(src.opening_date), when_open: toDateInput(src.when_open), acceptance_letter_signed: toDateInput(src.acceptance_letter_signed) }
     : { ...EMPTY_IAC };
@@ -657,7 +658,7 @@ function IACModal({ item, onClose, onSave, onDelete, onDuplicate, onCheckinSaved
   const toast = useToast().toast;
   const { user } = useAuth();
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
-  useModalHotkeys(true, onClose, saving ? undefined : () => onSave(form));
+  useModalHotkeys(true, onClose, (saving || pageReadOnly) ? undefined : () => onSave(form));
 
   // Fetch last viewed and last edited info
   useEffect(() => {
@@ -925,7 +926,7 @@ function IACModal({ item, onClose, onSave, onDelete, onDuplicate, onCheckinSaved
           borderTop: '1px solid #E2E8F0', background: '#FAFAFA',
           display: 'flex', alignItems: 'center', gap: 10,
         }}>
-          {!isNew && (
+          {!isNew && !pageReadOnly && (
             <div style={{ display: 'flex', gap: 8, marginRight: 'auto' }}>
               <button onClick={() => onDelete(form.id)} disabled={deleting} style={{
                 padding: '8px 18px', borderRadius: 8, border: '1.5px solid #FCA5A5',
@@ -953,18 +954,20 @@ function IACModal({ item, onClose, onSave, onDelete, onDuplicate, onCheckinSaved
             </div>
           )}
           <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-primary" onClick={() => onSave(form)} disabled={saving} style={{ opacity: saving ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 5 }}>
-            {saving ? (
-              <>Salvando...</>
-            ) : (
-              <>
-                <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
-                  <path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6h5a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2h5v5.586l-1.293-1.293zM9 4a1 1 0 012 0v2H9V4z"/>
-                </svg>
-                Salvar
-              </>
-            )}
-          </button>
+          {!pageReadOnly && (
+            <button className="btn btn-primary" onClick={() => onSave(form)} disabled={saving} style={{ opacity: saving ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 5 }}>
+              {saving ? (
+                <>Salvando...</>
+              ) : (
+                <>
+                  <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                    <path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6h5a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2h5v5.586l-1.293-1.293zM9 4a1 1 0 012 0v2H9V4z"/>
+                  </svg>
+                  Salvar
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -975,7 +978,9 @@ function IACModal({ item, onClose, onSave, onDelete, onDuplicate, onCheckinSaved
 export default function IACsPage() {
   const { toast: addToast, confirm } = useToast();
   const { user } = useAuth();
+  const pageReadOnly = usePageAccess('iacs') === 'viewer';
   const [items, setItems]               = useState([]);
+  const [alertSettings, setAlertSettings] = useState(null);
   const [allUsers, setAllUsers]         = useState([]);
   const [loading, setLoading]           = useState(true);
   const [search, setSearch]             = useState('');
@@ -1034,6 +1039,11 @@ export default function IACsPage() {
     return data;
   }, [items, search, filterStatus, filterPriority, activeTab, showMyIACs, user]);
 
+  const statusDotThresholdDays = useMemo(
+    () => resolveRoleDays(alertSettings, 'iac_alert_role_days', 'iac_alert_interval_days', 6, getAlertRole(user)),
+    [alertSettings, user]
+  );
+
   // Unique values for column filters — only show values that exist in current data
   const colFilterAreaValues = useMemo(() => {
     const values = [...new Set(preFiltered.map(i => i.area).filter(Boolean))];
@@ -1071,12 +1081,17 @@ export default function IACsPage() {
     fetchItems();
     // Fetch all users for responsible dropdowns (exclude admins)
     api.get('/users/for-delegation').then(r => setAllUsers(r.data.filter(u => u.role !== 'admin'))).catch(() => setAllUsers([]));
+    // Prazo por cargo para a bolinha de status, sincronizado com o alerta de IACs configurado em Configurações
+    api.get('/settings').then(r => setAlertSettings(r.data)).catch(() => setAlertSettings(null));
 
-    const handleNew = () => { setIsNew(true); setSelected({ ...EMPTY_IAC }); };
+    const handleNew = () => {
+      if (pageReadOnly) { addToast('Sem permissão para criar IACs.', 'error'); return; }
+      setIsNew(true); setSelected({ ...EMPTY_IAC });
+    };
     window.addEventListener('new-iac', handleNew);
 
-    const canImport = ['coordenador', 'planejador', 'admin'].includes(user?.role) ||
-      user?.email === 'julio.casagrande@ctgbr.com.br';
+    const canImport = (['coordenador', 'planejador', 'admin'].includes(user?.role) ||
+      user?.email === 'julio.casagrande@ctgbr.com.br') && !pageReadOnly;
 
     const handleImport = () => {
       if (!canImport) { addToast('Sem permissão para importar.', 'error'); return; }
@@ -1102,9 +1117,10 @@ export default function IACsPage() {
       window.removeEventListener('new-iac', handleNew);
       window.removeEventListener('import-iacs', handleImport);
     };
-  }, [user?.role, user?.email]);
+  }, [user?.role, user?.email, pageReadOnly]);
 
   const handleExport = async () => {
+    if (pageReadOnly) { addToast('Sem permissão para exportar.', 'error'); return; }
     try {
       const base = import.meta.env.VITE_API_URL || '/api';
       const res = await fetch(`${base}/export/iacs`, { credentials: 'include' });
@@ -1657,7 +1673,7 @@ export default function IACsPage() {
                           onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? '#fff' : '#FAFAFA'}
                         >
                           <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                            <StatusDot updatedAt={item.updated_at} />
+                            <StatusDot updatedAt={item.updated_at} thresholdDays={statusDotThresholdDays} />
                           </td>
                           <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                             {item.link_path && (
@@ -1743,6 +1759,7 @@ export default function IACsPage() {
           allChineseStaff={allChineseStaff}
           allOrganizers={allOrganizers}
           allSupervisors={allSupervisors}
+          pageReadOnly={pageReadOnly}
         />
       )}
       {importPreview && (

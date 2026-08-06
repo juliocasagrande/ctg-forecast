@@ -9,6 +9,18 @@ const router = express.Router();
 
 router.use(requireAuth);
 
+// Escapes HTML-significant characters so user/DB-controlled text can never be
+// interpreted as markup when interpolated into the generated report HTML.
+function escapeHTML(str) {
+  return String(str ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[c]));
+}
+
 // ── Controle de acesso ────────────────────────────────────────────────────────
 function requireMonthlyReportAccess(req, res, next) {
   const { role, email } = req.user;
@@ -206,21 +218,22 @@ router.post(
       function moneyOrRaw(v) {
         if (!v || v === '-') return '-';
         const s = String(v);
-        if (/[a-zA-Z+;|]/.test(s) || s.includes('  ')) return s;
+        if (/[a-zA-Z+;|]/.test(s) || s.includes('  ')) return escapeHTML(s);
         const n = moneyToFloat(s);
-        return n !== null ? fmtBRL(n) : s;
+        return n !== null ? fmtBRL(n) : escapeHTML(s);
       }
 
       function badgeAditivo(v) {
         const s = trat(v).toUpperCase().replace(/Ã/g, 'A');
         if (s === 'SIM') return "<span class='badge info'>SIM</span>";
         if (['NAO', 'NÃO', 'N', 'NAO'].includes(s)) return "<span class='badge success'>NÃO</span>";
-        return trat(v);
+        return escapeHTML(trat(v));
       }
 
       function mdToHtml(text) {
         if (!text || text === '-') return '-';
         let s = String(text);
+        s = escapeHTML(s);
         s = s.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
         s = s.replace(/((?:[ \t]*\|[^\n]+\|[ \t]*(?:\n|$))+)/g, (block) => {
           const lines = block.split('\n')
@@ -308,24 +321,28 @@ router.post(
         if (!hasAnyValue) return;
         const vencDate = parseDate(cellVal(row, 'VENC'));
         rows.push({
-          UHE:     trat(cellVal(row, 'UHE')),
-          AREA:    trat(cellVal(row, 'AREA')),
-          PROJ:    trat(cellVal(row, 'PROJ')),
-          PROJRES: trat(cellVal(row, 'PROJRES')),
-          FORN:    trat(cellVal(row, 'FORN')),
-          GEST:    trat(cellVal(row, 'GEST')),
-          PP:      trat(cellVal(row, 'PP')),
+          // Plain-text fields interpolated verbatim into the report — escaped here.
+          UHE:     escapeHTML(trat(cellVal(row, 'UHE'))),
+          AREA:    escapeHTML(trat(cellVal(row, 'AREA'))),
+          PROJ:    escapeHTML(trat(cellVal(row, 'PROJ'))),
+          PROJRES: escapeHTML(trat(cellVal(row, 'PROJRES'))),
+          FORN:    escapeHTML(trat(cellVal(row, 'FORN'))),
+          GEST:    escapeHTML(trat(cellVal(row, 'GEST'))),
+          PP:      escapeHTML(trat(cellVal(row, 'PP'))),
           VENC:    vencDate,
+          // VAL/REAL/SALDO/SI/REALSI/SALDO_SI pass through moneyOrRaw(), which escapes.
           VAL:     trat(cellVal(row, 'VAL_CONTR')),
           REAL:    trat(cellVal(row, 'REAL_CONTR')),
           SALDO:   trat(cellVal(row, 'SALDO_CONTR')),
           SI:      trat(cellVal(row, 'VAL_SI')),
           REALSI:  trat(cellVal(row, 'REAL_SI')),
           SALDO_SI:trat(cellVal(row, 'SALDO_SI')),
+          // RESUMO/CRONOGRAMA pass through mdToHtml(), which escapes.
           RESUMO:  trat(cellVal(row, 'RESUMO')),
-          NAT:     trat(cellVal(row, 'NAT')),
-          EMPRESA: trat(cellVal(row, 'EMPRESA')),
-          REAJUSTES:           trat(cellVal(row, 'REAJUSTES')),
+          NAT:     escapeHTML(trat(cellVal(row, 'NAT'))),
+          EMPRESA: escapeHTML(trat(cellVal(row, 'EMPRESA'))),
+          REAJUSTES:           escapeHTML(trat(cellVal(row, 'REAJUSTES'))),
+          // ADITIVOS/ADITIVO_EM_ANDAMENTO pass through badgeAditivo(), which escapes.
           ADITIVOS:            trat(cellVal(row, 'ADITIVOS')),
           ADITIVO_EM_ANDAMENTO:trat(cellVal(row, 'ADITIVO_EM_ANDAMENTO')),
           CRONOGRAMA:          trat(cellVal(row, 'CRONOGRAMA')),
@@ -458,7 +475,7 @@ router.post(
 
 
       const html = buildHTML({
-        mesAno: `${mes} de ${ano}`,
+        mesAno: escapeHTML(`${mes} de ${ano}`),
         uheOptions, areaOptions,
         table12,
         sections: sections.join('\n'),
@@ -719,21 +736,22 @@ router.get(
       function moneyOrRaw(v) {
         if (!v || v === '-') return '-';
         const s = String(v);
-        if (/[a-zA-Z+;|]/.test(s) || s.includes('  ')) return s;
+        if (/[a-zA-Z+;|]/.test(s) || s.includes('  ')) return escapeHTML(s);
         const n = moneyToFloat(s);
-        return n !== null ? fmtBRL(n) : s;
+        return n !== null ? fmtBRL(n) : escapeHTML(s);
       }
 
       function badgeAditivo(v) {
         const s = (v || '-').toUpperCase().replace(/Ã/g, 'A');
         if (s === 'SIM') return "<span class='badge info'>SIM</span>";
         if (['NAO', 'NÃO', 'N'].includes(s)) return "<span class='badge success'>NÃO</span>";
-        return v || '-';
+        return escapeHTML(v || '-');
       }
 
       function mdToHtml(text) {
         if (!text || text === '-') return '-';
         let s = String(text);
+        s = escapeHTML(s);
         s = s.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
         s = s.replace(/((?:[ \t]*\|[^\n]+\|[ \t]*(?:\n|$))+)/g, (block) => {
           const lines = block.split('\n').map(l => l.trim()).filter(l => l.startsWith('|') && l.endsWith('|'));
@@ -793,7 +811,7 @@ router.get(
       function breakdownKvRows(breakdown) {
         if (!breakdown || !breakdown.length) return '';
         return breakdown.map(({ uhe, valor }) => `
-        <div class='k sub'>↳ ${uhe}</div><div class='v sub'>${moneyOrRaw(valor)}</div>`).join('');
+        <div class='k sub'>↳ ${escapeHTML(uhe)}</div><div class='v sub'>${moneyOrRaw(valor)}</div>`).join('');
       }
 
       // Per-usina saldo can only be deduced when valor and realizado were broken
@@ -814,14 +832,16 @@ router.get(
 
       // Parse dates and prepare data rows
       const dataRows = rows.map(r => ({
-        UHE: r.uhe || '-',
-        AREA: r.area || '-',
-        PROJ: r.proj || '-',
-        PROJRES: r.projres || '-',
-        FORN: r.forn || '-',
-        GEST: r.gestor || '-',
-        PP: r.pp || '-',
+        // Plain-text fields interpolated verbatim into the report — escaped here.
+        UHE: escapeHTML(r.uhe || '-'),
+        AREA: escapeHTML(r.area || '-'),
+        PROJ: escapeHTML(r.proj || '-'),
+        PROJRES: escapeHTML(r.projres || '-'),
+        FORN: escapeHTML(r.forn || '-'),
+        GEST: escapeHTML(r.gestor || '-'),
+        PP: escapeHTML(r.pp || '-'),
         VENC: r.venc ? new Date(r.venc) : null,
+        // VAL/REAL/SALDO/SI/REALSI/SALDO_SI pass through moneyOrRaw(), which escapes.
         VAL: r.val ?? '-',
         REAL: r.real ?? '-',
         SALDO: r.saldo ?? '-',
@@ -832,10 +852,12 @@ router.get(
         REAL_BREAKDOWN: Array.isArray(r.real_breakdown) ? r.real_breakdown : [],
         SI_BREAKDOWN: Array.isArray(r.si_breakdown) ? r.si_breakdown : [],
         REALSI_BREAKDOWN: Array.isArray(r.realsi_breakdown) ? r.realsi_breakdown : [],
+        // RESUMO/CRONOGRAMA pass through mdToHtml(), which escapes.
         RESUMO: r.resumo || '-',
-        NAT: r.nat || '-',
-        EMPRESA: r.empresa || '-',
-        REAJUSTES: r.reajustes || '-',
+        NAT: escapeHTML(r.nat || '-'),
+        EMPRESA: escapeHTML(r.empresa || '-'),
+        REAJUSTES: escapeHTML(r.reajustes || '-'),
+        // ADITIVOS/ADITIVO_EM_ANDAMENTO pass through badgeAditivo(), which escapes.
         ADITIVOS: r.aditivos || '-',
         ADITIVO_EM_ANDAMENTO: r.aditivo_em_andamento || '-',
         CRONOGRAMA: r.cronograma || '-',
@@ -969,7 +991,7 @@ router.get(
       }
 
       const monthNames = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-      const mesAno = `${monthNames[parseInt(mes) - 1] || mes} de ${ano}`;
+      const mesAno = escapeHTML(`${monthNames[parseInt(mes) - 1] || mes} de ${ano}`);
 
       const html = buildHTML({ mesAno, uheOptions, areaOptions, table12, sections: sections.join('\n') });
 

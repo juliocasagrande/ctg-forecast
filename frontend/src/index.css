@@ -401,6 +401,9 @@ body{font-family:var(--font-body);background:var(--bg-app);color:var(--text-prim
 .btn-ghost:hover{background:var(--bg-app);color:var(--text-primary);}
 .btn-danger{background:#FEE2E2;color:#DC2626;}
 .btn-danger:hover{background:#FECACA;}
+.btn-success{background:#15803D;color:#fff;box-shadow:0 0 0 2px rgba(21,128,61,0.25);}
+.btn-success:hover{background:#166534;transform:translateY(-1px);}
+.btn-success:disabled{opacity:0.6;cursor:not-allowed;transform:none;}
 .btn-export{background:linear-gradient(135deg,#166534,#15803d);color:#fff;}
 .btn-export:hover{background:linear-gradient(135deg,#15803d,#16a34a);transform:translateY(-1px);}
 .btn-sm{padding:5px 10px;font-size:0.76rem;}

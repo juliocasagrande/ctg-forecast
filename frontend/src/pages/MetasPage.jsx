@@ -52,6 +52,18 @@ function escapeHTML(v) {
     .replaceAll("'", '&#39;');
 }
 
+// Rejects dangerous URL schemes (javascript:, data:, vbscript:, ...) before a
+// user-supplied link is ever placed into an href — HTML-escaping alone does
+// not stop a javascript: URL from executing when clicked.
+function safeHref(v) {
+  const value = String(v ?? '').trim();
+  if (!value) return '';
+  if (/^[a-z][a-z\d+.-]*:/i.test(value)) {
+    return /^(https?|mailto):/i.test(value) ? value : '';
+  }
+  return value;
+}
+
 function areaLabel(area) {
   return AREAS.find(a => a.value === area)?.label || area || '-';
 }
@@ -261,7 +273,7 @@ function buildGoalsHTML({ member, metas, year }) {
   }).join('');
   const rows = metas.map(m => {
     const progress = Math.min(120, achievementPercent(m) || 0);
-    const evidenceLink = m.evidence_link ? escapeHTML(m.evidence_link) : '';
+    const evidenceLink = m.evidence_link ? escapeHTML(safeHref(m.evidence_link)) : '';
     const images = visibleEvidenceImages(m);
     const fits = visibleEvidenceFits(m);
     const imageCells = images.map((src, idx) => `
@@ -885,8 +897,8 @@ function MetaCell({ meta, member, canEdit, deleting, uploading, onEdit, onDelete
       <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: 2 }}>
         Peso {meta.weight ? fmtPercent(meta.weight * 100) : '-'} - Realizado {fmtPercent(meta.achieved_value)}
       </div>
-      {meta.evidence_link && (
-        <a href={meta.evidence_link} target="_blank" rel="noopener noreferrer" title={meta.evidence_link}
+      {safeHref(meta.evidence_link) && (
+        <a href={safeHref(meta.evidence_link)} target="_blank" rel="noopener noreferrer" title={meta.evidence_link}
           style={{ display: 'inline-block', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--ctg-blue)', fontSize: '0.64rem', fontWeight: 700, marginTop: 3 }}>
           Link evidencias
         </a>
@@ -1115,7 +1127,7 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
   }
 
   function openNewGeneralMeta() {
-    const targetArea = role === 'coordenador' ? (user?.area || 'eletrica') : area;
+    const targetArea = viewRole === 'coordenador' ? (user?.area || 'eletrica') : area;
     const areaGeneralMetas = generalMetas.filter(m => (m.assigned_area || m.area) === targetArea);
     setModal({
       meta: {
@@ -1130,6 +1142,7 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
   }
 
   function openNewMeta() {
+    if (pageReadOnly) return;
     const memberMetas = metasByUser[user?.id] || [];
     setModal({
       meta: {
@@ -1206,8 +1219,8 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
                   <td style={{ padding: '7px 10px', whiteSpace: 'nowrap' }}>{fmtPercent(m.achieved_value)}</td>
                   <td style={{ padding: '7px 10px', fontWeight: 700, color: (achievementPercent(m) || 0) >= 100 ? '#059669' : 'var(--text-secondary)' }}>{fmtPercent(achievementPercent(m))}</td>
                   <td style={{ padding: '7px 10px' }}>
-                    {m.evidence_link ? (
-                      <a href={m.evidence_link} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ctg-blue)', fontWeight: 700 }}>Abrir</a>
+                    {safeHref(m.evidence_link) ? (
+                      <a href={safeHref(m.evidence_link)} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ctg-blue)', fontWeight: 700 }}>Abrir</a>
                     ) : (
                       <span style={{ color: 'var(--text-muted)' }}>-</span>
                     )}
@@ -1222,9 +1235,9 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
   }
 
   function renderGeneralGoalsTable() {
-    const targetArea = role === 'coordenador' ? (user?.area || 'eletrica') : area;
+    const targetArea = viewRole === 'coordenador' ? (user?.area || 'eletrica') : area;
     const rows = generalMetas.filter(m => canViewAllMetas || (m.assigned_area || m.area) === targetArea);
-    const canManageGeneral = !pageReadOnly && (role === 'coordenador' || ['admin', 'planejador'].includes(role));
+    const canManageGeneral = !pageReadOnly && (viewRole === 'coordenador' || ['admin', 'planejador'].includes(viewRole));
     if (!canManageGeneral && rows.length === 0) return null;
     return (
       <CollapsibleSection
@@ -1299,7 +1312,7 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
                 const concluded = mm.filter(m => m.status === 'Concluida').length;
                 const evidences = mm.filter(m => visibleEvidenceImages(m).length > 0).length;
                 const canEdit = includeRole
-                  ? canEditOthers && !(role === 'coordenador' && ['gerente', 'diretor'].includes(member.role))
+                  ? canEditOthers && !(viewRole === 'coordenador' && ['gerente', 'diretor'].includes(member.role))
                   : !pageReadOnly && (canEditOthers || member.id === user?.id);
                 const roleLabel = { gerente: 'Gerente', diretor: 'Diretor', coordenador: 'Coord.', planejador: 'Planejador' }[member.role] || member.role;
 
@@ -1448,7 +1461,7 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
                 </tr>
               ) : sortedMetas.map((m, i) => {
                 const rowTone = m.is_general ? TABLE_TONES.collective : tone;
-                const canManageCollective = m.is_general && (role === 'coordenador' || ['admin', 'planejador'].includes(role));
+                const canManageCollective = m.is_general && (viewRole === 'coordenador' || ['admin', 'planejador'].includes(viewRole));
                 const canEditRow = m.is_general ? canManageCollective : canEdit;
                 const canOpenRow = m.is_general || canEditRow;
                 return (
@@ -1470,8 +1483,8 @@ export default function MetasPage({ areaFilter: areaFilterProp = '', year: yearP
                   <td style={{ padding: '8px 10px', fontWeight: 700, color: (achievementPercent(m) || 0) >= 100 ? '#059669' : 'var(--text-secondary)' }}>{fmtPercent(achievementPercent(m))}</td>
                   <td style={{ padding: '8px 10px' }}><StatusBadge status={m.status} /></td>
                   <td style={{ padding: '8px 10px' }}>
-                    {m.evidence_link ? (
-                      <a href={m.evidence_link} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ color: 'var(--ctg-blue)', fontWeight: 700 }}>Abrir</a>
+                    {safeHref(m.evidence_link) ? (
+                      <a href={safeHref(m.evidence_link)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ color: 'var(--ctg-blue)', fontWeight: 700 }}>Abrir</a>
                     ) : (
                       <span style={{ color: 'var(--text-muted)' }}>-</span>
                     )}

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import ExcelJS from 'exceljs';
 import { pool } from '../db/schema.js';
-import { requireAuth, requireProjectAccess } from '../middleware/auth.js';
+import { requireAuth, requireProjectAccess, requirePageAccess } from '../middleware/auth.js';
 import { buildLegacyWorkbook } from '../utils/pmsExcelFormat.js';
 
 const router = Router();
@@ -747,7 +747,7 @@ router.get('/planejador', async (req, res) => {
 /* ══════════════════════════════════════════════════════
  * PROJECTS TRACKING EXPORT
  * ══════════════════════════════════════════════════════ */
-router.get('/projects-tracking', requireAuth, async (req, res) => {
+router.get('/projects-tracking', requireAuth, requirePageAccess('projects_tracking'), async (req, res) => {
   try {
     const r = await pool.query(`
       SELECT * FROM lists_projects_tracking
@@ -947,7 +947,7 @@ router.get('/projects-tracking', requireAuth, async (req, res) => {
 /* ══════════════════════════════════════════════════════
  * DOCUMENTS EXPORT
  * ══════════════════════════════════════════════════════ */
-router.get('/documents', requireAuth, async (req, res) => {
+router.get('/documents', requireAuth, requirePageAccess('documents'), async (req, res) => {
   try {
     const { year } = req.query;
     let query = `
@@ -1098,7 +1098,7 @@ router.get('/documents', requireAuth, async (req, res) => {
 /* ══════════════════════════════════════════════════════
  * DRAWINGS EXPORT (Controle de Numeração de Desenhos)
  * ══════════════════════════════════════════════════════ */
-router.get('/drawings', requireAuth, async (req, res) => {
+router.get('/drawings', requireAuth, requirePageAccess('drawings'), async (req, res) => {
   try {
     const { year } = req.query;
     let query = `
@@ -1248,7 +1248,7 @@ router.get('/drawings', requireAuth, async (req, res) => {
  * engenharia (4 abas, um layout por tipo). Ver backend/src/utils/pmsExcelFormat.js
  * — o mesmo módulo é usado pela importação, garantindo o round-trip.
  * ══════════════════════════════════════════════════════ */
-router.get('/pms', requireAuth, async (req, res) => {
+router.get('/pms', requireAuth, requirePageAccess('pms'), async (req, res) => {
   try {
     const r = await pool.query(`
       SELECT *,
@@ -1280,7 +1280,7 @@ router.get('/pms', requireAuth, async (req, res) => {
 /* ══════════════════════════════════════════════════════
  * IACS EXPORT
  * ══════════════════════════════════════════════════════ */
-router.get('/iacs', requireAuth, async (req, res) => {
+router.get('/iacs', requireAuth, requirePageAccess('iacs'), async (req, res) => {
   try {
     const r = await pool.query(`
       SELECT * FROM lists_iacs
