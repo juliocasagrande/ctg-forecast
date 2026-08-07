@@ -107,6 +107,20 @@ const ALL_PLANTS = [
   'UHE Salto Grande','UHE Taquaruçu',
 ];
 
+const ROUTES_WITHOUT_HEADER_FILTERS = new Set([
+  '/admin',
+  '/admin/health',
+  '/documents',
+  '/drawings',
+  '/engineering/equipamentos',
+  '/engineering/equipamentos-admin',
+  '/lists/iacs',
+  '/lists/projects-tracking',
+  '/lists/schedule-project',
+  '/pms',
+  '/workload',
+]);
+
 // ── Period Slider ──────────────────────────────────────────────────
 function PeriodSelector({ period, onChange }) {
   const settings = useSettings();
@@ -850,7 +864,8 @@ export default function App() {
   const { title, sub } = getPageMeta(location.pathname);
   const showControls   = ['/projects', '/polos', '/vacations', '/metas'].includes(location.pathname) && !isNativeAdmin;
   const isPeopleControlPage = location.pathname === '/vacations' || location.pathname === '/metas';
-  const showFilterPill = location.pathname !== '/';
+  const showFilterPill = location.pathname !== '/'
+    && !ROUTES_WITHOUT_HEADER_FILTERS.has(location.pathname);
   const isHomePage = location.pathname === '/';
 
   // Active plants = plants that exist in at least one project

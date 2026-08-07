@@ -737,7 +737,7 @@ router.get('/alerts', async (req, res) => {
                   ))`;
 
           const r = await pool.query(`
-            SELECT d.id, d.code, d.subject, d.status, d.document_link, d.created_at
+            SELECT d.id, d.code, d.subject, d.status, d.responsible, d.document_link, d.created_at
             FROM documents d
             WHERE (${docScopeSql})
               AND ($2::boolean = false OR d.status <> 'Cancelado')
@@ -793,7 +793,7 @@ router.get('/alerts', async (req, res) => {
                   ))`;
 
           const r = await pool.query(`
-            SELECT d.id, d.code, d.subject, d.status, d.document_link, d.created_at
+            SELECT d.id, d.code, d.subject, d.status, d.responsible, d.document_link, d.created_at
             FROM drawings d
             WHERE (${drawingScopeSql})
               AND ($2::boolean = false OR d.status <> 'Cancelado')

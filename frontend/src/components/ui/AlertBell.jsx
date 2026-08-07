@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import api from '../../utils/api.js';
-import { usePageAccess, useRole } from '../../context/AuthContext.jsx';
+import { useAuth, usePageAccess, useRole } from '../../context/AuthContext.jsx';
+import { useSettings, useSettingsReady } from '../../context/SettingsContext.jsx';
+import DailyAlertsModal, { buildDailyAlertGroups } from './DailyAlertsModal.jsx';
 
 const POLL_INTERVAL = 60_000;
 
@@ -22,12 +25,18 @@ export default function AlertBell() {
   const [workloadLate, setWorkloadLate] = useState([]);
   const [pmsAlerts, setPmsAlerts] = useState([]);
   const [open, setOpen] = useState(false);
+  const [dailySummaryOpen, setDailySummaryOpen] = useState(false);
   const [dismissing, setDismissing] = useState(new Set());
   const [markingAllSection, setMarkingAllSection] = useState(null);
   const ref = useRef(null);
+  const dropdownRef = useRef(null);
   const btnRef = useRef(null);
+  const autoOpenHandledRef = useRef('');
   const [dropPos, setDropPos] = useState({ top: 0, right: 0 });
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const settings = useSettings();
+  const settingsReady = useSettingsReady();
   const { isPlanejador, isAdmin } = useRole();
   const pmsAccess = usePageAccess('pms');
   const isManager = isPlanejador || isAdmin;
@@ -90,12 +99,56 @@ export default function AlertBell() {
   }, [fetchAlerts]);
 
   useEffect(() => {
-    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const h = (e) => {
+      const clickedBell = ref.current?.contains(e.target);
+      const clickedDropdown = dropdownRef.current?.contains(e.target);
+      if (!clickedBell && !clickedDropdown) setOpen(false);
+    };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
 
   const total = alerts?.total ?? 0;
+  const dailySummaryGroups = alerts ? buildDailyAlertGroups({
+    alerts,
+    staleProjects: stalePT,
+    staleIacs: staleIACs,
+    workloadLate,
+    pmsAlerts,
+    settings,
+  }) : [];
+  const dailySummaryTotal = dailySummaryGroups.reduce((sum, group) => sum + group.items.length, 0);
+
+  useEffect(() => {
+    if (alerts === null || !user || !settingsReady) return;
+
+    // App renders one bell for desktop and another for mobile. Only the visible
+    // instance may claim and display the once-a-day automatic popup.
+    const button = btnRef.current;
+    if (!button || button.getClientRects().length === 0) return;
+
+    const now = new Date();
+    const today = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      String(now.getDate()).padStart(2, '0'),
+    ].join('-');
+    const userKey = user.id ?? user.email;
+    const handledKey = `${userKey}:${today}`;
+    if (autoOpenHandledRef.current === handledKey) return;
+    autoOpenHandledRef.current = handledKey;
+
+    const storageKey = `daily-alert-summary-last-shown:${userKey}`;
+    try {
+      if (localStorage.getItem(storageKey) === today) return;
+      localStorage.setItem(storageKey, today);
+    } catch {
+      // The in-memory guard above still prevents repeated openings this session.
+    }
+
+    if (dailySummaryTotal <= 0) return;
+    setDailySummaryOpen(true);
+  }, [alerts, dailySummaryTotal, settingsReady, user]);
 
   const goTo = (projectId) => {
     navigate(`/projects/${projectId}`);
@@ -131,6 +184,7 @@ export default function AlertBell() {
       {/* Bell button */}
       <button
         ref={btnRef}
+        className={`alert-bell-button${total > 0 ? ' has-alerts' : ''}`}
         onClick={() => {
           if (btnRef.current) {
             const r = btnRef.current.getBoundingClientRect();
@@ -139,16 +193,17 @@ export default function AlertBell() {
           setOpen(o => !o);
         }}
         title="Alertas"
+        aria-label={total > 0 ? `${total} alerta${total > 1 ? 's' : ''}` : 'Nenhum alerta'}
         style={{
           position: 'relative',
           width: 34, height: 34,
           borderRadius: '50%',
-          border: `1.5px solid ${total > 0 ? 'var(--ctg-blue)' : 'var(--border-strong)'}`,
-          background: total > 0 ? 'var(--budget-bg)' : 'var(--bg-card)',
+          border: `1.5px solid ${total > 0 ? '#DC2626' : 'var(--border-strong)'}`,
+          background: total > 0 ? '#FEF2F2' : 'var(--bg-card)',
           cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           transition: 'all 0.15s',
-          color: total > 0 ? 'var(--ctg-navy)' : 'var(--text-muted)',
+          color: total > 0 ? '#B91C1C' : 'var(--text-muted)',
         }}
       >
         <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
@@ -169,8 +224,8 @@ export default function AlertBell() {
       </button>
 
       {/* Dropdown panel */}
-      {open && (
-        <div className="alert-bell-dropdown" style={{
+      {open && createPortal(
+        <div ref={dropdownRef} className="alert-bell-dropdown" style={{
           position: 'fixed', top: dropPos.top, right: dropPos.right,
           width: 370, background: 'var(--bg-card)',
           border: '1px solid var(--border-strong)',
@@ -498,7 +553,21 @@ export default function AlertBell() {
               }}
             >Atualizar</button>
           </div>
-        </div>
+        </div>,
+        document.body
+      )}
+
+      {dailySummaryOpen && createPortal(
+        <DailyAlertsModal
+          groups={dailySummaryGroups}
+          onClose={() => setDailySummaryOpen(false)}
+          onNavigate={(path) => {
+            setDailySummaryOpen(false);
+            setOpen(false);
+            navigate(path);
+          }}
+        />,
+        document.body
       )}
     </div>
   );

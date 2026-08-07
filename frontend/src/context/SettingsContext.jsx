@@ -6,8 +6,10 @@ const DEFAULTS = {
   alert_stale_days:      '30',
   tracking_alert_interval_days: '6',
   tracking_alert_role_days: '{"engenheiro":6,"coordenador":10,"gerente":14,"diretor":14,"admin":14}',
+  tracking_alert_roles:  'gerente,diretor,coordenador,engenheiro,admin',
   iac_alert_interval_days: '6',
   iac_alert_role_days:   '{"engenheiro":6,"coordenador":10,"gerente":14,"diretor":14,"admin":14}',
+  iac_alert_roles:       'gerente,diretor,coordenador,engenheiro,admin',
   doc_alert_enabled:     'true',
   doc_alert_interval_days: '7',
   doc_alert_role_days:   '{"engenheiro":7,"coordenador":14,"planejador":14,"gerente":21,"diretor":21,"admin":21}',
@@ -22,6 +24,10 @@ const DEFAULTS = {
   drawing_alert_exclude_published: 'true',
   drawing_alert_roles:   'engenheiro,coordenador,planejador',
   drawing_alert_areas:   '',
+  pms_alert_enabled:     'true',
+  pms_alert_days:        '30',
+  pms_alert_role_days:   '{"engenheiro":30,"coordenador":15,"planejador":15,"gerente":15,"diretor":15,"admin":15}',
+  pms_alert_roles:       'coordenador,gerente,diretor,admin',
   alert_empty_forecast:  'true',
   alert_unread_messages: 'true',
   color_budget:          '#15803D',
@@ -37,27 +43,37 @@ const DEFAULTS = {
 };
 
 const SettingsContext = createContext(DEFAULTS);
+const SettingsReadyContext = createContext(false);
 
 export function SettingsProvider({ children }) {
   const [settings, setSettings] = useState(DEFAULTS);
+  const [ready, setReady] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) { setReady(false); return; }
+    setReady(false);
     api.get('/settings')
       .then(r => setSettings({ ...DEFAULTS, ...r.data }))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setReady(true));
   }, [user?.id]);
 
   return (
-    <SettingsContext.Provider value={settings}>
-      {children}
-    </SettingsContext.Provider>
+    <SettingsReadyContext.Provider value={ready}>
+      <SettingsContext.Provider value={settings}>
+        {children}
+      </SettingsContext.Provider>
+    </SettingsReadyContext.Provider>
   );
 }
 
 export function useSettings() {
   return useContext(SettingsContext);
+}
+
+export function useSettingsReady() {
+  return useContext(SettingsReadyContext);
 }
 
 // Convenience: returns the 5 type colors as an object
