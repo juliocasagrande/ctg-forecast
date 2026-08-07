@@ -675,6 +675,7 @@ router.get('/iacs/stale-iacs', async (req, res) => {
         SELECT id, iac_code, project, area, team_leader, updated_at
         FROM lists_iacs
         WHERE updated_at < NOW() - ($1::text || ' days')::interval
+          AND status_current IS DISTINCT FROM '9 - Contract signed'
           AND (team_leader_user_id = $2 OR (team_leader_user_id IS NULL AND LOWER(team_leader) LIKE '%' || LOWER($3) || '%'))
         ORDER BY updated_at ASC
       `;
@@ -685,6 +686,7 @@ router.get('/iacs/stale-iacs', async (req, res) => {
         SELECT id, iac_code, project, area, team_leader, updated_at
         FROM lists_iacs
         WHERE updated_at < NOW() - ($1::text || ' days')::interval
+          AND status_current IS DISTINCT FROM '9 - Contract signed'
           AND area = ANY($2::text[])
         ORDER BY updated_at ASC
       `;
@@ -695,6 +697,7 @@ router.get('/iacs/stale-iacs', async (req, res) => {
         SELECT id, iac_code, project, area, team_leader, updated_at
         FROM lists_iacs
         WHERE updated_at < NOW() - ($1::text || ' days')::interval
+          AND status_current IS DISTINCT FROM '9 - Contract signed'
         ORDER BY updated_at ASC
       `;
       params = [String(intervalDays)];

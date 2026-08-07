@@ -5,7 +5,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { getTestApp } from '../setup/testApp.js';
 import { createTestUser, loginAs, cookieHeader } from '../helpers/auth.js';
-import { cleanTables } from '../helpers/db.js';
+import { cleanTables, query } from '../helpers/db.js';
 
 const app    = getTestApp();
 const PREFIX = 'lst';
@@ -281,6 +281,44 @@ describe('GET /api/lists/iacs/stale-iacs', () => {
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
   });
+
+  it('não alerta IACs com contrato assinado', async () => {
+    const activeRes = await request(app)
+      .post('/api/lists/iacs')
+      .set('Cookie', cookieHeader(adminCookies))
+      .send({
+        iac_code: 'IAC-STALE-ACTIVE',
+        project: 'IAC desatualizado ativo',
+        status_current: '1 - IA and PDs',
+      });
+    const signedRes = await request(app)
+      .post('/api/lists/iacs')
+      .set('Cookie', cookieHeader(adminCookies))
+      .send({
+        iac_code: 'IAC-STALE-SIGNED',
+        project: 'IAC desatualizado com contrato assinado',
+        status_current: '9 - Contract signed',
+      });
+
+    expect(activeRes.status).toBe(201);
+    expect(signedRes.status).toBe(201);
+
+    await query(
+      `UPDATE lists_iacs
+       SET updated_at = NOW() - INTERVAL '10 years'
+       WHERE id = ANY($1::int[])`,
+      [[activeRes.body.id, signedRes.body.id]],
+    );
+
+    const res = await request(app)
+      .get('/api/lists/iacs/stale-iacs')
+      .set('Cookie', cookieHeader(adminCookies));
+    const alertIds = res.body.map(iac => String(iac.id));
+
+    expect(res.status).toBe(200);
+    expect(alertIds).toContain(String(activeRes.body.id));
+    expect(alertIds).not.toContain(String(signedRes.body.id));
+  });
 });
 
 // ──────────────────────────────────────────────────────────────
@@ -346,5 +384,43 @@ describe('GET /api/lists/projects-tracking/stale-projects', () => {
 
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it('não alerta projetos encerrados', async () => {
+    const activeRes = await request(app)
+      .post('/api/lists/projects-tracking')
+      .set('Cookie', cookieHeader(adminCookies))
+      .send({
+        pp_contrato: 'TRACK-STALE-ACTIVE',
+        projeto: 'Projeto desatualizado ativo',
+        status: 'Em andamento',
+      });
+    const closedRes = await request(app)
+      .post('/api/lists/projects-tracking')
+      .set('Cookie', cookieHeader(adminCookies))
+      .send({
+        pp_contrato: 'TRACK-STALE-CLOSED',
+        projeto: 'Projeto desatualizado encerrado',
+        status: 'Encerrado',
+      });
+
+    expect(activeRes.status).toBe(201);
+    expect(closedRes.status).toBe(201);
+
+    await query(
+      `UPDATE lists_projects_tracking
+       SET updated_at = NOW() - INTERVAL '10 years'
+       WHERE id = ANY($1::int[])`,
+      [[activeRes.body.id, closedRes.body.id]],
+    );
+
+    const res = await request(app)
+      .get('/api/lists/projects-tracking/stale-projects')
+      .set('Cookie', cookieHeader(adminCookies));
+    const alertIds = res.body.map(project => String(project.id));
+
+    expect(res.status).toBe(200);
+    expect(alertIds).toContain(String(activeRes.body.id));
+    expect(alertIds).not.toContain(String(closedRes.body.id));
   });
 });

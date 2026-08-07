@@ -1169,6 +1169,11 @@ const IAC_PRIORITY_ACCENTS = {
   'Non Priority': '#64748B',
 };
 
+const IAC_PRIORITY_TITLE_COLORS = {
+  Priority: '#B45309',
+  'Non Priority': '#334155',
+};
+
 function priorityAchievementPct(bucket, goals) {
   if (!bucket || !goals?.pct100) return null;
   return Math.min(120, (bucket.goalValue / goals.pct100) * 100);
@@ -1204,6 +1209,11 @@ function GoalBar({ value, pct80, pct100, pct120 }) {
   const scaleMax = pct120 > 0 ? pct120 * (8 / 7) : 1;
   const widthPct = Math.min(100, Math.max(0, (value / scaleMax) * 100));
   const barColor = value >= pct120 ? '#10B981' : value >= pct100 ? '#0070B8' : value >= pct80 ? '#F59E0B' : '#EF4444';
+  const currentValueTransform = widthPct <= 3
+    ? 'translate(0, -50%)'
+    : widthPct >= 97
+      ? 'translate(-100%, -50%)'
+      : 'translate(-50%, -50%)';
   const marks = [
     { key: 'pct80', pctLabel: '80%', value: pct80, color: '#F59E0B' },
     { key: 'pct100', pctLabel: '100%', value: pct100, color: '#0070B8' },
@@ -1225,16 +1235,27 @@ function GoalBar({ value, pct80, pct100, pct120 }) {
 
   return (
     <div
-      style={{ position: 'relative', paddingBottom: 13, flex: 1, minWidth: 0, cursor: 'default' }}
+      style={{ position: 'relative', paddingTop: 2, paddingBottom: 13, flex: 1, minWidth: 0, cursor: 'default' }}
       onMouseEnter={() => setHovered(true)}
       onMouseMove={e => setTipPos({ x: e.clientX, y: e.clientY })}
       onMouseLeave={() => setHovered(false)}
     >
+      <div style={{
+        position: 'absolute', left: `${widthPct}%`, top: 6, zIndex: 1,
+        transform: currentValueTransform, color: '#000',
+        minWidth: 18, height: 18, padding: '0 3px', boxSizing: 'border-box',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: '#fff', border: `1px solid ${barColor}`, borderRadius: 999,
+        fontSize: '0.82rem', fontWeight: 900, lineHeight: 1,
+        whiteSpace: 'nowrap', pointerEvents: 'none',
+      }}>
+        {value}
+      </div>
       <div style={{ height: 8, background: '#E2E8F0', borderRadius: 999, overflow: 'hidden' }}>
         <div style={{ width: `${widthPct}%`, height: '100%', background: barColor, borderRadius: 999 }} />
       </div>
       {marks.map(mark => (
-        <div key={mark.key} style={{ position: 'absolute', left: `${Math.min(100, (mark.value / scaleMax) * 100)}%`, top: -2, transform: 'translateX(-50%)', pointerEvents: 'none' }}>
+        <div key={mark.key} style={{ position: 'absolute', left: `${Math.min(100, (mark.value / scaleMax) * 100)}%`, top: 0, transform: 'translateX(-50%)', pointerEvents: 'none' }}>
           <div style={{ width: 2, height: 12, background: mark.color, borderRadius: 1, boxShadow: '0 0 0 1px #fff' }} />
           <div style={{ marginTop: 2, fontSize: '0.78rem', color: mark.color, fontWeight: 900, textAlign: 'center', whiteSpace: 'nowrap' }}>{mark.value}</div>
         </div>
@@ -1334,11 +1355,11 @@ function StatValueCell({ value, rows }) {
   );
 }
 
-function PriorityGoalTable({ title, stats, goals, accent }) {
+function PriorityGoalTable({ title, stats, goals, accent, titleColor }) {
   return (
     <div style={{ borderRadius: 8, overflow: 'hidden', background: '#FBFDFF', minHeight: 0 }}>
-      <div style={{ background: `linear-gradient(135deg, ${accent}26, ${accent}0d)`, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span style={{ color: accent, fontSize: IAC_CARD_TITLE_FONT, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>{title}</span>
+      <div style={{ background: `linear-gradient(135deg, ${accent}26, ${accent}0d)`, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ color: titleColor, WebkitTextStroke: '0.3px #000', paintOrder: 'stroke fill', fontSize: 'clamp(0.68rem, 1vw, 0.82rem)', fontWeight: 900, lineHeight: 1, letterSpacing: '0.04em', whiteSpace: 'nowrap', flexShrink: 0 }}>{title}</span>
         <span style={{ fontSize: '0.66rem', fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase', flexShrink: 0 }}>Goal</span>
         <GoalBar value={stats.goalValue} pct80={goals.pct80} pct100={goals.pct100} pct120={goals.pct120} />
       </div>
@@ -1361,8 +1382,8 @@ function PriorityGoalTable({ title, stats, goals, accent }) {
 function IacPriorityGoalPanel({ data }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minHeight: 0 }}>
-      <PriorityGoalTable title="Priority" stats={data.Priority} goals={IAC_PRIORITY_GOALS.Priority} accent={IAC_PRIORITY_ACCENTS.Priority} />
-      <PriorityGoalTable title="Non Priority" stats={data['Non Priority']} goals={IAC_PRIORITY_GOALS['Non Priority']} accent={IAC_PRIORITY_ACCENTS['Non Priority']} />
+      <PriorityGoalTable title="PPs PRIORITY" stats={data.Priority} goals={IAC_PRIORITY_GOALS.Priority} accent={IAC_PRIORITY_ACCENTS.Priority} titleColor={IAC_PRIORITY_TITLE_COLORS.Priority} />
+      <PriorityGoalTable title="PPs NON PRIORITY" stats={data['Non Priority']} goals={IAC_PRIORITY_GOALS['Non Priority']} accent={IAC_PRIORITY_ACCENTS['Non Priority']} titleColor={IAC_PRIORITY_TITLE_COLORS['Non Priority']} />
     </div>
   );
 }
@@ -2001,7 +2022,7 @@ export default function HomePage({ year }) {
 
         {/* Row 2: main cards side by side */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, flex: 1, minHeight: 0 }}>
-          <HomeCard title="Projetos em acompanhamento" icon="folder" action="›" onClick={() => navigate('/lists/projects-tracking')}>
+          <HomeCard title="Acompanhamento de Contratos" icon="folder" action="›" onClick={() => navigate('/lists/projects-tracking')}>
             <div style={{ display: 'grid', gridTemplateRows: 'auto auto minmax(0, 1fr) auto', gap: 8, height: '100%', minHeight: 0 }}>
               <ProjectStatusStrip items={projectStatusItems} />
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
@@ -2013,7 +2034,7 @@ export default function HomePage({ year }) {
             </div>
           </HomeCard>
 
-          <HomeCard title="IACs em andamento" icon="warning" action="›" onClick={() => navigate('/lists/iacs')}>
+          <HomeCard title="Situação do Procurement Plan" icon="target" action="›" onClick={() => navigate('/lists/iacs')}>
             <div style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', gap: 6, height: '100%', minHeight: 0 }}>
               <IacPriorityGoalPanel data={iacPriorityGoalData} />
               <div style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', gap: 6, minHeight: 0 }}>

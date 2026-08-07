@@ -2661,7 +2661,11 @@ export default function ProjectsTrackingPage() {
                         onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? '#fff' : '#FAFAFA'}
                       >
                         <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                          <StatusDot updatedAt={item.updated_at} thresholdDays={statusDotThresholdDays} />
+                          <StatusDot
+                            updatedAt={item.updated_at}
+                            thresholdDays={statusDotThresholdDays}
+                            inactive={item.status === 'Encerrado'}
+                          />
                         </td>
                         <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                           {item.caminho_projeto && (

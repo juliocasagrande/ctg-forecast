@@ -6,12 +6,13 @@ import { useState, useEffect } from 'react';
  * Props:
  * - updatedAt: string|Date - data da última edição
  * - thresholdDays: number - dias para considerar desatualizado (padrão: 6)
+ * - inactive: boolean - exibe um indicador neutro, sem animação
  */
-export default function StatusDot({ updatedAt, thresholdDays = 6 }) {
+export default function StatusDot({ updatedAt, thresholdDays = 6, inactive = false }) {
   const [blink, setBlink] = useState(false);
 
   useEffect(() => {
-    if (!updatedAt) return;
+    if (inactive || !updatedAt) return;
     const updated = new Date(updatedAt);
     const now = new Date();
     const diffDays = (now - updated) / (1000 * 60 * 60 * 24);
@@ -21,7 +22,22 @@ export default function StatusDot({ updatedAt, thresholdDays = 6 }) {
       const interval = setInterval(() => setBlink(b => !b), 1200);
       return () => clearInterval(interval);
     }
-  }, [updatedAt, thresholdDays]);
+  }, [updatedAt, thresholdDays, inactive]);
+
+  if (inactive) {
+    return (
+      <span style={{
+        display: 'inline-block',
+        width: 10,
+        height: 10,
+        borderRadius: '50%',
+        background: '#94A3B8',
+        opacity: 0.45,
+        flexShrink: 0,
+        boxShadow: 'none',
+      }} title="Contrato assinado — acompanhamento de atualização encerrado" />
+    );
+  }
 
   if (!updatedAt) {
     return (
