@@ -61,7 +61,7 @@ async function canManageVacationUser(user, targetUserId) {
 router.get('/', async (req, res) => {
   try {
     const year = parseInt(req.query.year) || new Date().getFullYear();
-    const area = req.user.role === 'coordenador' && !req.user._allAreasAccess
+    const area = ['engenheiro', 'coordenador'].includes(req.user.role) && !req.user._allAreasAccess
       ? (req.user.area || 'eletrica')
       : (req.query.area || null);
 
@@ -85,15 +85,13 @@ router.get('/', async (req, res) => {
       JOIN users u ON u.id = vp.user_id
       WHERE vp.year = $1
         AND u.active = true
-        AND u.email <> ALL($${area ? 4 : 2}::text[])
-        ${area ? "AND (vp.area = $2 OR vp.user_id = $3 OR u.role IN ('gerente','diretor','coordenador','planejador'))" : ''}
+        AND u.email <> ALL($${area ? 3 : 2}::text[])
+        ${area ? "AND COALESCE(u.area, 'eletrica') = $2" : ''}
       ORDER BY u.name, vp.period_number
-    `, area ? [year, area, req.user.id, VACATIONS_EXCLUDED_EMAILS] : [year, VACATIONS_EXCLUDED_EMAILS]);
-    // Nota: mesmo com filtro de área (coordenador), o próprio usuário sempre vê seus
-    // períodos — evita que um período registrado antes de uma mudança de área do
-    // usuário (vp.area desatualizado) fique invisível para o dono do período.
-    // Gerentes/diretores/coordenadores também aparecem sempre, pois o frontend
-    // exibe esse grupo (Coordenação & Gerência) independente da área filtrada.
+    `, area ? [year, area, VACATIONS_EXCLUDED_EMAILS] : [year, VACATIONS_EXCLUDED_EMAILS]);
+    // O filtro considera a área atual do usuário, inclusive para coordenadores e
+    // demais cargos de gestão. Assim, períodos antigos continuam acompanhando a
+    // pessoa caso sua área seja atualizada.
 
     res.json(rows);
   } catch (err) { safeError(res, err); }

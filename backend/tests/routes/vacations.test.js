@@ -54,13 +54,24 @@ describe('GET /api/vacations', () => {
   });
 
   it('filtra por área', async () => {
+    await query(`
+      INSERT INTO vacation_periods
+        (user_id, area, period_number, start_date, end_date, days, year, created_by)
+      VALUES
+        ($1, 'eletrica', 1, '2024-01-02', '2024-01-10', 9, 2024, $3),
+        ($2, 'mecanica', 1, '2024-02-01', '2024-02-10', 10, 2024, $3)
+    `, [coordUser.id, coordMecUser.id, adminUser.id]);
+
     const res = await request(app)
       .get('/api/vacations')
-      .query({ year: 2025, area: 'eletrica' })
+      .query({ year: 2024, area: 'mecanica' })
       .set('Cookie', cookieHeader(adminCookies));
 
     expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.map(p => p.user_id)).toContain(coordMecUser.id);
+    expect(res.body.map(p => p.user_id)).not.toContain(coordUser.id);
+
+    await query('DELETE FROM vacation_periods WHERE year = 2024');
   });
 
   it('engenheiro pode listar férias', async () => {
@@ -373,6 +384,19 @@ describe('GET /api/vacations/members', () => {
       expect(res.body[0]).toHaveProperty('name');
       expect(res.body[0]).toHaveProperty('area');
     }
+  });
+
+  it('filtro de área inclui apenas coordenadores da área selecionada', async () => {
+    const res = await request(app)
+      .get('/api/vacations/members')
+      .query({ area: 'mecanica' })
+      .set('Cookie', cookieHeader(adminCookies));
+
+    expect(res.status).toBe(200);
+    const ids = res.body.map(m => m.id);
+    expect(ids).toContain(coordMecUser.id);
+    expect(ids).not.toContain(coordUser.id);
+    expect(res.body.every(m => m.area === 'mecanica')).toBe(true);
   });
 
   it('engenheiro vê membros da sua área', async () => {

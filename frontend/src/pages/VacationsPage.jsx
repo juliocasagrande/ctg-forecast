@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth, useRole, usePageAccess } from '../context/AuthContext.jsx';
+import { useAuth, usePageAccess } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
 import AppSelect from '../components/ui/AppSelect.jsx';
 
@@ -394,27 +394,23 @@ function PeriodModal({ period, userId, area, year, members, canEditOthers, onSav
 }
 
 /* ─── PÁGINA ─── */
-export default function VacationsPage({ areaFilter: areaFilterProp = '', year: yearProp, onYearChange }) {
+export default function VacationsPage({ areaFilter: areaFilterProp = '', year: yearProp }) {
   const { user } = useAuth();
-  const { isEngenheiro } = useRole();
   const pageReadOnly = usePageAccess('vacations') === 'viewer';
   const role = user?.role;
   const viewRole = user?._managerAccessOverride ? role : (user?._originalRole || role);
   const canEditOthers = !pageReadOnly && (viewRole === 'admin' || viewRole === 'coordenador' || viewRole === 'gerente' || viewRole === 'diretor');
 
-  // year and area driven by App.jsx header props
+  // Year and area are driven by the filters rendered in App.jsx.
   const year    = yearProp ?? new Date().getFullYear();
-  const setYear = onYearChange ?? (() => {});
   // Engenheiros e coordenadores sempre veem a própria área (o backend já
   // restringe a este escopo); o filtro de área do cabeçalho só se aplica
   // a quem pode ver todas as áreas (admin/gestor/planejador/gerente).
   const area    = ['engenheiro', 'coordenador'].includes(viewRole)
     ? (user?.area || 'eletrica')
-    : ((areaFilterProp && areaFilterProp !== '') ? areaFilterProp : 'eletrica');
-  const setArea = () => {}; // area is controlled by App header
+    : areaFilterProp;
   const [periods,    setPeriods]    = useState([]);
   const [members,    setMembers]    = useState([]);
-  const [allMembers, setAllMembers] = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [modal,      setModal]      = useState(null);
   const [deleting,   setDeleting]   = useState(null);
@@ -422,14 +418,14 @@ export default function VacationsPage({ areaFilter: areaFilterProp = '', year: y
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [pRes, mAreaRes, mAllRes] = await Promise.all([
-        api.get(`/vacations?year=${year}`),
-        api.get(`/vacations/members?area=${area}`),
-        api.get('/vacations/members'),
+      const areaQuery = area ? `&area=${encodeURIComponent(area)}` : '';
+      const membersAreaQuery = area ? `?area=${encodeURIComponent(area)}` : '';
+      const [pRes, mRes] = await Promise.all([
+        api.get(`/vacations?year=${year}${areaQuery}`),
+        api.get(`/vacations/members${membersAreaQuery}`),
       ]);
       setPeriods(pRes.data);
-      setMembers(mAreaRes.data);
-      setAllMembers(mAllRes.data);
+      setMembers(mRes.data);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, [year, area]);
@@ -457,16 +453,23 @@ export default function VacationsPage({ areaFilter: areaFilterProp = '', year: y
     finally { setDeleting(null); }
   }
 
+  // Keep a client-side guard as well: restricted users receive a management
+  // group from the API, and older API versions returned every coordinator.
+  const visibleMembers = area ? members.filter(m => m.area === area) : members;
+  const visibleMemberIds = new Set(visibleMembers.map(m => m.id));
+  const visiblePeriods = periods.filter(p => visibleMemberIds.has(p.user_id));
+
   const periodsByUser = {};
-  for (const p of periods) {
+  for (const p of visiblePeriods) {
     if (!periodsByUser[p.user_id]) periodsByUser[p.user_id] = [];
     periodsByUser[p.user_id].push(p);
   }
 
-  // Separate managers/coordinators from engineers in allMembers
-  const mgmtMembers  = allMembers.filter(m => ['gerente','diretor','coordenador','planejador'].includes(m.role));
-  const areaMembers  = members.filter(m => m.area === area && !['gerente','diretor','coordenador','planejador'].includes(m.role));
-  const areaPeriods  = periods.filter(p => areaMembers.some(m => m.id === p.user_id));
+  // Both tables and the timeline use the exact same area-filtered member list.
+  const mgmtMembers  = visibleMembers.filter(m => ['gerente','diretor','coordenador','planejador'].includes(m.role));
+  const areaMembers  = visibleMembers.filter(m => !['gerente','diretor','coordenador','planejador'].includes(m.role));
+  const areaMemberIds = new Set(areaMembers.map(m => m.id));
+  const areaPeriods  = visiblePeriods.filter(p => areaMemberIds.has(p.user_id));
   const withVacation = new Set(areaPeriods.map(p => p.user_id)).size;
   const adpOk        = areaPeriods.filter(p => p.adp_registered).length;
   const totalDays    = areaPeriods.reduce((s, p) => s + (p.days || 0), 0);
@@ -480,6 +483,9 @@ export default function VacationsPage({ areaFilter: areaFilterProp = '', year: y
     .sort((a, b) => a.member.name.localeCompare(b.member.name));
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  const selectedAreaLabel = area
+    ? (AREAS.find(a => a.value === area)?.label || area)
+    : 'Todas as áreas';
 
 
 
@@ -488,7 +494,7 @@ export default function VacationsPage({ areaFilter: areaFilterProp = '', year: y
     if (!p) return (
       <td style={{ padding: '7px 12px' }}>
         {canEdit
-          ? <button onClick={() => onEdit({ period_number: num, user_id: member.id, area }, member.id)}
+          ? <button onClick={() => onEdit({ period_number: num, user_id: member.id, area: member.area || area }, member.id)}
               style={{ background: 'none', border: '1px dashed var(--border)', borderRadius: 6, padding: '3px 10px', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '0.72rem' }}>
               + Adicionar
             </button>
@@ -529,7 +535,7 @@ export default function VacationsPage({ areaFilter: areaFilterProp = '', year: y
       {/* ── KPI Cards ── */}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 8, flexShrink: 0 }}>
         {[
-          { label: 'Colaboradores',      val: areaMembers.length, sub: AREAS.find(a => a.value === area)?.label },
+          { label: 'Colaboradores',      val: areaMembers.length, sub: selectedAreaLabel },
           { label: 'Com férias marcadas', val: withVacation, sub: `${areaMembers.length - withVacation} sem registro` },
           { label: 'Registrados no ADP',  val: adpOk, sub: `de ${areaPeriods.length} períodos` },
           { label: 'Total de dias',       val: totalDays, sub: `em ${areaPeriods.length} períodos` },
@@ -567,7 +573,7 @@ export default function VacationsPage({ areaFilter: areaFilterProp = '', year: y
               </div>
             </div>
             <div style={{ padding: '8px 14px 12px' }}>
-              <VacationTimeline periodsByUser={periodsByUser} allMembers={allMembers} year={year} />
+              <VacationTimeline periodsByUser={periodsByUser} allMembers={visibleMembers} year={year} />
             </div>
           </div>
 
@@ -632,7 +638,7 @@ export default function VacationsPage({ areaFilter: areaFilterProp = '', year: y
           <div className="card" style={{ flexShrink: 0 }}>
             <div style={{ padding: '6px 14px 4px', background: '#1E3A6E', borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0' }}>
               <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.76rem', fontWeight: 600, letterSpacing: '0.04em' }}>
-                Períodos — {AREAS.find(a => a.value === area)?.label}
+                Períodos — {selectedAreaLabel}
               </span>
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
@@ -678,7 +684,7 @@ export default function VacationsPage({ areaFilter: areaFilterProp = '', year: y
                       </td>
                       <td style={{ padding: '7px 12px' }}>
                         {canEdit && mp.length < 3 && (
-                          <button onClick={() => setModal({ period: { period_number: mp.length+1, user_id: member.id, area }, userId: member.id })}
+                          <button onClick={() => setModal({ period: { period_number: mp.length+1, user_id: member.id, area: member.area || area }, userId: member.id })}
                             style={{ background: 'rgba(0,112,184,0.08)', border: '1px solid rgba(0,112,184,0.2)', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', color: 'var(--ctg-blue)', fontSize: '0.68rem', fontWeight: 600 }}>
                             + período
                           </button>
@@ -698,13 +704,13 @@ export default function VacationsPage({ areaFilter: areaFilterProp = '', year: y
         <PeriodModal
           period={modal.period?.id ? modal.period : (modal.period?.period_number ? modal.period : null)}
           userId={modal.userId ?? user.id}
-          area={area}
+          area={modal.period?.area || visibleMembers.find(m => m.id === (modal.userId ?? user.id))?.area || area || user?.area || 'eletrica'}
           year={year}
-          members={allMembers}
+          members={visibleMembers}
           canEditOthers={canEditOthers}
           onSave={handleSave}
           onClose={() => setModal(null)}
-          allPeriods={periods}
+          allPeriods={visiblePeriods}
           currentUserRole={role}
           currentUserArea={user?.area || 'eletrica'}
         />
