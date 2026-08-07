@@ -6,6 +6,7 @@ import AlertBell from '../components/ui/AlertBell.jsx';
 import api from '../utils/api.js';
 import { formatBRL } from '../utils/format.js';
 import { iacElapsedMonthsProjected, isIacOpenedInYear } from '../utils/iacDates.js';
+import { getAlertRole, resolveRoleDays } from '../utils/roleDays.js';
 
 function pct(v) {
   const n = Number(v);
@@ -26,10 +27,14 @@ function evidenceCount(meta) {
 }
 
 function isStaleByUpdatedAt(row, thresholdDays) {
-  if (!row?.updated_at) return false;
-  const updatedAt = new Date(row.updated_at).getTime();
-  if (!Number.isFinite(updatedAt)) return false;
-  return (Date.now() - updatedAt) / 86400000 > thresholdDays;
+  return isOlderThan(row?.updated_at, thresholdDays);
+}
+
+function isOlderThan(value, thresholdDays) {
+  if (!value) return false;
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return false;
+  return (Date.now() - timestamp) / 86400000 > thresholdDays;
 }
 
 function areaLabel(area) {
@@ -49,6 +54,22 @@ function areaKey(value) {
   if (normalized.includes('ele') || normalized.includes('trica')) return 'eletrica';
   if (normalized.includes('modern')) return 'modernizacao';
   return normalized.trim();
+}
+
+function documentDisciplineKey(document) {
+  return areaKey(document?.discipline_area || document?.discipline || document?.disciplina);
+}
+
+function latestRevisions(rows) {
+  const latestByCode = new Map();
+  rows.forEach((row, index) => {
+    const key = row.base_code || String(row.code || '').replace(/-R\d+$/, '') || `row-${row.id ?? index}`;
+    const current = latestByCode.get(key);
+    const revision = row.revision == null || !Number.isFinite(Number(row.revision)) ? -1 : Number(row.revision);
+    const currentRevision = current?.revision == null || !Number.isFinite(Number(current.revision)) ? -1 : Number(current.revision);
+    if (!current || revision > currentRevision) latestByCode.set(key, row);
+  });
+  return [...latestByCode.values()];
 }
 
 const PROJECT_PLANTS = [
@@ -741,6 +762,15 @@ function updateHealthColor(value) {
   return safe >= 90 ? '#10B981' : safe >= 70 ? '#F59E0B' : '#EF4444';
 }
 
+function OperationalSub({ count, label }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4, maxWidth: '100%', font: 'inherit', color: 'inherit' }}>
+      <span style={{ font: 'inherit', fontSize: '0.94rem', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{count}</span>
+      <span>{label}</span>
+    </span>
+  );
+}
+
 function OperationalTile({ label, value, sub, color, icon, trend, gaugeValue, onClick, breakdown }) {
   const hasGauge = gaugeValue !== undefined;
   const statusColor = hasGauge ? updateHealthColor(gaugeValue) : color;
@@ -776,7 +806,7 @@ function OperationalTile({ label, value, sub, color, icon, trend, gaugeValue, on
         border: 'none',
         background: hasBubble ? `linear-gradient(110deg, ${statusColor}20 0%, rgba(255,255,255,0) 72%)` : 'transparent',
         borderRadius: hasBubble ? 8 : 0,
-        padding: '4px 8px',
+        padding: '6px 9px',
         textAlign: 'left',
         cursor: 'pointer',
         minWidth: 0,
@@ -794,9 +824,11 @@ function OperationalTile({ label, value, sub, color, icon, trend, gaugeValue, on
           <OperationalIcon name={icon} color={color} />
         </span>
         <div style={{ minWidth: 0 }}>
-          <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 900 }}>{label}</div>
-          <div style={{ color: 'var(--ctg-navy)', fontFamily: 'var(--font-display)', fontSize: 'clamp(1.1rem, 2vw, 1.5rem)', fontWeight: 900, lineHeight: 1.05, marginTop: 1 }}>{value}</div>
-          <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>{sub}</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem', fontWeight: 900 }}>{label}</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, minWidth: 0, marginTop: 2 }}>
+            <div style={{ color: 'var(--ctg-navy)', fontFamily: 'var(--font-display)', fontSize: 'clamp(1.3rem, 2vw, 1.7rem)', fontWeight: 900, lineHeight: 1, flexShrink: 0 }}>{value}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.84rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>
+          </div>
         </div>
         {trend && <Sparkline color={statusColor} />}
       </div>
@@ -1689,16 +1721,19 @@ function AttentionPanel({ total, items, navigate }) {
 export default function HomePage({ year }) {
   const { user } = useAuth();
   const settings = useSettings();
-  const viewRole = user?._managerAccessOverride ? user?.role : (user?._originalRole || user?.role);
+  const alertRole = getAlertRole(user);
+  const viewRole = alertRole;
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState({
     metas: [],
     vacations: [],
     documents: [],
+    drawings: [],
     alerts: null,
     delegations: [],
     docsStats: null,
+    drawingsStats: null,
     tracking: [],
     iacs: [],
     allIacs: [],
@@ -1733,11 +1768,13 @@ export default function HomePage({ year }) {
       const docsYear = year ? year % 100 : '';
       const metasQuery = `?year=${year}${scope.area ? `&area=${scope.area}` : ''}`;
       const vacationsQuery = `?year=${year}${scope.area ? `&area=${scope.area}` : ''}`;
-      const [metas, vacations, documents, docsStats, tracking, iacs, alerts, delegations] = await Promise.all([
+      const [metas, vacations, documents, drawings, docsStats, drawingsStats, tracking, iacs, alerts, delegations] = await Promise.all([
         api.get(`/metas${metasQuery}`).then(r => r.data).catch(() => []),
         api.get(`/vacations${vacationsQuery}`).then(r => r.data).catch(() => []),
         api.get(`/documents?year=${docsYear}`).then(r => r.data).catch(() => []),
+        api.get(`/drawings?year=${docsYear}`).then(r => r.data).catch(() => []),
         api.get(`/documents/stats?year=${docsYear}`).then(r => r.data).catch(() => null),
+        api.get(`/drawings/stats?year=${docsYear}`).then(r => r.data).catch(() => null),
         api.get('/lists/projects-tracking').then(r => r.data).catch(() => []),
         api.get('/lists/iacs').then(r => r.data).catch(() => []),
         api.get('/forecast/alerts').then(r => r.data).catch(() => null),
@@ -1747,6 +1784,7 @@ export default function HomePage({ year }) {
       const ownMetas = scope.ownOnly ? metas.filter(m => m.is_general || m.user_id === user.id) : metas;
       const ownVacations = scope.ownOnly ? vacations.filter(v => v.user_id === user.id) : vacations;
       const areaMatch = row => areaKey(row.area) === areaKey(scope.area);
+      const documentAreaMatch = document => documentDisciplineKey(document) === areaKey(scope.area);
       const scopedTracking = scope.ownOnly
         ? tracking.filter(r => Number(r.gestor_user_id) === Number(user.id))
         : scope.area ? tracking.filter(areaMatch) : tracking;
@@ -1755,8 +1793,16 @@ export default function HomePage({ year }) {
         : scope.area ? iacs.filter(areaMatch) : iacs;
       const scopedDocuments = scope.ownOnly
         ? documents.filter(d => (d.responsible || '').trim().toLowerCase() === (user?.name || '').trim().toLowerCase())
-        : scope.area ? documents.filter(areaMatch) : documents;
-      setData({ metas: ownMetas, vacations: ownVacations, documents: scopedDocuments, alerts, delegations, docsStats, tracking: scopedTracking, iacs: scopedIacs, allIacs: iacs });
+        : scope.area ? documents.filter(documentAreaMatch) : documents;
+      const scopedDrawings = scope.ownOnly
+        ? drawings.filter(d => (d.responsible || '').trim().toLowerCase() === (user?.name || '').trim().toLowerCase())
+        : scope.area ? drawings.filter(documentAreaMatch) : drawings;
+      setData({
+        metas: ownMetas, vacations: ownVacations,
+        documents: scopedDocuments, drawings: scopedDrawings,
+        alerts, delegations, docsStats, drawingsStats,
+        tracking: scopedTracking, iacs: scopedIacs, allIacs: iacs,
+      });
       setLoading(false);
     }
     load();
@@ -1768,7 +1814,7 @@ export default function HomePage({ year }) {
   const {
     metasAvg, iacGoalBreakdown, projectRows, staleTrackingRows, iacRows,
     docsTotal, docsPublished, docsPublishedPct,
-    projectStaleCount, iacStaleCount, projectUpdatedPct, iacUpdatedPct,
+    projectStaleCount, iacStaleCount, projectUpdatedCount, iacUpdatedCount, projectUpdatedPct, iacUpdatedPct,
     iacProcessData, iacPriorityGoalData, iac2026, iacAvgMonths, iacMetaColor,
     projectNatureData, projectAllPlantData,
     projectTotalContrato, projectTotalSi, projectRealizadoContrato, projectRealizadoSi,
@@ -1785,17 +1831,25 @@ export default function HomePage({ year }) {
       });
     };
     const projectRows = data.tracking.filter(row => rowMatchesSelectedPlant(row, ['uhe', 'plant', 'usina']));
-    const documentRows = data.documents.filter(row => rowMatchesSelectedPlant(row, ['plant', 'uhe', 'usina']));
+    const documentRows = latestRevisions(data.documents.filter(row => rowMatchesSelectedPlant(row, ['plant', 'uhe', 'usina'])));
+    const drawingRows = latestRevisions(data.drawings.filter(row => rowMatchesSelectedPlant(row, ['plant', 'uhe', 'usina'])));
     const iacRows = data.iacs.filter(row => rowMatchesSelectedPlant(row, ['uhe', 'plant', 'usina']));
-    const trackingStaleDays = parseInt(settings.tracking_alert_interval_days, 10) || 6;
-    const iacStaleDays = parseInt(settings.iac_alert_interval_days, 10) || 6;
-    const staleTrackingRows = projectRows.filter(row => isStaleByUpdatedAt(row, trackingStaleDays));
-    const staleIacRows = iacRows.filter(row => isStaleByUpdatedAt(row, iacStaleDays));
-    const useDocsStatsFallback = !selectedPlants.length && !documentRows.length;
-    const docsTotal = documentRows.length || (useDocsStatsFallback ? (data.docsStats?.by_status || []).reduce((s, r) => s + Number(r.count || 0), 0) : 0);
-    const docsPublished = documentRows.length
-      ? documentRows.filter(d => d.status === 'Publicado').length
-      : (useDocsStatsFallback ? Number((data.docsStats?.by_status || []).find(r => r.status === 'Publicado')?.count || 0) : 0);
+    const trackingStaleDays = resolveRoleDays(settings, 'tracking_alert_role_days', 'tracking_alert_interval_days', 6, alertRole);
+    const iacStaleDays = resolveRoleDays(settings, 'iac_alert_role_days', 'iac_alert_interval_days', 6, alertRole);
+    const docStaleDays = resolveRoleDays(settings, 'doc_alert_role_days', 'doc_alert_interval_days', 7, alertRole);
+    const drawingStaleDays = resolveRoleDays(settings, 'drawing_alert_role_days', 'drawing_alert_interval_days', 7, alertRole);
+    const staleTrackingRows = projectRows.filter(row => row.status !== 'Encerrado' && isStaleByUpdatedAt(row, trackingStaleDays));
+    const staleIacRows = iacRows.filter(row => row.status_current !== '9 - Contract signed' && isStaleByUpdatedAt(row, iacStaleDays));
+    const useDocsStatsFallback = !scope.area && !scope.ownOnly && !selectedPlants.length && !documentRows.length && !drawingRows.length;
+    const statsTotal = stats => (stats?.by_status || []).reduce((sum, row) => sum + Number(row.count || 0), 0);
+    const statsPublished = stats => Number((stats?.by_status || []).find(row => row.status === 'Publicado')?.count || 0);
+    const controlledItemsTotal = documentRows.length + drawingRows.length;
+    const docsTotal = controlledItemsTotal || (useDocsStatsFallback
+      ? statsTotal(data.docsStats) + statsTotal(data.drawingsStats)
+      : 0);
+    const docsPublished = controlledItemsTotal
+      ? documentRows.filter(d => d.status === 'Publicado').length + drawingRows.filter(d => d.status === 'Publicado').length
+      : (useDocsStatsFallback ? statsPublished(data.docsStats) + statsPublished(data.drawingsStats) : 0);
     const docsPublishedPct = docsTotal ? Math.round((docsPublished / docsTotal) * 100) : 0;
     const projectStaleCount = staleTrackingRows.length;
     const iacStaleCount = staleIacRows.length;
@@ -1846,8 +1900,39 @@ export default function HomePage({ year }) {
     const projectTotalSi = projectRows.reduce((sum, p) => sum + parseMoney(p.valor_si), 0);
     const projectRealizadoContrato = projectRows.reduce((sum, p) => sum + parseMoney(p.realizado_contrato), 0);
     const projectRealizadoSi = projectRows.reduce((sum, p) => sum + parseMoney(p.realizado_si), 0);
-    const unpublishedDocs = documentRows.filter(d => d.status !== 'Publicado' || !d.document_link);
-    const alertDocCount = unpublishedDocs.length || (!selectedPlants.length ? Number(data.alerts?.doc_unpublished?.count || 0) : 0);
+    const docAlertRoles = (settings.doc_alert_roles || 'engenheiro,coordenador,planejador')
+      .split(',').map(role => role.trim()).filter(Boolean);
+    const docAlertAreas = (settings.doc_alert_areas || '')
+      .split(',').map(area => area.trim()).filter(Boolean);
+    const docAlertsEnabled = settings.doc_alert_enabled !== 'false';
+    const docRoleAllowed = docAlertRoles.includes(alertRole);
+    const docAreaAllowed = !docAlertAreas.length || docAlertAreas.includes(user?.area || '');
+    const excludeCancelledDocs = settings.doc_alert_exclude_cancelled !== 'false';
+    const excludePublishedDocs = settings.doc_alert_exclude_published !== 'false';
+    const pendingDocumentCount = docAlertsEnabled && docRoleAllowed && docAreaAllowed
+      ? documentRows.filter(d =>
+          (!excludeCancelledDocs || d.status !== 'Cancelado') &&
+          (!excludePublishedDocs || d.status !== 'Publicado' || !d.document_link) &&
+          isOlderThan(d.created_at, docStaleDays)
+        ).length
+      : 0;
+    const drawingAlertRoles = (settings.drawing_alert_roles || 'engenheiro,coordenador,planejador')
+      .split(',').map(role => role.trim()).filter(Boolean);
+    const drawingAlertAreas = (settings.drawing_alert_areas || '')
+      .split(',').map(area => area.trim()).filter(Boolean);
+    const drawingAlertsEnabled = settings.drawing_alert_enabled !== 'false';
+    const drawingRoleAllowed = drawingAlertRoles.includes(alertRole);
+    const drawingAreaAllowed = !drawingAlertAreas.length || drawingAlertAreas.includes(user?.area || '');
+    const excludeCancelledDrawings = settings.drawing_alert_exclude_cancelled !== 'false';
+    const excludePublishedDrawings = settings.drawing_alert_exclude_published !== 'false';
+    const pendingDrawingCount = drawingAlertsEnabled && drawingRoleAllowed && drawingAreaAllowed
+      ? drawingRows.filter(d =>
+          (!excludeCancelledDrawings || d.status !== 'Cancelado') &&
+          (!excludePublishedDrawings || d.status !== 'Publicado' || !d.document_link) &&
+          isOlderThan(d.created_at, drawingStaleDays)
+        ).length
+      : 0;
+    const alertDocCount = pendingDocumentCount + pendingDrawingCount;
     const projectStatusItems = [
       { label: 'Total', value: projectRows.length, color: '#0b5cab' },
       { label: 'Em Andamento', value: projectRows.filter(i => i.status === 'Em andamento').length, color: '#0EA5E9' },
@@ -1875,13 +1960,13 @@ export default function HomePage({ year }) {
       metasAvg: iacMetasAvg, iacGoalBreakdown,
       projectRows, staleTrackingRows, iacRows,
       docsTotal, docsPublished, docsPublishedPct,
-      projectStaleCount, iacStaleCount, projectUpdatedPct, iacUpdatedPct,
+      projectStaleCount, iacStaleCount, projectUpdatedCount, iacUpdatedCount, projectUpdatedPct, iacUpdatedPct,
       iacProcessData, iacPriorityGoalData, iac2026, iacAvgMonths, iacMetaColor,
       projectNatureData, projectAllPlantData,
       projectTotalContrato, projectTotalSi, projectRealizadoContrato, projectRealizadoSi,
       projectStatusItems, attentionItems, pendingTotal,
     };
-  }, [data, selectedPlants, settings.tracking_alert_interval_days, settings.iac_alert_interval_days]);
+  }, [data, selectedPlants, settings, alertRole, user?.area, scope.area, scope.ownOnly]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, height: 'calc(100vh - 32px)', maxHeight: 'calc(100vh - 32px)', overflow: 'hidden', paddingBottom: 0 }}>
@@ -1926,9 +2011,9 @@ export default function HomePage({ year }) {
             style={{ gridColumn: '1', gridRow: '1' }}
           >
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
-              <OperationalTile label="IACs" value={iacRows.length} sub={`${iacUpdatedPct}% atualizado`} color="#F59E0B" icon="warning" trend gaugeValue={iacUpdatedPct} onClick={() => navigate('/lists/iacs')} />
-              <OperationalTile label="Projetos" value={projectRows.length} sub={`${projectUpdatedPct}% atualizado`} color="#0070B8" icon="folder" trend gaugeValue={projectUpdatedPct} onClick={() => navigate('/lists/projects-tracking')} />
-              <OperationalTile label="Documentos" value={docsTotal} sub={`${docsPublished} publicados`} color="#6366F1" icon="file" trend gaugeValue={docsPublishedPct} onClick={() => navigate('/documents')} />
+              <OperationalTile label="IACs" value={iacRows.length} sub={<OperationalSub count={iacUpdatedCount} label={iacUpdatedCount > 1 ? 'atualizados' : 'atualizado'} />} color="#F59E0B" icon="warning" trend gaugeValue={iacUpdatedPct} onClick={() => navigate('/lists/iacs')} />
+              <OperationalTile label="Projetos" value={projectRows.length} sub={<OperationalSub count={projectUpdatedCount} label={projectUpdatedCount > 1 ? 'atualizados' : 'atualizado'} />} color="#0070B8" icon="folder" trend gaugeValue={projectUpdatedPct} onClick={() => navigate('/lists/projects-tracking')} />
+              <OperationalTile label="Documentos e Desenhos" value={docsTotal} sub={<OperationalSub count={docsPublished} label={docsPublished > 1 ? 'publicados' : 'publicado'} />} color="#6366F1" icon="file" trend gaugeValue={docsPublishedPct} onClick={() => navigate('/documents')} />
             </div>
           </HomeCard>
 
