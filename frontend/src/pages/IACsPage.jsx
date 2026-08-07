@@ -18,7 +18,7 @@ import { formatActivityLine, formatRemainingTime, getCheckinRemainingMs } from '
 import useColumnWidths from '../hooks/useColumnWidths.js';
 import { getAlertRole, resolveRoleDays } from '../utils/roleDays.js';
 
-const IACS_COL_WIDTHS = [64, 40, 140, 90, 110, 90, 105, 60, 90, 220, 180, 130, 130, 110, 80, 110, 100, 120, 130, 140, 100];
+const IACS_COL_WIDTHS = [40, 40, 140, 90, 110, 90, 105, 60, 90, 220, 180, 130, 130, 110, 80, 110, 100, 120, 130, 140, 100];
 
 /* ─── Constants ────────────────────────────────────────────────────────────── */
 const AREAS = ['Confiabilidade', 'Elétrica', 'Mecânica'];
@@ -70,6 +70,7 @@ function compareIacStatus(a, b) {
 
 const PRIORITY_OPTIONS = ['Priority', 'Non Priority'];
 const PRIORITY_CHART_OPTIONS = ['Priority', 'Non Priority'];
+const LINK_FILTER_OPTIONS = ['Com link', 'Sem link'];
 const PRIORITY_COLORS = {
   'Priority':     { color: '#F59E0B', bg: '#FEF3C7', text: '#92400E' },
   'Non Priority': { color: '#64748B', bg: '#F1F5F9', text: '#475569' },
@@ -110,6 +111,10 @@ function externalLink(path) {
   if (/^[a-z][a-z\d+.-]*:/i.test(value)) return value;
   if (/^(?:www\.)?[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(?:[/?#]|$)/i.test(value)) return `https://${value}`;
   return value;
+}
+
+function getLinkFilterValue(path) {
+  return String(path || '').trim() ? 'Com link' : 'Sem link';
 }
 
 /* ─── Badges ─────────────────────────────────────────────────────────────────── */
@@ -1002,6 +1007,7 @@ export default function IACsPage() {
 
   // Column filters
   const [colFilterUpdateStatus, setColFilterUpdateStatus] = useState([]);
+  const [colFilterLink, setColFilterLink] = useState([]);
   const [colFilterArea, setColFilterArea] = useState([]);
   const [colFilterType, setColFilterType] = useState([]);
   const [colFilterPriority, setColFilterPriority] = useState([]);
@@ -1192,6 +1198,9 @@ export default function IACsPage() {
         i.status_current === '9 - Contract signed'
       )));
     }
+    if (colFilterLink.length > 0 && colFilterLink.length < LINK_FILTER_OPTIONS.length) {
+      data = data.filter(i => colFilterLink.includes(getLinkFilterValue(i.link_path)));
+    }
     if (skip !== 'area' && colFilterArea.length > 0 && colFilterArea.length < AREAS.length) {
       data = data.filter(i => colFilterArea.includes(i.area));
     }
@@ -1217,7 +1226,7 @@ export default function IACsPage() {
       );
     }
     return data;
-  }, [items, search, filterStatus, filterPriority, activeTab, showMyIACs, user, colFilterUpdateStatus, colFilterArea, colFilterType, colFilterPriority, colFilterStatus2, colFilterApresentado, statusDotThresholdDays]);
+  }, [items, search, filterStatus, filterPriority, activeTab, showMyIACs, user, colFilterUpdateStatus, colFilterLink, colFilterArea, colFilterType, colFilterPriority, colFilterStatus2, colFilterApresentado, statusDotThresholdDays]);
 
   const filtered = useMemo(() => {
     const data = applyFilters(null);
@@ -1270,7 +1279,7 @@ export default function IACsPage() {
 
   const hasActiveFilters = Boolean(
     filterStatus || filterPriority || search || activeTab !== 'Todos' || showMyIACs
-    || colFilterUpdateStatus.length || colFilterArea.length || colFilterType.length
+    || colFilterUpdateStatus.length || colFilterLink.length || colFilterArea.length || colFilterType.length
     || colFilterPriority.length || colFilterStatus2.length || colFilterApresentado.length
   );
 
@@ -1281,6 +1290,7 @@ export default function IACsPage() {
     setActiveTab('Todos');
     setShowMyIACs(false);
     setColFilterUpdateStatus([]);
+    setColFilterLink([]);
     setColFilterArea([]);
     setColFilterType([]);
     setColFilterPriority([]);
@@ -1651,7 +1661,6 @@ export default function IACsPage() {
                     <thead>
                       <tr style={{ background: '#F8FAFC', borderBottom: '2px solid #E2E8F0' }}>
                         <th style={{ position: 'relative', padding: '10px 8px', textAlign: 'center', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>
-                          <span title="Status de atualização">●</span>
                           <ColumnFilterDropdown
                             column="Status de atualização"
                             uniqueValues={colFilterUpdateStatusValues}
@@ -1662,7 +1671,16 @@ export default function IACsPage() {
                           />
                           <ColumnResizeHandle onResizeStart={handleResizeStart(0)} />
                         </th>
-                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'center', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>🔗<ColumnResizeHandle onResizeStart={handleResizeStart(1)} /></th>
+                        <th style={{ position: 'relative', padding: '10px 4px', textAlign: 'center', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>
+                          🔗
+                          <ColumnFilterDropdown
+                            column="Link"
+                            uniqueValues={LINK_FILTER_OPTIONS}
+                            selectedValues={colFilterLink}
+                            onChange={setColFilterLink}
+                          />
+                          <ColumnResizeHandle onResizeStart={handleResizeStart(1)} />
+                        </th>
                         <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>
                           IAC
                           <ColumnResizeHandle onResizeStart={handleResizeStart(2)} />

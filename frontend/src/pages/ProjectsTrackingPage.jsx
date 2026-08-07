@@ -14,7 +14,7 @@ import AppSelect from '../components/ui/AppSelect.jsx';
 import { formatActivityLine, formatRemainingTime, getCheckinRemainingMs } from '../utils/listActivity.js';
 import { getAlertRole, resolveRoleDays } from '../utils/roleDays.js';
 
-const PROJECTS_COL_WIDTHS = [64, 46, 130, 110, 280, 180, 160, 170, 220, 100, 120, 110, 110, 100, 100, 100, 150, 100, 90];
+const PROJECTS_COL_WIDTHS = [40, 46, 130, 110, 280, 180, 160, 170, 220, 100, 120, 110, 110, 100, 100, 100, 150, 100, 90];
 
 // Compara o campo "gestor" com o nome do usuário logado. Usa includes() nos dois sentidos
 // e, como o campo às vezes guarda o nome completo (com nome do meio) enquanto o cadastro do
@@ -89,6 +89,7 @@ const STATUS_OPTIONS = [
 const STATUS_META = Object.fromEntries(STATUS_OPTIONS.map(s => [s.value, s]));
 
 const NATUREZA_OPTIONS = ['CAPEX', 'OPEX', 'Guarda-chuva'];
+const LINK_FILTER_OPTIONS = ['Com link', 'Sem link'];
 
 const EMPTY_PROJECT = {
   area: 'Elétrica',
@@ -970,6 +971,10 @@ function projectFolderHref(path) {
   }
   if (/^(?:www\.)?[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(?:[/?#]|$)/i.test(value)) return `https://${value}`;
   return value;
+}
+
+function getLinkFilterValue(path) {
+  return String(path || '').trim() ? 'Com link' : 'Sem link';
 }
 
 function fmtDateBR(val) {
@@ -1865,6 +1870,7 @@ export default function ProjectsTrackingPage() {
 
   // Column filters
   const [colFilterUpdateStatus, setColFilterUpdateStatus] = useState([]);
+  const [colFilterLink, setColFilterLink] = useState([]);
   const [colFilterUHE, setColFilterUHE] = useState([]);
   const [colFilterStatus, setColFilterStatus] = useState([]);
   const [colFilterGestor, setColFilterGestor] = useState([]);
@@ -2099,6 +2105,9 @@ export default function ProjectsTrackingPage() {
         i.status === 'Encerrado'
       )));
     }
+    if (colFilterLink.length > 0 && colFilterLink.length < LINK_FILTER_OPTIONS.length) {
+      data = data.filter(i => colFilterLink.includes(getLinkFilterValue(i.caminho_projeto)));
+    }
     if (colFilterUHE.length > 0 && colFilterUHE.length < UHE_LIST.length) {
       data = data.filter(i => colFilterUHE.includes(i.uhe));
     }
@@ -2125,7 +2134,7 @@ export default function ProjectsTrackingPage() {
       );
     }
     return data;
-  }, [items, search, filterStatus, filterNatureza, filterUHE, activeTab, showMyContracts, user, colFilterUpdateStatus, colFilterUHE, colFilterStatus, colFilterGestor, colFilterNatureza, colFilterAditivo, statusDotThresholdDays]);
+  }, [items, search, filterStatus, filterNatureza, filterUHE, activeTab, showMyContracts, user, colFilterUpdateStatus, colFilterLink, colFilterUHE, colFilterStatus, colFilterGestor, colFilterNatureza, colFilterAditivo, statusDotThresholdDays]);
 
   const filtered = useMemo(() => applyFilters(null), [applyFilters]);
   const statusChartItems   = useMemo(() => applyFilters('status'),   [applyFilters]);
@@ -2362,7 +2371,7 @@ export default function ProjectsTrackingPage() {
 
   const hasActiveFilters = Boolean(
     filterStatus || filterNatureza || filterUHE || search || activeTab !== 'Todos' || showMyContracts
-    || colFilterUpdateStatus.length || colFilterUHE.length || colFilterStatus.length
+    || colFilterUpdateStatus.length || colFilterLink.length || colFilterUHE.length || colFilterStatus.length
     || colFilterGestor.length || colFilterNatureza.length || colFilterAditivo.length
   );
 
@@ -2374,6 +2383,7 @@ export default function ProjectsTrackingPage() {
     setActiveTab('Todos');
     setShowMyContracts(false);
     setColFilterUpdateStatus([]);
+    setColFilterLink([]);
     setColFilterUHE([]);
     setColFilterStatus([]);
     setColFilterGestor([]);
@@ -2552,7 +2562,6 @@ export default function ProjectsTrackingPage() {
                         fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
                       }}>
-                        <span title="Status de atualização">●</span>
                         <ColumnFilterDropdown
                           column="Status de atualização"
                           uniqueValues={colFilterUpdateStatusValues}
@@ -2564,9 +2573,18 @@ export default function ProjectsTrackingPage() {
                         <ColumnResizeHandle onResizeStart={handleResizeStart(0)} />
                       </th>
                       <th style={{
-                        position: 'relative', padding: '10px 12px', textAlign: 'center',
+                        position: 'relative', padding: '10px 4px', textAlign: 'center',
                         fontSize: '0.75rem', fontWeight: 700, color: '#64748B', whiteSpace: 'nowrap',
-                      }}>🔗<ColumnResizeHandle onResizeStart={handleResizeStart(1)} /></th>
+                      }}>
+                        🔗
+                        <ColumnFilterDropdown
+                          column="Link"
+                          uniqueValues={LINK_FILTER_OPTIONS}
+                          selectedValues={colFilterLink}
+                          onChange={setColFilterLink}
+                        />
+                        <ColumnResizeHandle onResizeStart={handleResizeStart(1)} />
+                      </th>
                       <th style={{
                         position: 'relative', padding: '10px 12px', textAlign: 'left',
                         fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
