@@ -11,6 +11,7 @@ import { createPortal } from 'react-dom';
  * - onChange: (values: string[]) => void (callback quando os filtros mudam)
  * - searchPlaceholder?: string
  * - maxWidth?: number
+ * - renderValue?: (value: string) => ReactNode
  */
 export default function ColumnFilterDropdown({
   column,
@@ -19,6 +20,7 @@ export default function ColumnFilterDropdown({
   onChange,
   searchPlaceholder = 'Buscar...',
   maxWidth = 240,
+  renderValue,
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -363,7 +365,7 @@ export default function ColumnFilterDropdown({
                       flex: 1,
                       fontWeight: isSelected ? 600 : 400,
                     }}>
-                      {value}
+                      {renderValue ? renderValue(value) : value}
                     </span>
                   </label>
                 );

@@ -6,7 +6,7 @@ import { useAuth, usePageAccess } from '../context/AuthContext.jsx';
 import AlertBell from '../components/ui/AlertBell.jsx';
 import ColumnFilterDropdown from '../components/ui/ColumnFilterDropdown.jsx';
 import ColumnResizeHandle from '../components/ui/ColumnResizeHandle.jsx';
-import StatusDot from '../components/ui/StatusDot.jsx';
+import StatusDot, { getStatusDotFilterValue, STATUS_DOT_FILTER_OPTIONS, StatusDotFilterValue } from '../components/ui/StatusDot.jsx';
 import OpenTimeBadge from '../components/ui/OpenTimeBadge.jsx';
 import CellTooltip from '../components/ui/CellTooltip.jsx';
 import DuplicatePromptModal from '../components/ui/DuplicatePromptModal.jsx';
@@ -18,7 +18,7 @@ import { formatActivityLine, formatRemainingTime, getCheckinRemainingMs } from '
 import useColumnWidths from '../hooks/useColumnWidths.js';
 import { getAlertRole, resolveRoleDays } from '../utils/roleDays.js';
 
-const IACS_COL_WIDTHS = [40, 40, 140, 90, 110, 90, 105, 60, 90, 220, 180, 130, 130, 110, 80, 110, 100, 120, 130, 140, 100];
+const IACS_COL_WIDTHS = [64, 40, 140, 90, 110, 90, 105, 60, 90, 220, 180, 130, 130, 110, 80, 110, 100, 120, 130, 140, 100];
 
 /* ─── Constants ────────────────────────────────────────────────────────────── */
 const AREAS = ['Confiabilidade', 'Elétrica', 'Mecânica'];
@@ -1001,6 +1001,7 @@ export default function IACsPage() {
   const [importFile, setImportFile]     = useState(null);
 
   // Column filters
+  const [colFilterUpdateStatus, setColFilterUpdateStatus] = useState([]);
   const [colFilterArea, setColFilterArea] = useState([]);
   const [colFilterType, setColFilterType] = useState([]);
   const [colFilterPriority, setColFilterPriority] = useState([]);
@@ -1043,6 +1044,15 @@ export default function IACsPage() {
     () => resolveRoleDays(alertSettings, 'iac_alert_role_days', 'iac_alert_interval_days', 6, getAlertRole(user)),
     [alertSettings, user]
   );
+
+  const colFilterUpdateStatusValues = useMemo(() => {
+    const values = new Set(preFiltered.map(i => getStatusDotFilterValue(
+      i.updated_at,
+      statusDotThresholdDays,
+      i.status_current === '9 - Contract signed'
+    )));
+    return STATUS_DOT_FILTER_OPTIONS.filter(value => values.has(value));
+  }, [preFiltered, statusDotThresholdDays]);
 
   // Unique values for column filters — only show values that exist in current data
   const colFilterAreaValues = useMemo(() => {
@@ -1175,6 +1185,13 @@ export default function IACsPage() {
     if (skip !== 'status' && filterStatus) data = data.filter(i => i.status_current === filterStatus);
     if (skip !== 'priority' && filterPriority) data = data.filter(i => i.priority === filterPriority);
     // Column filters
+    if (colFilterUpdateStatus.length > 0) {
+      data = data.filter(i => colFilterUpdateStatus.includes(getStatusDotFilterValue(
+        i.updated_at,
+        statusDotThresholdDays,
+        i.status_current === '9 - Contract signed'
+      )));
+    }
     if (skip !== 'area' && colFilterArea.length > 0 && colFilterArea.length < AREAS.length) {
       data = data.filter(i => colFilterArea.includes(i.area));
     }
@@ -1200,7 +1217,7 @@ export default function IACsPage() {
       );
     }
     return data;
-  }, [items, search, filterStatus, filterPriority, activeTab, showMyIACs, user, colFilterArea, colFilterType, colFilterPriority, colFilterStatus2, colFilterApresentado]);
+  }, [items, search, filterStatus, filterPriority, activeTab, showMyIACs, user, colFilterUpdateStatus, colFilterArea, colFilterType, colFilterPriority, colFilterStatus2, colFilterApresentado, statusDotThresholdDays]);
 
   const filtered = useMemo(() => {
     const data = applyFilters(null);
@@ -1250,6 +1267,26 @@ export default function IACsPage() {
     ).length;
     return m;
   }, [items, user]);
+
+  const hasActiveFilters = Boolean(
+    filterStatus || filterPriority || search || activeTab !== 'Todos' || showMyIACs
+    || colFilterUpdateStatus.length || colFilterArea.length || colFilterType.length
+    || colFilterPriority.length || colFilterStatus2.length || colFilterApresentado.length
+  );
+
+  const clearFilters = () => {
+    setFilterStatus('');
+    setFilterPriority('');
+    setSearch('');
+    setActiveTab('Todos');
+    setShowMyIACs(false);
+    setColFilterUpdateStatus([]);
+    setColFilterArea([]);
+    setColFilterType([]);
+    setColFilterPriority([]);
+    setColFilterStatus2([]);
+    setColFilterApresentado([]);
+  };
 
   // Extract unique values for dynamic dropdowns
   const allRequesters = useMemo(() =>
@@ -1546,14 +1583,14 @@ export default function IACsPage() {
 
       {/* ── Filters ── */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-        <button onClick={() => { setFilterStatus(''); setFilterPriority(''); setSearch(''); setActiveTab('Todos'); }}
-          disabled={!(filterStatus || filterPriority || search || activeTab !== 'Todos')}
+        <button onClick={clearFilters}
+          disabled={!hasActiveFilters}
           style={{
             display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px',
             border: '1.5px solid #FCA5A5', borderRadius: 8, background: '#FEE2E2', color: '#DC2626',
             fontSize: '0.82rem', fontWeight: 700,
-            cursor: (filterStatus || filterPriority || search || activeTab !== 'Todos') ? 'pointer' : 'not-allowed',
-            opacity: (filterStatus || filterPriority || search || activeTab !== 'Todos') ? 1 : 0.5, flexShrink: 0,
+            cursor: hasActiveFilters ? 'pointer' : 'not-allowed',
+            opacity: hasActiveFilters ? 1 : 0.5, flexShrink: 0,
           }}>
           Limpar filtros
         </button>
@@ -1602,7 +1639,18 @@ export default function IACsPage() {
                     </colgroup>
                     <thead>
                       <tr style={{ background: '#F8FAFC', borderBottom: '2px solid #E2E8F0' }}>
-                        <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'center', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>●<ColumnResizeHandle onResizeStart={handleResizeStart(0)} /></th>
+                        <th style={{ position: 'relative', padding: '10px 8px', textAlign: 'center', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>
+                          <span title="Status de atualização">●</span>
+                          <ColumnFilterDropdown
+                            column="Status de atualização"
+                            uniqueValues={colFilterUpdateStatusValues}
+                            selectedValues={colFilterUpdateStatus}
+                            onChange={setColFilterUpdateStatus}
+                            maxWidth={280}
+                            renderValue={value => <StatusDotFilterValue value={value} />}
+                          />
+                          <ColumnResizeHandle onResizeStart={handleResizeStart(0)} />
+                        </th>
                         <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'center', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>🔗<ColumnResizeHandle onResizeStart={handleResizeStart(1)} /></th>
                         <th style={{ position: 'relative', padding: '10px 12px', textAlign: 'left', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap' }}>
                           IAC

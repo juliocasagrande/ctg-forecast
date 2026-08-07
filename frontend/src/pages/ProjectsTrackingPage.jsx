@@ -5,7 +5,7 @@ import { useToast } from '../components/ui/Toast.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import ColumnFilterDropdown from '../components/ui/ColumnFilterDropdown.jsx';
 import ColumnResizeHandle from '../components/ui/ColumnResizeHandle.jsx';
-import StatusDot from '../components/ui/StatusDot.jsx';
+import StatusDot, { getStatusDotFilterValue, STATUS_DOT_FILTER_OPTIONS, StatusDotFilterValue } from '../components/ui/StatusDot.jsx';
 import CellTooltip from '../components/ui/CellTooltip.jsx';
 import DuplicatePromptModal from '../components/ui/DuplicatePromptModal.jsx';
 import useColumnWidths from '../hooks/useColumnWidths.js';
@@ -14,7 +14,7 @@ import AppSelect from '../components/ui/AppSelect.jsx';
 import { formatActivityLine, formatRemainingTime, getCheckinRemainingMs } from '../utils/listActivity.js';
 import { getAlertRole, resolveRoleDays } from '../utils/roleDays.js';
 
-const PROJECTS_COL_WIDTHS = [40, 46, 130, 110, 280, 180, 160, 170, 220, 100, 120, 110, 110, 100, 100, 100, 150, 100, 90];
+const PROJECTS_COL_WIDTHS = [64, 46, 130, 110, 280, 180, 160, 170, 220, 100, 120, 110, 110, 100, 100, 100, 150, 100, 90];
 
 // Compara o campo "gestor" com o nome do usuário logado. Usa includes() nos dois sentidos
 // e, como o campo às vezes guarda o nome completo (com nome do meio) enquanto o cadastro do
@@ -1864,6 +1864,7 @@ export default function ProjectsTrackingPage() {
   const [showReportModal, setShowReportModal] = useState(false);
 
   // Column filters
+  const [colFilterUpdateStatus, setColFilterUpdateStatus] = useState([]);
   const [colFilterUHE, setColFilterUHE] = useState([]);
   const [colFilterStatus, setColFilterStatus] = useState([]);
   const [colFilterGestor, setColFilterGestor] = useState([]);
@@ -2033,6 +2034,15 @@ export default function ProjectsTrackingPage() {
     [alertSettings, user]
   );
 
+  const colFilterUpdateStatusValues = useMemo(() => {
+    const values = new Set(preFiltered.map(i => getStatusDotFilterValue(
+      i.updated_at,
+      statusDotThresholdDays,
+      i.status === 'Encerrado'
+    )));
+    return STATUS_DOT_FILTER_OPTIONS.filter(value => values.has(value));
+  }, [preFiltered, statusDotThresholdDays]);
+
   // Unique values for column filters — only show values that exist in current data
   const colFilterUHEValues = useMemo(() => {
     const values = [...new Set(preFiltered.map(i => i.uhe).filter(Boolean))];
@@ -2082,6 +2092,13 @@ export default function ProjectsTrackingPage() {
     else if (skip !== 'status' && filterStatus) data = data.filter(i => i.status === filterStatus);
     if (skip !== 'natureza' && filterNatureza) data = data.filter(i => i.natureza === filterNatureza);
     // Column filters
+    if (colFilterUpdateStatus.length > 0) {
+      data = data.filter(i => colFilterUpdateStatus.includes(getStatusDotFilterValue(
+        i.updated_at,
+        statusDotThresholdDays,
+        i.status === 'Encerrado'
+      )));
+    }
     if (colFilterUHE.length > 0 && colFilterUHE.length < UHE_LIST.length) {
       data = data.filter(i => colFilterUHE.includes(i.uhe));
     }
@@ -2108,7 +2125,7 @@ export default function ProjectsTrackingPage() {
       );
     }
     return data;
-  }, [items, search, filterStatus, filterNatureza, filterUHE, activeTab, showMyContracts, user, colFilterUHE, colFilterStatus, colFilterGestor, colFilterNatureza, colFilterAditivo]);
+  }, [items, search, filterStatus, filterNatureza, filterUHE, activeTab, showMyContracts, user, colFilterUpdateStatus, colFilterUHE, colFilterStatus, colFilterGestor, colFilterNatureza, colFilterAditivo, statusDotThresholdDays]);
 
   const filtered = useMemo(() => applyFilters(null), [applyFilters]);
   const statusChartItems   = useMemo(() => applyFilters('status'),   [applyFilters]);
@@ -2343,6 +2360,27 @@ export default function ProjectsTrackingPage() {
     }
   };
 
+  const hasActiveFilters = Boolean(
+    filterStatus || filterNatureza || filterUHE || search || activeTab !== 'Todos' || showMyContracts
+    || colFilterUpdateStatus.length || colFilterUHE.length || colFilterStatus.length
+    || colFilterGestor.length || colFilterNatureza.length || colFilterAditivo.length
+  );
+
+  const clearFilters = () => {
+    setFilterStatus('');
+    setFilterNatureza('');
+    setFilterUHE('');
+    setSearch('');
+    setActiveTab('Todos');
+    setShowMyContracts(false);
+    setColFilterUpdateStatus([]);
+    setColFilterUHE([]);
+    setColFilterStatus([]);
+    setColFilterGestor([]);
+    setColFilterNatureza([]);
+    setColFilterAditivo([]);
+  };
+
   return (
     <div style={{ padding: '12px 16px 16px 0' }}>
 
@@ -2443,14 +2481,14 @@ export default function ProjectsTrackingPage() {
 
       {/* Filters */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-        <button onClick={() => { setFilterStatus(''); setFilterNatureza(''); setFilterUHE(''); setSearch(''); setActiveTab('Todos'); }}
-          disabled={!(filterStatus || filterNatureza || filterUHE || search || activeTab !== 'Todos')}
+        <button onClick={clearFilters}
+          disabled={!hasActiveFilters}
           style={{
             display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px',
             border: '1.5px solid #FCA5A5', borderRadius: 8, background: '#FEE2E2', color: '#DC2626',
             fontSize: '0.82rem', fontWeight: 700,
-            cursor: (filterStatus || filterNatureza || filterUHE || search || activeTab !== 'Todos') ? 'pointer' : 'not-allowed',
-            opacity: (filterStatus || filterNatureza || filterUHE || search || activeTab !== 'Todos') ? 1 : 0.5, flexShrink: 0,
+            cursor: hasActiveFilters ? 'pointer' : 'not-allowed',
+            opacity: hasActiveFilters ? 1 : 0.5, flexShrink: 0,
           }}>
           Limpar filtros
         </button>
@@ -2513,7 +2551,18 @@ export default function ProjectsTrackingPage() {
                         position: 'relative', padding: '10px 12px', textAlign: 'center',
                         fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.07em', color: '#64748B', whiteSpace: 'nowrap',
-                      }}>●<ColumnResizeHandle onResizeStart={handleResizeStart(0)} /></th>
+                      }}>
+                        <span title="Status de atualização">●</span>
+                        <ColumnFilterDropdown
+                          column="Status de atualização"
+                          uniqueValues={colFilterUpdateStatusValues}
+                          selectedValues={colFilterUpdateStatus}
+                          onChange={setColFilterUpdateStatus}
+                          maxWidth={280}
+                          renderValue={value => <StatusDotFilterValue value={value} />}
+                        />
+                        <ColumnResizeHandle onResizeStart={handleResizeStart(0)} />
+                      </th>
                       <th style={{
                         position: 'relative', padding: '10px 12px', textAlign: 'center',
                         fontSize: '0.75rem', fontWeight: 700, color: '#64748B', whiteSpace: 'nowrap',
