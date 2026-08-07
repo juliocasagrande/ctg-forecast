@@ -11,7 +11,7 @@ import useModalHotkeys from '../hooks/useModalHotkeys.js';
 import AppSelect from '../components/ui/AppSelect.jsx';
 import * as mammoth from 'mammoth';
 
-const DRAW_COL_WIDTHS = [40, 170, 130, 150, 100, 320, 130, 110]; // 🔗 Código Usina Solicitante Data Assunto Status Ações
+const DRAW_COL_WIDTHS = [40, 170, 130, 125, 150, 100, 320, 130, 110]; // 🔗 Código Usina Disciplina Solicitante Data Assunto Status Ações
 
 /* ─── Constants ──────────────────────────────────────────────────────────────── */
 const DRAWING_TYPES = [
@@ -22,6 +22,13 @@ const AREAS = [
   { value: 'PRD', label: 'Produção' },
   { value: 'COP', label: 'Coordenação Operação' },
 ];
+const DISCIPLINE_AREAS = [
+  { value: 'eletrica',       label: 'Elétrica' },
+  { value: 'mecanica',       label: 'Mecânica' },
+  { value: 'confiabilidade', label: 'Confiabilidade' },
+  { value: 'modernizacao',   label: 'Modernização' },
+];
+const DISCIPLINE_AREA_LABELS = Object.fromEntries(DISCIPLINE_AREAS.map(a => [a.value, a.label]));
 const PLANT_SIGLAS = {
   'PCH Palmeiras':'PLM', 'PCH Retiro':'RET',
   'UHE Canoas 1':'CN1',  'UHE Canoas 2':'CN2',
@@ -74,6 +81,12 @@ function plantsLabel(plants) {
 function hasPlant(doc, plant) {
   return Array.isArray(doc.plant) && doc.plant.includes(plant);
 }
+function hasDocumentLink(doc) {
+  return Boolean(String(doc?.document_link || '').trim());
+}
+function disciplineAreaLabel(value) {
+  return DISCIPLINE_AREA_LABELS[value] || '—';
+}
 function buildCode(type, area, seq, year, revision) {
   if (!type || !area || !seq || !year) return '';
   const seqStr = String(seq).padStart(4, '0');
@@ -100,17 +113,19 @@ function StatusBadge({ status }) {
 }
 
 /* ─── StatCard ───────────────────────────────────────────────────────────────── */
-function StatCard({ label, value, sub, color = '#0066B3' }) {
+function StatCard({ label, value, sub, color = '#0066B3', active = false, onClick }) {
   return (
-    <div style={{
+    <button type="button" onClick={onClick} aria-pressed={active} style={{
       background:'#fff', border:'1px solid #E2E8F0', borderRadius:10,
       padding:'14px 18px', display:'flex', flexDirection:'column', gap:4,
       borderTop:`3px solid ${color}`, flex:'1 1 0', minWidth:100,
+      textAlign:'left', fontFamily:'inherit', cursor:onClick?'pointer':'default',
+      boxShadow:active?`0 0 0 2px ${color}55`:'none', opacity:active?1:0.96,
     }}>
       <div style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#94A3B8' }}>{label}</div>
       <div style={{ fontFamily:'var(--font-display)', fontSize:'1.6rem', fontWeight:700, color, lineHeight:1 }}>{value}</div>
       {sub && <div style={{ fontSize:'0.72rem', color:'#64748B' }}>{sub}</div>}
-    </div>
+    </button>
   );
 }
 
@@ -155,7 +170,7 @@ function DonutChart({ data, title, activeFilter, onFilter }) {
   const [tooltipPos, setTooltipPos] = useState({ x:0, y:0 });
   return (
     <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:10, borderTop:'3px solid #0066B3', padding:'14px 16px', flex:1, minWidth:0 }}>
-      <div style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#94A3B8', marginBottom:10 }}>{title}</div>
+      <div style={{ fontSize:'0.72rem', lineHeight:1, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#94A3B8', marginBottom:10 }}>{title}</div>
       {total===0 ? <div style={{ fontSize:'0.78rem', color:'#CBD5E1', textAlign:'center', padding:'16px 0' }}>Sem dados</div>
         : <div style={{ display:'flex', alignItems:'center', gap:12 }}>
             <svg width={90} height={90} viewBox="0 0 90 90" style={{ flexShrink:0 }}>
@@ -174,7 +189,7 @@ function DonutChart({ data, title, activeFilter, onFilter }) {
                   />
                 );
               })}
-              <text x={cx} y={cy+1} textAnchor="middle" dominantBaseline="middle" style={{ fontSize:'0.8rem', fontWeight:700, fill:'#1E293B' }}>{total}</text>
+              <text x={cx} y={cy+1} textAnchor="middle" dominantBaseline="middle" style={{ fontSize:'0.92rem', fontWeight:700, fill:'#1E293B' }}>{total}</text>
             </svg>
             <div style={{ display:'flex', flexDirection:'column', gap:5, flex:1, minWidth:0 }}>
               {slices.map((s,i) => {
@@ -190,8 +205,8 @@ function DonutChart({ data, title, activeFilter, onFilter }) {
                     }}
                   >
                     <span style={{ width:8, height:8, borderRadius:'50%', background:s.color, flexShrink:0 }}/>
-                    <span style={{ fontSize:'0.68rem', color:'#475569', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontWeight: isActive ? 700 : 400 }}>{s.label}</span>
-                    <span style={{ fontSize:'0.68rem', fontWeight:700, color:'#1E293B', flexShrink:0 }}>{s.value}</span>
+                    <span style={{ fontSize:'0.88rem', lineHeight:1, color:'#475569', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontWeight: isActive ? 700 : 400 }}>{s.label}</span>
+                    <span style={{ fontSize:'0.88rem', lineHeight:1, fontWeight:700, color:'#1E293B', flexShrink:0 }}>{s.value}</span>
                   </div>
                 );
               })}
@@ -429,6 +444,7 @@ function DrawingModal({ open, onClose, onSaved, doc, nextSeq, allUsers }) {
   const initForm = () => ({
     type:            doc?.type  || 'DES',
     area:            doc?.area  || 'ENG',
+    discipline_area: doc?.discipline_area || '',
     sequence_number: doc?.sequence_number ?? nextSeq ?? '',
     year:            doc?.year  ?? CURRENT_YEAR_SHORT,
     revision:        doc?.revision !== null && doc?.revision !== undefined ? doc.revision : 0,
@@ -458,6 +474,8 @@ function DrawingModal({ open, onClose, onSaved, doc, nextSeq, allUsers }) {
     const missing = [];
     if (!form.type)        missing.push('Tipo de Desenho');
     if (!form.area)        missing.push('Área');
+    if (!form.discipline_area) missing.push('Disciplina');
+    if (!form.plant?.length)   missing.push('Usina');
     if (!form.responsible) missing.push('Solicitante');
     if (!form.date)        missing.push('Data');
     if (!form.subject)     missing.push('Assunto');
@@ -496,17 +514,23 @@ function DrawingModal({ open, onClose, onSaved, doc, nextSeq, allUsers }) {
             <span style={{ fontFamily:'monospace', fontWeight:700, fontSize:'1rem', color: preview?'#001F5B':'#CBD5E1' }}>{preview || 'Preencha os campos abaixo'}</span>
           </div>
 
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
             <Field label="Tipo de Desenho" required>
               <AppSelect value={form.type} onChange={e => set('type', e.target.value)}
                 style={isEdit ? fLocked : fS} disabled={isEdit}>
                 {DRAWING_TYPES.map(o => <option key={o.value} value={o.value}>{o.value} — {o.label}</option>)}
               </AppSelect>
             </Field>
-            <Field label="Área" required>
+            <Field label="Área do código" required>
               <AppSelect value={form.area} onChange={e => set('area', e.target.value)}
                 style={isEdit ? fLocked : fS} disabled={isEdit}>
                 {AREAS.map(o => <option key={o.value} value={o.value}>{o.value} — {o.label}</option>)}
+              </AppSelect>
+            </Field>
+            <Field label="Disciplina" required>
+              <AppSelect value={form.discipline_area} onChange={e => set('discipline_area', e.target.value)} style={fS}>
+                <option value="">— Selecionar —</option>
+                {DISCIPLINE_AREAS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </AppSelect>
             </Field>
           </div>
@@ -526,7 +550,7 @@ function DrawingModal({ open, onClose, onSaved, doc, nextSeq, allUsers }) {
           </div>
 
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
-            <Field label="Usina">
+            <Field label="Usina" required>
               <PlantMultiSelect value={form.plant} onChange={v => set('plant', v)}/>
             </Field>
             <Field label="Solicitante" required>
@@ -627,7 +651,7 @@ function VBarChart({ data, title, activeFilter, onFilter }) {
   const [tooltipPos, setTooltipPos] = useState({ x:0, y:0 });
   return (
     <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:10, borderTop:'3px solid #0066B3', padding:'14px 16px', flex:1, minWidth:0, width:'100%' }}>
-      <div style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#94A3B8', marginBottom:10 }}>{title}</div>
+      <div style={{ fontSize:'0.72rem', lineHeight:1, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#94A3B8', marginBottom:10 }}>{title}</div>
       {visible.length === 0
         ? <div style={{ fontSize:'0.78rem', color:'#CBD5E1', textAlign:'center', padding:'16px 0' }}>Sem dados</div>
         : <div style={{ display:'flex', alignItems:'flex-end', gap:4, height:120, overflow:'hidden' }}>
@@ -645,7 +669,7 @@ function VBarChart({ data, title, activeFilter, onFilter }) {
                     transition:'opacity 0.15s',
                   }}
                 >
-                  <div style={{ fontSize:'0.75rem', fontWeight:700, color: isActive ? '#001F5B' : '#1E293B', marginBottom:3 }}>{d.value}</div>
+                  <div style={{ fontSize:'0.82rem', lineHeight:1, fontWeight:700, color: isActive ? '#001F5B' : '#1E293B', marginBottom:3 }}>{d.value}</div>
                   <div style={{
                     width:'100%',
                     height:`${Math.max((d.value/max)*80,6)}px`,
@@ -656,7 +680,7 @@ function VBarChart({ data, title, activeFilter, onFilter }) {
                     opacity: activeFilter && !isActive ? 0.5 : 1,
                   }}/>
                   <div style={{
-                    fontSize:'0.72rem', fontWeight: isActive ? 700 : 600, color: isActive ? '#001F5B' : '#334155', textAlign:'center',
+                    fontSize:'0.8rem', fontWeight: isActive ? 700 : 600, color: isActive ? '#001F5B' : '#334155', textAlign:'center',
                     width:'100%', marginTop:5, lineHeight:1,
                     letterSpacing:'0.02em',
                   }}>{d.label}</div>
@@ -1084,12 +1108,15 @@ export default function ControleDesenhosPage() {
   const [typeFilter, setTypeFilter]     = useState('');
   const [myDocsOnly, setMyDocsOnly]     = useState(false);
   const [plantFilter, setPlantFilter]   = useState('');
+  const [kpiFilter, setKpiFilter]       = useState('');
   const [expandedGroup, setExpandedGroup] = useState(null);
   const [expandedDoc, setExpandedDoc]   = useState(null);
   const [importDocxModal, setImportDocxModal] = useState(false);
 
+  const [colFilterLink, setColFilterLink] = useState([]);
   const [colFilterCode, setColFilterCode] = useState([]);
   const [colFilterPlant, setColFilterPlant] = useState([]);
+  const [colFilterDisciplineArea, setColFilterDisciplineArea] = useState([]);
   const [colFilterResponsible, setColFilterResponsible] = useState([]);
   const [colFilterDate, setColFilterDate] = useState([]);
   const [colFilterSubject, setColFilterSubject] = useState([]);
@@ -1099,6 +1126,7 @@ export default function ControleDesenhosPage() {
 
   const [chartStatusFilter, setChartStatusFilter] = useState('');
   const [chartPlantFilter, setChartPlantFilter] = useState('');
+  const [chartDisciplineFilter, setChartDisciplineFilter] = useState('');
 
   const SUPERIOR_ROLES = ['admin','planejador','coordenador'];
   const isSuperior = SUPERIOR_ROLES.includes(user?.role);
@@ -1192,12 +1220,12 @@ export default function ControleDesenhosPage() {
   const openEdit = (doc) => setDocModal({ open:true, doc });
 
   const hasActiveFilters = !!(search || typeFilter || statusFilter || plantFilter || yearFilter || myDocsOnly
-    || colFilterCode.length || colFilterPlant.length || colFilterResponsible.length || colFilterDate.length || colFilterSubject.length || colFilterStatus.length
-    || chartStatusFilter || chartPlantFilter);
+    || colFilterLink.length || colFilterCode.length || colFilterPlant.length || colFilterDisciplineArea.length || colFilterResponsible.length || colFilterDate.length || colFilterSubject.length || colFilterStatus.length
+    || chartStatusFilter || chartPlantFilter || chartDisciplineFilter || kpiFilter);
   const clearFilters = () => {
     setSearch(''); setTypeFilter(''); setStatusFilter(''); setPlantFilter(''); setYearFilter(0); setMyDocsOnly(false);
-    setColFilterCode([]); setColFilterPlant([]); setColFilterResponsible([]); setColFilterDate([]); setColFilterSubject([]); setColFilterStatus([]);
-    setChartStatusFilter(''); setChartPlantFilter('');
+    setColFilterLink([]); setColFilterCode([]); setColFilterPlant([]); setColFilterDisciplineArea([]); setColFilterResponsible([]); setColFilterDate([]); setColFilterSubject([]); setColFilterStatus([]);
+    setChartStatusFilter(''); setChartPlantFilter(''); setChartDisciplineFilter(''); setKpiFilter('');
   };
 
   const normalizeBaseCode = (doc) => {
@@ -1207,6 +1235,14 @@ export default function ControleDesenhosPage() {
 
   const applyFilters = useCallback((skip) => {
     let data = [...docs];
+    if (skip !== 'kpi' && kpiFilter) {
+      const activeYear = yearFilter ? (yearFilter % 100) : CURRENT_YEAR_SHORT;
+      if (kpiFilter === 'year') data = data.filter(d => d.year === activeYear);
+      if (kpiFilter === 'published') data = data.filter(d => d.status === 'Publicado');
+      if (kpiFilter === 'in-progress') data = data.filter(d => d.status === 'Em elaboração');
+      if (kpiFilter === 'published-no-link') data = data.filter(d => d.status === 'Publicado' && !hasDocumentLink(d));
+      if (kpiFilter === 'mine') data = data.filter(d => user?.name && d.responsible?.trim().toLowerCase() === user.name.trim().toLowerCase());
+    }
     if (myDocsOnly) {
       data = data.filter(d => {
         if (!user?.name || !d.responsible) return false;
@@ -1228,11 +1264,20 @@ export default function ControleDesenhosPage() {
     if (skip !== 'plant' && chartPlantFilter) {
       data = data.filter(d => hasPlant(d, chartPlantFilter));
     }
+    if (skip !== 'discipline' && chartDisciplineFilter) {
+      data = data.filter(d => d.discipline_area === chartDisciplineFilter);
+    }
+    if (colFilterLink.length > 0) {
+      data = data.filter(d => colFilterLink.includes(hasDocumentLink(d) ? 'Com link' : 'Sem link'));
+    }
     if (colFilterCode.length > 0) {
       data = data.filter(d => colFilterCode.includes(d.code));
     }
     if (colFilterPlant.length > 0) {
       data = data.filter(d => (d.plant?.length ? d.plant : ['—']).some(p => colFilterPlant.includes(p)));
+    }
+    if (colFilterDisciplineArea.length > 0) {
+      data = data.filter(d => colFilterDisciplineArea.includes(disciplineAreaLabel(d.discipline_area)));
     }
     if (colFilterResponsible.length > 0) {
       data = data.filter(d => colFilterResponsible.includes(d.responsible));
@@ -1252,12 +1297,13 @@ export default function ControleDesenhosPage() {
         (d.code||'').toLowerCase().includes(q)
         || (d.responsible||'').toLowerCase().includes(q)
         || (d.subject||'').toLowerCase().includes(q)
+        || disciplineAreaLabel(d.discipline_area).toLowerCase().includes(q)
         || (d.plant||[]).some(p => p.toLowerCase().includes(q))
         || (d.authors||[]).some(a => a.name.toLowerCase().includes(q))
       );
     }
     return data;
-  }, [docs, statusFilter, typeFilter, plantFilter, search, myDocsOnly, user, colFilterCode, colFilterPlant, colFilterResponsible, colFilterDate, colFilterSubject, colFilterStatus, chartStatusFilter, chartPlantFilter]);
+  }, [docs, statusFilter, typeFilter, plantFilter, search, myDocsOnly, user, kpiFilter, yearFilter, colFilterLink, colFilterCode, colFilterPlant, colFilterDisciplineArea, colFilterResponsible, colFilterDate, colFilterSubject, colFilterStatus, chartStatusFilter, chartPlantFilter, chartDisciplineFilter]);
 
   const dedupeLatest = (arr) => {
     const map = new Map();
@@ -1270,9 +1316,10 @@ export default function ControleDesenhosPage() {
   };
 
   const filtered        = useMemo(() => applyFilters(null),        [applyFilters]);
-  const kpiDocs          = useMemo(() => dedupeLatest(filtered),    [filtered]);
+  const kpiDocs          = useMemo(() => dedupeLatest(applyFilters('kpi')), [applyFilters]);
   const statusChartDocs  = useMemo(() => dedupeLatest(applyFilters('status')), [applyFilters]);
   const plantChartDocs   = useMemo(() => dedupeLatest(applyFilters('plant')),  [applyFilters]);
+  const disciplineChartDocs = useMemo(() => dedupeLatest(applyFilters('discipline')), [applyFilters]);
 
   const groups = useMemo(() => {
     const map = new Map();
@@ -1294,7 +1341,7 @@ export default function ControleDesenhosPage() {
   const totalAll  = kpiDocs.length;
   const published = kpiDocs.filter(d => d.status==='Publicado').length;
   const inProg    = kpiDocs.filter(d => d.status==='Em elaboração').length;
-  const pubNoLink = stats?.published_without_link ?? 0;
+  const pubNoLink = kpiDocs.filter(d => d.status === 'Publicado' && !hasDocumentLink(d)).length;
   const activeYear = yearFilter ? (yearFilter % 100) : CURRENT_YEAR_SHORT;
   const activeYearFull = yearFilter || CURRENT_YEAR;
   const yearDocs  = kpiDocs.filter(d => d.year === activeYear).length;
@@ -1302,6 +1349,7 @@ export default function ControleDesenhosPage() {
     user?.name && d.responsible &&
     d.responsible.trim().toLowerCase() === user.name.trim().toLowerCase()
   ).length;
+  const toggleKpiFilter = value => setKpiFilter(current => current === value ? '' : value);
 
   const TYPE_COLORS = ['#0066B3','#0891B2','#10B981','#8B5CF6','#F59E0B','#EF4444','#6366F1','#EC4899','#14B8A6'];
   const statusChartData = STATUSES.map(s => {
@@ -1320,6 +1368,20 @@ export default function ControleDesenhosPage() {
         { title:'Status', items: STATUSES.map(s => ({ label: s.value, value: itemsForPlant.filter(d=>d.status===s.value).length, color: s.color })) },
       ] };
   }).filter(d=>d.value>0);
+  const DISCIPLINE_COLORS = ['#0EA5E9', '#F97316', '#6366F1', '#14B8A6'];
+  const disciplineChartData = DISCIPLINE_AREAS.map((discipline, i) => {
+    const items = disciplineChartDocs.filter(d => d.discipline_area === discipline.value);
+    return {
+      label: discipline.label,
+      value: items.length,
+      color: DISCIPLINE_COLORS[i],
+      filterKey: discipline.value,
+      tooltipBreakdowns: [
+        { title:'Tipo', items: DRAWING_TYPES.map((t, ti) => ({ label:t.value, value:items.filter(d => d.type === t.value).length, color:TYPE_COLORS[ti % TYPE_COLORS.length] })) },
+        { title:'Status', items: STATUSES.map(s => ({ label:s.value, value:items.filter(d => d.status === s.value).length, color:s.color })) },
+      ],
+    };
+  });
   const years = [...new Set(docs.map(d=>2000+d.year))].sort((a,b)=>b-a);
   const plantsUsed = ALL_PLANTS.filter(p => docs.some(d => hasPlant(d, p)));
 
@@ -1328,12 +1390,12 @@ export default function ControleDesenhosPage() {
 
       {/* KPI Cards */}
       <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
-        <StatCard label="Total Geral"           value={totalAll}    color="#001F5B"/>
-        <StatCard label={`Ano ${activeYearFull}`} value={yearDocs}    color="#0066B3" sub={`de ${totalAll} total`}/>
-        <StatCard label="Publicados"            value={published}   color="#10B981"/>
-        <StatCard label="Em Elaboração"         value={inProg}      color="#F59E0B"/>
-        <StatCard label="Pub. sem link"         value={pubNoLink}   color={pubNoLink>0?'#EF4444':'#94A3B8'} sub={pubNoLink>0?'Atenção':'Tudo ok'}/>
-        <StatCard label="Meus desenhos"         value={myDocsCount} color="#8B5CF6"/>
+        <StatCard label="Total Geral"             value={totalAll}    color="#001F5B" active={!kpiFilter} onClick={() => setKpiFilter('')}/>
+        <StatCard label={`Ano ${activeYearFull}`}  value={yearDocs}    color="#0066B3" active={kpiFilter==='year'} onClick={() => toggleKpiFilter('year')} sub={`de ${totalAll} total`}/>
+        <StatCard label="Publicados"              value={published}   color="#10B981" active={kpiFilter==='published'} onClick={() => toggleKpiFilter('published')}/>
+        <StatCard label="Em Elaboração"           value={inProg}      color="#F59E0B" active={kpiFilter==='in-progress'} onClick={() => toggleKpiFilter('in-progress')}/>
+        <StatCard label="Pub. sem link"           value={pubNoLink}   color={pubNoLink>0?'#EF4444':'#94A3B8'} active={kpiFilter==='published-no-link'} onClick={() => toggleKpiFilter('published-no-link')} sub={pubNoLink>0?'Atenção':'Tudo ok'}/>
+        <StatCard label="Meus desenhos"           value={myDocsCount} color="#8B5CF6" active={kpiFilter==='mine'} onClick={() => toggleKpiFilter('mine')}/>
       </div>
 
       {/* Charts */}
@@ -1352,6 +1414,14 @@ export default function ControleDesenhosPage() {
             data={statusChartData}
             activeFilter={chartStatusFilter}
             onFilter={setChartStatusFilter}
+          />
+        </div>
+        <div style={{ flex:'1 1 190px', minWidth:170, display:'flex' }}>
+          <DonutChart
+            title="Desenhos por Disciplina"
+            data={disciplineChartData}
+            activeFilter={chartDisciplineFilter}
+            onFilter={setChartDisciplineFilter}
           />
         </div>
       </div>
@@ -1437,7 +1507,13 @@ export default function ControleDesenhosPage() {
             </colgroup>
             <thead style={{ position:'sticky', top:0, zIndex:2 }}>
               <tr style={{ background:'#F8FAFC', borderBottom:'2px solid #E2E8F0' }}>
-                <th style={{ ...TH, textAlign:'center' }}>🔗<ColumnResizeHandle onResizeStart={handleResizeStart(0)} /></th>
+                <th style={{ ...TH, textAlign:'center' }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'center' }}>
+                    🔗
+                    <ColumnFilterDropdown column="Link" uniqueValues={['Com link', 'Sem link']} selectedValues={colFilterLink} onChange={setColFilterLink}/>
+                  </div>
+                  <ColumnResizeHandle onResizeStart={handleResizeStart(0)} />
+                </th>
                 <th style={TH}>
                   <div style={{ display:'flex', alignItems:'center' }}>
                     Código
@@ -1464,6 +1540,18 @@ export default function ControleDesenhosPage() {
                 </th>
                 <th style={TH}>
                   <div style={{ display:'flex', alignItems:'center' }}>
+                    Disciplina
+                    <ColumnFilterDropdown
+                      column="Disciplina"
+                      uniqueValues={[...new Set(docs.map(d => disciplineAreaLabel(d.discipline_area)))]}
+                      selectedValues={colFilterDisciplineArea}
+                      onChange={setColFilterDisciplineArea}
+                    />
+                  </div>
+                  <ColumnResizeHandle onResizeStart={handleResizeStart(3)} />
+                </th>
+                <th style={TH}>
+                  <div style={{ display:'flex', alignItems:'center' }}>
                     Solicitante
                     <ColumnFilterDropdown
                       column="Solicitante"
@@ -1472,7 +1560,7 @@ export default function ControleDesenhosPage() {
                       onChange={setColFilterResponsible}
                     />
                   </div>
-                  <ColumnResizeHandle onResizeStart={handleResizeStart(3)} />
+                  <ColumnResizeHandle onResizeStart={handleResizeStart(4)} />
                 </th>
                 <th style={TH}>
                   <div style={{ display:'flex', alignItems:'center' }}>
@@ -1484,7 +1572,7 @@ export default function ControleDesenhosPage() {
                       onChange={setColFilterDate}
                     />
                   </div>
-                  <ColumnResizeHandle onResizeStart={handleResizeStart(4)} />
+                  <ColumnResizeHandle onResizeStart={handleResizeStart(5)} />
                 </th>
                 <th style={TH}>
                   <div style={{ display:'flex', alignItems:'center' }}>
@@ -1496,7 +1584,7 @@ export default function ControleDesenhosPage() {
                       onChange={setColFilterSubject}
                     />
                   </div>
-                  <ColumnResizeHandle onResizeStart={handleResizeStart(5)} />
+                  <ColumnResizeHandle onResizeStart={handleResizeStart(6)} />
                 </th>
                 <th style={TH}>
                   <div style={{ display:'flex', alignItems:'center' }}>
@@ -1508,7 +1596,7 @@ export default function ControleDesenhosPage() {
                       onChange={setColFilterStatus}
                     />
                   </div>
-                  <ColumnResizeHandle onResizeStart={handleResizeStart(6)} />
+                  <ColumnResizeHandle onResizeStart={handleResizeStart(7)} />
                 </th>
                 <th style={TH}>Ações</th>
               </tr>
@@ -1562,6 +1650,9 @@ export default function ControleDesenhosPage() {
                       <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B' }}>
                         <CellTooltip text={plantsLabel(latest.plant)}/>
                       </td>
+                      <td style={{ ...TD, fontSize:'0.78rem', color:'#475569' }}>
+                        <CellTooltip text={disciplineAreaLabel(latest.discipline_area)}/>
+                      </td>
                       <td style={{ ...TD, fontSize:'0.82rem' }}>
                         <CellTooltip text={latest.responsible}/>
                       </td>
@@ -1591,7 +1682,7 @@ export default function ControleDesenhosPage() {
 
                     {expandedDoc === latest.id && (
                       <tr style={{ background:'#F8FBFF', borderBottom:'1px solid #E2E8F0' }}>
-                        <td colSpan={8} style={{ padding:'12px 16px' }}>
+                        <td colSpan={9} style={{ padding:'12px 16px' }}>
                           <DocDetail doc={latest} isAuthor={isAuthor(latest)}/>
                         </td>
                       </tr>
@@ -1636,6 +1727,9 @@ export default function ControleDesenhosPage() {
                           <td style={{ ...TD, fontSize:'0.75rem', color:'#94A3B8' }}>
                             <CellTooltip text={plantsLabel(rev.plant)}/>
                           </td>
+                          <td style={{ ...TD, fontSize:'0.75rem', color:'#64748B' }}>
+                            <CellTooltip text={disciplineAreaLabel(rev.discipline_area)}/>
+                          </td>
                           <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B' }}>
                             <CellTooltip text={rev.responsible}/>
                           </td>
@@ -1655,7 +1749,7 @@ export default function ControleDesenhosPage() {
                         </tr>
                         {expandedDoc === rev.id && (
                           <tr style={{ background:'#F8FBFF', borderBottom:'1px solid #E2E8F0' }}>
-                            <td colSpan={8} style={{ padding:'12px 16px 12px 32px' }}>
+                            <td colSpan={9} style={{ padding:'12px 16px 12px 32px' }}>
                               <DocDetail doc={rev} isAuthor={isAuthor(rev)}/>
                             </td>
                           </tr>
@@ -1707,11 +1801,12 @@ export default function ControleDesenhosPage() {
 function DocDetail({ doc, isAuthor }) {
   return (
     <div style={{ display:'flex', gap:20, flexWrap:'wrap' }}>
-      <div style={{ flex:1, minWidth:200 }}>
+      <div style={{ flex:1, minWidth:0 }}>
         <div style={{ display:'flex', flexWrap:'wrap', gap:'10px 24px' }}>
           {doc.plant?.length > 0 && <InfoItem label="Usina"    value={plantsLabel(doc.plant)}/>}
           <InfoItem label="Tipo" value={`${doc.type} — ${TYPE_META[doc.type]?.label||''}`}/>
-          <InfoItem label="Área" value={`${doc.area} — ${AREAS.find(a=>a.value===doc.area)?.label||doc.area}`}/>
+          <InfoItem label="Área do código" value={`${doc.area} — ${AREAS.find(a=>a.value===doc.area)?.label||doc.area}`}/>
+          <InfoItem label="Disciplina" value={disciplineAreaLabel(doc.discipline_area)}/>
           {doc.revision !== null && doc.revision !== undefined && <InfoItem label="Revisão" value={`R${doc.revision}`}/>}
           {doc.created_by_name && <InfoItem label="Criado por" value={doc.created_by_name}/>}
           {doc.authors?.length > 0 && (
@@ -1771,9 +1866,9 @@ function ActionBtn({ color, onClick, children, tooltip }) {
 }
 function InfoItem({ label, value, full }) {
   return (
-    <div style={{ flex: full ? '1 1 100%' : '1 1 180px', minWidth: full ? '100%' : 180, maxWidth: full ? '100%' : 320 }}>
+    <div style={{ flex: full ? '1 1 100%' : '1 1 180px', minWidth:0, maxWidth: full ? '100%' : 320, overflow:'hidden' }}>
       <div style={{ fontSize:'0.62rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', color:'#94A3B8', marginBottom:2 }}>{label}</div>
-      <div style={{ fontSize:'0.82rem', color:'#1E293B', fontWeight:500, whiteSpace:'normal', wordBreak:'break-word', overflowWrap:'anywhere' }}>{value}</div>
+      <div style={{ fontSize:'0.82rem', color:'#1E293B', fontWeight:500, whiteSpace:'normal', lineHeight:1.35, wordBreak:'break-word', overflowWrap:'anywhere', maxWidth:'100%' }}>{value}</div>
     </div>
   );
 }

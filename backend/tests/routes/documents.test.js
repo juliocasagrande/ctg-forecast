@@ -2,7 +2,7 @@
  * Testes de integração — /api/documents
  *
  * Campos obrigatórios no POST:
- *   type, area, sequence_number (int), year (2 dígitos int),
+ *   type, area, discipline_area, plant, sequence_number (int), year (2 dígitos int),
  *   responsible, date (YYYY-MM-DD), subject, status
  * Código gerado automaticamente: {type}-{area}-{seq}-{yy}
  */
@@ -21,11 +21,13 @@ let adminUser, planejadorUser, engUser;
 // IDs criados nos testes para reutilizar
 let docCreatedByAdmin;
 let docCreatedByEng;
+const REQUIRED_CLASSIFICATION = { discipline_area: 'eletrica', plant: ['UHE Jupiá'] };
 
 function docPayload(overrides = {}) {
   return {
     type:            'IAC',
     area:            'eletrica',
+    ...REQUIRED_CLASSIFICATION,
     sequence_number: 1,
     year:            25,
     responsible:     'Responsável Teste',
@@ -87,6 +89,8 @@ describe('POST /api/documents', () => {
     expect(res.body).toHaveProperty('id');
     expect(res.body).toHaveProperty('code');
     expect(res.body.code).toMatch(/^IAC-eletrica-001-25/);
+    expect(res.body.discipline_area).toBe('eletrica');
+    expect(res.body.plant).toEqual(['UHE Jupiá']);
     expect(Array.isArray(res.body.authors)).toBe(true);
     // Criador é adicionado automaticamente como autor
     expect(res.body.authors.some(a => a.id === adminUser.id)).toBe(true);
@@ -122,6 +126,20 @@ describe('POST /api/documents', () => {
       .send({ type: 'IAC', area: 'eletrica' }); // faltam campos
 
     expect(res.status).toBe(400);
+  });
+
+  it('disciplina e usina são obrigatórias', async () => {
+    const withoutDiscipline = await request(app)
+      .post('/api/documents')
+      .set('Cookie', cookieHeader(adminCookies))
+      .send(docPayload({ sequence_number: 97, discipline_area: '' }));
+    expect(withoutDiscipline.status).toBe(400);
+
+    const withoutPlant = await request(app)
+      .post('/api/documents')
+      .set('Cookie', cookieHeader(adminCookies))
+      .send(docPayload({ sequence_number: 98, plant: [] }));
+    expect(withoutPlant.status).toBe(400);
   });
 
   it('sem auth retorna 401', async () => {
@@ -213,6 +231,7 @@ describe('PUT /api/documents/:id', () => {
       .put(`/api/documents/${docCreatedByEng.id}`)
       .set('Cookie', cookieHeader(adminCookies))
       .send({
+        ...REQUIRED_CLASSIFICATION,
         responsible:   'Novo Responsável',
         date:          '2025-06-15',
         subject:       'Título Atualizado',
@@ -231,6 +250,7 @@ describe('PUT /api/documents/:id', () => {
       .put(`/api/documents/${docCreatedByEng.id}`)
       .set('Cookie', cookieHeader(engCookies))
       .send({
+        ...REQUIRED_CLASSIFICATION,
         responsible:   'Engenheiro Responsável',
         date:          '2025-07-01',
         subject:       'Documento do Eng',
@@ -249,6 +269,7 @@ describe('PUT /api/documents/:id', () => {
       .put(`/api/documents/${docCreatedByAdmin.id}`)
       .set('Cookie', cookieHeader(engCookies))
       .send({
+        ...REQUIRED_CLASSIFICATION,
         responsible:   'Hacker',
         date:          '2025-07-01',
         subject:       'Hackeado',
@@ -266,6 +287,7 @@ describe('PUT /api/documents/:id', () => {
       .put(`/api/documents/${docCreatedByEng.id}`)
       .set('Cookie', cookieHeader(planejadorCookies))
       .send({
+        ...REQUIRED_CLASSIFICATION,
         responsible:   'Planejador',
         date:          '2025-06-20',
         subject:       'Atualizado pelo Planejador',
@@ -281,6 +303,7 @@ describe('PUT /api/documents/:id', () => {
       .put('/api/documents/999999')
       .set('Cookie', cookieHeader(adminCookies))
       .send({
+        ...REQUIRED_CLASSIFICATION,
         responsible:   'Ninguém',
         date:          '2025-06-01',
         subject:       'Não existe',

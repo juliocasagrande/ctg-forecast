@@ -683,6 +683,7 @@ await client.query(`
         code            VARCHAR(60) UNIQUE,
         type            VARCHAR(20) NOT NULL,
         area            VARCHAR(30) NOT NULL,
+        discipline_area VARCHAR(30) DEFAULT NULL,
         sequence_number INTEGER NOT NULL,
         year            INTEGER NOT NULL,
         revision        INTEGER DEFAULT NULL,
@@ -715,6 +716,7 @@ await client.query(`
     /* ───────── DOCUMENT GROUP (agrupamento por base_code) ───────── */
     await client.query(`
       ALTER TABLE documents ADD COLUMN IF NOT EXISTS base_code VARCHAR(50) DEFAULT NULL;
+      ALTER TABLE documents ADD COLUMN IF NOT EXISTS discipline_area VARCHAR(30) DEFAULT NULL;
     `);
 
     /* ───────── DOCUMENTS.PLANT: migrar de VARCHAR único para TEXT[] (múltiplas usinas) ───────── */
@@ -740,6 +742,7 @@ await client.query(`
         code            VARCHAR(60) UNIQUE,
         type            VARCHAR(20) NOT NULL,
         area            VARCHAR(30) NOT NULL,
+        discipline_area VARCHAR(30) DEFAULT NULL,
         sequence_number INTEGER NOT NULL,
         year            INTEGER NOT NULL,
         revision        INTEGER DEFAULT NULL,
@@ -756,6 +759,10 @@ await client.query(`
         created_at      TIMESTAMPTZ DEFAULT NOW(),
         updated_at      TIMESTAMPTZ DEFAULT NOW()
       );
+    `);
+
+    await client.query(`
+      ALTER TABLE drawings ADD COLUMN IF NOT EXISTS discipline_area VARCHAR(30) DEFAULT NULL;
     `);
 
     /* ───────── DRAWING AUTHORS (multi-author support) ───────── */

@@ -14,6 +14,13 @@ function safeError(res, err) {
 }
 
 const SUPERIOR_ROLES = ['planejador', 'coordenador', 'admin'];
+const DISCIPLINE_AREAS = ['eletrica', 'mecanica', 'confiabilidade', 'modernizacao'];
+
+function normalizeDisciplineArea(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const normalized = String(value).trim().toLowerCase();
+  return DISCIPLINE_AREAS.includes(normalized) ? normalized : undefined;
+}
 
 // Verifica se o usuário é autor do desenho
 async function isDrawingAuthor(drawingId, userId) {
@@ -145,10 +152,18 @@ router.get('/next-sequence', async (req, res) => {
 // ─── POST /  — criar desenho ───────────────────────────────────────────────────
 router.post('/', requirePageAccess('drawings', { write: true }), async (req, res) => {
   const { type, area, plant, responsible, date, subject, status, document_link, notes, author_ids } = req.body;
+  const disciplineArea = normalizeDisciplineArea(req.body.discipline_area);
+  const normalizedPlants = normalizePlants(plant);
   const sequence_number = parseNum(req.body.sequence_number);
   const year            = parseNum(req.body.year);
   const revision        = parseNum(req.body.revision);
   const userId = req.user.id;
+
+  if (disciplineArea === undefined)
+    return res.status(400).json({ error: 'Disciplina inválida' });
+
+  if (!disciplineArea || !normalizedPlants)
+    return res.status(400).json({ error: 'Disciplina e usina são obrigatórias' });
 
   if (!type || !area || !sequence_number || !year || !responsible || !date || !subject || !status)
     return res.status(400).json({ error: 'Campos obrigatórios: tipo, área, número, ano, solicitante, data, assunto, status' });
@@ -164,11 +179,11 @@ router.post('/', requirePageAccess('drawings', { write: true }), async (req, res
     await client.query('BEGIN');
     const r = await client.query(`
       INSERT INTO drawings
-        (type, area, sequence_number, year, revision, plant, responsible, date, subject, status,
+        (type, area, discipline_area, sequence_number, year, revision, plant, responsible, date, subject, status,
          document_link, notes, code, base_code, created_by, updated_by, created_at, updated_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15,NOW(),NOW())
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16,NOW(),NOW())
       RETURNING *
-    `, [type, area, sequence_number, year, revision, normalizePlants(plant), responsible, date, subject, status,
+    `, [type, area, disciplineArea, sequence_number, year, revision, normalizedPlants, responsible, date, subject, status,
         document_link||null, notes||null, code, base_code, userId]);
 
     const drawingId = r.rows[0].id;
@@ -212,6 +227,9 @@ router.post('/:id/revision', requirePageAccess('drawings', { write: true }), asy
     if (!(await canEdit(origId, userId, req.user.role, req.user.name)))
       return res.status(403).json({ error: 'Sem permissão para criar revisão' });
 
+    if (!o.discipline_area || !normalizePlants(o.plant))
+      return res.status(400).json({ error: 'Defina a disciplina e a usina antes de criar uma revisão' });
+
     // Calcular próxima revisão
     const maxRev = await client.query(
       'SELECT COALESCE(MAX(revision), -1) AS max FROM drawings WHERE base_code=$1',
@@ -224,11 +242,11 @@ router.post('/:id/revision', requirePageAccess('drawings', { write: true }), asy
 
     const r = await client.query(`
       INSERT INTO drawings
-        (type, area, sequence_number, year, revision, plant, responsible, date, subject, status,
+        (type, area, discipline_area, sequence_number, year, revision, plant, responsible, date, subject, status,
          document_link, notes, code, base_code, created_by, updated_by, created_at, updated_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15,NOW(),NOW())
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16,NOW(),NOW())
       RETURNING *
-    `, [o.type, o.area, o.sequence_number, o.year, nextRev, o.plant,
+    `, [o.type, o.area, o.discipline_area, o.sequence_number, o.year, nextRev, o.plant,
         responsible || o.responsible, date, o.subject, 'Em elaboração',
         null, null, newCode, o.base_code, userId]);
 
@@ -260,20 +278,28 @@ router.post('/:id/revision', requirePageAccess('drawings', { write: true }), asy
 router.put('/:id', requirePageAccess('drawings', { write: true }), async (req, res) => {
   const id = parseInt(req.params.id);
   const { plant, responsible, date, subject, status, document_link, notes, author_ids } = req.body;
+  const disciplineArea = normalizeDisciplineArea(req.body.discipline_area);
+  const normalizedPlants = normalizePlants(plant);
   const userId = req.user.id;
 
   if (!(await canEdit(id, userId, req.user.role, req.user.name)))
     return res.status(403).json({ error: 'Sem permissão para editar este desenho' });
+
+  if (disciplineArea === undefined)
+    return res.status(400).json({ error: 'Disciplina inválida' });
+
+  if (!disciplineArea || !normalizedPlants)
+    return res.status(400).json({ error: 'Disciplina e usina são obrigatórias' });
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const r = await client.query(`
       UPDATE drawings SET
-        plant=$1, responsible=$2, date=$3, subject=$4, status=$5,
-        document_link=$6, notes=$7, updated_by=$8, updated_at=NOW()
-      WHERE id=$9 RETURNING *
-    `, [normalizePlants(plant), responsible, date, subject, status,
+        discipline_area=$1, plant=$2, responsible=$3, date=$4, subject=$5, status=$6,
+        document_link=$7, notes=$8, updated_by=$9, updated_at=NOW()
+      WHERE id=$10 RETURNING *
+    `, [disciplineArea, normalizedPlants, responsible, date, subject, status,
         document_link||null, notes||null, userId, id]);
 
     if (!r.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Desenho não encontrado' }); }

@@ -5,6 +5,7 @@ import api from '../utils/api.js';
 import { useToast } from '../components/ui/Toast.jsx';
 import ColumnFilterDropdown from '../components/ui/ColumnFilterDropdown.jsx';
 import ColumnResizeHandle from '../components/ui/ColumnResizeHandle.jsx';
+import CellTooltip from '../components/ui/CellTooltip.jsx';
 import useColumnWidths from '../hooks/useColumnWidths.js';
 import useModalHotkeys from '../hooks/useModalHotkeys.js';
 import AppSelect from '../components/ui/AppSelect.jsx';
@@ -104,17 +105,19 @@ function ValidadeBadge({ status, days }) {
 }
 
 /* ─── StatCard ───────────────────────────────────────────────────────────────── */
-function StatCard({ label, value, sub, color = '#0066B3' }) {
+function StatCard({ label, value, sub, color = '#0066B3', active = false, onClick }) {
   return (
-    <div style={{
+    <button type="button" onClick={onClick} aria-pressed={active} style={{
       background:'#fff', border:'1px solid #E2E8F0', borderRadius:10,
       padding:'14px 18px', display:'flex', flexDirection:'column', gap:4,
       borderTop:`3px solid ${color}`, flex:'1 1 0', minWidth:100,
+      textAlign:'left', fontFamily:'inherit', cursor:onClick?'pointer':'default',
+      boxShadow:active?`0 0 0 2px ${color}55`:'none', opacity:active?1:0.96,
     }}>
       <div style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#94A3B8' }}>{label}</div>
       <div style={{ fontFamily:'var(--font-display)', fontSize:'1.6rem', fontWeight:700, color, lineHeight:1 }}>{value}</div>
       {sub && <div style={{ fontSize:'0.72rem', color:'#64748B' }}>{sub}</div>}
-    </div>
+    </button>
   );
 }
 
@@ -157,7 +160,7 @@ function HBarChart({ data, title, activeFilter, onFilter }) {
   const [tooltipPos, setTooltipPos] = useState({ x:0, y:0 });
   return (
     <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:10, borderTop:'3px solid #0066B3', padding:'14px 16px', flex:1, minWidth:0 }}>
-      <div style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#94A3B8', marginBottom:10 }}>{title}</div>
+      <div style={{ fontSize:'0.72rem', lineHeight:1, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#94A3B8', marginBottom:10 }}>{title}</div>
       {visible.length === 0 ? <div style={{ fontSize:'0.78rem', color:'#CBD5E1', textAlign:'center', padding:'16px 0' }}>Sem dados</div>
         : <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
             {visible.map((d,i) => {
@@ -173,11 +176,11 @@ function HBarChart({ data, title, activeFilter, onFilter }) {
                     borderRadius:4, padding:'2px 0',
                   }}
                 >
-                  <div style={{ fontSize:'0.68rem', color: isActive ? '#001F5B' : '#475569', width:34, textAlign:'right', flexShrink:0, fontWeight: isActive ? 700 : 600 }}>{d.label}</div>
+                  <div style={{ fontSize:'0.78rem', lineHeight:1, color: isActive ? '#001F5B' : '#475569', width:34, textAlign:'right', flexShrink:0, fontWeight: isActive ? 700 : 600 }}>{d.label}</div>
                   <div style={{ flex:1, background:'#F1F5F9', borderRadius:4, height:14, overflow:'hidden' }}>
                     <div style={{ width:`${(d.value/max)*100}%`, height:'100%', background:d.color||'#0066B3', borderRadius:4 }} />
                   </div>
-                  <div style={{ fontSize:'0.68rem', fontWeight:700, color:'#1E293B', width:24, flexShrink:0 }}>{d.value}</div>
+                  <div style={{ fontSize:'0.78rem', lineHeight:1, fontWeight:700, color:'#1E293B', width:24, flexShrink:0 }}>{d.value}</div>
                 </div>
               );
             })}
@@ -216,7 +219,7 @@ function MiniDonut({ data, highlightKey, highlightLabel, activeFilter, onFilter 
           />
         )}
         <text x={cx} y={cy-6} textAnchor="middle" style={{ fontSize:'1.3rem', fontWeight:800, fill:'#0F172A' }}>{pctLabel}%</text>
-        <text x={cx} y={cy+15} textAnchor="middle" style={{ fontSize:'0.6rem', fontWeight:700, letterSpacing:'0.04em', fill:'#94A3B8' }}>{highlightLabel.toUpperCase()}</text>
+        <text x={cx} y={cy+15} textAnchor="middle" style={{ fontSize:'0.72rem', fontWeight:700, letterSpacing:'0.04em', fill:'#94A3B8' }}>{highlightLabel.toUpperCase()}</text>
       </svg>
       <div style={{ display:'flex', flexDirection:'column', gap:6, width:'100%' }}>
         {data.filter(d=>d.value>0).map((d,i) => {
@@ -230,8 +233,8 @@ function MiniDonut({ data, highlightKey, highlightLabel, activeFilter, onFilter 
               style={{ display:'flex', alignItems:'center', gap:6, cursor: clickable ? 'pointer' : 'default', opacity: activeFilter && !isItemActive ? 0.5 : 1, transition:'opacity 0.15s' }}
             >
               <span style={{ width:8, height:8, borderRadius:'50%', background:d.color, flexShrink:0 }}/>
-              <span style={{ fontSize:'0.74rem', color:'#475569', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.label}</span>
-              <span style={{ fontSize:'0.74rem', fontWeight:700, color:'#1E293B', flexShrink:0 }}>{d.value.toLocaleString('pt-BR')}</span>
+              <span style={{ fontSize:'0.88rem', lineHeight:1, color:'#475569', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.label}</span>
+              <span style={{ fontSize:'0.88rem', lineHeight:1, fontWeight:700, color:'#1E293B', flexShrink:0 }}>{d.value.toLocaleString('pt-BR')}</span>
             </div>
           );
         })}
@@ -248,7 +251,7 @@ function StatsOverviewCard({ blocks }) {
       <div style={{ display:'flex', gap:18, alignItems:'center' }}>
         {blocks.map((b,i) => (
           <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:8, minWidth:0 }}>
-            <div style={{ fontSize:'0.62rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#94A3B8' }}>{b.title}</div>
+            <div style={{ fontSize:'0.72rem', lineHeight:1, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#94A3B8' }}>{b.title}</div>
             <MiniDonut {...b}/>
           </div>
         ))}
@@ -266,7 +269,7 @@ function VBarChart({ data, title, activeFilter, onFilter }) {
   const [tooltipPos, setTooltipPos] = useState({ x:0, y:0 });
   return (
     <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:10, borderTop:'3px solid #0066B3', padding:'14px 16px', flex:1, minWidth:0, width:'100%' }}>
-      <div style={{ fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#94A3B8', marginBottom:10 }}>{title}</div>
+      <div style={{ fontSize:'0.72rem', lineHeight:1, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#94A3B8', marginBottom:10 }}>{title}</div>
       {visible.length === 0
         ? <div style={{ fontSize:'0.78rem', color:'#CBD5E1', textAlign:'center', padding:'16px 0' }}>Sem dados</div>
         : <div style={{ display:'flex', alignItems:'flex-end', gap:4, height:120, overflow:'hidden' }}>
@@ -284,7 +287,7 @@ function VBarChart({ data, title, activeFilter, onFilter }) {
                     transition:'opacity 0.15s',
                   }}
                 >
-                  <div style={{ fontSize:'0.75rem', fontWeight:700, color: isActive ? '#001F5B' : '#1E293B', marginBottom:3 }}>{d.value}</div>
+                  <div style={{ fontSize:'0.82rem', lineHeight:1, fontWeight:700, color: isActive ? '#001F5B' : '#1E293B', marginBottom:3 }}>{d.value}</div>
                   <div style={{
                     width:'100%',
                     height:`${Math.max((d.value/max)*80,6)}px`,
@@ -295,7 +298,7 @@ function VBarChart({ data, title, activeFilter, onFilter }) {
                     opacity: activeFilter && !isActive ? 0.5 : 1,
                   }}/>
                   <div style={{
-                    fontSize:'0.72rem', fontWeight: isActive ? 700 : 600, color: isActive ? '#001F5B' : '#334155', textAlign:'center',
+                    fontSize:'0.8rem', fontWeight: isActive ? 700 : 600, color: isActive ? '#001F5B' : '#334155', textAlign:'center',
                     width:'100%', marginTop:5, lineHeight:1, letterSpacing:'0.02em',
                   }}>{d.label}</div>
                 </div>
@@ -796,6 +799,7 @@ export default function PMSPage() {
   const [plantFilter, setPlantFilter]   = useState('');
   const [validadeFilter, setValidadeFilter] = useState('');
   const [myDocsOnly, setMyDocsOnly]     = useState(false);
+  const [kpiFilter, setKpiFilter]         = useState('');
   const [expandedGroup, setExpandedGroup] = useState(null);
   const [expandedDoc, setExpandedDoc]     = useState(null);
 
@@ -866,11 +870,11 @@ export default function PMSPage() {
 
   const hasActiveFilters = !!(search || typeFilter || statusFilter || plantFilter || validadeFilter || myDocsOnly
     || colFilterCode.length || colFilterPlant.length || colFilterArea.length || colFilterResp.length || colFilterValidade.length || colFilterStatus.length
-    || chartTypeFilter || chartValidadeFilter || chartPlantFilter || chartLangFilter);
+    || chartTypeFilter || chartValidadeFilter || chartPlantFilter || chartLangFilter || kpiFilter);
   const clearFilters = () => {
     setSearch(''); setTypeFilter(''); setStatusFilter(''); setPlantFilter(''); setValidadeFilter(''); setMyDocsOnly(false);
     setColFilterCode([]); setColFilterPlant([]); setColFilterArea([]); setColFilterResp([]); setColFilterValidade([]); setColFilterStatus([]);
-    setChartTypeFilter(''); setChartValidadeFilter(''); setChartPlantFilter(''); setChartLangFilter('');
+    setChartTypeFilter(''); setChartValidadeFilter(''); setChartPlantFilter(''); setChartLangFilter(''); setKpiFilter('');
   };
 
   // Aplica todos os filtros (busca, dropdowns, colunas e gráficos), exceto a dimensão de
@@ -879,6 +883,11 @@ export default function PMSPage() {
   // (tabela, KPIs, outros gráficos) refletem o cruzamento.
   const applyFilters = useCallback((skip) => {
     let data = [...docs];
+    if (skip !== 'kpi' && kpiFilter) {
+      if (kpiFilter === 'published') data = data.filter(d => d.status === 'Publicado');
+      if (kpiFilter === 'expiring') data = data.filter(d => d.validade_status === 'Alerta');
+      if (kpiFilter === 'expired') data = data.filter(d => d.validade_status === 'Vencido');
+    }
     if (myDocsOnly) data = data.filter(d => isOwner(d));
     if (skip !== 'type' && typeFilter) data = data.filter(d => d.type === typeFilter);
     if (statusFilter) data = data.filter(d => d.status === statusFilter);
@@ -906,7 +915,7 @@ export default function PMSPage() {
       );
     }
     return data;
-  }, [docs, typeFilter, statusFilter, plantFilter, validadeFilter, search, myDocsOnly, user,
+  }, [docs, typeFilter, statusFilter, plantFilter, validadeFilter, search, myDocsOnly, user, kpiFilter,
       colFilterCode, colFilterPlant, colFilterArea, colFilterResp, colFilterValidade, colFilterStatus, chartTypeFilter, chartValidadeFilter, chartPlantFilter, chartLangFilter]);
 
   const dedupeLatest = (arr) => {
@@ -920,7 +929,7 @@ export default function PMSPage() {
   };
 
   const filtered          = useMemo(() => applyFilters(null),      [applyFilters]);
-  const kpiDocs           = useMemo(() => dedupeLatest(filtered),  [filtered]);
+  const kpiDocs           = useMemo(() => dedupeLatest(applyFilters('kpi')), [applyFilters]);
   const typeChartDocs     = useMemo(() => dedupeLatest(applyFilters('type')),     [applyFilters]);
   const plantChartDocs    = useMemo(() => dedupeLatest(applyFilters('plant')),    [applyFilters]);
   const validadeChartDocs = useMemo(() => dedupeLatest(applyFilters('validade')), [applyFilters]);
@@ -943,6 +952,7 @@ export default function PMSPage() {
   const expiring   = kpiDocs.filter(d => d.validade_status === 'Alerta').length;
   const expired    = kpiDocs.filter(d => d.validade_status === 'Vencido').length;
   const myDocsCount = kpiDocs.filter(d => isOwner(d)).length;
+  const toggleKpiFilter = value => setKpiFilter(current => current === value ? '' : value);
 
   /* Charts — cada um reflete os demais filtros, exceto a própria dimensão */
   const langBreakdown = (arr) => {
@@ -1007,10 +1017,10 @@ export default function PMSPage() {
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
           {/* Linha 1: KPI cards */}
           <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'stretch' }}>
-            <StatCard label="Total Geral"      value={totalAll}   color="#001F5B"/>
-            <StatCard label="Publicados"       value={published}  color="#10B981"/>
-            <StatCard label="Vencendo (30d)"   value={expiring}   color={expiring>0?'#F59E0B':'#94A3B8'} sub={expiring>0?'Atenção':'Tudo ok'}/>
-            <StatCard label="Vencidos"         value={expired}    color={expired>0?'#EF4444':'#94A3B8'} sub={expired>0?'Ação necessária':'Tudo ok'}/>
+            <StatCard label="Total Geral"      value={totalAll}   color="#001F5B" active={!kpiFilter} onClick={() => setKpiFilter('')}/>
+            <StatCard label="Publicados"       value={published}  color="#10B981" active={kpiFilter==='published'} onClick={() => toggleKpiFilter('published')}/>
+            <StatCard label="Vencendo (30d)"   value={expiring}   color={expiring>0?'#F59E0B':'#94A3B8'} active={kpiFilter==='expiring'} onClick={() => toggleKpiFilter('expiring')} sub={expiring>0?'Atenção':'Tudo ok'}/>
+            <StatCard label="Vencidos"         value={expired}    color={expired>0?'#EF4444':'#94A3B8'} active={kpiFilter==='expired'} onClick={() => toggleKpiFilter('expired')} sub={expired>0?'Ação necessária':'Tudo ok'}/>
           </div>
           {/* Linha 2: gráficos por tipo/usina */}
           <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'stretch', flex:1 }}>
@@ -1203,7 +1213,7 @@ export default function PMSPage() {
                         )}
                       </td>
                       <td style={TD}>
-                        <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'nowrap', minWidth:0, overflow:'hidden' }}>
                           {hasRevisions && (
                             <button onClick={e => { e.stopPropagation(); setExpandedGroup(groupOpen ? null : key); }}
                               title={groupOpen ? 'Recolher revisões' : `Ver ${items.length} versões`}
@@ -1221,18 +1231,18 @@ export default function PMSPage() {
                             fontSize:'0.6rem', fontWeight:700, color:'#fff', background:TYPE_COLORS[latest.type],
                             borderRadius:6, padding:'1px 5px', flexShrink:0,
                           }}>{latest.type}</span>
-                          <span style={{ fontFamily:'monospace', fontWeight:700, color:'#001F5B', fontSize:'0.82rem' }}>{latest.code}</span>
-                          {isMine && <span style={{ fontSize:'0.6rem', background:'#F5F3FF', color:'#6D28D9', border:'1px solid #DDD6FE', borderRadius:10, padding:'1px 5px', fontWeight:700 }}>meu</span>}
+                          <CellTooltip text={latest.code} style={{ fontFamily:'monospace', fontWeight:700, color:'#001F5B', fontSize:'0.82rem', flex:'1 1 auto', minWidth:0 }}/>
+                          {isMine && <span style={{ fontSize:'0.6rem', background:'#F5F3FF', color:'#6D28D9', border:'1px solid #DDD6FE', borderRadius:10, padding:'1px 5px', fontWeight:700, flexShrink:0 }}>meu</span>}
                         </div>
                       </td>
-                      <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B' }}>{latest.plant||'—'}</td>
-                      <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B', maxWidth:160 }}>{latest.area}</td>
-                      <td style={{ ...TD, fontSize:'0.82rem' }}>{latest.responsible}</td>
+                      <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B' }}><CellTooltip text={latest.plant||'—'}/></td>
+                      <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B' }}><CellTooltip text={latest.area||'—'}/></td>
+                      <td style={{ ...TD, fontSize:'0.82rem' }}><CellTooltip text={latest.responsible||'—'}/></td>
                       <td style={TD}><ValidadeBadge status={latest.validade_status} days={latest.days_to_expire}/></td>
                       <td style={{ ...TD, fontSize:'0.82rem', maxWidth:240 }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:6, minWidth:0, overflow:'hidden' }}>
                           <LangBadges hasPt={latest.has_pt} hasEn={latest.has_en}/>
-                          <span style={{ display:'-webkit-box', WebkitLineClamp:1, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{latest.title_pt}</span>
+                          <CellTooltip text={latest.title_pt||'—'} style={{ flex:'1 1 auto', minWidth:0 }}/>
                         </div>
                       </td>
                       <td style={TD}><StatusBadge status={latest.status}/></td>
@@ -1284,8 +1294,8 @@ export default function PMSPage() {
                                 <div style={{ width:12, height:1, background:'#CBD5E1', alignSelf:'flex-end' }}/>
                                 <div style={{ width:1, height:'50%', background:'transparent' }}/>
                               </div>
-                              <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                                <span style={{ fontFamily:'monospace', fontWeight:600, color:'#64748B', fontSize:'0.78rem' }}>{rev.code}</span>
+                              <div style={{ display:'flex', alignItems:'center', gap:6, flex:'1 1 auto', minWidth:0, overflow:'hidden' }}>
+                                <CellTooltip text={rev.code} style={{ fontFamily:'monospace', fontWeight:600, color:'#64748B', fontSize:'0.78rem', flex:'1 1 auto', minWidth:0 }}/>
                                 {rev.revision === null || rev.revision === undefined
                                   ? <span style={{ fontSize:'0.6rem', background:'#F1F5F9', color:'#94A3B8', borderRadius:10, padding:'1px 6px' }}>original</span>
                                   : <span style={{ fontSize:'0.6rem', background:'#EFF6FF', color:'#3B82F6', border:'1px solid #BFDBFE', borderRadius:10, padding:'1px 6px', fontWeight:700 }}>R{rev.revision}</span>
@@ -1293,14 +1303,14 @@ export default function PMSPage() {
                               </div>
                             </div>
                           </td>
-                          <td style={{ ...TD, fontSize:'0.75rem', color:'#94A3B8' }}>{rev.plant||'—'}</td>
-                          <td style={{ ...TD, fontSize:'0.75rem', color:'#94A3B8' }}>{rev.area}</td>
-                          <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B' }}>{rev.responsible}</td>
+                          <td style={{ ...TD, fontSize:'0.75rem', color:'#94A3B8' }}><CellTooltip text={rev.plant||'—'}/></td>
+                          <td style={{ ...TD, fontSize:'0.75rem', color:'#94A3B8' }}><CellTooltip text={rev.area||'—'}/></td>
+                          <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B' }}><CellTooltip text={rev.responsible||'—'}/></td>
                           <td style={TD}><ValidadeBadge status={rev.validade_status} days={rev.days_to_expire}/></td>
                           <td style={{ ...TD, fontSize:'0.78rem', color:'#64748B', maxWidth:280 }}>
-                            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:6, minWidth:0, overflow:'hidden' }}>
                               <LangBadges hasPt={rev.has_pt} hasEn={rev.has_en}/>
-                              <span style={{ display:'-webkit-box', WebkitLineClamp:1, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{rev.title_pt}</span>
+                              <CellTooltip text={rev.title_pt||'—'} style={{ flex:'1 1 auto', minWidth:0 }}/>
                             </div>
                           </td>
                           <td style={TD}><StatusBadge status={rev.status}/></td>
@@ -1344,7 +1354,7 @@ export default function PMSPage() {
 function DocDetail({ doc }) {
   return (
     <div style={{ display:'flex', gap:20, flexWrap:'wrap' }}>
-      <div style={{ flex:1, minWidth:200 }}>
+      <div style={{ flex:1, minWidth:0 }}>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))', gap:'10px 24px' }}>
           {doc.plant && <InfoItem label="Usina" value={doc.plant}/>}
           {doc.category && <InfoItem label="Categoria" value={doc.category}/>}
@@ -1374,7 +1384,7 @@ function DocDetail({ doc }) {
 
 /* ─── Style helpers ──────────────────────────────────────────────────────────── */
 const TH = { position:'relative', padding:'10px 14px', textAlign:'left', fontSize:'0.65rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.07em', color:'#64748B', whiteSpace:'nowrap' };
-const TD = { padding:'10px 14px', verticalAlign:'middle' };
+const TD = { padding:'10px 14px', verticalAlign:'middle', overflow:'hidden' };
 const Div = () => <div style={{ width:1, height:18, background:'#E2E8F0', flexShrink:0 }}/>;
 const selStyle = (active) => ({ border:'none', outline:'none', fontSize:'0.78rem', fontFamily:'var(--font-body)', color: active?'#001F5B':'#94A3B8', fontWeight: active?700:400, cursor:'pointer', background:'transparent', flexShrink:0 });
 function ActionBtn({ color, onClick, children, tooltip }) {
@@ -1408,9 +1418,9 @@ function ActionBtn({ color, onClick, children, tooltip }) {
 }
 function InfoItem({ label, value, full }) {
   return (
-    <div style={{ gridColumn: full?'1 / -1':undefined }}>
+    <div style={{ gridColumn: full?'1 / -1':undefined, minWidth:0, maxWidth:'100%', overflow:'hidden' }}>
       <div style={{ fontSize:'0.62rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', color:'#94A3B8', marginBottom:2 }}>{label}</div>
-      <div style={{ fontSize:'0.82rem', color:'#1E293B', fontWeight:500 }}>{value}</div>
+      <div style={{ fontSize:'0.82rem', color:'#1E293B', fontWeight:500, whiteSpace:'normal', lineHeight:1.35, wordBreak:'break-word', overflowWrap:'anywhere', maxWidth:'100%' }}>{value}</div>
     </div>
   );
 }
