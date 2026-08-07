@@ -827,7 +827,7 @@ function OperationalTile({ label, value, sub, color, icon, trend, gaugeValue, on
           <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem', fontWeight: 900 }}>{label}</div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, minWidth: 0, marginTop: 2 }}>
             <div style={{ color: 'var(--ctg-navy)', fontFamily: 'var(--font-display)', fontSize: 'clamp(1.3rem, 2vw, 1.7rem)', fontWeight: 900, lineHeight: 1, flexShrink: 0 }}>{value}</div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.84rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>
           </div>
         </div>
         {trend && <Sparkline color={statusColor} />}
