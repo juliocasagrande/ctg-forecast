@@ -808,6 +808,7 @@ export default function PMSPage() {
   const [chartPlantFilter, setChartPlantFilter]       = useState('');
   const [chartLangFilter, setChartLangFilter]         = useState('');
 
+  const [colFilterLink, setColFilterLink]       = useState([]);
   const [colFilterCode, setColFilterCode]       = useState([]);
   const [colFilterPlant, setColFilterPlant]     = useState([]);
   const [colFilterArea, setColFilterArea]       = useState([]);
@@ -869,11 +870,11 @@ export default function PMSPage() {
   const openEdit = (doc) => setDocModal({ open:true, doc });
 
   const hasActiveFilters = !!(search || typeFilter || statusFilter || plantFilter || validadeFilter || myDocsOnly
-    || colFilterCode.length || colFilterPlant.length || colFilterArea.length || colFilterResp.length || colFilterValidade.length || colFilterStatus.length
+    || colFilterLink.length || colFilterCode.length || colFilterPlant.length || colFilterArea.length || colFilterResp.length || colFilterValidade.length || colFilterStatus.length
     || chartTypeFilter || chartValidadeFilter || chartPlantFilter || chartLangFilter || kpiFilter);
   const clearFilters = () => {
     setSearch(''); setTypeFilter(''); setStatusFilter(''); setPlantFilter(''); setValidadeFilter(''); setMyDocsOnly(false);
-    setColFilterCode([]); setColFilterPlant([]); setColFilterArea([]); setColFilterResp([]); setColFilterValidade([]); setColFilterStatus([]);
+    setColFilterLink([]); setColFilterCode([]); setColFilterPlant([]); setColFilterArea([]); setColFilterResp([]); setColFilterValidade([]); setColFilterStatus([]);
     setChartTypeFilter(''); setChartValidadeFilter(''); setChartPlantFilter(''); setChartLangFilter(''); setKpiFilter('');
   };
 
@@ -898,6 +899,7 @@ export default function PMSPage() {
     if (skip !== 'plant' && chartPlantFilter) data = data.filter(d => d.plant === chartPlantFilter);
     if (skip !== 'lang' && chartLangFilter === 'with_en') data = data.filter(d => d.has_en);
     else if (skip !== 'lang' && chartLangFilter === 'without_en') data = data.filter(d => !d.has_en);
+    if (colFilterLink.length) data = data.filter(d => colFilterLink.includes(String(d.document_link || '').trim() ? 'Com link' : 'Sem link'));
     if (colFilterCode.length)   data = data.filter(d => colFilterCode.includes(d.code));
     if (colFilterPlant.length)  data = data.filter(d => colFilterPlant.includes(d.plant));
     if (colFilterArea.length)   data = data.filter(d => colFilterArea.includes(d.area));
@@ -916,7 +918,7 @@ export default function PMSPage() {
     }
     return data;
   }, [docs, typeFilter, statusFilter, plantFilter, validadeFilter, search, myDocsOnly, user, kpiFilter,
-      colFilterCode, colFilterPlant, colFilterArea, colFilterResp, colFilterValidade, colFilterStatus, chartTypeFilter, chartValidadeFilter, chartPlantFilter, chartLangFilter]);
+      colFilterLink, colFilterCode, colFilterPlant, colFilterArea, colFilterResp, colFilterValidade, colFilterStatus, chartTypeFilter, chartValidadeFilter, chartPlantFilter, chartLangFilter]);
 
   const dedupeLatest = (arr) => {
     const map = new Map();
@@ -1139,7 +1141,13 @@ export default function PMSPage() {
             </colgroup>
             <thead style={{ position:'sticky', top:0, zIndex:2 }}>
               <tr style={{ background:'#F8FAFC', borderBottom:'2px solid #E2E8F0' }}>
-                <th style={{ ...TH, textAlign:'center' }}>🔗<ColumnResizeHandle onResizeStart={handleResizeStart(0)} /></th>
+                <th style={{ ...TH, textAlign:'center', padding:'10px 2px' }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'center' }}>
+                    🔗
+                    <ColumnFilterDropdown column="Link" uniqueValues={['Com link', 'Sem link']} selectedValues={colFilterLink} onChange={setColFilterLink}/>
+                  </div>
+                  <ColumnResizeHandle onResizeStart={handleResizeStart(0)} />
+                </th>
                 <th style={TH}>
                   <div style={{ display:'flex', alignItems:'center' }}>
                     Código
