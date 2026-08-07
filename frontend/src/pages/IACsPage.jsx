@@ -1458,13 +1458,24 @@ export default function IACsPage() {
               </span>
             )}
           </div>
-          <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, borderTop: '3px solid #0b5cab', padding: '10px', flex: 1, overflowY: 'auto', minHeight: 0 }}>
+          <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, borderTop: '3px solid #0b5cab', padding: '10px', flex: 1, overflow: 'hidden', minHeight: 0 }}>
             {(() => {
               // Always show all statuses from STATUS_OPTIONS (even with count 0)
               const visibleData = statusBarData;
               const maxCount = Math.max(...visibleData.map(d => d.count), 1);
+              const columnCount = 4;
+              const rowCount = Math.ceil(visibleData.length / columnCount);
               return (
-                <div style={{ columnCount: 4, columnGap: 8 }}>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
+                  gridTemplateRows: `repeat(${rowCount}, minmax(0, 1fr))`,
+                  gridAutoFlow: 'column',
+                  columnGap: 8,
+                  rowGap: 6,
+                  height: '100%',
+                  minHeight: 0,
+                }}>
                   {visibleData.map((d, i) => {
                     const m = STATUS_META[d.status] || { color: '#94A3B8', bg: '#F1F5F9', text: '#475569' };
                     const isActive = filterStatus === d.status;
@@ -1480,13 +1491,13 @@ export default function IACsPage() {
                         style={{
                           display: 'flex', alignItems: 'center', gap: 8,
                           padding: '8px 12px', borderRadius: 8, cursor: 'pointer',
-                          marginBottom: 6,
                           background: isActive ? m.bg : (i % 2 === 0 ? '#FAFAFA' : '#fff'),
                           border: isActive ? `1.5px solid ${m.color}55` : '1.5px solid transparent',
                           transition: 'all 0.15s',
-                          breakInside: 'avoid',
                           position: 'relative',
                           overflow: 'hidden',
+                          minHeight: 0,
+                          boxSizing: 'border-box',
                         }}
                       >
                         {/* Barra translúcida de fundo */}
