@@ -55,6 +55,13 @@ export function invalidateAuthCache(userId) {
   else authCache.clear();
 }
 
+// Usado pelo login (email/senha e Azure SSO) para pré-aquecer o cache com a
+// mesma permissão já calculada para a resposta do login — evita recomputar
+// nas primeiras requisições autenticadas da sessão.
+export function primeAuthCache(userId, computed) {
+  authCache.set(userId, { data: computed, expiresAt: Date.now() + AUTH_CACHE_TTL_MS });
+}
+
 export function signToken(payload) {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 }
@@ -72,6 +79,149 @@ function extractToken(req) {
   const header = req.headers.authorization;
   if (header?.startsWith('Bearer ')) return header.slice(7);
   return null;
+}
+
+// ── computeUserAccess ────────────────────────────────────────────────────────
+// Calcula role/área efetivos, delegações e permissões de página/botão para um
+// usuário. Extraído de requireAuth para ser reutilizável no login (email/senha
+// e Azure SSO) — assim a resposta do login já vem com _pageAccess/_buttonAccess
+// prontos, sem depender do primeiro fetchMe (que só roda no polling periódico
+// do front, até 30s depois) para a sidebar liberar as páginas permitidas.
+export async function computeUserAccess(userId, email) {
+  const { pool } = await import('../db/schema.js');
+
+  // 1. Revalida usuário no banco + 2. delegações ativas PARA este usuário.
+  //    As duas consultas são independentes entre si (nenhuma usa o resultado
+  //    da outra), então rodam em paralelo em vez de em sequência.
+  const [userR, delegR] = await Promise.all([
+    pool.query(
+      'SELECT id, role, area, active FROM users WHERE id = $1',
+      [userId]
+    ),
+    pool.query(`
+      SELECT u.id AS delegator_id, u.role AS delegator_role, u.area AS delegator_area
+      FROM access_delegations ad
+      JOIN users u ON u.id = ad.delegator_id
+      WHERE ad.delegate_id = $1
+        AND ad.active = true
+        AND CURRENT_DATE BETWEEN ad.start_date AND ad.end_date
+    `, [userId])
+  ]);
+  const user = userR.rows[0];
+  if (!user || !user.active) return null;
+
+  let effectiveRole = user.role;
+  let effectiveArea = user.area;
+  const delegatorIds = [];
+  for (const d of delegR.rows) {
+    delegatorIds.push(d.delegator_id);
+    if ((ROLE_RANK[d.delegator_role] || 0) > (ROLE_RANK[effectiveRole] || 0)) {
+      effectiveRole = d.delegator_role;
+      effectiveArea = d.delegator_area;
+    }
+  }
+
+  // 'admin' eleva o cargo de fato (acesso total). 'gerente' aqui NÃO substitui o
+  // cargo real — apenas marca acesso a todas as áreas, mantendo o usuário como
+  // coordenador (com seus poderes normais de edição/importação/exportação) e sua
+  // área real (usada, por ex., para escopo de metas).
+  const emailOverride = getEmailAccessOverride(email);
+  if (emailOverride === 'admin') {
+    effectiveRole = 'admin';
+  }
+  const allAreasAccess = emailOverride === 'gerente';
+
+  // 3. Acesso de página/botão: um usuário pode pertencer a VÁRIOS grupos de
+  //    permissão ao mesmo tempo (user_permission_groups) — o efetivo é o MAIOR
+  //    nível entre todos eles. Sem nenhum grupo, o padrão é 'none' (fail-closed).
+  //    Com delegação ativa, o delegado herda o MAIOR nível de acesso entre o
+  //    próprio (já resolvido pelos seus grupos) e o(s) delegador(es) — nunca
+  //    resulta em MENOS acesso do que o usuário já tinha por conta própria.
+  const relevantUserIds = [userId, ...delegatorIds];
+
+  const membershipR = await pool.query(
+    'SELECT user_id, group_id FROM user_permission_groups WHERE user_id = ANY($1::int[])',
+    [relevantUserIds]
+  );
+  const groupIdsByUser = {};
+  for (const row of membershipR.rows) (groupIdsByUser[row.user_id] ??= []).push(row.group_id);
+  const relevantGroupIds = [...new Set(membershipR.rows.map(r => r.group_id))];
+
+  const [groupPageAccessR, groupButtonAccessR] = await Promise.all([
+    pool.query(
+      'SELECT group_id, page_key, access FROM group_page_access WHERE group_id = ANY($1::int[])',
+      [relevantGroupIds]
+    ),
+    pool.query(
+      'SELECT group_id, page_key, button_key FROM group_button_access WHERE group_id = ANY($1::int[]) AND enabled = false',
+      [relevantGroupIds]
+    )
+  ]);
+
+  const groupPageByGroup = {};
+  for (const row of groupPageAccessR.rows) (groupPageByGroup[row.group_id] ??= {})[row.page_key] = row.access;
+
+  const PAGE_ACCESS_RANK = { none: 0, viewer: 1, editor: 2 };
+  // Maior nível entre TODOS os grupos de um usuário (cada usuário relevante
+  // resolve os próprios grupos antes de entrar na disputa "próprio x delegador(es)").
+  function ownPageAccess(uid, pk) {
+    let best = 0;
+    for (const gid of groupIdsByUser[uid] || []) {
+      best = Math.max(best, PAGE_ACCESS_RANK[groupPageByGroup[gid]?.[pk] || 'none'] ?? 0);
+    }
+    return Object.keys(PAGE_ACCESS_RANK).find(k => PAGE_ACCESS_RANK[k] === best) || 'none';
+  }
+  const pageAccess = {};
+  for (const pk of PAGE_KEYS) {
+    let best = 0; // 'none'
+    for (const uid of relevantUserIds) {
+      best = Math.max(best, PAGE_ACCESS_RANK[ownPageAccess(uid, pk)] ?? 0);
+    }
+    pageAccess[pk] = Object.keys(PAGE_ACCESS_RANK).find(k => PAGE_ACCESS_RANK[k] === best) || 'none';
+  }
+
+  // 4. Botões de ação: linha em group_button_access sempre significa "desabilitado"
+  //    (padrão é habilitado). Desabilitado para um usuário só se TODOS os grupos
+  //    dele desabilitarem; no resultado final, só se desabilitado para TODOS os
+  //    usuários relevantes (próprio + delegador(es)).
+  const groupDisabledByGroup = {};
+  for (const row of groupButtonAccessR.rows) {
+    ((groupDisabledByGroup[row.group_id] ??= {})[row.page_key] ??= new Set()).add(row.button_key);
+  }
+
+  function isButtonDisabledForUser(uid, pageKey, buttonKey) {
+    const groupIds = groupIdsByUser[uid] || [];
+    if (!groupIds.length) return false;
+    return groupIds.every(gid => groupDisabledByGroup[gid]?.[pageKey]?.has(buttonKey));
+  }
+
+  const candidatePairs = new Set();
+  for (const uid of relevantUserIds) {
+    for (const gid of groupIdsByUser[uid] || []) {
+      for (const [pk, set] of Object.entries(groupDisabledByGroup[gid] || {})) {
+        for (const bk of set) candidatePairs.add(`${pk} ${bk}`);
+      }
+    }
+  }
+  const buttonAccess = {};
+  for (const pair of candidatePairs) {
+    const [pageKey, buttonKey] = pair.split(' ');
+    const disabledForAll = relevantUserIds.every(uid => isButtonDisabledForUser(uid, pageKey, buttonKey));
+    if (disabledForAll) (buttonAccess[pageKey] ??= {})[buttonKey] = false;
+  }
+
+  return {
+    role: effectiveRole,
+    area: effectiveArea,
+    _originalRole: user.role,
+    _accessOverride: emailOverride,
+    _managerAccessOverride: allAreasAccess,
+    _allAreasAccess: allAreasAccess,
+    _delegatorIds: delegatorIds, // IDs dos delegadores — permite acesso aos projetos deles
+    _permissionGroupIds: groupIdsByUser[userId] || [],
+    _pageAccess: pageAccess,
+    _buttonAccess: buttonAccess,
+  };
 }
 
 // ── requireAuth ───────────────────────────────────────────────────────────────
@@ -96,143 +246,11 @@ export async function requireAuth(req, res, next) {
   }
 
   try {
-    const { pool } = await import('../db/schema.js');
-
-    // 1. Revalida usuário no banco + 2. delegações ativas PARA este usuário.
-    //    As duas consultas são independentes entre si (nenhuma usa o resultado
-    //    da outra), então rodam em paralelo em vez de em sequência.
-    const [userR, delegR] = await Promise.all([
-      pool.query(
-        'SELECT id, role, area, active FROM users WHERE id = $1',
-        [decoded.id]
-      ),
-      pool.query(`
-        SELECT u.id AS delegator_id, u.role AS delegator_role, u.area AS delegator_area
-        FROM access_delegations ad
-        JOIN users u ON u.id = ad.delegator_id
-        WHERE ad.delegate_id = $1
-          AND ad.active = true
-          AND CURRENT_DATE BETWEEN ad.start_date AND ad.end_date
-      `, [decoded.id])
-    ]);
-    const user = userR.rows[0];
-    if (!user || !user.active) {
+    const computed = await computeUserAccess(decoded.id, decoded.email);
+    if (!computed) {
       clearAuthCookie(res);
       return res.status(401).json({ error: 'Conta inativa ou não encontrada' });
     }
-
-    let effectiveRole = user.role;
-    let effectiveArea = user.area;
-    const delegatorIds = [];
-    for (const d of delegR.rows) {
-      delegatorIds.push(d.delegator_id);
-      if ((ROLE_RANK[d.delegator_role] || 0) > (ROLE_RANK[effectiveRole] || 0)) {
-        effectiveRole = d.delegator_role;
-        effectiveArea = d.delegator_area;
-      }
-    }
-
-    // 'admin' eleva o cargo de fato (acesso total). 'gerente' aqui NÃO substitui o
-    // cargo real — apenas marca acesso a todas as áreas, mantendo o usuário como
-    // coordenador (com seus poderes normais de edição/importação/exportação) e sua
-    // área real (usada, por ex., para escopo de metas).
-    const emailOverride = getEmailAccessOverride(decoded.email);
-    if (emailOverride === 'admin') {
-      effectiveRole = 'admin';
-    }
-    const allAreasAccess = emailOverride === 'gerente';
-
-    // 3. Acesso de página/botão: um usuário pode pertencer a VÁRIOS grupos de
-    //    permissão ao mesmo tempo (user_permission_groups) — o efetivo é o MAIOR
-    //    nível entre todos eles. Sem nenhum grupo, o padrão é 'none' (fail-closed).
-    //    Com delegação ativa, o delegado herda o MAIOR nível de acesso entre o
-    //    próprio (já resolvido pelos seus grupos) e o(s) delegador(es) — nunca
-    //    resulta em MENOS acesso do que o usuário já tinha por conta própria.
-    const relevantUserIds = [decoded.id, ...delegatorIds];
-
-    const membershipR = await pool.query(
-      'SELECT user_id, group_id FROM user_permission_groups WHERE user_id = ANY($1::int[])',
-      [relevantUserIds]
-    );
-    const groupIdsByUser = {};
-    for (const row of membershipR.rows) (groupIdsByUser[row.user_id] ??= []).push(row.group_id);
-    const relevantGroupIds = [...new Set(membershipR.rows.map(r => r.group_id))];
-
-    const [groupPageAccessR, groupButtonAccessR] = await Promise.all([
-      pool.query(
-        'SELECT group_id, page_key, access FROM group_page_access WHERE group_id = ANY($1::int[])',
-        [relevantGroupIds]
-      ),
-      pool.query(
-        'SELECT group_id, page_key, button_key FROM group_button_access WHERE group_id = ANY($1::int[]) AND enabled = false',
-        [relevantGroupIds]
-      )
-    ]);
-
-    const groupPageByGroup = {};
-    for (const row of groupPageAccessR.rows) (groupPageByGroup[row.group_id] ??= {})[row.page_key] = row.access;
-
-    const PAGE_ACCESS_RANK = { none: 0, viewer: 1, editor: 2 };
-    // Maior nível entre TODOS os grupos de um usuário (cada usuário relevante
-    // resolve os próprios grupos antes de entrar na disputa "próprio x delegador(es)").
-    function ownPageAccess(uid, pk) {
-      let best = 0;
-      for (const gid of groupIdsByUser[uid] || []) {
-        best = Math.max(best, PAGE_ACCESS_RANK[groupPageByGroup[gid]?.[pk] || 'none'] ?? 0);
-      }
-      return Object.keys(PAGE_ACCESS_RANK).find(k => PAGE_ACCESS_RANK[k] === best) || 'none';
-    }
-    const pageAccess = {};
-    for (const pk of PAGE_KEYS) {
-      let best = 0; // 'none'
-      for (const uid of relevantUserIds) {
-        best = Math.max(best, PAGE_ACCESS_RANK[ownPageAccess(uid, pk)] ?? 0);
-      }
-      pageAccess[pk] = Object.keys(PAGE_ACCESS_RANK).find(k => PAGE_ACCESS_RANK[k] === best) || 'none';
-    }
-
-    // 4. Botões de ação: linha em group_button_access sempre significa "desabilitado"
-    //    (padrão é habilitado). Desabilitado para um usuário só se TODOS os grupos
-    //    dele desabilitarem; no resultado final, só se desabilitado para TODOS os
-    //    usuários relevantes (próprio + delegador(es)).
-    const groupDisabledByGroup = {};
-    for (const row of groupButtonAccessR.rows) {
-      ((groupDisabledByGroup[row.group_id] ??= {})[row.page_key] ??= new Set()).add(row.button_key);
-    }
-
-    function isButtonDisabledForUser(uid, pageKey, buttonKey) {
-      const groupIds = groupIdsByUser[uid] || [];
-      if (!groupIds.length) return false;
-      return groupIds.every(gid => groupDisabledByGroup[gid]?.[pageKey]?.has(buttonKey));
-    }
-
-    const candidatePairs = new Set();
-    for (const uid of relevantUserIds) {
-      for (const gid of groupIdsByUser[uid] || []) {
-        for (const [pk, set] of Object.entries(groupDisabledByGroup[gid] || {})) {
-          for (const bk of set) candidatePairs.add(`${pk} ${bk}`);
-        }
-      }
-    }
-    const buttonAccess = {};
-    for (const pair of candidatePairs) {
-      const [pageKey, buttonKey] = pair.split(' ');
-      const disabledForAll = relevantUserIds.every(uid => isButtonDisabledForUser(uid, pageKey, buttonKey));
-      if (disabledForAll) (buttonAccess[pageKey] ??= {})[buttonKey] = false;
-    }
-
-    const computed = {
-      role: effectiveRole,
-      area: effectiveArea,
-      _originalRole: user.role,
-      _accessOverride: emailOverride,
-      _managerAccessOverride: allAreasAccess,
-      _allAreasAccess: allAreasAccess,
-      _delegatorIds: delegatorIds, // IDs dos delegadores — permite acesso aos projetos deles
-      _permissionGroupIds: groupIdsByUser[decoded.id] || [],
-      _pageAccess: pageAccess,
-      _buttonAccess: buttonAccess,
-    };
     authCache.set(decoded.id, { data: computed, expiresAt: Date.now() + AUTH_CACHE_TTL_MS });
     req.user = { ...decoded, ...computed };
   } catch (dbErr) {

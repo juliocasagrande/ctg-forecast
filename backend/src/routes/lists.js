@@ -604,6 +604,7 @@ router.get('/projects-tracking/stale-projects', async (req, res) => {
         SELECT id, pp_contrato, projeto, area, gestor, updated_at
         FROM lists_projects_tracking
         WHERE updated_at < NOW() - ($1::text || ' days')::interval
+          AND status <> 'Encerrado'
           AND (gestor_user_id = $2 OR (gestor_user_id IS NULL AND LOWER(gestor) LIKE '%' || LOWER($3) || '%'))
         ORDER BY updated_at ASC
       `;
@@ -614,6 +615,7 @@ router.get('/projects-tracking/stale-projects', async (req, res) => {
         SELECT id, pp_contrato, projeto, area, gestor, updated_at
         FROM lists_projects_tracking
         WHERE updated_at < NOW() - ($1::text || ' days')::interval
+          AND status <> 'Encerrado'
           AND area = ANY($2::text[])
         ORDER BY updated_at ASC
       `;
@@ -624,6 +626,7 @@ router.get('/projects-tracking/stale-projects', async (req, res) => {
         SELECT id, pp_contrato, projeto, area, gestor, updated_at
         FROM lists_projects_tracking
         WHERE updated_at < NOW() - ($1::text || ' days')::interval
+          AND status <> 'Encerrado'
         ORDER BY updated_at ASC
       `;
       params = [String(intervalDays)];

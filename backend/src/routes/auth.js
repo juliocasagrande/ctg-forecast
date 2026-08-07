@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { pool } from '../db/schema.js';
-import { signToken, requireAuth, setAuthCookie, clearAuthCookie, getEmailAccessOverride } from '../middleware/auth.js';
+import { signToken, requireAuth, setAuthCookie, clearAuthCookie, getEmailAccessOverride, computeUserAccess, primeAuthCache } from '../middleware/auth.js';
 
 // 'admin' eleva o cargo de fato; 'gerente' mantém o cargo real (coordenador) e
 // apenas concede acesso a todas as áreas — ver MANAGER_ACCESS_OVERRIDE_EMAILS.
@@ -160,9 +160,19 @@ router.post('/login', loginLimiter, async (req, res) => {
 
     await logAuthEvent('login_success', { email: user.email, userId: user.id, ip, userAgent: ua, success: true });
 
+    // Calcula _pageAccess/_buttonAccess já na resposta do login (mesma lógica do
+    // requireAuth), para a sidebar liberar as páginas permitidas de imediato — sem
+    // depender do primeiro fetchMe periódico do front (até 30s depois do login).
+    const access = await computeUserAccess(user.id, user.email);
+    if (access) primeAuthCache(user.id, access);
+
     res.json({
       token,
-      user: { id: user.id, name: user.name, email: user.email, role, _originalRole: user.role, area, avatar_initials: user.avatar_initials, must_change_password: user.must_change_password || false, ...accessOverrideFields(user.email) }
+      user: {
+        id: user.id, name: user.name, email: user.email, role, _originalRole: user.role, area,
+        avatar_initials: user.avatar_initials, must_change_password: user.must_change_password || false,
+        ...accessOverrideFields(user.email), ...access,
+      }
     });
   } catch (err) {
     safeError(res, err);
@@ -225,9 +235,17 @@ router.post('/azure-login', loginLimiter, async (req, res) => {
 
     await logAuthEvent('login_success', { email: user.email, userId: user.id, ip, userAgent: ua, success: true, detail: 'Azure SSO' });
 
+    // Ver comentário equivalente em /login — evita sidebar "vazia" até o próximo fetchMe.
+    const access = await computeUserAccess(user.id, user.email);
+    if (access) primeAuthCache(user.id, access);
+
     res.json({
       token,
-      user: { id: user.id, name: user.name, email: user.email, role, _originalRole: user.role, area, avatar_initials: user.avatar_initials, must_change_password: false, ...accessOverrideFields(user.email) },
+      user: {
+        id: user.id, name: user.name, email: user.email, role, _originalRole: user.role, area,
+        avatar_initials: user.avatar_initials, must_change_password: false,
+        ...accessOverrideFields(user.email), ...access,
+      },
     });
   } catch (err) {
     safeError(res, err);
